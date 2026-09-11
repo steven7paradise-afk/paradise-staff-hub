@@ -52,7 +52,7 @@ function missingItems(control: DailyClientControlItem["control"]) {
 function CheckBadge({ done, label, photo = false }: { done: boolean; label: string; photo?: boolean }) {
   const Icon = photo ? Camera : FileText;
   return (
-    <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-wide ${done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+    <span data-done={done ? "true" : "false"} className={`daily-control-check inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-wide ${done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
       {done ? <Check className="size-3.5" /> : <Icon className="size-3.5" />}
       {label}
     </span>
@@ -72,9 +72,9 @@ export function DailyClientControl({ day, salon, items }: { day: string; salon: 
   }
 
   return (
-    <main className="mx-auto min-h-[calc(100vh-120px)] max-w-[1500px] space-y-4 p-2 sm:p-5 lg:p-7">
-      <section className="overflow-hidden rounded-[26px] border border-[#E8DCE2] bg-white shadow-[0_18px_50px_rgba(70,35,50,0.08)]">
-        <div className="flex flex-wrap items-start justify-between gap-4 bg-[linear-gradient(135deg,#FFF4F9,#FFFCF8)] px-5 py-6 sm:px-8">
+    <main className="daily-client-control mx-auto min-h-[calc(100vh-120px)] max-w-[1500px] space-y-4 p-2 sm:p-5 lg:p-7">
+      <section className="daily-control-header overflow-hidden rounded-[26px] border border-[#E8DCE2] bg-white shadow-[0_18px_50px_rgba(70,35,50,0.08)]">
+        <div className="daily-control-heading flex flex-wrap items-start justify-between gap-4 bg-[linear-gradient(135deg,#FFF4F9,#FFFCF8)] px-5 py-6 sm:px-8">
           <div className="flex items-start gap-3">
             <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FCE5F1] text-[#B83D7F]"><ClipboardCheck className="size-6" /></span>
             <div>
@@ -89,22 +89,22 @@ export function DailyClientControl({ day, salon, items }: { day: string; salon: 
           </div>
         </div>
 
-        <div className="grid gap-2 border-t border-[#EEE2E8] bg-[#FBF7F9] p-3 sm:grid-cols-[auto_minmax(180px,230px)_minmax(180px,240px)_1fr_auto] sm:items-center sm:p-4">
-          <button type="button" onClick={() => navigate(moveDay(day, -1))} className="hidden size-11 place-items-center rounded-xl border border-[#E5D7DE] bg-white text-[#7B5367] sm:grid" aria-label="Giorno precedente"><ChevronLeft className="size-5" /></button>
+        <div className="daily-control-toolbar grid gap-2 border-t border-[#EEE2E8] bg-[#FBF7F9] p-3 sm:grid-cols-[auto_minmax(180px,230px)_minmax(180px,240px)_1fr_auto] sm:items-center sm:p-4">
+          <button type="button" onClick={() => navigate(moveDay(day, -1))} className="daily-control-field hidden size-11 place-items-center rounded-xl border border-[#E5D7DE] bg-white text-[#7B5367] sm:grid" aria-label="Giorno precedente"><ChevronLeft className="size-5" /></button>
           <label className="relative">
             <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#A93469]" />
-            <input type="date" value={day} onChange={(event) => navigate(event.target.value)} className="h-11 w-full rounded-xl border border-[#E5D7DE] bg-white pl-10 pr-3 text-xs font-black text-[#33252C] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]" />
+            <input type="date" value={day} onChange={(event) => navigate(event.target.value)} className="daily-control-field h-11 w-full rounded-xl border border-[#E5D7DE] bg-white pl-10 pr-3 text-xs font-black text-[#33252C] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]" />
           </label>
-          <select value={salon} onChange={(event) => navigate(day, event.target.value)} className="h-11 rounded-xl border border-[#E5D7DE] bg-white px-3 text-xs font-black text-[#33252C] outline-none focus:border-[#D86B9B]">
+          <select value={salon} onChange={(event) => navigate(day, event.target.value)} className="daily-control-field h-11 rounded-xl border border-[#E5D7DE] bg-white px-3 text-xs font-black text-[#33252C] outline-none focus:border-[#D86B9B]">
             <option value="tutti">Tutti i saloni</option>
             <option value="duomo">Duomo</option>
             <option value="buenos-aires">Buenos Aires</option>
           </select>
           <label className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#A93469]" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca cliente o collaboratrice" className="h-11 w-full rounded-xl border border-[#E5D7DE] bg-white pl-10 pr-3 text-xs font-bold text-[#33252C] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca cliente o collaboratrice" className="daily-control-field h-11 w-full rounded-xl border border-[#E5D7DE] bg-white pl-10 pr-3 text-xs font-bold text-[#33252C] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]" />
           </label>
-          <button type="button" onClick={() => navigate(moveDay(day, 1))} className="hidden size-11 place-items-center rounded-xl border border-[#E5D7DE] bg-white text-[#7B5367] sm:grid" aria-label="Giorno successivo"><ChevronRight className="size-5" /></button>
+          <button type="button" onClick={() => navigate(moveDay(day, 1))} className="daily-control-field hidden size-11 place-items-center rounded-xl border border-[#E5D7DE] bg-white text-[#7B5367] sm:grid" aria-label="Giorno successivo"><ChevronRight className="size-5" /></button>
         </div>
       </section>
 
@@ -115,14 +115,14 @@ export function DailyClientControl({ day, salon, items }: { day: string; salon: 
             const isComplete = missing.length === 0;
             const staffNames = item.control?.staffNames || [];
             return (
-              <article key={item.id} className={`flex flex-col rounded-[22px] border p-4 shadow-sm ${isComplete ? "border-emerald-200 bg-[linear-gradient(145deg,#FFFFFF,#F5FFF8)]" : "border-amber-200 bg-[linear-gradient(145deg,#FFFFFF,#FFFBF1)]"}`}>
+              <article data-control-state={isComplete ? "complete" : item.control?.isDraft ? "draft" : "incomplete"} key={item.id} className={`daily-control-card flex flex-col rounded-[22px] border p-4 shadow-sm ${isComplete ? "border-emerald-200 bg-[linear-gradient(145deg,#FFFFFF,#F5FFF8)]" : "border-amber-200 bg-[linear-gradient(145deg,#FFFFFF,#FFFBF1)]"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0"><h2 className="truncate text-lg font-black text-[#211A1E]">{item.customerName}</h2><p className="mt-1 text-[11px] font-bold text-[#6F5662]">{formatTime(item.startDate)}–{formatTime(item.endDate)} · {item.serviceTitle}</p></div>
-                  <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase ${isComplete ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.control?.isDraft ? "border-sky-200 bg-sky-50 text-sky-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>{isComplete ? "Completo" : item.control?.isDraft ? "Bozza" : item.control?.exists ? `Mancano ${missing.length}` : "Da compilare"}</span>
+                  <span className={`daily-control-status shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase ${isComplete ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.control?.isDraft ? "border-sky-200 bg-sky-50 text-sky-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>{isComplete ? "Completo" : item.control?.isDraft ? "Bozza" : item.control?.exists ? `Mancano ${missing.length}` : "Da compilare"}</span>
                 </div>
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-black/[0.05] bg-white/80 px-3 py-2.5"><UsersRound className="size-4 shrink-0 text-[#B83D7F]" /><div className="min-w-0"><p className="text-[8px] font-black uppercase tracking-wider text-black/35">Chi ha seguito la cliente</p><p className={`truncate text-xs font-black ${staffNames.length ? "text-[#30242A]" : "text-amber-700"}`}>{staffNames.join(", ") || "Collaboratrice non indicata"}</p></div></div>
+                <div className="daily-control-staff mt-3 flex items-center gap-2 rounded-xl border border-black/[0.05] bg-white/80 px-3 py-2.5"><UsersRound className="size-4 shrink-0 text-[#B83D7F]" /><div className="min-w-0"><p className="text-[8px] font-black uppercase tracking-wider text-black/35">Chi ha seguito la cliente</p><p className={`truncate text-xs font-black ${staffNames.length ? "text-[#30242A]" : "text-amber-700"}`}>{staffNames.join(", ") || "Collaboratrice non indicata"}</p></div></div>
                 <div className="mt-3 flex flex-wrap gap-1.5"><CheckBadge done={Boolean(item.control?.noteDone)} label="Nota" /><CheckBadge done={Boolean(item.control?.beforeMediaDone)} label="Foto prima" photo /><CheckBadge done={Boolean(item.control?.afterMediaDone)} label="Foto dopo" photo /></div>
-                {missing.length ? <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900"><CircleAlert className="mt-0.5 size-4 shrink-0" /><p className="text-[10px] font-bold leading-4"><strong>Da completare:</strong> {missing.join(" · ")}</p></div> : <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[10px] font-black text-emerald-800"><Check className="size-4" /> Tutto completato</div>}
+                {missing.length ? <div className="daily-control-result mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900"><CircleAlert className="mt-0.5 size-4 shrink-0" /><p className="text-[10px] font-bold leading-4"><strong>Da completare:</strong> {missing.join(" · ")}</p></div> : <div className="daily-control-result mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[10px] font-black text-emerald-800"><Check className="size-4" /> Tutto completato</div>}
                 {item.control?.noteText ? <p className="mt-3 line-clamp-3 text-[10px] font-semibold leading-4 text-black/50">Nota: {item.control.noteText}</p> : null}
                 <Link href={`/appointments?booking=${encodeURIComponent(item.id)}&from=${day}&to=${day}`} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#211A1E] px-4 text-xs font-black text-white transition hover:bg-[#A93469]">{isComplete ? "Apri controllo" : "Completa controllo"}</Link>
               </article>
@@ -130,7 +130,7 @@ export function DailyClientControl({ day, salon, items }: { day: string; salon: 
           })}
         </section>
       ) : (
-        <section className="grid min-h-64 place-items-center rounded-[24px] border border-dashed border-[#DECBD4] bg-white p-8 text-center"><div><CalendarDays className="mx-auto size-8 text-[#CFA8BA]" /><h2 className="mt-3 text-lg font-black text-[#33252C]">Nessuna cliente trovata</h2><p className="mt-1 text-xs font-semibold text-black/45">Cambia giorno, salone oppure ricerca.</p></div></section>
+        <section className="daily-control-empty grid min-h-64 place-items-center rounded-[24px] border border-dashed border-[#DECBD4] bg-white p-8 text-center"><div><CalendarDays className="mx-auto size-8 text-[#CFA8BA]" /><h2 className="mt-3 text-lg font-black text-[#33252C]">Nessuna cliente trovata</h2><p className="mt-1 text-xs font-semibold text-black/45">Cambia giorno, salone oppure ricerca.</p></div></section>
       )}
     </main>
   );

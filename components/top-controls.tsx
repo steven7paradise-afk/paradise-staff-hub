@@ -33,6 +33,47 @@ function applyThemeVariables(isDark: boolean) {
   });
 }
 
+export function ThemeRestorer() {
+  useEffect(() => {
+    const isDark = window.localStorage.getItem("paradise-theme") === "dark";
+    document.documentElement.classList.toggle("dark", isDark);
+    window.requestAnimationFrame(() => applyThemeVariables(isDark));
+  }, []);
+
+  return null;
+}
+
+export function ThemeToggleButton({ className }: { className?: string }) {
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const isDark = window.localStorage.getItem("paradise-theme") === "dark";
+    setDark(isDark);
+    document.documentElement.classList.toggle("dark", isDark);
+    window.requestAnimationFrame(() => applyThemeVariables(isDark));
+  }, []);
+
+  function toggleTheme() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    window.localStorage.setItem("paradise-theme", next ? "dark" : "light");
+    applyThemeVariables(next);
+  }
+
+  return (
+    <button
+      onClick={toggleTheme}
+      className={className || "grid size-10 place-items-center rounded-2xl bg-white/90 text-slate-800 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white dark:text-[#171719] dark:ring-white/20 dark:hover:bg-[#f3edf0]"}
+      type="button"
+      aria-label={dark ? "Attiva modalità chiara" : "Attiva modalità notte"}
+      title={dark ? "Modalità chiara" : "Modalità notte"}
+    >
+      {dark ? <Sun className="size-5 text-amber-400" /> : <Moon className="size-5" />}
+    </button>
+  );
+}
+
 export function TopControls({
   unread,
   name,
@@ -46,7 +87,6 @@ export function TopControls({
   userId?: string;
   profileHref?: string;
 }) {
-  const [dark, setDark] = useState(false);
   const [activeWorkers, setActiveWorkers] = useState<Array<{ id: string; name: string; photo_url: string | null; status: string }>>([]);
 
   useEffect(() => {
@@ -70,25 +110,6 @@ export function TopControls({
     const interval = setInterval(fetchActiveWorkers, 30000);
     return () => clearInterval(interval);
   }, [userId]);
-
-  useEffect(() => {
-    const savedTheme = window.localStorage.getItem("paradise-theme");
-    if (savedTheme === "dark") {
-      setDark(true);
-      document.documentElement.classList.add("dark");
-      window.requestAnimationFrame(() => applyThemeVariables(true));
-    } else {
-      window.requestAnimationFrame(() => applyThemeVariables(false));
-    }
-  }, []);
-
-  function toggleTheme() {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    window.localStorage.setItem("paradise-theme", next ? "dark" : "light");
-    applyThemeVariables(next);
-  }
 
   async function handleLogout() {
     if (userId === "PC_CASSA") {
@@ -133,9 +154,7 @@ export function TopControls({
         </div>
       )}
       <NotificationsPopover initialUnread={unread} />
-      <button onClick={toggleTheme} className="grid size-10 place-items-center rounded-2xl bg-white/90 text-slate-800 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white dark:text-[#171719] dark:ring-white/20 dark:hover:bg-[#f3edf0]" type="button" aria-label="Tema">
-        {dark ? <Sun className="size-5 text-amber-400 animate-pulse-soft" /> : <Moon className="size-5 text-slate-700" />}
-      </button>
+      <ThemeToggleButton />
       <div className="group relative">
         <Link href={profileHref} className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
           <span className="grid size-12 place-items-center overflow-hidden rounded-full bg-[#C66170]">

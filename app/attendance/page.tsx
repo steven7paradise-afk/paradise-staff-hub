@@ -65,6 +65,7 @@ export default async function AttendancePage() {
 
   return (
     <AppShell title="Timbrature" subtitle="Registro ufficiale delle presenze salvate dai tablet autorizzati.">
+      <div className="administrative-night-page">
       <AttendanceManager
         readOnly={!canEditAttendance}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", photoUrl: worker.photo_url }))}
@@ -82,6 +83,7 @@ export default async function AttendancePage() {
           photoUrl: log.user.photo_url,
         }))}
       />
+      </div>
     </AppShell>
   );
 }

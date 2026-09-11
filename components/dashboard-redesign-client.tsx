@@ -76,6 +76,7 @@ type Props = {
   workerRequests?: WorkerRequest[];
   todayIsRest?: boolean;
   nextWorkDayLabel?: string | null;
+  greeting?: string;
   [key: string]: unknown;
 };
 
@@ -101,6 +102,7 @@ export function DashboardRedesignClient({
   workerRequests = [],
   todayIsRest = false,
   nextWorkDayLabel = null,
+  greeting = "Ciao",
 }: Props) {
   const [communicationsOpen, setCommunicationsOpen] = useState(false);
   const [activeComms, setActiveComms] = useState(unreadCommunications);
@@ -178,27 +180,32 @@ export function DashboardRedesignClient({
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-[#171717]">
+    <div className="worker-dashboard min-h-screen bg-transparent text-[#171717] dark:text-white">
       <main className="mx-auto w-full max-w-[1420px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <header className="flex flex-col gap-5 border border-[#ecc6dc] bg-white px-5 py-5 shadow-[0_12px_40px_rgba(96,30,67,0.06)] sm:flex-row sm:items-center sm:justify-between sm:px-7">
+        <header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)]">
+          <img src="/beta-login-hero.png" alt="" className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center" aria-hidden="true" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,8,21,0.88)_0%,rgba(78,20,48,0.62)_52%,rgba(66,14,39,0.18)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(24,6,15,0.32),transparent_65%)]" />
+          <div className="relative flex min-h-48 flex-col justify-end gap-5 px-5 py-6 sm:min-h-56 sm:flex-row sm:items-end sm:justify-between sm:px-8 sm:py-8">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-[#efb7d9] bg-[#fff0f8] font-black">
+            <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white/70 bg-white/90 font-black text-[#7d294f] shadow-xl sm:size-20">
               {currentUser.photo_url ? <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={userName} className="size-full object-cover" /> : initials}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#bd527f]">{todayIsRest ? "Giornata di riposo" : "La mia giornata"}</p>
-              <h1 className="truncate text-2xl font-black sm:text-3xl">{todayIsRest ? `Buon riposo, ${firstName}` : `Ciao, ${firstName}`}</h1>
-              <p className="mt-1 flex items-center gap-1.5 text-xs font-bold text-black/50"><MapPin className="size-3.5 text-[#c66170]" />{currentUser.locationName || "Sede non indicata"}</p>
-              {todayIsRest && <p className="mt-2 text-xs font-black text-[#9d3767]">Ci vediamo {nextWorkDayLabel || "al prossimo turno"}.</p>}
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ffc3dc]">{todayIsRest ? "Giornata di riposo" : "La mia giornata"}</p>
+              <h1 className="mt-1 truncate text-3xl font-black tracking-[-0.04em] sm:text-5xl">{todayIsRest ? `Buon riposo, ${firstName}` : `${greeting}, ${firstName}`}</h1>
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-white/70"><MapPin className="size-3.5 text-[#ffc3dc]" />{currentUser.locationName || "Sede non indicata"}</p>
+              {todayIsRest && <p className="mt-2 text-xs font-black text-[#ffc3dc]">Ci vediamo {nextWorkDayLabel || "al prossimo turno"}.</p>}
             </div>
           </div>
-          <button type="button" onClick={() => setCommunicationsOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#e8bfd6] bg-[#fff5fa] px-4 text-xs font-black uppercase text-[#9d3767] transition hover:bg-[#f5c1e2]">
+          <button type="button" onClick={() => setCommunicationsOpen(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/25 bg-white/12 px-5 text-xs font-black uppercase text-white backdrop-blur-md transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
             <Bell className="size-4" /> Comunicazioni
-            {communicationCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-black px-1.5 py-0.5 text-[10px] text-white">{communicationCount}</span>}
+            {communicationCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-white px-1.5 py-0.5 text-[10px] text-[#8f2857]">{communicationCount}</span>}
           </button>
+          </div>
         </header>
 
-        <section className="mt-5 grid border border-[#ecc6dc] bg-white lg:grid-cols-[1.35fr_0.65fr]">
+        <section className="worker-dashboard-enter worker-dashboard-enter-delay-1 mt-5 grid overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)] lg:grid-cols-[1.35fr_0.65fr]">
           <div className="border-b border-[#ecc6dc] p-5 sm:p-7 lg:border-b-0 lg:border-r">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -212,7 +219,7 @@ export function DashboardRedesignClient({
                   {todayLateMinutes > 10 && <span className="inline-flex items-center gap-2 bg-rose-50 px-3 py-2 text-[10px] font-black uppercase text-rose-700"><ClockAlert className="size-3.5" />Ritardo {todayLateMinutes} min</span>}
                 </div>
               </div>
-              <div className="min-w-[220px] bg-black px-5 py-4 text-white">
+              <div className="min-w-[220px] rounded-[18px] bg-black px-5 py-4 text-white dark:bg-[#111114]">
                 <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/50"><Timer className="size-4 text-[#f5c1e2]" />Tempo trascorso</p>
                 <p className="mt-3 font-mono text-3xl font-black">{formatDuration(attendance.status === "PAUSA" ? attendance.breakSeconds : attendance.workedSeconds)}</p>
                 <p className="mt-1 text-[10px] font-bold uppercase text-white/45">{attendance.status === "PAUSA" ? "Pausa corrente" : `Registrato oggi ${workedHoursFormatted}`}</p>
@@ -236,22 +243,22 @@ export function DashboardRedesignClient({
           </div>
         </section>
 
-        <section className="mt-5 border border-[#ecc6dc] bg-white">
+        <section className="worker-dashboard-enter worker-dashboard-enter-delay-2 mt-5 overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)]">
           <div className="flex items-center justify-between border-b border-[#ecc6dc] bg-[#f5c1e2] px-5 py-4 sm:px-6">
             <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/55">Planning personale</p><h2 className="mt-1 text-xl font-black">Turni di questa settimana</h2></div>
             <Link href="/my-shifts" className="inline-flex items-center gap-2 text-[10px] font-black uppercase">Calendario <ArrowRight className="size-4" /></Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
-            {weeklyShifts.map((shift) => <div key={shift.date} className={cn("min-h-32 border-b border-r border-[#ecd5e1] p-4 lg:border-b-0", shift.isToday && "bg-black text-white", shift.isRest && !shift.isToday && "bg-[#fff8fc]")}>
-              <div className="flex items-start justify-between"><p className={cn("text-[10px] font-black uppercase", shift.isToday ? "text-[#f5c1e2]" : "text-black/40")}>{shift.dayLabel}</p><p className="text-xl font-black">{shift.dayNumber}</p></div>
-              <p className="mt-5 text-xs font-black uppercase">{shift.categoryName}</p>
-              <p className={cn("mt-1 text-xs font-bold", shift.isToday ? "text-white/60" : "text-black/45")}>{shift.time}</p>
+          <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:grid lg:grid-cols-7 lg:gap-0 lg:overflow-visible lg:p-0">
+            {weeklyShifts.map((shift) => <div key={shift.date} className={cn("min-h-32 w-[132px] shrink-0 snap-start rounded-[18px] border border-[#ecd5e1] p-4 lg:w-auto lg:rounded-none lg:border-b-0 lg:border-l-0 lg:border-t-0", shift.isToday && !shift.isRest && "border-[#b63870] bg-[linear-gradient(145deg,#8e2957,#c6477e)] text-white", shift.isRest && "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-500/25 dark:bg-emerald-950/35 dark:text-emerald-100") }>
+              <div className="flex items-start justify-between"><p className={cn("text-[10px] font-black uppercase", shift.isToday && !shift.isRest ? "text-white/70" : shift.isRest ? "text-emerald-700 dark:text-emerald-300" : "text-black/40")}>{shift.dayLabel}</p><p className="text-xl font-black">{shift.dayNumber}</p></div>
+              <p className="mt-5 text-xs font-black uppercase">{shift.isRest ? "Riposo" : shift.categoryName}</p>
+              <p className={cn("mt-1 text-xs font-bold", shift.isToday && !shift.isRest ? "text-white/65" : shift.isRest ? "text-emerald-700 dark:text-emerald-300" : "text-black/45")}>{shift.isRest ? "Giornata libera" : shift.time}</p>
             </div>)}
           </div>
         </section>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_0.7fr]">
-          <div className="border border-[#ecc6dc] bg-white">
+        <section className="worker-dashboard-enter worker-dashboard-enter-delay-3 mt-5 grid gap-5 lg:grid-cols-[1fr_0.7fr]">
+          <div className="overflow-hidden rounded-[26px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.05)]">
             <div className="flex items-center justify-between border-b border-[#ecc6dc] px-5 py-4 sm:px-6"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#bd527f]">Assenze personali</p><h2 className="mt-1 text-xl font-black">Permessi e prossime ferie</h2></div><Umbrella className="size-5 text-[#c66170]" /></div>
             <div className="divide-y divide-[#f0dde7]">
               {requestPreview.length > 0 ? requestPreview.map((request) => <div key={request.id} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black uppercase">{request.type}</p><span className={cn("px-2 py-1 text-[9px] font-black uppercase", request.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{statusLabels[request.status] || request.status}</span></div><p className="mt-1 text-xs font-bold text-black/45">{request.period}{request.reason ? ` · ${request.reason}` : ""}</p></div><CalendarDays className="size-4 shrink-0 text-[#c66170]" /></div>) : <div className="px-5 py-8 text-sm font-bold text-black/40 sm:px-6">Nessuna richiesta o assenza programmata.</div>}
@@ -259,7 +266,7 @@ export function DashboardRedesignClient({
             <div className="border-t border-[#ecc6dc] p-4"><Link href="/requests" className="inline-flex min-h-11 w-full items-center justify-center gap-2 bg-black px-4 text-xs font-black uppercase text-white">Gestisci richieste <ArrowRight className="size-4" /></Link></div>
           </div>
 
-          <button type="button" onClick={() => setCommunicationsOpen(true)} className="group flex min-h-56 flex-col justify-between border border-[#ecc6dc] bg-[#fff0f8] p-6 text-left transition hover:bg-[#f5c1e2]">
+          <button type="button" onClick={() => setCommunicationsOpen(true)} className="group flex min-h-56 flex-col justify-between rounded-[26px] border border-[#ecc6dc] bg-[#fff0f8] p-6 text-left shadow-[0_14px_38px_rgba(59,24,42,0.05)] transition hover:-translate-y-0.5 hover:bg-[#f5c1e2]">
             <div className="flex items-center justify-between"><Bell className="size-6 text-[#bd527f]" /><span className="grid min-w-8 place-items-center rounded-full bg-black px-2 py-1 text-xs font-black text-white">{communicationCount}</span></div>
             <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#bd527f]">Bacheca personale</p><h2 className="mt-2 text-2xl font-black">Comunicazioni</h2><p className="mt-2 text-sm leading-6 text-black/55">Avvisi e messaggi della direzione in un unico spazio.</p><span className="mt-5 inline-flex items-center gap-2 text-xs font-black uppercase">Apri bacheca <ArrowRight className="size-4 transition group-hover:translate-x-1" /></span></div>
           </button>
@@ -267,7 +274,7 @@ export function DashboardRedesignClient({
       </main>
 
       {communicationsOpen && <div className="fixed inset-0 z-[80] bg-black/35" onClick={() => setCommunicationsOpen(false)} />}
-      <aside className={cn("fixed inset-y-0 right-0 z-[90] flex w-full max-w-md flex-col bg-white shadow-[-20px_0_60px_rgba(0,0,0,0.16)] transition-transform duration-300", communicationsOpen ? "translate-x-0" : "translate-x-full")} aria-hidden={!communicationsOpen}>
+      <aside className={cn("fixed inset-y-0 right-0 z-[90] flex w-full max-w-md flex-col bg-white shadow-[-20px_0_60px_rgba(0,0,0,0.16)] transition-transform duration-300 dark:bg-[#1c1c21] dark:text-white", communicationsOpen ? "translate-x-0" : "translate-x-full")} aria-hidden={!communicationsOpen}>
         <div className="flex items-center justify-between border-b border-[#ecc6dc] bg-[#f5c1e2] px-5 py-5"><div><p className="text-[10px] font-black uppercase tracking-[0.16em]">Bacheca</p><h2 className="mt-1 text-2xl font-black">Comunicazioni</h2></div><button type="button" onClick={() => setCommunicationsOpen(false)} className="grid size-11 place-items-center rounded-full bg-white" aria-label="Chiudi comunicazioni"><X className="size-5" /></button></div>
         <div className="flex-1 overflow-y-auto">
           {activeComms.length > 0 && <div className="divide-y divide-[#f0dde7] border-b border-[#ecc6dc]">{activeComms.map((comm) => <article key={comm.id} className="p-5"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#bd527f]">Da leggere</p><h3 className="mt-2 text-base font-black">{comm.title}</h3><p className="mt-2 text-sm leading-6 text-black/60">{comm.message}</p><button type="button" disabled={claimingId === comm.id} onClick={() => handleClaimPoint(comm.id)} className="mt-4 inline-flex min-h-10 items-center gap-2 bg-black px-4 text-[10px] font-black uppercase text-white disabled:opacity-50"><Check className="size-4" />Ho compreso</button></article>)}</div>}

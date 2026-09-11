@@ -59,6 +59,7 @@ export default async function CedoliniPage({
       subtitle="Carica e gestisci i cedolini, contratti e documenti HR di tutti i collaboratori."
       hidePageHeaderOnMobile
     >
+      <div className="administrative-night-page">
       <div className="mb-6">
         <DocumentUpload workers={workers} />
       </div>
@@ -70,6 +71,7 @@ export default async function CedoliniPage({
         initialWorkerId={params.employee ?? ""}
         initialType={params.type ?? "ALL"}
       />
+      </div>
     </AppShell>
   );
 }

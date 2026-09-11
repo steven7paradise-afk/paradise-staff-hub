@@ -82,6 +82,7 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [internalNotes, setInternalNotes] = useState<Record<string, InternalNote>>(initialNotes);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
@@ -163,11 +164,41 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
     return [...result.entries()];
   }, [monthEvents]);
 
+  const selectedDayEvents = useMemo(
+    () => selectedDayKey ? monthEvents.filter((event) => dateKey(event.start) === selectedDayKey) : [],
+    [monthEvents, selectedDayKey],
+  );
+  const visibleGroups = useMemo(
+    () => selectedDayKey ? groups.filter(([key]) => key === selectedDayKey) : groups,
+    [groups, selectedDayKey],
+  );
+  const selectedDayDate = selectedDayKey
+    ? new Date(year, month, Number(selectedDayKey.slice(-2)))
+    : null;
+
   const monthLabel = currentDate.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
   const selectedPhone = cleanPhone(selectedEvent?.customerPhone);
   const notes = selectedEvent ? cleanNotes(selectedEvent.description) : "";
   const savedInternalNote = selectedEvent ? internalNotes[selectedEvent.uid] : null;
   const noteChanged = Boolean(selectedEvent) && noteDraft.trim() !== (savedInternalNote?.note || "");
+
+  function openDay(date: Date, dayEvents: ParsedEvent[]) {
+    setSelectedDayKey(dateKey(date));
+    if (dayEvents[0]) setSelectedId(dayEvents[0].uid);
+  }
+
+  function moveMonth(offset: number) {
+    setCurrentDate(new Date(year, month + offset, 1));
+    setSelectedDayKey(null);
+  }
+
+  function openToday() {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDayKey(dateKey(today));
+    const firstTodayEvent = events.find((event) => dateKey(event.start) === dateKey(today));
+    if (firstTodayEvent) setSelectedId(firstTodayEvent.uid);
+  }
 
   async function saveInternalNote() {
     if (!selectedEvent || noteSaving) return;
@@ -211,7 +242,7 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
   }
 
   return (
-    <section className="space-y-5">
+    <section className="online-consultations-page relative isolate space-y-5 overflow-hidden rounded-[38px] p-3 sm:p-5 lg:p-7">
       {noteFeedback ? (
         <div
           role="alert"
@@ -249,10 +280,10 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
           </button>
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(125deg,rgba(255,255,255,.94),rgba(255,238,244,.88)_52%,rgba(238,231,248,.9))] shadow-[0_24px_70px_rgba(86,45,57,.10)]">
+      <div className="consultations-hero overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(125deg,rgba(255,255,255,.94),rgba(255,238,244,.88)_52%,rgba(238,231,248,.9))] shadow-[0_24px_70px_rgba(86,45,57,.10)]">
         <div className="grid gap-6 px-5 py-6 sm:px-7 lg:grid-cols-[1fr_auto] lg:items-end lg:px-8 lg:py-7">
           <div className="flex items-start gap-4">
-            <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#171319] text-white shadow-lg shadow-black/10 sm:size-14">
+            <div className="consultations-hero-icon grid size-12 shrink-0 place-items-center rounded-2xl bg-[#171319] text-white shadow-lg shadow-black/10 sm:size-14">
               <Video className="size-6" strokeWidth={1.8} />
             </div>
             <div>
@@ -269,18 +300,18 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 overflow-hidden rounded-[28px] border border-black/[0.05] bg-white shadow-[0_18px_55px_rgba(75,42,54,.07)]">
-          <div className="space-y-4 border-b border-black/[0.06] p-4 sm:p-5 lg:p-6">
+      <div className="consultations-layout grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="consultations-calendar min-w-0 overflow-hidden rounded-[28px] border border-black/[0.05] bg-white shadow-[0_18px_55px_rgba(75,42,54,.07)]">
+          <div className="consultations-calendar-toolbar space-y-4 border-b border-black/[0.06] p-4 sm:p-5 lg:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-2">
-                <NavButton label="Mese precedente" onClick={() => setCurrentDate(new Date(year, month - 1, 1))}><ChevronLeft className="size-4" /></NavButton>
+                <NavButton label="Mese precedente" onClick={() => moveMonth(-1)}><ChevronLeft className="size-4" /></NavButton>
                 <div className="min-w-[150px] px-2 text-center sm:min-w-[180px]">
                   <p className="text-[9px] font-black uppercase tracking-[0.18em] text-black/35">Calendario</p>
                   <h2 className="mt-0.5 text-lg font-black capitalize tracking-[-0.02em] text-[#171319]">{monthLabel}</h2>
                 </div>
-                <NavButton label="Mese successivo" onClick={() => setCurrentDate(new Date(year, month + 1, 1))}><ChevronRight className="size-4" /></NavButton>
-                <button type="button" onClick={() => setCurrentDate(new Date())} className="ml-1 hidden h-11 items-center rounded-2xl border border-black/[0.07] px-4 text-xs font-black text-black/65 transition hover:bg-black/[0.03] sm:flex">Oggi</button>
+                <NavButton label="Mese successivo" onClick={() => moveMonth(1)}><ChevronRight className="size-4" /></NavButton>
+                <button type="button" onClick={openToday} className="ml-1 hidden h-11 items-center rounded-2xl border border-black/[0.07] px-4 text-xs font-black text-black/65 transition hover:bg-black/[0.03] sm:flex">Oggi</button>
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row lg:max-w-[530px] lg:justify-end">
                 <label className="relative min-w-0 flex-1">
@@ -299,30 +330,50 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
 
           {viewMode === "month" ? (
             <div className="overflow-x-auto p-4 sm:p-5 lg:p-6">
-              <div className="min-w-[820px]">
-                <div className="mb-2 grid grid-cols-7 text-center">
+              <div className="min-w-[760px]">
+                <div className="consultations-weekdays mb-3 grid grid-cols-7 gap-2 text-center">
                   {weekDays.map((day) => <div key={day} className="py-2 text-[10px] font-black uppercase tracking-[0.14em] text-black/35">{day}</div>)}
                 </div>
-                <div className="grid grid-cols-7 overflow-hidden rounded-[22px] border border-black/[0.07] bg-black/[0.035]">
+                <div className="consultations-calendar-grid grid grid-cols-7 gap-2 rounded-[24px] bg-transparent">
                   {cells.map((cell, index) => (
-                    <div key={`${cell.date?.toISOString() || "empty"}-${index}`} className={`min-h-[132px] border-b border-r border-black/[0.055] p-2.5 ${cell.date ? "bg-white" : "bg-[#F7F4F5]"}`}>
+                    <div data-selected={cell.date && dateKey(cell.date) === selectedDayKey ? "true" : "false"} key={`${cell.date?.toISOString() || "empty"}-${index}`} className={`consultations-calendar-cell min-h-[128px] rounded-[18px] border p-2.5 ${cell.date ? "bg-white/70" : "consultations-calendar-cell-empty bg-white/20"}`}>
                       {cell.date && <div className="flex items-center justify-between">
-                        <span className={`grid size-7 place-items-center rounded-full text-[11px] font-black ${dateKey(cell.date) === todayKey ? "bg-[#171319] text-white shadow-md" : "text-black/55"}`}>{cell.date.getDate()}</span>
-                        {cell.events.length > 0 && <span className="rounded-full bg-[#A74758]/10 px-2 py-1 text-[9px] font-black text-[#A74758]">{cell.events.length}</span>}
+                        <button type="button" onClick={() => openDay(cell.date!, cell.events)} aria-label={`Apri ${fullDate(cell.date)}`} aria-pressed={dateKey(cell.date) === selectedDayKey} className={`consultations-calendar-date grid size-8 place-items-center rounded-full text-[11px] font-black transition ${dateKey(cell.date) === todayKey ? "consultations-calendar-today bg-[#A74758] text-white shadow-md" : "text-black/55 hover:bg-[#A74758]/10 hover:text-[#A74758]"}`}>{cell.date.getDate()}</button>
+                        {cell.events.length > 0 && <button type="button" onClick={() => openDay(cell.date!, cell.events)} aria-label={`Mostra ${cell.events.length} appuntamenti del ${fullDate(cell.date)}`} className="consultations-calendar-count rounded-full bg-[#A74758]/10 px-2 py-1 text-[9px] font-black text-[#A74758]">{cell.events.length}</button>}
                       </div>}
                       <div className="mt-2 space-y-1.5">
-                        {cell.events.slice(0, 3).map((event) => <EventPill key={event.uid} event={event} active={selectedEvent?.uid === event.uid} onClick={() => setSelectedId(event.uid)} />)}
-                        {cell.events.length > 3 && <button type="button" onClick={() => setViewMode("list")} className="w-full py-1 text-[9px] font-black text-black/35 hover:text-[#A74758]">+{cell.events.length - 3} altre</button>}
+                        {cell.events.slice(0, 3).map((event) => <EventPill key={event.uid} event={event} active={selectedEvent?.uid === event.uid} onClick={() => { setSelectedDayKey(dateKey(event.start)); setSelectedId(event.uid); }} />)}
+                        {cell.events.length > 3 && <button type="button" onClick={() => openDay(cell.date!, cell.events)} className="w-full py-1 text-[9px] font-black text-black/35 hover:text-[#A74758]">+{cell.events.length - 3} altre</button>}
                       </div>
                     </div>
                   ))}
                 </div>
+                {selectedDayDate ? (
+                  <section className="consultations-day-agenda mt-5 rounded-[24px] border border-white/70 bg-white/70 p-4 shadow-[0_14px_38px_rgba(83,62,88,.08)] sm:p-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#A74758]">Agenda del giorno</p>
+                        <h3 className="mt-1 text-lg font-black capitalize text-[#171319]">{fullDate(selectedDayDate)}</h3>
+                        <p className="mt-1 text-xs font-semibold text-black/40">{selectedDayEvents.length} {selectedDayEvents.length === 1 ? "consulenza" : "consulenze"}</p>
+                      </div>
+                      <button type="button" onClick={() => setSelectedDayKey(null)} className="rounded-full border border-black/[0.07] bg-white px-4 py-2 text-[10px] font-black text-black/55 transition hover:bg-black/[0.04]">Tutto il mese</button>
+                    </div>
+                    {selectedDayEvents.length > 0 ? (
+                      <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+                        {selectedDayEvents.map((event) => <ListRow key={event.uid} event={event} active={selectedEvent?.uid === event.uid} onClick={() => setSelectedId(event.uid)} />)}
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-xs font-semibold text-black/40">Nessuna consulenza in questa giornata.</div>
+                    )}
+                  </section>
+                ) : null}
               </div>
             </div>
           ) : (
             <div className="max-h-[720px] overflow-y-auto p-4 sm:p-5 lg:p-6">
-              {groups.length === 0 ? <EmptyState searchActive={Boolean(query)} /> : <div className="space-y-7">
-                {groups.map(([key, dayEvents]) => <div key={key}>
+              {selectedDayKey ? <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl bg-[#A74758]/[0.08] px-4 py-3"><p className="text-xs font-black capitalize text-[#A74758]">{selectedDayDate ? fullDate(selectedDayDate) : "Giorno selezionato"}</p><button type="button" onClick={() => setSelectedDayKey(null)} className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-black/55">Tutto il mese</button></div> : null}
+              {visibleGroups.length === 0 ? <EmptyState searchActive={Boolean(query)} /> : <div className="space-y-7">
+                {visibleGroups.map(([key, dayEvents]) => <div key={key}>
                   <div className="mb-3 flex items-center gap-3">
                     <div className="grid size-10 place-items-center rounded-2xl bg-[#171319] text-sm font-black text-white">{dayEvents[0].start.getDate()}</div>
                     <div><h3 className="text-sm font-black capitalize text-[#171319]">{fullDate(dayEvents[0].start)}</h3><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-black/35">{dayEvents.length} {dayEvents.length === 1 ? "consulenza" : "consulenze"}</p></div>
@@ -334,7 +385,7 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
           )}
         </div>
 
-        <aside className="h-fit overflow-hidden rounded-[28px] border border-black/[0.05] bg-white shadow-[0_18px_55px_rgba(75,42,54,.07)] xl:sticky xl:top-5">
+        <aside className="consultations-detail h-fit overflow-hidden rounded-[28px] border border-black/[0.05] bg-white shadow-[0_18px_55px_rgba(75,42,54,.07)] xl:sticky xl:top-5">
           {selectedEvent ? <>
             <div className="bg-[linear-gradient(145deg,#171319,#2A2027)] p-5 text-white sm:p-6">
               <div className="flex items-start justify-between gap-4">
@@ -384,7 +435,7 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
 }
 
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
-  return <div className="min-w-0 rounded-2xl border border-white/80 bg-white/65 px-3 py-3 backdrop-blur-xl sm:min-w-[112px] sm:px-4"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/35">{label}</p><p className={`mt-1 truncate font-black text-[#171319] ${compact ? "text-sm" : "text-xl"}`}>{value}</p></div>;
+  return <div className="consultations-metric min-w-0 rounded-2xl border border-white/80 bg-white/65 px-3 py-3 backdrop-blur-xl sm:min-w-[112px] sm:px-4"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/35">{label}</p><p className={`mt-1 truncate font-black text-[#171319] ${compact ? "text-sm" : "text-xl"}`}>{value}</p></div>;
 }
 
 function NavButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
@@ -396,7 +447,7 @@ function ViewButton({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function EventPill({ event, active, onClick }: { event: ParsedEvent; active: boolean; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className={`block w-full rounded-xl border px-2 py-1.5 text-left transition ${active ? "border-[#A74758]/30 bg-[#A74758] text-white shadow-sm" : "border-[#A74758]/10 bg-[#FFF6F8] text-[#7D3442] hover:border-[#A74758]/25 hover:bg-[#FDECF0]"}`}><span className={`block text-[8px] font-black ${active ? "text-white/65" : "text-[#A74758]/55"}`}>{time(event.start)}</span><span className="mt-0.5 block truncate text-[10px] font-extrabold">{event.customerName}</span></button>;
+  return <button type="button" data-active={active ? "true" : "false"} onClick={onClick} className={`consultation-event-pill block w-full rounded-xl border px-2 py-1.5 text-left transition ${active ? "border-[#A74758]/30 bg-[#A74758] text-white shadow-sm" : "border-[#A74758]/10 bg-[#FFF6F8] text-[#7D3442] hover:border-[#A74758]/25 hover:bg-[#FDECF0]"}`}><span className={`block text-[8px] font-black ${active ? "text-white/65" : "text-[#A74758]/55"}`}>{time(event.start)}</span><span className="mt-0.5 block truncate text-[10px] font-extrabold">{event.customerName}</span></button>;
 }
 
 function ListRow({ event, active, onClick }: { event: ParsedEvent; active: boolean; onClick: () => void }) {

@@ -79,6 +79,7 @@ export default async function MalattiePage(props: {
 
   return (
     <AppShell title="Malattie" subtitle="Gestione dei certificati medici e delle assenze dello staff.">
+      <div className="administrative-night-page">
       <MalattieManager
         initialRequests={requests.map((r) => ({
           id: r.id,
@@ -105,6 +106,7 @@ export default async function MalattiePage(props: {
         prevMonthUrl={prevYearUrl}
         nextMonthUrl={nextYearUrl}
       />
+      </div>
     </AppShell>
   );
 }

@@ -108,7 +108,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
       role={role}
       hideHeader
     >
-      <div className="space-y-6">
+      <div className="administrative-night-page space-y-6">
         {/* Header Premium Rose/Red Band */}
         <section className="relative overflow-hidden -mx-4 rounded-none sm:mx-0 sm:rounded-[36px] bg-[#050608] pt-12 pb-5 px-5 text-white shadow-2xl sm:p-8">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(244,63,94,0.22),transparent_32%),radial-gradient(circle_at_70%_20%,rgba(251,146,60,0.18),transparent_30%),linear-gradient(135deg,#050608,#0f172a_62%,#0f172a)]" />

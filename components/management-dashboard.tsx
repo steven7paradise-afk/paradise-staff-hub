@@ -194,14 +194,16 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       aria-pressed={active}
       aria-expanded={active}
       aria-controls={controls}
-      className={`group min-h-36 min-w-0 rounded-[22px] border px-5 py-4 text-left transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none ${featured ? "border-[#d85991] bg-[linear-gradient(145deg,#b62f69_0%,#d95d95_55%,#f08bb8_100%)] text-white shadow-[0_18px_35px_rgba(183,47,105,0.22)] hover:border-[#b62f69]" : "border-black/[0.07] bg-white text-[#171719] shadow-[0_8px_24px_rgba(20,16,18,0.045)] hover:border-black/15 dark:border-white/10 dark:bg-[#292a30] dark:text-white dark:hover:border-white/20"} ${active && !featured ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
+      aria-label={`${label}: ${value}. ${note}`}
+      title={`${label}: ${value}`}
+      className={`group min-h-[94px] min-w-0 rounded-[18px] border px-1 py-2 text-center transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none sm:min-h-[108px] sm:rounded-[22px] sm:px-3 sm:py-3 ${featured ? "border-[#d85991] bg-[linear-gradient(145deg,#b62f69_0%,#d95d95_55%,#f08bb8_100%)] text-white shadow-[0_18px_35px_rgba(183,47,105,0.22)] hover:border-[#b62f69]" : "border-black/[0.07] bg-white text-[#171719] shadow-[0_8px_24px_rgba(20,16,18,0.045)] hover:border-black/15 dark:border-white/10 dark:bg-[#292a30] dark:text-white dark:hover:border-white/20"} ${active && !featured ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
     >
-      <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] ${featured ? "text-white/75" : "text-black/50 dark:text-white/60"}`}>
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${featured ? "bg-white text-[#b62f69]" : colors}`}><Icon size={16} aria-hidden="true" /></span>
-        {label}
+      <div className="flex flex-col items-center justify-center gap-1">
+        <p className={`w-full truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] ${featured ? "text-white/80" : "text-black/50 dark:text-white/60"}`}>{label}</p>
+        <span className={`flex size-7 shrink-0 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none sm:size-9 ${featured ? "bg-white text-[#b62f69]" : colors}`}><Icon className="size-3.5 sm:size-4" aria-hidden="true" /></span>
+        <p className={`text-lg font-black leading-none tabular-nums sm:text-2xl ${featured ? "text-white" : "text-[#171719] dark:text-white"}`}>{value}</p>
+        <span className="sr-only">{label}. {note}</span>
       </div>
-      <p className={`text-3xl font-black ${featured ? "text-white" : "text-[#171719] dark:text-white"}`}>{value}</p>
-      <p className={`mt-1 flex items-center gap-1 text-xs leading-5 ${featured ? "text-white/75" : "text-black/55 dark:text-white/55"}`}>{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
     </button>
   );
 }
@@ -347,17 +349,17 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
-        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-5">
-          <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="pink" featured active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+          <Metric label="Presenti" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="pink" featured active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
           <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
-          <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
-          <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
+          <Metric label="Ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
+          <Metric label="Malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
           <Metric label="Ritardi" value={String(data.lateStaff.length)} note="presi in visione" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
         </div>
       </section>
 
       {personnelView === "PRESENT" || personnelView === "ABSENT" || personnelView === "LATE" ? (
-        <section id="personale-oggi" className="order-3 scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
+        <section id="personale-oggi" className="order-2 scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
@@ -397,7 +399,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       ) : null}
 
       {personnelView === "HOLIDAYS" || personnelView === "SICKNESS" ? (
-        <section id="assenze-attive" className="order-3 scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
+        <section id="assenze-attive" className="order-2 scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
@@ -595,7 +597,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         )}
       </section>
 
-      <section className="order-2 overflow-hidden rounded-[28px] border border-[#7e294f]/30 bg-[linear-gradient(145deg,#2b1722_0%,#431b30_52%,#642441_100%)] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)] dark:border-[#f080b7]/20 dark:bg-[linear-gradient(145deg,#171217_0%,#2a1822_55%,#451d31_100%)]">
+      <section className="order-3 overflow-hidden rounded-[28px] border border-[#7e294f]/30 bg-[linear-gradient(145deg,#2b1722_0%,#431b30_52%,#642441_100%)] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)] dark:border-[#f080b7]/20 dark:bg-[linear-gradient(145deg,#171217_0%,#2a1822_55%,#451d31_100%)]">
         <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>

@@ -12,7 +12,7 @@ import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { SidebarFrame } from "@/components/sidebar-frame";
-import { TopControls } from "@/components/top-controls";
+import { ThemeRestorer, TopControls } from "@/components/top-controls";
 import { NotificationWatcher } from "@/components/notification-watcher";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
 import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
@@ -405,7 +405,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             profileHref="/profile"
             logoutButton={
               <LogoutButton
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200"
+                className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200"
                 redirectTo={isPcCassa ? pcProfileChooserHref : undefined}
                 skipSignOut={isPcCassa}
                 label={isPcCassa ? "Cambia profilo" : "Esci"}
@@ -478,7 +478,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<>{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
+      main={<><ThemeRestorer />{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),

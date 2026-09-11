@@ -66,12 +66,14 @@ export default async function CassaLivePage() {
 
 function CashmaticLiveFrame() {
   return (
-    <iframe
-      src={CASHMATIC_LIVE_URL}
-      title="Terminale POS Cashmatic"
-      loading="eager"
-      allow="clipboard-read; clipboard-write"
-      className="block h-[calc(100dvh-64px)] min-h-[640px] w-full border-0 bg-white xl:h-dvh"
-    />
+    <div className="administrative-night-page cashmatic-live-shell h-full w-full bg-white dark:bg-[#151518]">
+      <iframe
+        src={CASHMATIC_LIVE_URL}
+        title="Terminale POS Cashmatic"
+        loading="eager"
+        allow="clipboard-read; clipboard-write"
+        className="block h-[calc(100dvh-64px)] min-h-[640px] w-full border-0 bg-white dark:bg-[#151518] xl:h-dvh"
+      />
+    </div>
   );
 }

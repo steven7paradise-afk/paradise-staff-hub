@@ -26,6 +26,7 @@ export default async function WorkHoursPage() {
 
   return (
     <AppShell title="Ore staff" subtitle="Controllo mensile di ore timbrate, ore riconosciute e assenze retribuite per ogni lavoratore." role={role}>
+      <div className="administrative-night-page">
       <WorkHoursManager
         initialYear={year}
         initialMonth={month}
@@ -38,6 +39,7 @@ export default async function WorkHoursPage() {
           photoUrl: worker.photo_url ?? null,
         }))}
       />
+      </div>
     </AppShell>
   );
 }

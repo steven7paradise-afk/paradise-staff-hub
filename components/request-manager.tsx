@@ -249,8 +249,8 @@ function RequestDetailPanel({
   const canEditDecision = ((canApprove || canFlag) && isPending) || canEmployeeAcknowledge;
 
   return (
-    <aside className="overflow-hidden rounded-[26px] border border-paradise-pink/20 bg-white shadow-[0_18px_50px_rgba(92,44,67,0.09)]">
-      <div className="relative flex items-start justify-between gap-4 overflow-hidden border-b border-paradise-pink/15 bg-gradient-to-br from-white via-[#fffafd] to-paradise-softPink/45 px-5 py-5 sm:px-6 sm:py-6">
+    <aside className="request-detail-panel overflow-hidden rounded-[26px] border border-paradise-pink/20 bg-white shadow-[0_18px_50px_rgba(92,44,67,0.09)]">
+      <div className="request-detail-hero relative flex items-start justify-between gap-4 overflow-hidden border-b border-paradise-pink/15 bg-gradient-to-br from-white via-[#fffafd] to-paradise-softPink/45 px-5 py-5 sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute -right-10 -top-14 size-40 rounded-full bg-paradise-pink/10 blur-2xl" />
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Dettaglio richiesta</p>
@@ -282,7 +282,7 @@ function RequestDetailPanel({
         ) : null}
       </div>
 
-      <div className="space-y-3 bg-[#fffdfd] px-4 py-4 sm:px-5 sm:py-5">
+      <div className="request-detail-body space-y-3 bg-[#fffdfd] px-4 py-4 sm:px-5 sm:py-5">
         <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4">
           <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-paradise-noir">
             <Calendar className="size-4 text-paradise-pink" /> Periodo e orario

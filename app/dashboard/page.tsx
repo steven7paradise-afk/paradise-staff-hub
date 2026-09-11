@@ -768,6 +768,12 @@ export default async function DashboardPage() {
   const nextWorkDayLabel = nextWorkShift
     ? new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(nextWorkShift.date)
     : null;
+  const greetingHour = romeDateTimeParts(new Date()).hour;
+  const greeting = greetingHour >= 5 && greetingHour < 12
+    ? "Buongiorno"
+    : greetingHour >= 12 && greetingHour < 18
+      ? "Buon pomeriggio"
+      : "Buonasera";
 
   return (
     <AppShell 
@@ -817,6 +823,7 @@ export default async function DashboardPage() {
         workerRequests={workerRequests}
         todayIsRest={todayIsRest}
         nextWorkDayLabel={nextWorkDayLabel}
+        greeting={greeting}
       />
     </AppShell>
   );

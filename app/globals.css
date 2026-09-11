@@ -263,6 +263,581 @@ html:not(.dark) .paradise-theme-root {
   color: rgba(255, 255, 255, 0.66) !important;
 }
 
+/* Board appuntamenti: gerarchia dedicata in modalità notte. Le regole sopra
+   normalizzano l'intera pagina; qui restituiamo identità a colonne, stati e
+   note operative senza aumentare il rumore visivo. */
+.dark .appointments-workspace .appointments-board-scroll {
+  background: #151518 !important;
+}
+
+.dark .appointments-workspace .appointments-board-column {
+  background: #2b2c31 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18) !important;
+}
+
+.dark .appointments-workspace .appointments-board-worker {
+  background: #202125 !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16) !important;
+}
+
+.dark .appointments-workspace .appointments-board-card {
+  background: #202125 !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  border-left-width: 1px !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18) !important;
+}
+
+.dark .appointments-workspace .appointments-board-card:hover {
+  background: #25262b !important;
+  border-color: rgba(240, 128, 183, 0.42) !important;
+}
+
+.dark .appointments-workspace .appointments-board-status {
+  background: rgba(216, 90, 145, 0.13) !important;
+  border-color: rgba(240, 128, 183, 0.28) !important;
+  color: #f7acd0 !important;
+}
+
+.dark .appointments-workspace [data-appointment-state="completato"] .appointments-board-status {
+  background: rgba(88, 201, 132, 0.12) !important;
+  border-color: rgba(88, 201, 132, 0.28) !important;
+  color: #8ce1ad !important;
+}
+
+.dark .appointments-workspace [data-appointment-state="iniziato"] .appointments-board-status {
+  background: rgba(67, 205, 167, 0.12) !important;
+  border-color: rgba(67, 205, 167, 0.28) !important;
+  color: #87e3c8 !important;
+}
+
+.dark .appointments-workspace [data-appointment-state="in_attesa"] .appointments-board-status {
+  background: rgba(224, 184, 79, 0.12) !important;
+  border-color: rgba(224, 184, 79, 0.28) !important;
+  color: #f1cf75 !important;
+}
+
+.dark .appointments-workspace [data-appointment-state="canceled"] .appointments-board-status,
+.dark .appointments-workspace [data-appointment-state="non_presentato"] .appointments-board-status {
+  background: rgba(237, 113, 128, 0.12) !important;
+  border-color: rgba(237, 113, 128, 0.28) !important;
+  color: #f5a1ab !important;
+}
+
+.dark .appointments-workspace .appointments-board-office-note {
+  background: #2c2d32 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .appointments-workspace .appointments-board-add-note {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+.dark .appointments-workspace .appointment-note-preview[data-appointment-note="shopify"] {
+  background: #2c2d32 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  box-shadow: none !important;
+}
+
+.dark .appointments-workspace .appointment-note-preview[data-appointment-note="booking"],
+.dark .appointments-workspace .appointment-note-preview[data-appointment-note="form"] {
+  background: rgba(255, 255, 255, 0.045) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* Controllo giornata: in notte usa la stessa gerarchia antracite del board
+   appuntamenti. Gli stati restano riconoscibili dai badge, non dallo sfondo. */
+.dark .app-content-surface:has(.daily-client-control),
+.dark .app-content-surface:has(.daily-client-control) .app-liquid-canvas {
+  background: #151518 !important;
+}
+
+.dark .app-content-surface .daily-client-control .daily-control-header,
+.dark .app-content-surface .daily-client-control .daily-control-card,
+.dark .app-content-surface .daily-client-control .daily-control-empty {
+  background: #202125 !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .app-content-surface .daily-client-control .daily-control-heading {
+  background: #202125 !important;
+  background-image: none !important;
+}
+
+.dark .app-content-surface .daily-client-control .daily-control-toolbar {
+  background: #292a2f !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .app-content-surface .daily-client-control .daily-control-field,
+.dark .app-content-surface .daily-client-control .daily-control-staff {
+  background: #2c2d32 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .app-content-surface .daily-client-control .daily-control-result {
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+.dark .app-content-surface .daily-client-control [data-control-state="complete"] .daily-control-result,
+.dark .app-content-surface .daily-client-control [data-control-state="complete"] .daily-control-status,
+.dark .app-content-surface .daily-client-control .daily-control-check[data-done="true"] {
+  background: rgba(88, 201, 132, 0.1) !important;
+  border-color: rgba(88, 201, 132, 0.25) !important;
+  color: #8ce1ad !important;
+}
+
+.dark .app-content-surface .daily-client-control [data-control-state="incomplete"] :is(.daily-control-result, .daily-control-status),
+.dark .app-content-surface .daily-client-control [data-control-state="draft"] .daily-control-result,
+.dark .app-content-surface .daily-client-control .daily-control-check[data-done="false"] {
+  background: rgba(224, 184, 79, 0.1) !important;
+  border-color: rgba(224, 184, 79, 0.25) !important;
+  color: #f1cf75 !important;
+}
+
+.dark .app-content-surface .daily-client-control :is(
+  [class*="text-[#21"],
+  [class*="text-[#30"],
+  [class*="text-[#33"]
+) {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.dark .app-content-surface .daily-client-control :is(
+  [class*="text-[#6F"],
+  [class*="text-[#7B"]
+) {
+  color: rgba(255, 255, 255, 0.64) !important;
+}
+
+.dark .app-content-surface .daily-client-control [data-control-state="draft"] .daily-control-status {
+  background: rgba(105, 181, 235, 0.11) !important;
+  border-color: rgba(105, 181, 235, 0.28) !important;
+  color: #9bd3f7 !important;
+}
+
+/* Ordini Shopify: nessun lampo bianco su hover, selezione o apertura del
+   dettaglio. Il colore resta riservato agli stati dell'ordine. */
+.dark .shopify-orders-page,
+.dark .shopify-orders-page > [role="dialog"] {
+  background: #151518 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .shopify-orders-page :is(header, main > section, [role="dialog"] > header) {
+  background-color: #202125 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .shopify-orders-page :is(input, select, button[class*="bg-white"], section[class*="bg-white"], div[class*="bg-white"]) {
+  background-color: #292a2f !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.dark .shopify-orders-page thead {
+  background: #292a2f !important;
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.dark .shopify-orders-page .shopify-order-row {
+  background: #202125 !important;
+  border-color: rgba(255, 255, 255, 0.075) !important;
+}
+
+.dark .shopify-orders-page .shopify-order-row:hover,
+.dark .shopify-orders-page .shopify-order-row:active {
+  background: #2b2c31 !important;
+  box-shadow: inset 3px 0 0 #e870aa;
+}
+
+.dark .shopify-orders-page :is(
+  [class*="text-[#20"],
+  [class*="text-[#30"]
+) {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.dark .shopify-orders-page :is(
+  [class*="text-[#4a"],
+  [class*="text-[#61"],
+  [class*="text-[#6d"],
+  [class*="text-[#8c"]
+) {
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.dark .shopify-orders-page .shopify-order-status[data-tone="positive"] {
+  background: rgba(88, 201, 132, 0.13) !important;
+  color: #8ce1ad !important;
+}
+
+.dark .shopify-orders-page .shopify-order-status[data-tone="warning"] {
+  background: rgba(224, 184, 79, 0.14) !important;
+  color: #f1cf75 !important;
+}
+
+.dark .shopify-orders-page .shopify-order-status[data-tone="neutral"] {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.66) !important;
+}
+
+/* Pipeline ordini: colonne e schede condividono superfici antracite. Gli
+   accenti laterali e i badge comunicano lo stato senza riempimenti chiari. */
+.dark .app-content-surface:has(.orders-workspace),
+.dark .app-content-surface:has(.orders-workspace) .app-liquid-canvas {
+  background: #151518 !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-toolbar {
+  background: #202125 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-scanner,
+.dark .app-content-surface .orders-workspace .orders-summary {
+  background: #26272c !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-summary > button {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-summary > button.orders-summary-active {
+  background: rgba(212, 82, 139, 0.12) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-summary > button :is([class~="text-black"], [class*="text-black/"]) {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-scanner-input,
+.dark .app-content-surface .orders-workspace .orders-scanner-camera {
+  background: #1c1d21 !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-scanner-input::placeholder {
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-column {
+  background: #2b2c31 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-card {
+  background: #202125 !important;
+  border-top-color: rgba(255, 255, 255, 0.13) !important;
+  border-right-color: rgba(255, 255, 255, 0.13) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .app-content-surface .orders-workspace .orders-card:hover,
+.dark .app-content-surface .orders-workspace .orders-card:active {
+  background: #26272c !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24) !important;
+}
+
+.dark .app-content-surface .orders-workspace :is(
+  [class*="text-[#21"],
+  [class*="text-[#22"],
+  [class~="text-black"],
+  [class*="text-slate-9"]
+) {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.dark .app-content-surface .orders-workspace :is(
+  [class*="text-black/"],
+  [class*="text-slate-5"]
+) {
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.dark .orders-detail-layer,
+.dark .orders-detail-layer .orders-detail-page {
+  background: #151518 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .orders-detail-layer .orders-detail-header {
+  background: rgba(21, 21, 24, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .orders-detail-layer :is([class~="bg-white"], [class~="bg-white/95"], [class*="bg-[#FC"], [class*="bg-[#FA"]) {
+  background-color: #24252a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .orders-detail-layer :is([class~="text-black"], [class*="text-black/"], [class*="text-slate-9"]) {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+/* Consulenze online: dashboard ariosa su un fondale pastel molto leggero. */
+.online-consultations-page {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(250, 199, 229, 0.72), transparent 30%),
+    radial-gradient(circle at 52% 48%, rgba(255, 216, 190, 0.58), transparent 35%),
+    radial-gradient(circle at 94% 9%, rgba(210, 226, 250, 0.82), transparent 34%),
+    linear-gradient(135deg, #f5ecf7 0%, #eef4fb 48%, #f6eee9 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.54);
+}
+
+.online-consultations-page .consultations-hero,
+.online-consultations-page .consultations-calendar,
+.online-consultations-page .consultations-detail {
+  border-color: rgba(255, 255, 255, 0.76) !important;
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 24px 65px rgba(77, 63, 91, 0.1) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(118%);
+  backdrop-filter: blur(24px) saturate(118%);
+}
+
+.online-consultations-page .consultations-hero {
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.88), rgba(255, 241, 249, 0.76), rgba(240, 245, 255, 0.84)) !important;
+}
+
+.online-consultations-page .consultations-hero-icon {
+  background: linear-gradient(145deg, #e87bad, #aa4d84) !important;
+  box-shadow: 0 14px 30px rgba(181, 71, 126, 0.24) !important;
+}
+
+.online-consultations-page .consultations-calendar-toolbar {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.online-consultations-page .consultations-calendar-grid {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.online-consultations-page .consultations-calendar-cell {
+  background: rgba(255, 255, 255, 0.66) !important;
+  border-color: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: 0 8px 24px rgba(81, 66, 91, 0.045);
+}
+
+.online-consultations-page .consultations-calendar-cell-empty {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.32) !important;
+  box-shadow: none;
+}
+
+.online-consultations-page .consultations-calendar-cell[data-selected="true"] {
+  border-color: rgba(190, 78, 132, 0.3) !important;
+  background: rgba(255, 244, 249, 0.84) !important;
+  box-shadow: 0 12px 30px rgba(174, 66, 120, 0.11) !important;
+}
+
+.online-consultations-page .consultations-day-agenda {
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.online-consultations-page .consultations-calendar-today {
+  background: linear-gradient(145deg, #e576a8, #b84e83) !important;
+  box-shadow: 0 7px 16px rgba(183, 74, 130, 0.26) !important;
+}
+
+.online-consultations-page .consultations-calendar-count {
+  background: rgba(183, 74, 130, 0.1) !important;
+}
+
+.online-consultations-page .consultation-event-pill[data-active="false"] {
+  background: rgba(255, 242, 248, 0.78) !important;
+}
+
+.online-consultations-page .consultation-event-pill[data-active="true"] {
+  background: linear-gradient(135deg, #cf6798, #ad4678) !important;
+  border-color: rgba(160, 53, 105, 0.24) !important;
+  box-shadow: 0 7px 16px rgba(174, 66, 120, 0.2) !important;
+}
+
+.online-consultations-page .consultations-metric {
+  background: rgba(255, 255, 255, 0.72) !important;
+  box-shadow: 0 10px 30px rgba(88, 64, 91, 0.07);
+}
+
+.online-consultations-page :is(button, a, input, textarea) {
+  transition-duration: 180ms;
+}
+
+@media (max-width: 639px) {
+  .online-consultations-page {
+    border-radius: 26px;
+  }
+
+  .online-consultations-page .consultations-hero,
+  .online-consultations-page .consultations-calendar,
+  .online-consultations-page .consultations-detail {
+    border-radius: 24px;
+  }
+}
+
+/* Consulenze online: calendario, lista e dettaglio usano la stessa gerarchia
+   antracite; il rosa resta un segnale di selezione e non una superficie chiara. */
+.dark .app-content-surface:has(.online-consultations-page),
+.dark .app-content-surface:has(.online-consultations-page) .app-liquid-canvas {
+  background: #151518 !important;
+}
+
+.dark .app-content-surface .online-consultations-page {
+  background:
+    radial-gradient(circle at 8% 8%, rgba(183, 70, 116, 0.14), transparent 28%),
+    radial-gradient(circle at 92% 10%, rgba(96, 82, 134, 0.12), transparent 32%),
+    #151518 !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.dark .app-content-surface .online-consultations-page :is(
+  .consultations-hero,
+  .consultations-calendar,
+  .consultations-detail
+) {
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  background-color: #202125 !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.24) !important;
+}
+
+.dark .app-content-surface .online-consultations-page > div:first-of-type {
+  background: linear-gradient(135deg, #26272c, #211e24 58%, #28242d) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24) !important;
+}
+
+.dark .app-content-surface .online-consultations-page :is(
+  [class~="bg-white"],
+  [class~="bg-white/65"],
+  [class*="bg-[#FFF6F8]"],
+  [class*="bg-[#FFF2F5]"],
+  [class*="bg-[#FDECF0]"],
+  [class*="bg-[#FCFAFB]"],
+  [class*="bg-[#FAF8F9]"],
+  [class*="bg-[#F8F5F6]"],
+  [class*="bg-[#F7F4F5]"]
+) {
+  background-color: #24252a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .online-consultations-page :is(
+  [class*="bg-[#FFF2F5]"],
+  [class*="bg-[#FFF6F8]"],
+  [class*="bg-[#FDECF0]"]
+) {
+  background-color: rgba(167, 71, 88, 0.16) !important;
+}
+
+.dark .app-content-surface .online-consultations-page [class*="bg-[linear-gradient(125deg"] {
+  background: linear-gradient(135deg, #26272c, #211e24 58%, #28242d) !important;
+}
+
+.dark .app-content-surface .online-consultations-page :is(input, textarea) {
+  background: #1c1d21 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .app-content-surface .online-consultations-page :is(input, textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.dark .app-content-surface .online-consultations-page :is(
+  [class*="border-black/"],
+  [class*="border-white/"]
+) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .online-consultations-page :is(
+  [class~="text-[#171319]"],
+  [class~="text-black"],
+  [class*="text-black/"]
+) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .app-content-surface .online-consultations-page [class*="bg-black/[0.035]"] {
+  background-color: #1b1c20 !important;
+}
+
+.dark .app-content-surface .online-consultations-page [class*="bg-black/[0.045]"] {
+  background-color: #191a1e !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-grid {
+  background: transparent !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-cell {
+  background: #26272c !important;
+  border-color: rgba(255, 255, 255, 0.075) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12) !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-cell-empty {
+  background: #1b1c20 !important;
+  border-color: rgba(255, 255, 255, 0.035) !important;
+  box-shadow: none !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-cell[data-selected="true"] {
+  background: rgba(176, 66, 116, 0.16) !important;
+  border-color: rgba(225, 105, 160, 0.28) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18) !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-day-agenda {
+  background: #202125 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-date:not(.consultations-calendar-today) {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-today {
+  background: linear-gradient(145deg, #d9689d, #a94173) !important;
+  color: #ffffff !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultations-calendar-count {
+  background: rgba(224, 103, 158, 0.14) !important;
+  color: #f2a8ca !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultation-event-pill[data-active="false"] {
+  background: rgba(197, 78, 132, 0.12) !important;
+  border-color: rgba(226, 113, 164, 0.16) !important;
+  color: #efb0cd !important;
+}
+
+.dark .app-content-surface .online-consultations-page .consultation-event-pill[data-active="true"] {
+  background: linear-gradient(135deg, #c35b8c, #9f3d6c) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
 .app-content-surface .app-liquid-canvas :is(
   [class~="bg-white"],
   [class~="bg-white/50"],
@@ -407,17 +982,117 @@ html:not(.dark) .paradise-theme-root {
   color: #57534e !important;
 }
 
+@keyframes profile-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.profile-page-enter {
+  animation: profile-page-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.profile-page-enter-delay-1 { animation-delay: 70ms; }
+.profile-page-enter-delay-2 { animation-delay: 130ms; }
+.profile-page-enter-delay-3 { animation-delay: 190ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-page-enter {
+    animation: none;
+  }
+}
+
+@keyframes worker-dashboard-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.993);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.worker-dashboard-enter {
+  animation: worker-dashboard-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.worker-dashboard-enter-delay-1 { animation-delay: 70ms; }
+.worker-dashboard-enter-delay-2 { animation-delay: 130ms; }
+.worker-dashboard-enter-delay-3 { animation-delay: 190ms; }
+
+.dark .app-content-surface:has(.worker-dashboard),
+.dark .app-content-surface:has(.worker-dashboard) .app-liquid-canvas {
+  background: #151518 !important;
+}
+
+.dark .worker-dashboard [class~="bg-white"] {
+  background-color: #232329 !important;
+}
+
+.dark .worker-dashboard [class*="border-[#ecc6dc]"],
+.dark .worker-dashboard [class*="border-[#ecd5e1]"],
+.dark .worker-dashboard [class*="border-[#f0dde7]"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark .worker-dashboard [class*="divide-"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .worker-dashboard [class*="text-black/"] {
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+.dark .worker-dashboard [class~="bg-[#fff0f8]"],
+.dark .worker-dashboard [class~="bg-[#fff5fa]"],
+.dark .worker-dashboard [class~="bg-[#fff8fc]"] {
+  background-color: #2b2027 !important;
+}
+
+.dark .worker-dashboard [class~="bg-[#f5c1e2]"] {
+  background-color: #51263a !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.dark .worker-dashboard [class~="bg-[#fff9f3]"] {
+  background-color: rgba(120, 72, 18, 0.2) !important;
+}
+
+.dark .worker-dashboard [class~="bg-rose-50"] {
+  background-color: rgba(159, 47, 96, 0.22) !important;
+}
+
+.dark .worker-dashboard [class~="bg-amber-50"] {
+  background-color: rgba(146, 91, 16, 0.22) !important;
+}
+
+.dark .worker-dashboard [class~="bg-emerald-50"] {
+  background-color: rgba(22, 101, 75, 0.25) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .worker-dashboard-enter {
+    animation: none;
+  }
+}
+
 .dark .app-content-surface .profile-liquid-page {
-  background: #191719 !important;
+  background: #151518 !important;
 }
 
 .dark .app-content-surface:has(.profile-liquid-page),
 .dark .app-content-surface:has(.profile-liquid-page) .app-liquid-canvas {
-  background: #191719 !important;
+  background: #151518 !important;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
-  background-color: color-mix(in srgb, rgb(28, 24, 23) var(--glass-opacity), transparent) !important;
+  background-color: color-mix(in srgb, rgb(27, 27, 31) var(--glass-opacity), transparent) !important;
   border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -425,7 +1100,7 @@ html:not(.dark) .paradise-theme-root {
 }
 
 .dark .app-content-surface .profile-liquid-page [class~="bg-neutral-50"] {
-  background-color: color-mix(in srgb, rgb(48, 42, 40) var(--glass-opacity), transparent) !important;
+  background-color: color-mix(in srgb, rgb(35, 35, 41) var(--glass-opacity), transparent) !important;
   border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
 }
 
@@ -433,16 +1108,16 @@ html:not(.dark) .paradise-theme-root {
 .dark .app-content-surface .profile-liquid-page .profile-glass-section {
   background-color: color-mix(
     in srgb,
-    color-mix(in srgb, rgb(28, 24, 23) var(--glass-opacity), transparent) 60%,
-    rgb(28, 24, 23) 40%
+    color-mix(in srgb, rgb(27, 27, 31) var(--glass-opacity), transparent) 60%,
+    rgb(27, 27, 31) 40%
   ) !important;
 }
 
 .dark .app-content-surface .profile-liquid-page .profile-glass-inset {
   background-color: color-mix(
     in srgb,
-    color-mix(in srgb, rgb(48, 42, 40) var(--glass-opacity), transparent) 68%,
-    rgb(48, 42, 40) 32%
+    color-mix(in srgb, rgb(35, 35, 41) var(--glass-opacity), transparent) 68%,
+    rgb(35, 35, 41) 32%
   ) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.10),
@@ -479,7 +1154,7 @@ html:not(.dark) .paradise-theme-root {
   }
 
   .dark .app-content-surface .profile-liquid-page {
-    background: #191719 !important;
+    background: #151518 !important;
   }
 }
 
@@ -1599,9 +2274,19 @@ textarea {
   color: var(--light-sidebar-text, #1f1f1f);
   background: var(--user-sidebar-color, var(--light-sidebar, #ffffff));
   background-clip: padding-box;
-  box-shadow: none;
+  box-shadow: 24px 0 60px rgba(20, 13, 17, 0.2);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+.dark .mobile-liquid-sidebar {
+  --sidebar-active-bg: rgba(255, 255, 255, 0.1);
+  --sidebar-active-text: #ffffff;
+  --sidebar-active-icon: #f49bc4;
+  color: var(--dark-sidebar-text, #f8f3f6);
+  background: #171719 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 24px 0 70px rgba(0, 0, 0, 0.48);
 }
 
 .dashboard-night-action {
@@ -1670,9 +2355,21 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   color: var(--light-sidebar-text, #1f1f1f) !important;
 }
 
+.dark .mobile-sidebar-text,
+.dark .mobile-sidebar-link {
+  color: #f8f3f6 !important;
+  -webkit-text-fill-color: #f8f3f6 !important;
+}
+
 .mobile-sidebar-muted,
 .mobile-sidebar-section {
   color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 62%, transparent) !important;
+}
+
+.dark .mobile-sidebar-muted,
+.dark .mobile-sidebar-section {
+  color: rgba(248, 243, 246, 0.64) !important;
+  -webkit-text-fill-color: rgba(248, 243, 246, 0.64) !important;
 }
 
 .mobile-sidebar-icon,
@@ -1680,20 +2377,66 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   color: var(--light-sidebar-icon, #1f1f1f) !important;
 }
 
+.dark .mobile-sidebar-icon,
+.dark .mobile-sidebar-link-icon {
+  color: #f8f3f6 !important;
+}
+
 .mobile-sidebar-divider,
 .mobile-sidebar-avatar,
+.mobile-sidebar-brand-icon,
 .mobile-sidebar-close,
 .mobile-sidebar-search,
-.mobile-sidebar-muted {
+.mobile-sidebar-muted,
+.mobile-sidebar-area-switch,
+.mobile-sidebar-profile,
+.mobile-sidebar-theme {
   border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
+}
+
+.dark :is(
+  .mobile-sidebar-divider,
+  .mobile-sidebar-avatar,
+  .mobile-sidebar-brand-icon,
+  .mobile-sidebar-close,
+  .mobile-sidebar-search,
+  .mobile-sidebar-muted,
+  .mobile-sidebar-area-switch,
+  .mobile-sidebar-profile,
+  .mobile-sidebar-theme
+) {
+  border-color: color-mix(in srgb, var(--dark-sidebar-text, #f8f3f6) 13%, transparent) !important;
 }
 
 .mobile-sidebar-avatar {
   background-color: color-mix(in srgb, var(--primary) 14%, white) !important;
 }
 
+.mobile-sidebar-brand-icon,
+.mobile-sidebar-profile,
+.mobile-sidebar-area-switch,
+.mobile-sidebar-theme {
+  background-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 3%, transparent) !important;
+}
+
+.dark :is(.mobile-sidebar-brand-icon, .mobile-sidebar-profile, .mobile-sidebar-area-switch, .mobile-sidebar-theme) {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.mobile-sidebar-theme {
+  color: var(--light-sidebar-icon, #1f1f1f) !important;
+}
+
+.dark .mobile-sidebar-theme {
+  color: #f4c265 !important;
+}
+
 .mobile-sidebar-status {
   --tw-ring-color: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
+}
+
+.dark .mobile-sidebar-status {
+  --tw-ring-color: var(--sidebar-gradient-to, #111011) !important;
 }
 
 .mobile-sidebar-close,
@@ -1706,9 +2449,24 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   color: var(--light-sidebar-text, #1f1f1f) !important;
 }
 
+.dark .mobile-sidebar-search {
+  color: var(--dark-sidebar-text, #f8f3f6) !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  background-color: rgba(255, 255, 255, 0.045) !important;
+}
+
+.dark .mobile-sidebar-search::placeholder {
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
 .mobile-sidebar-link:not(.active):hover {
   color: var(--light-sidebar-text, #1f1f1f) !important;
   background-color: color-mix(in srgb, var(--primary) 8%, transparent) !important;
+}
+
+.dark .mobile-sidebar-link:not(.active):hover {
+  color: var(--dark-sidebar-text, #f8f3f6) !important;
+  background-color: rgba(255, 255, 255, 0.065) !important;
 }
 
 .mobile-sidebar-link.active {
@@ -1717,15 +2475,54 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   background-color: var(--sidebar-active-bg) !important;
 }
 
+.dark .mobile-sidebar-link.active {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent) !important;
+  background: var(--sidebar-active-bg, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: none !important;
+}
+
 .mobile-sidebar-link-icon.active {
   color: var(--sidebar-active-icon) !important;
-  background-color: color-mix(in srgb, var(--sidebar-active-text) 10%, transparent) !important;
+  background-color: transparent !important;
+}
+
+.dark .mobile-sidebar-link-icon.active {
+  color: #f49bc4 !important;
+  background-color: transparent !important;
+}
+
+.mobile-sidebar-area-button {
+  color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 50%, transparent) !important;
+}
+
+.mobile-sidebar-area-button.is-active {
+  color: #2a2025 !important;
+  background: #ffffff !important;
+  box-shadow: 0 5px 14px rgba(25, 16, 21, 0.1);
+}
+
+.dark .mobile-sidebar-area-button {
+  color: rgba(255, 255, 255, 0.48) !important;
+}
+
+.dark .mobile-sidebar-area-button.is-active {
+  color: #24191f !important;
+  background: #ffffff !important;
 }
 
 .mobile-sidebar-footer > * {
   color: var(--light-sidebar-text, #1f1f1f) !important;
   border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
   background-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 4%, transparent) !important;
+}
+
+.dark .mobile-sidebar-footer > * {
+  color: #f8f3f6 !important;
+  -webkit-text-fill-color: #f8f3f6 !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  background-color: rgba(255, 255, 255, 0.045) !important;
 }
 
 .mobile-sidebar-trigger {
@@ -1767,6 +2564,10 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
     background: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
+  }
+
+  .dark .mobile-liquid-sidebar {
+    background: #171719 !important;
   }
 }
 
@@ -2255,4 +3056,221 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
+}
+
+/* Sezione amministrativa: una sola grammatica scura per registri, tabelle,
+   pannelli, modali e filtri condivisi dalle pagine di gestione. */
+.dark .app-content-surface:has(.administrative-night-page),
+.dark .app-content-surface:has(.administrative-night-page) .app-liquid-canvas {
+  background: #151518 !important;
+  background-color: #151518 !important;
+}
+
+.dark .app-content-surface .administrative-night-page {
+  color: rgba(255, 255, 255, 0.9);
+  color-scheme: dark;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  [class~="bg-white"],
+  [class~="bg-white/50"],
+  [class~="bg-white/60"],
+  [class~="bg-white/70"],
+  [class~="bg-white/75"],
+  [class~="bg-white/80"],
+  [class~="bg-white/90"],
+  [class~="bg-white/95"],
+  [class~="bg-neutral-50"],
+  [class~="bg-slate-50"],
+  [class*="bg-[#FA"],
+  [class*="bg-[#FB"],
+  [class*="bg-[#FC"],
+  [class*="bg-[#FD"],
+  [class*="bg-[#FE"],
+  [class*="bg-[#FF"],
+  [class*="bg-[#f"]
+) {
+  background-color: #24252a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  [class*="from-white"],
+  [class*="to-white"]
+) {
+  background-image: none !important;
+  background-color: #24252a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .administrative-night-page [class*="bg-[linear-gradient"][class*="#fff"],
+.dark .app-content-surface .administrative-night-page [class*="bg-[linear-gradient"][class*="#FFF"],
+.dark .app-content-surface .administrative-night-page [class*="bg-[linear-gradient"][class*="rgba(255"] {
+  background-image: none !important;
+  background-color: #24252a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .administrative-night-page .staff-profile-editor {
+  background: #151518 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(table, thead, tbody, tfoot) {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(thead, tr[class*="bg-neutral-50"], tr[class*="bg-slate-50"]) {
+  background: #202125 !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(dialog, [role="dialog"]) {
+  color-scheme: dark;
+}
+
+.dark .app-content-surface .administrative-night-page .request-detail-panel {
+  background: #202125 !important;
+  border-color: rgba(224, 101, 156, 0.2) !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.24) !important;
+}
+
+.dark .app-content-surface .administrative-night-page .request-detail-hero {
+  background:
+    radial-gradient(circle at 88% 5%, rgba(218, 91, 146, 0.2), transparent 34%),
+    linear-gradient(135deg, #29242b, #202125) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .app-content-surface .administrative-night-page .request-detail-body {
+  background: #191a1e !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  [class~="bg-neutral-100"],
+  [class~="bg-slate-100"],
+  [class*="bg-black/[0.0"]
+) {
+  background-color: #1c1d21 !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  [class~="text-black"],
+  [class*="text-black/"],
+  [class*="text-[#11"],
+  [class*="text-[#17"],
+  [class*="text-[#1F"],
+  [class*="text-[#21"],
+  [class*="text-[#22"],
+  [class*="text-neutral-8"],
+  [class*="text-neutral-9"],
+  [class*="text-slate-8"],
+  [class*="text-slate-9"]
+) {
+  color: rgba(255, 255, 255, 0.9) !important;
+  -webkit-text-fill-color: currentColor;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  [class*="border-black/"],
+  [class*="border-neutral-"],
+  [class*="border-slate-"]
+) {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(input, textarea, select) {
+  background: #1c1d21 !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(input, textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  tr:hover,
+  button[class*="hover:bg-white"]:hover,
+  button[class*="hover:bg-[#F"]:hover,
+  a[class*="hover:bg-white"]:hover,
+  a[class*="hover:bg-[#F"]:hover
+) {
+  background-color: #2b2c31 !important;
+}
+
+.dark .app-content-surface .administrative-night-page :is(
+  [class*="bg-pink-50"],
+  [class*="bg-rose-50"]
+) {
+  background-color: rgba(218, 91, 146, 0.14) !important;
+}
+
+.dark .app-content-surface .administrative-night-page [class*="bg-emerald-50"] {
+  background-color: rgba(74, 190, 125, 0.13) !important;
+}
+
+.dark .app-content-surface .administrative-night-page [class*="bg-amber-50"] {
+  background-color: rgba(226, 177, 65, 0.14) !important;
+}
+
+.dark .cashmatic-live-shell {
+  background: #151518 !important;
+}
+
+/* Mobile e tablet: niente pannelli compressi o bordi che escono dal canvas.
+   Le directory lunghe diventano caroselli orizzontali e i controlli restano
+   comodi da toccare senza rubare spazio al contenuto. */
+@media (max-width: 1279px) {
+  .administrative-night-page .team-directory-panel {
+    position: static !important;
+  }
+
+  .administrative-night-page .team-directory-list {
+    display: grid !important;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(220px, 78vw);
+    max-height: none !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
+    padding-bottom: 0.5rem;
+  }
+
+  .administrative-night-page .team-directory-item {
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 639px) {
+  .administrative-night-page {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .administrative-night-page > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .administrative-night-page [class*="-mx-4"] {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .administrative-night-page :is(section, article, [role="dialog"]) {
+    max-width: 100%;
+  }
+
+  .administrative-night-page :is(input, textarea, select) {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  .administrative-night-page :is(button, a)[class*="min-h-"] {
+    touch-action: manipulation;
+  }
 }

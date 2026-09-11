@@ -3,10 +3,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { BriefcaseBusiness, Search, ArrowLeft, ChevronDown, Menu, UserRound, X } from "lucide-react";
+import { BriefcaseBusiness, Search, ChevronDown, Menu, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
+import { ThemeToggleButton } from "./top-controls";
 
 type MobileMenuDrawerProps = {
   logoUrl?: string | null;
@@ -109,9 +110,15 @@ export function MobileMenuDrawer({
   return (
     <div className="xl:hidden">
       <div className="fixed inset-x-0 top-0 z-40 bg-[color:var(--user-background-color,var(--background))]">
-        <div className="flex min-h-[calc(env(safe-area-inset-top)+80px)] items-end gap-3 rounded-b-[34px] border-b border-black/[0.08] bg-white px-6 pb-4 pt-[calc(env(safe-area-inset-top)+12px)] dark:border-white/10 dark:bg-[#1d1d22]">
-          <Link href={homeHref} className="flex h-12 w-36 shrink-0 items-center overflow-hidden" aria-label="Vai alla dashboard">
-            <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-12 w-full object-contain object-left dark:invert" />
+        <div className="flex min-h-[calc(env(safe-area-inset-top)+76px)] items-end gap-3 border-b border-black/[0.06] bg-white px-5 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] dark:border-white/[0.08] dark:bg-[#171719]">
+          <Link href={homeHref} className="flex min-w-0 items-center gap-3" aria-label="Vai alla dashboard">
+            <span className="grid size-10 shrink-0 place-items-center overflow-hidden">
+              <img src="/favicon.png" alt="" className="size-10 rounded-xl object-contain" aria-hidden="true" />
+            </span>
+            <span className="hidden min-w-0 text-left min-[380px]:block">
+              <span className="block text-[11px] font-black uppercase tracking-[0.18em] text-black/85 dark:text-white">Paradise</span>
+              <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-[0.14em] text-black/40 dark:text-white/45">Staff Hub</span>
+            </span>
           </Link>
           <span className="min-w-0 flex-1" aria-hidden="true" />
           <div className="relative size-11 shrink-0">
@@ -140,7 +147,7 @@ export function MobileMenuDrawer({
       {/* Overlay backdrop */}
       <div
         className={cn(
-          "fixed inset-0 z-50 bg-black/45 transition-opacity duration-300",
+          "fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] transition-opacity duration-300",
           isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={() => setIsOpen(false)}
@@ -148,45 +155,35 @@ export function MobileMenuDrawer({
 
       <div
         className={cn(
-          "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(82vw,320px)] flex-col justify-between overflow-hidden border-r border-black/10 p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out will-change-transform",
+          "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(88vw,332px)] flex-col justify-between overflow-hidden rounded-r-[26px] border-r p-3.5 pb-[max(.875rem,env(safe-area-inset-bottom))] pt-[max(.875rem,env(safe-area-inset-top))] font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out will-change-transform sm:p-4",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col">
           
-          {/* User Identity Header */}
-          <div className="mobile-sidebar-divider relative flex items-center justify-between border-b pb-5">
-            <div className="flex items-center gap-3">
-              <div className="relative shrink-0">
-                <div className="mobile-sidebar-avatar relative size-14 overflow-hidden rounded-full border shadow-sm">
-                  {userPhoto ? (
-                    <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full select-none object-cover pointer-events-none" />
-                  ) : (
-                    <div className="flex size-full items-center justify-center bg-[color:var(--button)] text-sm font-extrabold text-[color:var(--text)]">
-                      {userName.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <span className="mobile-sidebar-status absolute bottom-0 right-0 size-4 rounded-full bg-emerald-400 ring-4" />
-              </div>
-              
-              <div className="min-w-0 text-left">
-                <p className="mobile-sidebar-text max-w-[150px] truncate text-sm font-black uppercase leading-tight tracking-[0.16em]">{userName}</p>
-                <p className="mobile-sidebar-muted mt-1 text-[10px] font-black uppercase tracking-[0.2em]">{roleLabel}</p>
-              </div>
-            </div>
+          {/* Stessa identità visiva della sidebar desktop */}
+          <div className="mobile-sidebar-divider relative flex items-center justify-between border-b px-1 pb-4">
+            <Link href={homeHref} onClick={() => setIsOpen(false)} className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-20 shrink-0 items-center overflow-hidden">
+                <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-10 w-full object-contain object-left dark:invert" />
+              </span>
+              <span className="min-w-0 text-left">
+                <span className="mobile-sidebar-text block truncate text-[11px] font-black uppercase tracking-[0.16em]">Staff Hub</span>
+                <span className="mobile-sidebar-muted mt-0.5 block truncate text-[9px] font-medium">Area operativa</span>
+              </span>
+            </Link>
 
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="mobile-sidebar-close grid size-11 shrink-0 place-items-center rounded-full border transition active:scale-95"
+              className="mobile-sidebar-close grid size-10 shrink-0 place-items-center rounded-xl border transition active:scale-95"
               aria-label="Chiudi menu"
             >
-              <ArrowLeft className="size-6" />
+              <X className="size-5" />
             </button>
           </div>
 
-          <div className="relative mt-6">
+          <div className="relative mt-3">
             <span className="mobile-sidebar-icon pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 opacity-65">
               <Search size={17} />
             </span>
@@ -195,7 +192,7 @@ export function MobileMenuDrawer({
               placeholder="Cerca pagina..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="mobile-sidebar-search h-12 w-full rounded-xl border py-2 pl-12 pr-11 text-base font-semibold outline-none transition"
+              className="mobile-sidebar-search h-11 w-full rounded-xl border py-2 pl-10 pr-10 text-sm font-semibold outline-none transition"
             />
             {searchQuery ? (
               <button
@@ -210,7 +207,7 @@ export function MobileMenuDrawer({
           </div>
 
           {hasAreaSwitch ? (
-            <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/15 bg-white/[0.06] p-1">
+            <div className="mobile-sidebar-area-switch mt-2.5 grid grid-cols-2 rounded-xl border p-1">
               {(["PERSONALE", "LAVORO"] as const).map((area) => {
                 const selected = activeArea === area;
                 const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
@@ -221,8 +218,8 @@ export function MobileMenuDrawer({
                     onClick={() => setActiveArea(area)}
                     aria-pressed={selected}
                     className={cn(
-                      "flex min-h-11 items-center justify-center gap-2 rounded-lg px-2 text-[10px] font-black uppercase tracking-[0.12em] transition",
-                      selected ? "bg-white text-zinc-900 shadow-sm" : "text-white/55",
+                      "mobile-sidebar-area-button flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2 text-[9px] font-black uppercase tracking-[0.11em] transition",
+                      selected && "is-active",
                     )}
                   >
                     <Icon className="size-4" />
@@ -234,23 +231,23 @@ export function MobileMenuDrawer({
           ) : null}
 
           {/* Main Navigation links */}
-          <div className="no-scrollbar mt-7 flex-1 overflow-y-auto">
-            <div className="space-y-8 pb-4">
+          <div className="no-scrollbar mt-3 flex-1 overflow-y-auto overscroll-contain">
+            <div className="space-y-3 pb-3">
               {sections.map((section) => (
                 <div key={section.id}>
                   {section.title ? (
                     <button
                       type="button"
                       onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                      className="mobile-sidebar-section mb-2 flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left transition"
+                      className="mobile-sidebar-section mb-0.5 flex min-h-9 w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition"
                       aria-expanded={openSectionId === section.id}
                     >
-                      <p className="text-[12px] font-black uppercase tracking-[0.18em]">{section.title}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em]">{section.title}</p>
                       <ChevronDown className={cn("size-4 transition-transform", openSectionId === section.id && "rotate-180")} />
                     </button>
                   ) : null}
                   {openSectionId === section.id || !section.title || searchQuery.trim() ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       {section.items.map((item) => {
                         const isActive = isItemActive(item.href);
                         const displayLabel = getSidebarLabel(item.href, item.label);
@@ -261,15 +258,15 @@ export function MobileMenuDrawer({
                             href={item.href}
                             onClick={() => setIsOpen(false)}
                             className={cn(
-                            "mobile-sidebar-link relative flex min-h-12 items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-2.5 text-[16px] font-semibold tracking-tight transition",
+                            "mobile-sidebar-link relative flex min-h-11 items-center justify-between gap-2.5 rounded-xl border border-transparent px-2 py-1.5 text-[13px] font-bold tracking-tight transition",
                             isActive
                               ? "active shadow-none"
                               : ""
                           )}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                              <span className={cn("mobile-sidebar-link-icon grid size-9 shrink-0 place-items-center rounded-md", isActive && "active")}>
-                                <DynamicIcon name={item.iconName} className="size-6 shrink-0" />
+                              <span className={cn("mobile-sidebar-link-icon grid size-7 shrink-0 place-items-center", isActive && "active")}>
+                                <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
                               </span>
                               <span className="truncate">{displayLabel}</span>
                             </div>
@@ -298,7 +295,28 @@ export function MobileMenuDrawer({
           {/* Navigation lists directly end here */}
         </div>
 
-        <div className="mobile-sidebar-divider mobile-sidebar-footer relative mt-4 shrink-0 border-t pt-5">{logoutButton}</div>
+        <div className="mobile-sidebar-divider mobile-sidebar-footer relative mt-2 shrink-0 border-t pt-2.5">
+          <div className="mb-1.5 flex items-stretch gap-2">
+            <Link href={profileHref} onClick={() => setIsOpen(false)} className="mobile-sidebar-profile flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-2.5 py-1.5 transition active:scale-[0.99]">
+              <span className="mobile-sidebar-avatar relative size-9 shrink-0 overflow-visible rounded-full border">
+                <span className="block size-full overflow-hidden rounded-full">
+                  {userPhoto ? (
+                    <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
+                  ) : (
+                    <span className="grid size-full place-items-center text-[11px] font-black">{userName.slice(0, 2).toUpperCase()}</span>
+                  )}
+                </span>
+                <span className="mobile-sidebar-status absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-emerald-400 ring-2" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="mobile-sidebar-text block truncate text-xs font-black">{userName}</span>
+                <span className="mobile-sidebar-muted mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.12em]">{roleLabel}</span>
+              </span>
+            </Link>
+            <ThemeToggleButton className="mobile-sidebar-theme grid w-12 shrink-0 place-items-center rounded-xl border transition active:scale-95" />
+          </div>
+          {logoutButton}
+        </div>
       </div>
     </div>
   );

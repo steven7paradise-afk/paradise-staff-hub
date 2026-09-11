@@ -255,8 +255,10 @@ export default async function ProfilePage() {
           contractStartLabel: displayDate(user.contract_start),
           contractEndLabel: displayDate(user.contract_end),
           photoUrl: user.photo_url,
+          coverUrl: user.cover_url,
           locationName: user.location?.name ?? "Non assegnato",
           role: session.user.role,
+          mansione: user.mansione,
         }}
         colleagues={colleagues}
         stats={{
