@@ -524,7 +524,7 @@ function ResponseDetail({ row, questions }: { row: { day: string; values: Record
           const branchValue = row.values[`${question.id}::${followUp.key}`];
           return branchValue ? [{ ...followUp, value: branchValue }] : [];
         });
-        return <article key={question.id} className="grid gap-4 px-4 py-5 transition hover:bg-[#fdfbfc] sm:px-6 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.35fr)] md:gap-8">
+        return <article key={question.id} className="shift-response-row grid gap-4 px-4 py-5 transition hover:bg-[#fdfbfc] sm:px-6 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.35fr)] md:gap-8">
           <div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#ffe7f1] text-[9px] font-black text-[#b7356d]">{index + 1}</span><div><p className="text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Domanda</p><p className="mt-1 text-[11px] font-black leading-relaxed text-[#302c2e]">{question.title}</p></div></div>
           <div className="min-w-0 rounded-xl bg-[#faf8f9] p-3.5 sm:p-4"><p className="mb-2 text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Risposta</p>{value ? <StructuredResponse value={value} question={question} /> : <p className="text-[10px] italic text-black/35">Non compilata</p>}{branches.map((branch) => <div key={branch.key} className="mt-3 border-t border-black/[0.07] pt-3"><p className="mb-2 text-[8px] font-black uppercase tracking-wide text-[#9b667c]">{branch.prompt}</p><StructuredResponse value={branch.value} /></div>)}</div>
         </article>;

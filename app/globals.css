@@ -706,6 +706,10 @@ html:not(.dark) .paradise-theme-root {
   color: rgba(255, 255, 255, 0.46) !important;
 }
 
+.dark .shift-responsible-programming-page .shift-response-row:hover {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+}
+
 .dark .app-content-surface ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
 }
