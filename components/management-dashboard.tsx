@@ -193,14 +193,14 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       aria-pressed={active}
       aria-expanded={active}
       aria-controls={controls}
-      className={`group min-h-28 min-w-0 border-r border-white/10 px-4 py-3 text-left transition duration-200 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#f0a0c3] motion-reduce:transition-none last:border-r-0 ${active ? "bg-white/[0.09] shadow-[inset_0_-3px_0_#ee86b3]" : ""}`}
+      className={`group min-h-36 min-w-0 rounded-[22px] border border-black/[0.07] bg-[#edf3f5] px-5 py-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none ${active ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15" : ""}`}
     >
-      <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase text-white/60">
+      <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-black/50">
         <span className={`flex h-8 w-8 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${colors}`}><Icon size={16} aria-hidden="true" /></span>
         {label}
       </div>
-      <p className="text-3xl font-black text-white">{value}</p>
-      <p className="mt-1 flex items-center gap-1 text-xs text-white/70">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
+      <p className="text-3xl font-black text-[#171719]">{value}</p>
+      <p className="mt-1 flex items-center gap-1 text-xs leading-5 text-black/55">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
     </button>
   );
 }
@@ -311,19 +311,19 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   }
 
   return (
-    <div className="management-dashboard-liquid w-full max-w-none space-y-6 rounded-[32px] p-4 pb-12 font-sans antialiased sm:p-6">
-      <section className="overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(145deg,rgba(31,27,38,0.98),rgba(17,16,24,0.98))] text-white shadow-[0_20px_60px_rgba(20,11,16,0.18)] backdrop-blur-2xl">
-        <div className="flex flex-col gap-5 border-b border-white/10 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <div className="management-dashboard-liquid w-full max-w-none space-y-5 p-4 pb-12 font-sans antialiased sm:p-6 lg:p-8">
+      <section className="rounded-[28px] border border-black/[0.06] bg-white p-4 shadow-[0_12px_35px_rgba(20,16,18,0.055)] sm:p-5">
+        <div className="flex flex-col gap-5 px-1 pb-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[11px] font-black uppercase text-[#ee86b3]">Direzione operativa</p>
-            <h1 className="mt-1 text-2xl font-black sm:text-3xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
-            <p className="mt-1 text-sm text-white/70">Stato in tempo reale · {data.scopeLabel}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b83f70]">Direzione operativa</p>
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-[#171719] sm:text-4xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
+            <p className="mt-1 text-sm text-black/50">Stato in tempo reale · {data.scopeLabel}</p>
           </div>
-          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.06] px-5 text-xs font-bold uppercase transition hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
+          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 text-xs font-bold uppercase text-black/65 transition hover:border-black/20 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
           <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
           <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
@@ -411,7 +411,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-[28px] border border-white/85 bg-[linear-gradient(135deg,rgba(255,255,255,0.86),rgba(250,244,255,0.76))] p-5 shadow-[0_20px_70px_rgba(69,38,52,0.10)] backdrop-blur-2xl lg:p-7">
+      <section className="overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] lg:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
@@ -424,7 +424,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             {hourlyChartItems.map((item) => (
               <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede completate alle ${item.hour}`} className="group flex min-h-36 min-w-16 flex-1 flex-col items-center justify-end rounded-t-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f]">
                 <strong className="mb-2 text-sm tabular-nums">{item.count}</strong>
-                <span className="w-full max-w-16 rounded-t-xl bg-[linear-gradient(180deg,#f15ba6,#f8afd1_65%,rgba(248,175,209,0.20))] shadow-[0_0_25px_rgba(235,93,163,0.24)] transition group-hover:brightness-105" style={{ height: `${Math.max(28, item.count / maxHourly * 108)}px` }} />
+                <span className="w-full max-w-16 rounded-t-xl bg-[#ee78ad] transition group-hover:bg-[#d95b93]" style={{ height: `${Math.max(28, item.count / maxHourly * 108)}px` }} />
                 <span className="py-3 text-xs font-black">{item.hour}</span>
               </button>
             ))}
@@ -432,7 +432,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[30px] border border-white/15 bg-[linear-gradient(145deg,#101725,#07131f)] text-white shadow-[0_24px_80px_rgba(6,15,28,0.20)]">
+      <section className="overflow-hidden rounded-[28px] border border-black/10 bg-[#0f1720] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
         <div className="flex flex-col gap-4 border-b border-white/10 p-6 sm:flex-row sm:items-end sm:justify-between lg:p-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f080b7]">Performance Buenos Aires</p>
@@ -540,7 +540,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(145deg,rgba(31,27,38,0.98),rgba(17,16,24,0.98))] text-white shadow-[0_20px_60px_rgba(20,11,16,0.16)] backdrop-blur-2xl">
+      <section className="overflow-hidden rounded-[28px] border border-black/10 bg-[#171719] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
         <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>
@@ -552,7 +552,6 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
 
         <div className="grid gap-6 p-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:p-7">
           <Link href="/cash" aria-label={`Apri cassa. Disponibilità attuale ${money.format(data.availableCash)}`} className="group relative flex min-h-72 flex-col items-center justify-center overflow-hidden rounded-[22px] border border-white/15 bg-white/[0.055] p-6 transition duration-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(215,84,137,0.16),transparent_42%)]" />
             <div
               className="relative grid size-48 place-items-center rounded-full p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]"
               style={{ background: movementSum > 0 ? `conic-gradient(#28a37a 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}

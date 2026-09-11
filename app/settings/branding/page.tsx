@@ -12,7 +12,7 @@ export default async function BrandingSettingsPage() {
 
   const branding = await getBrandingTheme();
   return (
-    <AppShell title="Branding" subtitle="Modifica colori del sito, bottoni, card, sidebar e logo ufficiale." hideHeader transparentMain edgeToEdgeMain>
+    <AppShell title="Branding" subtitle="Personalizza colori, sidebar e logo della beta." hideHeader transparentMain edgeToEdgeMain>
       <BrandingForm initial={branding} />
     </AppShell>
   );

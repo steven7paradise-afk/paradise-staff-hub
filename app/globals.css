@@ -189,12 +189,9 @@
   background-color: #26232d !important;
 }
 
-/* Sistema visivo globale: ogni pagina eredita lo stesso canvas Liquid Glass. */
+/* Canvas globale: colore pieno e calmo, senza sfumature decorative. */
 .app-content-surface {
-  background:
-    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 28%),
-    radial-gradient(circle at 93% 10%, color-mix(in srgb, var(--gradient) 20%, transparent), transparent 26%),
-    linear-gradient(145deg, color-mix(in srgb, var(--background) 88%, white), var(--background));
+  background: var(--background);
 }
 
 /* Appuntamenti è una schermata operativa ad alta densità: un canvas uniforme
@@ -222,29 +219,12 @@
 }
 
 .dark .app-content-surface {
-  background:
-    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30%),
-    radial-gradient(circle at 93% 10%, color-mix(in srgb, var(--gradient) 16%, transparent), transparent 28%),
-    linear-gradient(145deg, color-mix(in srgb, var(--background) 90%, #241c28) 0%, var(--background) 100%);
+  background: var(--dark-background);
 }
 
-/* Branding Studio a pagina intera con anteprime collegate ai token globali. */
+/* Branding Studio: canvas neutro, senza sfumature decorative. */
 .branding-studio {
-  background:
-    radial-gradient(circle at 10% 8%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 26%),
-    radial-gradient(circle at 90% 14%, color-mix(in srgb, var(--gradient) 18%, transparent), transparent 24%);
-}
-
-.branding-studio > :is(section, aside) > div {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .branding-studio > :is(section, aside) > div {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
+  background: #f7f7f8;
 }
 
 .dark .app-content-surface :is([class~="text-black"], [class~="text-paradise-noir"], [class~="text-black/80"], [class~="text-black/90"]) {
@@ -287,18 +267,12 @@
 }
 
 .management-dashboard-liquid {
-  background:
-    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 30%),
-    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--gradient) 20%, transparent), transparent 28%),
-    rgba(250, 247, 251, 0.54);
+  background: var(--background);
 }
 
 .dark .app-content-surface .management-dashboard-liquid {
   color: rgba(255, 255, 255, 0.94);
-  background:
-    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30%),
-    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--gradient) 16%, transparent), transparent 28%),
-    rgba(23, 21, 28, 0.72) !important;
+  background: var(--dark-background) !important;
 }
 
 .dark .app-content-surface .management-dashboard-liquid :is([class~="bg-white/70"], [class~="bg-white/72"], [class~="bg-white/75"], [class~="bg-white/80"], [class~="bg-white"]) {
@@ -1336,20 +1310,14 @@ textarea {
   display: none !important;
 }
 
-/* Sidebar globale: materiale sottile Liquid Glass, coerente in chiaro e notte. */
+/* Sidebar globale: superficie piena, pulita e configurabile dal Branding. */
 @media (min-width: 1280px) {
   .app-liquid-sidebar {
-    border-right-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
-    background:
-      linear-gradient(165deg,
-        color-mix(in srgb, var(--sidebar-gradient-from) var(--glass-opacity), transparent),
-        color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent) 54%,
-        color-mix(in srgb, var(--sidebar-gradient-to) var(--glass-opacity), transparent)) !important;
-    box-shadow:
-      inset -1px 0 0 rgba(255, 255, 255, 0.10),
-      18px 0 48px rgba(43, 23, 36, 0.12);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    border-right-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 10%, transparent) !important;
+    background: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
+    box-shadow: 8px 0 28px rgba(20, 16, 18, 0.055);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   .app-liquid-sidebar > aside,
@@ -1358,18 +1326,14 @@ textarea {
   }
 
   .app-liquid-sidebar .sidebar-nav-link.active {
-    border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 8px 24px rgba(23, 13, 21, 0.14) !important;
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    border-color: color-mix(in srgb, var(--primary) 22%, transparent) !important;
+    box-shadow: none !important;
   }
 
   .app-liquid-sidebar-nav {
-    --sidebar-text: var(--dark-sidebar-text);
-    --sidebar-icon: var(--dark-sidebar-icon);
-    color: var(--dark-sidebar-text);
+    --sidebar-text: var(--light-sidebar-text, #1f1f1f);
+    --sidebar-icon: var(--light-sidebar-icon, #1f1f1f);
+    color: var(--light-sidebar-text, #1f1f1f);
   }
 
   .app-liquid-sidebar-nav .sidebar-nav-link {
@@ -1378,8 +1342,12 @@ textarea {
 
   .app-liquid-sidebar-nav .sidebar-nav-link:hover,
   .app-liquid-sidebar-nav .sidebar-nav-link.active {
-    color: #ffffff !important;
     opacity: 1;
+  }
+
+  .app-liquid-sidebar-nav .sidebar-nav-link:not(.active):hover {
+    color: var(--light-sidebar-text, #1f1f1f) !important;
+    background-color: color-mix(in srgb, var(--primary) 8%, transparent) !important;
   }
 
   .app-liquid-sidebar-nav button.sidebar-label :is(p, svg) {
@@ -1387,77 +1355,54 @@ textarea {
   }
 
   .app-liquid-sidebar-nav input {
-    color: var(--dark-sidebar-text) !important;
-    border-color: rgba(255, 255, 255, 0.22) !important;
-    background-color: rgba(255, 255, 255, 0.10) !important;
+    color: var(--light-sidebar-text, #1f1f1f) !important;
+    border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
+    background-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 4%, transparent) !important;
   }
 
   .app-liquid-sidebar-nav input::placeholder {
-    color: rgba(255, 255, 255, 0.68) !important;
+    color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 48%, transparent) !important;
   }
 }
 
-@media (prefers-reduced-transparency: reduce) and (min-width: 1280px) {
-  .app-liquid-sidebar {
-    background: var(--user-sidebar-color, var(--sidebar)) !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
-}
-
-/* Menu telefono: stesso vetro della sidebar desktop, ottimizzato per il tocco. */
+/* Menu telefono: stessa superficie piena della sidebar desktop. */
 .mobile-liquid-sidebar {
   isolation: isolate;
-  color: var(--dark-sidebar-text);
-  background:
-    linear-gradient(165deg,
-      color-mix(in srgb, var(--sidebar-gradient-from) var(--glass-opacity), transparent) 0%,
-      color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent) 52%,
-      color-mix(in srgb, var(--sidebar-gradient-to) var(--glass-opacity), transparent) 100%);
+  color: var(--light-sidebar-text, #1f1f1f);
+  background: var(--user-sidebar-color, var(--light-sidebar, #ffffff));
   background-clip: padding-box;
-  box-shadow:
-    inset -1px 0 0 color-mix(in srgb, white var(--glass-border-opacity), transparent),
-    10px 0 28px rgba(8, 5, 10, 0.24);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  box-shadow: 10px 0 28px rgba(20, 16, 18, 0.14);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .mobile-liquid-sidebar::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  content: "";
-  background:
-    radial-gradient(circle at 8% 3%, rgba(255, 255, 255, 0.11), transparent 30%),
-    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--sidebar-gradient-to) 16%, transparent) 100%);
+  content: none;
 }
 
 .mobile-liquid-sidebar input {
-  color: var(--dark-sidebar-text) !important;
-  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
-  background-color: rgba(255, 255, 255, 0.10) !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  color: var(--light-sidebar-text, #1f1f1f) !important;
+  border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
+  background-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 4%, transparent) !important;
 }
 
 .mobile-liquid-sidebar input::placeholder {
-  color: color-mix(in srgb, var(--dark-sidebar-text) 62%, transparent) !important;
+  color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 48%, transparent) !important;
 }
 
 .mobile-sidebar-text,
 .mobile-sidebar-link {
-  color: var(--dark-sidebar-text) !important;
+  color: var(--light-sidebar-text, #1f1f1f) !important;
 }
 
 .mobile-sidebar-muted,
 .mobile-sidebar-section {
-  color: color-mix(in srgb, var(--dark-sidebar-text) 68%, transparent) !important;
+  color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 62%, transparent) !important;
 }
 
 .mobile-sidebar-icon,
 .mobile-sidebar-link-icon {
-  color: var(--dark-sidebar-icon) !important;
+  color: var(--light-sidebar-icon, #1f1f1f) !important;
 }
 
 .mobile-sidebar-divider,
@@ -1465,30 +1410,30 @@ textarea {
 .mobile-sidebar-close,
 .mobile-sidebar-search,
 .mobile-sidebar-muted {
-  border-color: color-mix(in srgb, var(--dark-sidebar-text) var(--glass-border-opacity), transparent) !important;
+  border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
 }
 
 .mobile-sidebar-avatar {
-  background-color: color-mix(in srgb, var(--sidebar-gradient-mid) 78%, black) !important;
+  background-color: color-mix(in srgb, var(--primary) 14%, white) !important;
 }
 
 .mobile-sidebar-status {
-  --tw-ring-color: color-mix(in srgb, var(--dark-sidebar-text) 18%, transparent) !important;
+  --tw-ring-color: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
 }
 
 .mobile-sidebar-close,
 .mobile-sidebar-search,
 .mobile-sidebar-section:hover {
-  background-color: color-mix(in srgb, var(--dark-sidebar-text) 8%, transparent) !important;
+  background-color: color-mix(in srgb, var(--primary) 8%, transparent) !important;
 }
 
 .mobile-sidebar-search {
-  color: var(--dark-sidebar-text) !important;
+  color: var(--light-sidebar-text, #1f1f1f) !important;
 }
 
 .mobile-sidebar-link:not(.active):hover {
-  color: var(--dark-sidebar-text) !important;
-  background-color: color-mix(in srgb, var(--dark-sidebar-text) 7%, transparent) !important;
+  color: var(--light-sidebar-text, #1f1f1f) !important;
+  background-color: color-mix(in srgb, var(--primary) 8%, transparent) !important;
 }
 
 .mobile-sidebar-link.active {
@@ -1503,15 +1448,15 @@ textarea {
 }
 
 .mobile-sidebar-footer > * {
-  color: var(--dark-sidebar-text) !important;
-  border-color: color-mix(in srgb, var(--dark-sidebar-text) var(--glass-border-opacity), transparent) !important;
-  background-color: color-mix(in srgb, var(--dark-sidebar-text) 6%, transparent) !important;
+  color: var(--light-sidebar-text, #1f1f1f) !important;
+  border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
+  background-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 4%, transparent) !important;
 }
 
 .mobile-sidebar-trigger {
-  color: var(--dark-sidebar-icon) !important;
-  border-color: color-mix(in srgb, var(--dark-sidebar-text) var(--glass-border-opacity), transparent) !important;
-  background-color: color-mix(in srgb, var(--sidebar-gradient-mid) 84%, transparent) !important;
+  color: var(--light-sidebar-icon, #1f1f1f) !important;
+  border-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 12%, transparent) !important;
+  background-color: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
 }
 
 /* Dettaglio Task: pagina autonoma accanto alla sidebar, non più popup. */
@@ -1544,7 +1489,7 @@ textarea {
 
 @media (prefers-reduced-transparency: reduce) {
   .mobile-liquid-sidebar {
-    background: var(--dark-sidebar) !important;
+    background: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }

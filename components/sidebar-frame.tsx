@@ -22,14 +22,14 @@ export function SidebarFrame({
   forceCollapsed?: boolean;
   hideDesktopSidebar?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [isTablet, setIsTablet] = useState(false);
   const pathname = usePathname();
   const isCollapsed = forceCollapsed || collapsed;
 
   useEffect(() => {
     if (forceCollapsed) return;
-    setCollapsed(window.localStorage.getItem("paradise-sidebar-collapsed") === "1");
+    setCollapsed(window.localStorage.getItem("paradise-sidebar-collapsed") !== "0");
   }, [forceCollapsed]);
 
   const toggleCollapsed = () => {
@@ -81,15 +81,15 @@ export function SidebarFrame({
           "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
           hideDesktopSidebar && "xl:hidden",
           isCollapsed
-            ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
-            : "xl:w-[264px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
+            ? "xl:w-[88px] border-r border-black/[0.07] bg-[color:var(--user-sidebar-color,var(--light-sidebar,#fff))]"
+            : "xl:w-[264px] border-r border-black/[0.07] bg-[color:var(--user-sidebar-color,var(--light-sidebar,#fff))]"
         )}
       >
         {!forceCollapsed ? (
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="absolute -right-[22px] top-6 z-50 hidden size-11 place-items-center rounded-full border border-white/45 bg-white/70 text-black/65 shadow-lg backdrop-blur-xl transition hover:bg-white/90 hover:text-black dark:border-white/15 dark:bg-neutral-900/70 dark:text-white/80 xl:grid"
+            className="absolute -right-[18px] top-6 z-50 hidden size-9 place-items-center rounded-full border border-black/10 bg-white text-black/55 shadow-[0_6px_18px_rgba(15,15,20,0.10)] transition hover:border-black/20 hover:text-black xl:grid"
             aria-label={isCollapsed ? "Apri menu" : "Chiudi menu"}
             title={isCollapsed ? "Apri menu" : "Chiudi menu"}
           >

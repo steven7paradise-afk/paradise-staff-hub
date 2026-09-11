@@ -40,9 +40,9 @@ export async function PUT(request: NextRequest) {
     glass_blur: clampNumber(payload.glass_blur, 0, 50, 24),
     glass_saturation: clampNumber(payload.glass_saturation, 100, 200, 140),
     glass_border_opacity: clampNumber(payload.glass_border_opacity, 0, 40, 16),
-    sidebar_active_bg_color: String(payload.sidebar_active_bg_color ?? "#FFFFFF"),
-    sidebar_active_text_color: String(payload.sidebar_active_text_color ?? "#FFFFFF"),
-    sidebar_active_icon_color: String(payload.sidebar_active_icon_color ?? "#FFFFFF"),
+    sidebar_active_bg_color: String(payload.sidebar_active_bg_color ?? "#FCE7F0"),
+    sidebar_active_text_color: String(payload.sidebar_active_text_color ?? "#9F315B"),
+    sidebar_active_icon_color: String(payload.sidebar_active_icon_color ?? "#9F315B"),
     sidebar_font_family: ["Inter", "Manrope", "Montserrat"].includes(String(payload.sidebar_font_family ?? ""))
       ? String(payload.sidebar_font_family)
       : "Manrope",
