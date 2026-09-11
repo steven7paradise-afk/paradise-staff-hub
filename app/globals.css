@@ -214,6 +214,55 @@ html:not(.dark) .paradise-theme-root {
   background: #f6eef2;
 }
 
+/* Appuntamenti: le card usano tinte chiare per distinguere gli stati. In
+   modalità notte conserviamo quelle differenze con superfici scure colorate,
+   evitando testo bianco sopra pannelli rimasti chiari. */
+.dark .app-content-surface:has(.appointments-workspace),
+.dark .app-content-surface:has(.appointments-workspace) .app-liquid-canvas,
+.dark .appointments-workspace > main {
+  background: #121215 !important;
+}
+
+.dark .appointments-workspace [class*="bg-[#F"],
+.dark .appointments-workspace [class*="bg-[#f"] {
+  background-color: rgba(255, 255, 255, 0.065) !important;
+}
+
+.dark .appointments-workspace [class*="bg-[linear-gradient"] {
+  background-image: none !important;
+  background-color: rgba(255, 255, 255, 0.055) !important;
+}
+
+.dark .appointments-workspace :is(
+  [class*="text-[#17"],
+  [class*="text-[#21"],
+  [class*="text-[#24"],
+  [class*="text-[#25"],
+  [class*="text-[#26"],
+  [class*="text-[#33"],
+  [class*="text-[#49"],
+  [class*="text-[#4E"],
+  [class*="text-[#50"],
+  [class*="text-[#59"],
+  [class*="text-[#5E"]
+) {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.dark .appointments-workspace :is(
+  [class*="text-[#6B"],
+  [class*="text-[#6F"],
+  [class*="text-[#71"],
+  [class*="text-[#75"],
+  [class*="text-[#76"],
+  [class*="text-[#7B"],
+  [class*="text-[#80"],
+  [class*="text-[#8A"],
+  [class*="text-[#8D"]
+) {
+  color: rgba(255, 255, 255, 0.66) !important;
+}
+
 .app-content-surface .app-liquid-canvas :is(
   [class~="bg-white"],
   [class~="bg-white/50"],
