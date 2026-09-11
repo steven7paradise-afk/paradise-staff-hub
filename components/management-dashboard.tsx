@@ -311,14 +311,37 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
     }));
   }
 
+  const greetingHour = Number.parseInt(data.updatedAt.split(":")[0] || "0", 10);
+  const greeting = greetingHour >= 5 && greetingHour < 12
+    ? "Buongiorno"
+    : greetingHour >= 12 && greetingHour < 18
+      ? "Buon pomeriggio"
+      : "Buonasera";
+
   return (
     <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-none bg-[#f5f5f5] p-3 pb-12 font-sans antialiased dark:bg-[#151518] sm:rounded-[34px] sm:p-6 lg:p-8">
+      <section className="order-0 relative isolate min-h-44 overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.16)] sm:min-h-56">
+        <img
+          src="/beta-login-hero.png"
+          alt=""
+          className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center"
+          aria-hidden="true"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(38,9,22,0.86)_0%,rgba(55,13,31,0.58)_48%,rgba(55,13,31,0.12)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(30,7,17,0.28)_0%,transparent_55%)]" />
+        <div className="relative z-10 flex min-h-44 max-w-2xl flex-col justify-end p-6 sm:min-h-56 sm:p-8 lg:p-10">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffc3dc]">Paradise Staff Hub</p>
+          <h1 className="mt-2 text-3xl font-black leading-none tracking-[-0.04em] drop-shadow-sm sm:text-5xl">{greeting}, {data.viewerName.split(" ")[0]}</h1>
+          <p className="mt-3 max-w-lg text-sm font-medium leading-6 text-white/78 sm:text-base">Ecco cosa sta succedendo oggi nei tuoi saloni.</p>
+        </div>
+      </section>
+
       <section className="order-1 rounded-[28px] border border-black/[0.05] bg-[#fafafa] p-4 shadow-[0_14px_40px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-6">
         <div className="flex flex-col gap-5 px-1 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b83f70]">Direzione operativa</p>
             <h1 className="mt-1 text-3xl font-black tracking-[-0.045em] text-[#171719] dark:text-white sm:text-5xl">Dashboard</h1>
-            <p className="mt-2 text-sm text-black/50 dark:text-white/55">Buongiorno, {data.viewerName.split(" ")[0]} · Stato in tempo reale · {data.scopeLabel}</p>
+            <p className="mt-2 text-sm text-black/50 dark:text-white/55">Stato in tempo reale · {data.scopeLabel}</p>
           </div>
           <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#b62f69] bg-[#b62f69] px-6 text-xs font-black uppercase text-white shadow-[0_12px_25px_rgba(182,47,105,0.20)] transition hover:bg-[#9f285b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
