@@ -387,7 +387,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   }
   const aside = (
       <aside className={cn(
-        "z-30 w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
+        "z-30 w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:px-5 xl:py-4 xl:flex xl:h-full xl:flex-col xl:overflow-hidden xl:rounded-[28px] xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
         transparentMobileHeader 
           ? "absolute top-0 left-0 right-0 bg-transparent shadow-none px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3" 
           : "bg-[color:var(--user-header-color,var(--sidebar))] px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3",

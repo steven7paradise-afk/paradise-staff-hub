@@ -78,7 +78,7 @@ export function SidebarFrame({
     >
       <div
         className={cn(
-          "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
+          "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:bottom-5 xl:left-5 xl:top-5 xl:z-40 xl:h-[calc(100vh-2.5rem)] xl:overflow-visible xl:rounded-[28px]",
           hideDesktopSidebar && "xl:hidden",
           isCollapsed
             ? "xl:w-[88px] border-r border-black/[0.07] bg-[color:var(--user-sidebar-color,var(--light-sidebar,#fff))]"
@@ -89,7 +89,7 @@ export function SidebarFrame({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="absolute -right-[18px] top-6 z-50 hidden size-9 place-items-center rounded-full border border-black/10 bg-white text-black/55 shadow-[0_6px_18px_rgba(15,15,20,0.10)] transition hover:border-black/20 hover:text-black xl:grid"
+            className="absolute -right-[18px] top-24 z-50 hidden size-9 place-items-center rounded-full border border-black/10 bg-white text-black/55 shadow-[0_6px_18px_rgba(15,15,20,0.10)] transition hover:border-black/20 hover:text-black xl:grid"
             aria-label={isCollapsed ? "Apri menu" : "Chiudi menu"}
             title={isCollapsed ? "Apri menu" : "Chiudi menu"}
           >
@@ -98,7 +98,7 @@ export function SidebarFrame({
         ) : null}
         {aside}
       </div>
-      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
+      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[124px]" : "xl:ml-[300px]")}>
         <div className="xl:flex xl:h-screen xl:flex-col">
           <div className={cn(
             "app-content-surface flex-1 overflow-hidden border-0 shadow-none xl:flex xl:flex-col",

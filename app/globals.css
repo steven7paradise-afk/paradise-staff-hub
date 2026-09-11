@@ -1313,9 +1313,10 @@ textarea {
 /* Sidebar globale: superficie piena, pulita e configurabile dal Branding. */
 @media (min-width: 1280px) {
   .app-liquid-sidebar {
-    border-right-color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 10%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 10%, transparent) !important;
+    border-radius: 28px;
     background: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
-    box-shadow: 8px 0 28px rgba(20, 16, 18, 0.055);
+    box-shadow: 0 18px 48px rgba(20, 16, 18, 0.1);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -1323,6 +1324,7 @@ textarea {
   .app-liquid-sidebar > aside,
   .sidebar-collapsed .app-liquid-sidebar > aside {
     background: transparent !important;
+    border-radius: inherit;
   }
 
   .app-liquid-sidebar .sidebar-nav-link.active {
