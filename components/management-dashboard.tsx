@@ -319,7 +319,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-[#171719] dark:text-white sm:text-4xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
             <p className="mt-1 text-sm text-black/50 dark:text-white/55">Stato in tempo reale · {data.scopeLabel}</p>
           </div>
-          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 text-xs font-bold uppercase text-black/65 transition hover:border-black/20 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none dark:border-white/15 dark:bg-white/5 dark:text-white/75 dark:hover:border-white/30 dark:hover:text-white">
+          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="dashboard-night-action inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 px-5 text-xs font-bold uppercase transition hover:border-black/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
@@ -341,7 +341,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
               <p className="mt-1 text-sm text-[#775563] dark:text-white/60">Mancano i documenti di {data.payrollMonthLabel}: {data.missingPayslips.slice(0, 4).map((item) => item.name).join(", ")}{data.missingPayslips.length > 4 ? "…" : ""}</p>
             </div>
           </div>
-          <Link href="/cedolini" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#17131a] px-5 text-xs font-black uppercase text-white transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none">Apri cedolini</Link>
+          <Link href="/cedolini" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#17131a] px-5 text-xs font-black uppercase text-white transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:bg-white dark:text-[#171719] dark:hover:bg-[#f3edf0]">Apri cedolini</Link>
         </section>
       )}
 

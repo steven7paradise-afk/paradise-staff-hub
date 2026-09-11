@@ -18,9 +18,12 @@ type MobileMenuDrawerProps = {
   items: Array<{ href: string; label: string; iconName: string; section?: string; badge?: number }>;
   sidebarConfig?: Array<{ id: string; title: string; routes: string[]; labels?: Record<string, string>; area?: "LAVORO" | "PERSONALE" }> | null;
   logoutButton: ReactNode;
+  homeHref?: string;
+  profileHref?: string;
 };
 
 export function MobileMenuDrawer({
+  logoUrl,
   userName,
   userPhoto,
   roleLabel,
@@ -29,6 +32,8 @@ export function MobileMenuDrawer({
   items,
   sidebarConfig = null,
   logoutButton,
+  homeHref = "/dashboard",
+  profileHref = "/profile",
 }: MobileMenuDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,6 +47,10 @@ export function MobileMenuDrawer({
       document.body.style.overflow = "";
     };
   }, [isOpen]);
+
+  function openDrawer() {
+    setIsOpen(true);
+  }
 
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
@@ -99,14 +108,19 @@ export function MobileMenuDrawer({
 
   return (
     <div className="xl:hidden">
-      {/* Drawer Open Trigger Button */}
-      <div className="fixed left-0 top-[calc(env(safe-area-inset-top)+14px)] z-40 flex items-center">
-        <div className="pointer-events-none fixed bottom-0 left-0 top-0 w-1 bg-[color:var(--user-sidebar-color,var(--sidebar))]" />
-
+      <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+10px)] z-40 flex min-h-14 items-center gap-2 rounded-[22px] border border-black/[0.08] bg-white px-3 py-2 dark:border-white/10 dark:bg-[#1d1d22]">
+        <Link href={homeHref} className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl" aria-label="Vai alla dashboard">
+          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-9 w-auto object-contain dark:invert" />
+        </Link>
+        <span className="min-w-0 flex-1" aria-hidden="true" />
+        <Link href={profileHref} className="relative size-10 shrink-0 overflow-hidden rounded-full border border-black/10 bg-[#f8edf2] shadow-sm dark:border-white/15" aria-label={`Apri il profilo di ${userName}`}>
+          {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" /> : <span className="grid size-full place-items-center text-xs font-black text-[#8c3f60]">{userName.slice(0, 2).toUpperCase()}</span>}
+          <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-white bg-emerald-400 dark:border-[#1d1d22]" />
+        </Link>
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
-          className="mobile-sidebar-trigger relative flex size-11 items-center justify-center rounded-r-2xl border shadow-lg backdrop-blur-xl transition-all duration-200 hover:w-12 active:scale-95"
+          onClick={openDrawer}
+          className="relative grid size-10 shrink-0 place-items-center rounded-xl text-black transition hover:bg-black/[0.05] active:scale-95 dark:text-white dark:hover:bg-white/10"
           aria-label="Apri menu"
         >
           <Menu className="size-5" />

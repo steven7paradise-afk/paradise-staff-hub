@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
@@ -12,14 +11,12 @@ import { hasTaskAccess } from "@/lib/task-access";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
-import { InstantLink } from "@/components/instant-link";
 import { SidebarFrame } from "@/components/sidebar-frame";
 import { TopControls } from "@/components/top-controls";
 import { NotificationWatcher } from "@/components/notification-watcher";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
 import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { NotificationsPopover } from "@/components/notifications-popover";
 import { AdminAssistant } from "@/components/admin-assistant";
 import { RemoteControlBridge } from "@/components/remote-control-bridge";
 import pkg from "@/package.json";
@@ -390,13 +387,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         "z-30 w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:px-5 xl:py-4 xl:flex xl:h-full xl:flex-col xl:overflow-hidden xl:rounded-[28px] xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
         transparentMobileHeader 
           ? "absolute top-0 left-0 right-0 bg-transparent shadow-none px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3" 
-          : "bg-[color:var(--user-header-color,var(--sidebar))] px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3",
+          : "bg-transparent px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3",
         hideMobileHeader && "hidden xl:flex"
       )}>
         {/* Mobile Header (xl:hidden) */}
         {!hideMobileHeader && (
-          <div className="relative flex min-h-11 w-full items-center justify-between xl:hidden">
-          {/* Hamburger Drawer */}
+          <div className="relative min-h-11 w-full xl:hidden">
           <MobileMenuDrawer
             logoUrl={branding.logo_url}
             userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
@@ -405,6 +401,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
             sidebarConfig={effectiveSidebarConfig}
+            homeHref={isFormerEmployee ? "/documents" : "/dashboard"}
+            profileHref="/profile"
             logoutButton={
               <LogoutButton
                 className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200"
@@ -415,29 +413,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               />
             }
           />
-
-          {/* Logo Center */}
-          <Link href={isFormerEmployee ? "/documents" : "/dashboard"} className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">
-            <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
-          </Link>
-
-          {/* Bell & Profile Photo Right */}
-          {!isFormerEmployee ? <div className="flex items-center gap-3.5">
-            <NotificationsPopover initialUnread={unreadNotifications} />
-
-            <InstantLink href="/profile" className="relative active:scale-95 transition">
-              <div className="size-9 rounded-full overflow-hidden border border-black/5 bg-paradise-nude shadow-sm">
-                {currentUser?.photo_url ? (
-                  <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={currentUser.name ?? "User"} className="size-full object-cover rounded-full select-none pointer-events-none" />
-                ) : (
-                  <div className="size-full flex items-center justify-center font-bold text-xs text-paradise-noir">
-                    {currentUser?.name?.slice(0, 1).toUpperCase() ?? "P"}
-                  </div>
-                )}
-              </div>
-              <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
-            </InstantLink>
-          </div> : <div className="w-9" aria-hidden="true" />}
         </div>
       )}
 

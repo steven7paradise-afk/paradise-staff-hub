@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Bell, CalendarDays, FileText, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { CalendarDays, FileText, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { NotificationsPopover } from "@/components/notifications-popover";
 
@@ -133,7 +133,7 @@ export function TopControls({
         </div>
       )}
       <NotificationsPopover initialUnread={unread} />
-      <button onClick={toggleTheme} className="grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15" type="button" aria-label="Tema">
+      <button onClick={toggleTheme} className="grid size-10 place-items-center rounded-2xl bg-white/90 text-slate-800 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white dark:text-[#171719] dark:ring-white/20 dark:hover:bg-[#f3edf0]" type="button" aria-label="Tema">
         {dark ? <Sun className="size-5 text-amber-400 animate-pulse-soft" /> : <Moon className="size-5 text-slate-700" />}
       </button>
       <div className="group relative">
