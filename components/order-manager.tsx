@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { normalizeScannedOrderReference, orderCodeCandidates } from "@/lib/order-code-reader";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
@@ -544,23 +545,14 @@ export function OrderManager({
   }, []);
 
   const findOrderFromBarcode = useCallback((rawValue: string) => {
-    const scanned = rawValue.trim();
-    let scannedTarget = scanned;
-    try {
-      const scannedUrl = new URL(scanned);
-      const shortLinkReference = scannedUrl.pathname.match(/^\/o\/([^/]+)\/?$/i)?.[1];
-      scannedTarget = scannedUrl.searchParams.get("ordine")
-        || scannedUrl.searchParams.get("order")
-        || scannedUrl.searchParams.get("orderId")
-        || (shortLinkReference ? decodeURIComponent(shortLinkReference) : "")
-        || scanned;
-    } catch {
-      // I vecchi QR e i lettori USB continuano a inviare il codice semplice.
-    }
-    const normalized = scannedTarget.replace(/^PB-/i, "").replace(/^#/, "").toLowerCase();
+    const normalized = normalizeScannedOrderReference(rawValue);
     return orders.find((order) => {
-      const number = orderNumber(order).replace(/^#/, "").trim().toLowerCase();
-      return order.id.toLowerCase() === normalized || number === normalized;
+      const candidates = orderCodeCandidates({
+        responseId: order.id,
+        visibleOrderNumber: orderNumber(order),
+        answers: order.answers,
+      });
+      return candidates.has(normalized);
     }) ?? null;
   }, [orders]);
 
@@ -594,24 +586,35 @@ export function OrderManager({
         ],
       });
       scannerInstanceRef.current = scanner;
+      const cameras = await Html5Qrcode.getCameras().catch(() => []);
+      const rearCamera = cameras.find((camera) => /back|rear|environment|posteriore/i.test(camera.label));
       await scanner.start(
-        { facingMode: "environment" },
+        rearCamera?.id || { facingMode: "environment" },
         {
-          fps: 20,
+          fps: 12,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.86);
-            return { width: edge, height: edge };
+            return {
+              width: Math.floor(viewfinderWidth * 0.9),
+              height: Math.floor(Math.min(viewfinderHeight * 0.48, viewfinderWidth * 0.5)),
+            };
           },
           aspectRatio: 4 / 3,
         },
         (decodedText) => { openOrderFromBarcode(decodedText); },
         () => { /* Frames without a barcode are expected while focusing. */ },
       );
-    } catch {
+    } catch (error) {
       const scanner = scannerInstanceRef.current;
       scannerInstanceRef.current = null;
       try { scanner?.clear(); } catch { /* Ignore cleanup errors after denied camera access. */ }
-      setScannerMessage("Fotocamera non disponibile. Usa il lettore USB oppure inserisci il codice manualmente.");
+      const errorText = error instanceof Error ? `${error.name} ${error.message}` : String(error || "");
+      setScannerMessage(
+        /notallowed|permission|denied|permesso/i.test(errorText)
+          ? "Fotocamera bloccata. Consenti l’accesso alla fotocamera nelle impostazioni del browser e riprova."
+          : /notfound|devicesnotfound|camera.*not found/i.test(errorText)
+            ? "Nessuna fotocamera disponibile. Inserisci il numero ordine oppure usa un lettore USB."
+            : "Non riesco ad avviare la fotocamera. Riprova oppure inserisci il numero ordine manualmente.",
+      );
       setCameraActive(false);
     }
   }
@@ -1017,7 +1020,7 @@ export function OrderManager({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-black text-black">Lettore codice a barre</p>
-                <p className="mt-1 text-xs text-black/50">Scansiona l’etichetta con la fotocamera o con un lettore USB.</p>
+                <p className="mt-1 text-xs text-black/50">Legge QR, codice a barre, numero ordine e link Shopify.</p>
                 <form
                   className="mt-3 flex gap-2"
                   onSubmit={(event) => {
@@ -1034,7 +1037,7 @@ export function OrderManager({
                   />
                   <button type="submit" className="rounded-2xl bg-[#b74660] px-5 text-sm font-black text-white">Apri</button>
                 </form>
-                {scannerMessage ? <p className="mt-2 text-xs font-bold text-[#a94670]">{scannerMessage}</p> : null}
+                {scannerMessage ? <p role="status" className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#a94670]">{scannerMessage}</p> : null}
               </div>
               <div className="lg:w-72">
                 {cameraActive ? (
