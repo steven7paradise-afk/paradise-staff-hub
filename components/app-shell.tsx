@@ -387,7 +387,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         "z-30 min-h-[calc(env(safe-area-inset-top)+80px)] w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:min-h-0 xl:px-5 xl:py-4 xl:flex xl:h-full xl:flex-col xl:overflow-hidden xl:rounded-[28px] xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
         transparentMobileHeader 
           ? "absolute top-0 left-0 right-0 bg-transparent shadow-none px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3" 
-          : "bg-transparent px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3",
+          : "bg-[color:var(--user-background-color,var(--background))] px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3",
         hideMobileHeader && "hidden xl:flex"
       )}>
         {/* Mobile Header (xl:hidden) */}
