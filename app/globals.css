@@ -124,20 +124,26 @@ html:not(.dark) .paradise-theme-root {
 
 .dark .paradise-theme-root {
   --background: var(--dark-background);
+  --user-background-color: var(--dark-background) !important;
   --sidebar: var(--dark-sidebar);
   --card: var(--dark-card);
   --text: var(--dark-text);
   --button: var(--dark-button);
   --sidebar-text: var(--dark-sidebar-text);
   --sidebar-icon: var(--dark-sidebar-icon);
+  background-color: #121114 !important;
 }
 
 .dark .app-content-surface {
   --card: var(--dark-card);
   --text: var(--dark-text);
   color: var(--dark-text);
-  background-color: var(--dark-card);
+  background-color: #121114 !important;
   color-scheme: dark;
+}
+
+.dark .app-liquid-canvas {
+  background-color: #121114 !important;
 }
 
 /* Chiusura cassa: superficie operativa chiara e stabile anche quando il tema
@@ -249,8 +255,15 @@ html:not(.dark) .paradise-theme-root {
 .dark .app-content-surface :is(
   [class*="text-[#191"],
   [class*="text-[#1f1"],
+  [class*="text-[#1F1"],
+  [class*="text-[#171"],
   [class*="text-[#241"],
+  [class*="text-[#242"],
   [class*="text-[#252"],
+  [class*="text-[#282"],
+  [class*="text-[#2B2"],
+  [class*="text-[#302"],
+  [class*="text-[#303"],
   [class*="text-[#341"]
 ) {
   color: rgba(255, 255, 255, 0.94) !important;
@@ -607,6 +620,90 @@ html:not(.dark) .paradise-theme-root {
 .dark .app-content-surface select option {
   color: #111827;
   background: #ffffff;
+}
+
+/* Programmazione responsabile di turno: tema notte completo per canvas,
+   planner, verbali, commenti e finestre di assegnazione. */
+.dark .app-content-surface:has(.shift-responsible-programming-page),
+.dark .app-content-surface:has(.shift-responsible-programming-page) .app-liquid-canvas,
+.dark .app-content-surface .shift-responsible-programming-page {
+  color: rgba(255, 255, 255, 0.94);
+  background: #121215 !important;
+}
+
+.dark .shift-responsible-programming-page :is(
+  [class*="border-black/"],
+  [class*="divide-black/"]
+) {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark .shift-responsible-programming-page :is(
+  [class*="text-[#1f1"],
+  [class*="text-[#1d1"],
+  [class*="text-[#202"],
+  [class*="text-[#242"],
+  [class*="text-[#282"],
+  [class*="text-[#2B2"],
+  [class*="text-[#302"],
+  [class*="text-[#303"],
+  [class*="text-[#343"],
+  [class*="text-[#424"],
+  [class*="text-[#444"],
+  [class*="text-[#514"],
+  [class*="text-[#555"],
+  [class*="text-[#5f6"],
+  [class*="text-[#655"],
+  [class*="text-[#716"],
+  [class*="text-[#766"],
+  [class*="text-[#837"],
+  [class*="text-[#857"]
+) {
+  color: rgba(255, 255, 255, 0.90) !important;
+}
+
+.dark .shift-responsible-programming-page :is(
+  [class*="bg-[#f4f"],
+  [class*="bg-[#F3E"],
+  [class*="bg-[#F0E"],
+  [class*="bg-[#ece"],
+  [class*="bg-[#eeee"],
+  [class*="bg-[#fafafa"]
+) {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.dark .shift-responsible-programming-page :is(
+  [class*="bg-[#FFF3F8]"],
+  [class*="bg-[#fff1f7]"],
+  [class*="bg-[#fff7fa]"],
+  [class*="bg-[#ffe6f1]"],
+  [class*="bg-[#ffe7f1]"]
+) {
+  background-color: rgba(217, 76, 136, 0.16) !important;
+}
+
+.dark .shift-responsible-programming-page :is(
+  [class*="bg-[#FFF9ED]"],
+  [class*="bg-[#FFF3DF]"],
+  [class*="bg-[#fff3dc]"]
+) {
+  background-color: rgba(215, 162, 58, 0.14) !important;
+}
+
+.dark .shift-responsible-programming-page :is(
+  [class*="bg-[#E9F8EE]"],
+  [class*="bg-[#e8f7e9]"],
+  [class*="bg-[#e8f7eb]"],
+  [class*="bg-[#f3fff1]"],
+  [class*="bg-[#f7faf8]"],
+  [class*="bg-[#F7FBF8]"]
+) {
+  background-color: rgba(66, 184, 93, 0.13) !important;
+}
+
+.dark .shift-responsible-programming-page :is(input, textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.46) !important;
 }
 
 .dark .app-content-surface ::-webkit-scrollbar-thumb {

@@ -331,7 +331,7 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
   }
 
   return (
-    <div className={fullPage ? "min-h-screen bg-transparent px-3 py-5 sm:px-6 sm:py-7 xl:px-10 xl:py-9" : "mt-5 bg-transparent p-3 sm:p-5"}>
+    <div className={fullPage ? "min-h-screen bg-[color:var(--card)] px-3 py-5 sm:px-6 sm:py-7 xl:px-10 xl:py-9" : "mt-5 bg-transparent p-3 sm:p-5"}>
       <div className="mx-auto max-w-[1680px] space-y-5">
         <header className="rounded-[26px] border border-black/[0.06] bg-white p-5 shadow-[0_18px_55px_rgba(47,28,38,0.06)] sm:p-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
