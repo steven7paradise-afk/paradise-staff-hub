@@ -1401,7 +1401,7 @@ export function StaffFormsViewer({
             </span>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#14532d]/65">PAGAMENTI</p>
-              <h2 className="mt-1 text-xl font-black leading-tight text-[#10251c]">TERMINALE POS</h2>
+              <h2 className="mt-1 text-xl font-black leading-tight text-[#10251c]">PAGAMENTI IN CONTANTI</h2>
             </div>
           </button>
 
@@ -1602,7 +1602,7 @@ export function StaffFormsViewer({
                 </span>
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#70E1CE]">Pagamenti</p>
-                  <h2 className="text-lg font-black leading-tight">Terminale POS</h2>
+                  <h2 className="text-lg font-black leading-tight">Pagamenti in contanti</h2>
                 </div>
                 <span className="inline-flex rounded-full border border-[#70E1CE]/25 bg-[#70E1CE]/10 px-2.5 py-1.5 text-[10px] font-black tracking-wide text-[#9af0df] sm:px-3 sm:text-xs">
                   <span className="sm:hidden">PIN: 1234</span>
@@ -1613,14 +1613,14 @@ export function StaffFormsViewer({
                 type="button"
                 onClick={() => setShowPosTerminal(false)}
                 className="grid size-14 place-items-center rounded-2xl border border-white/20 bg-white/10 text-white shadow-sm transition hover:scale-105 hover:bg-white/15"
-                aria-label="Chiudi Terminale POS"
+                aria-label="Chiudi Pagamenti in contanti"
               >
                 <X className="size-8" strokeWidth={2.5} />
               </button>
             </header>
             <iframe
               src="https://cashmatic-payment-production.up.railway.app/cassa-live"
-              title="Terminale POS"
+              title="Pagamenti in contanti"
               loading="eager"
               allow="clipboard-read; clipboard-write"
               className="min-h-0 flex-1 border-0 bg-white"
