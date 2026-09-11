@@ -77,21 +77,31 @@ export function WeeklyShiftResponsiblePlanner({
     });
   }
 
+  const assignedDays = days.filter((day) => assignments[day.date]).length;
+
   return (
-    <div className={embedded ? "w-full bg-transparent pb-2 pt-5" : "w-full bg-[#f4f1fa] px-2 pb-10 pt-8 sm:px-5 xl:px-8 xl:pt-[9vh] 2xl:px-12"}>
+    <div className={embedded ? "w-full" : "w-full bg-[#f4f1fa] px-2 pb-10 pt-8 sm:px-5 xl:px-8 xl:pt-[9vh] 2xl:px-12"}>
       <div className="mx-auto w-full">
-        <div className="relative w-full pt-7 sm:pt-9 2xl:pt-12">
-          <div className={`absolute left-1/2 top-0 z-10 flex h-9 -translate-x-1/2 items-center gap-1 rounded-t-xl px-2 sm:h-11 sm:min-w-48 sm:justify-center 2xl:h-14 2xl:min-w-60 ${embedded ? "bg-white text-[#303833]" : "bg-white"}`}>
-            <Link href={previousWeekHref} aria-label="Settimana precedente" className="grid size-7 place-items-center rounded-full text-black/55 transition hover:bg-black/5 sm:size-8">
+        <div className="w-full">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E9E0E4] px-4 py-4 sm:px-5">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#A33B68]">Settimana da organizzare</p>
+              <p className="mt-1 text-sm font-black text-[#2B2227]">{weekLabel}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`mr-1 rounded-full px-3 py-1.5 text-[9px] font-black ${assignedDays === days.length ? "bg-[#E9F8EE] text-[#267744]" : "bg-[#FFF3DF] text-[#94621E]"}`}>
+                {assignedDays}/{days.length} assegnati
+              </span>
+              <Link href={previousWeekHref} aria-label="Settimana precedente" className="grid size-9 place-items-center rounded-xl border border-[#E2D9DE] bg-white text-[#65575E] shadow-sm transition hover:border-[#B9507B] hover:text-[#A33B68]">
               <ArrowLeft className="size-3.5" />
-            </Link>
-            <span className="whitespace-nowrap px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-black/75 sm:px-3 sm:text-[10px] 2xl:text-xs">{weekLabel}</span>
-            <Link href={nextWeekHref} aria-label="Settimana successiva" className="grid size-7 place-items-center rounded-full text-black/55 transition hover:bg-black/5 sm:size-8">
+              </Link>
+              <Link href={nextWeekHref} aria-label="Settimana successiva" className="grid size-9 place-items-center rounded-xl border border-[#E2D9DE] bg-white text-[#65575E] shadow-sm transition hover:border-[#B9507B] hover:text-[#A33B68]">
               <ArrowRight className="size-3.5" />
-            </Link>
+              </Link>
+            </div>
           </div>
 
-          <section className={`flex w-full snap-x snap-mandatory gap-1 overflow-x-auto overscroll-x-contain px-2 pb-3 pt-3 sm:gap-2 sm:px-3 sm:pb-4 sm:pt-4 2xl:px-8 2xl:pb-6 2xl:pt-7 ${embedded ? "border-y border-black/[0.08] bg-white" : "bg-white"}`} aria-label="Programmazione della settimana">
+          <section className="flex w-full snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain p-4 sm:p-5 xl:grid xl:grid-cols-7" aria-label="Programmazione della settimana">
             {days.map((day) => {
               const selected = candidates.find((candidate) => candidate.id === assignments[day.date]);
               const isActive = day.date === activeDay;
@@ -105,30 +115,31 @@ export function WeeklyShiftResponsiblePlanner({
                     setPickerOpen((open) => day.date === activeDay ? !open : true);
                   }}
                   aria-pressed={isActive}
-                  className={`flex w-[88px] shrink-0 snap-center flex-col items-center rounded-2xl border px-1.5 py-2 text-center transition sm:w-[116px] sm:px-2 xl:min-w-0 xl:flex-1 ${isActive ? "border-[#2ed65d]/45 bg-[#f1fcf4]" : "border-transparent hover:bg-black/[0.025]"}`}
+                  className={`group relative flex w-[132px] shrink-0 snap-center flex-col items-center rounded-[20px] border px-3 py-4 text-center transition xl:w-auto ${isActive ? "border-[#C54B7D] bg-[#FFF3F8] shadow-[0_8px_24px_rgba(164,58,103,0.12)]" : selected ? "border-[#E5DDE1] bg-white hover:border-[#CDB8C2] hover:shadow-md" : "border-[#E7C99C] bg-[#FFF9ED] hover:border-[#D5A861]"}`}
                 >
-                  <span className="whitespace-nowrap text-[6px] font-medium uppercase text-black/80 min-[390px]:text-[7px] sm:text-[10px] 2xl:text-xs">
-                    {day.weekday.slice(0, 3)} {day.dayNumber}
+                  <span className={`whitespace-nowrap text-[9px] font-black uppercase tracking-[0.12em] ${isActive ? "text-[#A33B68]" : "text-[#76656E]"}`}>
+                    {day.weekday.slice(0, 3)}
                   </span>
-                  <span className={`mt-1 grid size-10 place-items-center overflow-hidden rounded-full border-[2px] bg-[#eeeeee] text-[9px] font-black text-black/45 sm:size-16 sm:border-[3px] sm:text-sm 2xl:mt-2 2xl:size-24 2xl:text-lg ${selected ? "border-[#2ed65d]" : "border-[#b8b8b8]"}`}>
+                  <span className="mt-1 text-xl font-black leading-none text-[#2B2227]">{day.dayNumber}</span>
+                  <span className={`mt-3 grid size-14 place-items-center overflow-hidden rounded-full border-[3px] bg-[#F0ECEE] text-xs font-black text-[#83757C] ${selected ? isActive ? "border-[#C54B7D]" : "border-[#69B77F]" : "border-[#DAB87F]"}`}>
                     {selected?.photoUrl ? (
                       <img src={resolveDrivePhotoUrl(selected.photoUrl)} alt={`Foto di ${selected.name}`} className="size-full object-cover" />
                     ) : selected ? initials(selected.name) : "—"}
                   </span>
-                  <span className="mt-1.5 line-clamp-2 min-h-3 w-full text-[5.5px] font-black uppercase leading-[1.05] text-black min-[390px]:text-[6px] sm:min-h-5 sm:text-[8px] 2xl:mt-2 2xl:min-h-6 2xl:text-[11px]">
+                  <span className={`mt-2 line-clamp-2 min-h-8 w-full text-[10px] font-black leading-tight ${selected ? "text-[#2B2227]" : "text-[#9A6821]"}`}>
                     {selected?.name || "Da scegliere"}
                   </span>
-                  <span className="mt-0.5 whitespace-nowrap text-[5px] font-medium text-black/55 min-[390px]:text-[5.5px] sm:text-[7px] 2xl:text-[10px]">
-                    {selected?.shifts[day.date] || "—"}
+                  <span className="mt-1 min-h-4 whitespace-nowrap text-[8px] font-bold text-[#85777E]">
+                    {selected?.shifts[day.date] || "Tocca per assegnare"}
                   </span>
-                  <span className={`mt-1 min-h-4 rounded-md px-1.5 py-0.5 text-[5.5px] font-bold sm:min-h-5 sm:px-2 sm:text-[7px] 2xl:mt-2 2xl:min-h-7 2xl:px-3 2xl:py-1 2xl:text-[9px] ${isActive ? "bg-[#ffd978] text-[#342b18]" : "invisible"}`}>Modifica</span>
+                  <span className={`mt-3 rounded-lg px-2.5 py-1 text-[8px] font-black ${isActive ? "bg-[#A33B68] text-white" : "bg-[#F3EEF1] text-[#71636A] opacity-0 transition group-hover:opacity-100"}`}>{selected ? "Modifica" : "Assegna"}</span>
                 </button>
               );
             })}
           </section>
         </div>
 
-        {status ? <p role="status" className={`mt-3 text-center text-[9px] font-bold ${status.startsWith("Salvataggio non") ? "text-red-500" : "text-black/45"}`}>{status}</p> : null}
+        {status ? <p role="status" className={`border-t border-[#EEE5E9] px-5 py-3 text-[10px] font-bold ${status.startsWith("Salvataggio non") ? "bg-red-50 text-red-600" : "bg-[#F7FBF8] text-[#39724B]"}`}>{status}</p> : null}
       </div>
 
       {pickerOpen && selectedDay ? (
