@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -65,7 +66,16 @@ export async function POST(request: NextRequest) {
   const mentionTags = extractMentionTags(message);
   const mentionedUsers = mentionTags.length > 0
     ? await prisma.user.findMany({
-        where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        where: {
+          active: true,
+          employee_status: { not: "Ex dipendente" },
+          role: { not: "ZERO" },
+          OR: [
+            { role: "SUPER_ADMIN" },
+            { role: "ADMIN" },
+            { sede_id: task.location_id },
+          ],
+        },
         select: { id: true, name: true },
       }).then((users) => users.filter((user) => mentionTags.includes(mentionSlug(user.name))))
     : [];
@@ -85,7 +95,7 @@ export async function POST(request: NextRequest) {
       title: `Nuovo commento: ${task.title}`,
       message: notificationMessage,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(taskId)}`,
     }).catch((err) => console.error("Notification failed for comment on task:", userId, err))
   ));
 
@@ -95,7 +105,7 @@ export async function POST(request: NextRequest) {
       title: `Ti hanno taggato: ${task.title}`,
       message: `${session.user.name} ti ha menzionato in un commento: ${notificationMessage}`,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(taskId)}`,
     }).catch((err) => console.error("Mention notification failed for task:", userId, err))
   ));
 
@@ -113,12 +123,11 @@ export async function PATCH(request: NextRequest) {
   const canEdit = comment.user_id === session.user.id || session.user.role === "ZERO" || session.user.role === "SUPER_ADMIN";
   if (!canEdit) return NextResponse.json({ error: "Puoi modificare solo i tuoi commenti." }, { status: 403 });
   const files = payload.files !== undefined ? await normalizeTaskCommentFiles(payload.files, comment.task_id) : undefined;
+  const data: Prisma.StaffTaskCommentUpdateInput = { message };
+  if (files !== undefined && files !== null) data.files = files as Prisma.InputJsonValue;
   const updated = await prisma.staffTaskComment.update({ 
     where: { id }, 
-    data: { 
-      message, 
-      files: files !== undefined ? files : undefined 
-    }, 
+    data,
     include: { user: true } 
   });
   return NextResponse.json(updated);

@@ -1,10 +1,95 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
+import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
+import { canDecideTaskCompletion, canRequestTaskCompletion } from "@/lib/task-completion-workflow";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+
+function safeTaskFileName(name: string, taskId: string) {
+  const ext = String(name || "").split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "file";
+  const base = String(name || "allegato")
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .replace(/[\/\\:*?"<>|]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "") || "allegato";
+  const cleanTaskId = String(taskId || "task").replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 36);
+  return `${new Date().toISOString().slice(0, 10)}-${cleanTaskId}-${base}.${ext}`;
+}
+
+async function normalizeTaskAttachment(attachmentName: string | null, photoUrl: string | null, taskId: string) {
+  let cleanName = attachmentName?.trim() || null;
+  let cleanPhotoUrl = photoUrl?.trim() || null;
+  let attachmentUrl: string | null = null;
+
+  if (cleanPhotoUrl && cleanPhotoUrl.startsWith("data:")) {
+    const match = cleanPhotoUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1] || "application/octet-stream";
+      const buffer = Buffer.from(match[2], "base64");
+      const nameToUse = cleanName || (mimeType.startsWith("image/") ? "foto-task.jpg" : "file-task");
+      const fileName = safeTaskFileName(nameToUse, taskId);
+
+      try {
+        const driveFile = await uploadTaskImageToGoogleDrive(buffer, fileName, mimeType);
+        cleanName = cleanName || driveFile.name || fileName;
+        attachmentUrl = driveFile.webViewLink || driveFile.webContentLink || null;
+        if (mimeType.startsWith("image/")) {
+          cleanPhotoUrl = driveFile.previewUrl || driveFile.webViewLink || null;
+        } else {
+          cleanPhotoUrl = null;
+        }
+      } catch (err) {
+        console.error("Failed to upload task attachment to Google Drive:", err);
+      }
+    }
+  }
+
+  return {
+    attachmentName: cleanName,
+    attachmentUrl,
+    photoUrl: cleanPhotoUrl,
+  };
+}
+
+async function normalizeCompletionFilesForDb(files: Array<{ name: string; url?: string | null }>, taskId: string) {
+  const result = [];
+  for (const file of files) {
+    if (!file.url || !file.url.startsWith("data:")) {
+      result.push(file);
+      continue;
+    }
+    const match = file.url.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      result.push(file);
+      continue;
+    }
+    const mimeType = match[1] || "application/octet-stream";
+    const buffer = Buffer.from(match[2], "base64");
+    const fileName = safeTaskFileName(file.name || "completamento", taskId);
+    try {
+      const driveFile = await uploadTaskImageToGoogleDrive(buffer, fileName, mimeType);
+      const isImage = mimeType.startsWith("image/");
+      const driveUrl = driveFile.webViewLink || driveFile.webContentLink || null;
+      result.push({
+        name: driveFile.name || file.name,
+        url: isImage ? driveFile.previewUrl : driveUrl,
+        previewUrl: isImage ? driveFile.previewUrl : null,
+        driveFileId: driveFile.id,
+        driveFileUrl: driveUrl,
+        type: mimeType,
+      });
+    } catch (err) {
+      console.error("Failed to upload completion file to Google Drive:", err);
+      result.push(file);
+    }
+  }
+  return result;
+}
+
 
 async function getAuthorizedTaskUser(userId: string, role: string) {
   const user = await prisma.user.findUnique({
@@ -102,9 +187,9 @@ export async function POST(request: NextRequest) {
   const title = String(payload.title ?? "").trim();
   const description = String(payload.description ?? "").trim();
   
-  const workerIds = Array.isArray(payload.assignedToIds)
+  const workerIds: string[] = Array.from(new Set<string>(Array.isArray(payload.assignedToIds)
     ? payload.assignedToIds.map(String).filter(Boolean)
-    : [String(payload.assignedToId ?? "")].filter(Boolean);
+    : [String(payload.assignedToId ?? "")].filter(Boolean)));
 
   const priority = String(payload.priority ?? "MEDIA").toUpperCase();
   const category = String(payload.category ?? "Operativa").trim() || "Operativa";
@@ -122,21 +207,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Inserisci titolo, descrizione e almeno un lavoratore." }, { status: 400 });
   }
 
+  const canAssignAcrossLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const assignmentWhere = canAssignAcrossLocations
+    ? taskWorkerWhere()
+    : taskEscalationRecipientWhere(currentUser.sede_id);
   const workers = await prisma.user.findMany({
-    where: { ...taskWorkerWhere(), id: { in: workerIds } }
+    where: { ...assignmentWhere, id: { in: workerIds } },
   });
-  if (workers.length === 0) {
-    return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
+  if (workers.length !== workerIds.length) {
+    return NextResponse.json({ error: "Puoi assegnare la task solo agli Admin o ai Responsabili autorizzati." }, { status: 403 });
   }
 
-  const firstLocationId = workers[0]?.sede_id;
+  const firstLocationId = canAssignAcrossLocations ? workers[0]?.sede_id : currentUser.sede_id;
   if (!firstLocationId) {
     return NextResponse.json({ error: "I lavoratori selezionati devono essere assegnati a un salone." }, { status: 400 });
   }
   
-  if (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== firstLocationId) {
-    return NextResponse.json({ error: "Puoi assegnare task solo al tuo salone." }, { status: 403 });
-  }
+  const tempTaskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const normalized = await normalizeTaskAttachment(attachmentName, photoUrl, tempTaskId);
 
   const task = await prisma.staffTask.create({
     data: {
@@ -146,8 +234,9 @@ export async function POST(request: NextRequest) {
       category,
       checklist,
       link_url: linkUrl || null,
-      attachment_name: attachmentName || null,
-      photo_url: photoUrl || null,
+      attachment_name: normalized.attachmentName,
+      attachment_url: normalized.attachmentUrl,
+      photo_url: normalized.photoUrl,
       assignees: {
         connect: workers.map(w => ({ id: w.id }))
       },
@@ -164,7 +253,7 @@ export async function POST(request: NextRequest) {
       title: `Nuova task: ${title}`,
       message: description,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
       read: false,
     }).catch(err => console.error("Notification failed for", worker.id, err))
   ));
@@ -180,7 +269,14 @@ export async function PATCH(request: NextRequest) {
 
   const payload = await request.json();
   const id = String(payload.id ?? "");
-  const status = String(payload.status ?? "").toUpperCase();
+  const completionAction = String(payload.completionAction ?? "").toUpperCase();
+  const status = completionAction === "REQUEST"
+    ? "COMPLETION_REQUESTED"
+    : completionAction === "APPROVE"
+      ? "COMPLETED"
+      : completionAction === "REJECT"
+        ? "ACTIVE"
+        : String(payload.status ?? "").toUpperCase();
   const evaluation = String(payload.evaluation ?? "").toUpperCase();
   const notes = typeof payload.notes === "string" ? payload.notes : null;
   const attachmentName = typeof payload.attachmentName === "string" ? payload.attachmentName.trim() : null;
@@ -221,7 +317,7 @@ export async function PATCH(request: NextRequest) {
   const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
   const isChecklistUpdate = requestedChecklist !== null && !status && !evaluation && notes === null && photoUrl === null;
   
-  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "WAITING", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
+  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "WAITING", "COMPLETED", "COMPLETION_REQUESTED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
   }
 
@@ -246,21 +342,41 @@ export async function PATCH(request: NextRequest) {
     return { text: item.text, done: true, completedBy: session.user.name ?? "Collaboratore", completedAt: new Date().toISOString() };
   }) ?? null;
   const isEvaluation = ["LIKE", "OK", "DISLIKE"].includes(evaluation) && !status;
-  
+
   const isAssignee = task.assignees.some(u => u.id === session.user.id);
-  const canEdit = isEvaluation ? managerRoles.has(session.user.role) : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id || hasTaskAccess(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const isCompletionRequest = completionAction === "REQUEST";
+  const isCompletionApproval = completionAction === "APPROVE";
+  const isCompletionRejection = completionAction === "REJECT";
+  const canConfirmCompletion = task.created_by_id === session.user.id || session.user.role === "ZERO";
+  const canEdit = isCompletionRequest
+    ? canRequestTaskCompletion({ isAssignee, currentStatus: task.status })
+    : isCompletionApproval || isCompletionRejection
+      ? canDecideTaskCompletion({ userId: session.user.id, role: session.user.role, createdById: task.created_by_id, currentStatus: task.status })
+      : status === "COMPLETED"
+        ? canConfirmCompletion
+        : isEvaluation
+          ? managerRoles.has(session.user.role)
+          : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
   if (!canEdit || (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== task.location_id)) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
 
   let updated;
   try {
+    const normalizedImage = isDescriptionImageUpdate
+      ? await normalizeTaskAttachment(attachmentName, photoUrl, id)
+      : null;
+    const storesCompletionProof = isCompletionRequest || (status === "COMPLETED" && !isCompletionApproval);
+    const normalizedCompletionFiles = storesCompletionProof
+      ? await normalizeCompletionFilesForDb(completionFiles, id)
+      : null;
+
     updated = await prisma.staffTask.update({
       where: { id },
       data: isNotesUpdate
         ? { notes: notes || null }
         : isDescriptionImageUpdate
-        ? { photo_url: photoUrl || null, attachment_name: attachmentName || null }
+        ? { photo_url: normalizedImage?.photoUrl, attachment_name: normalizedImage?.attachmentName, attachment_url: normalizedImage?.attachmentUrl }
         : isChecklistUpdate
         ? { checklist }
         : isEvaluation
@@ -270,9 +386,9 @@ export async function PATCH(request: NextRequest) {
             timer_seconds: Number.isFinite(timerSeconds) ? Math.max(0, Math.round(timerSeconds)) : task.timer_seconds,
             started_at: status === "ACTIVE" && !task.started_at ? new Date() : task.started_at,
             completed_at: status === "COMPLETED" ? new Date() : null,
-            completion_note: status === "COMPLETED" ? completionNote || task.completion_note : task.completion_note,
-            completion_links: status === "COMPLETED" ? completionLinks : task.completion_links,
-            completion_files: status === "COMPLETED" ? completionFiles : task.completion_files,
+            completion_note: storesCompletionProof ? completionNote || task.completion_note : task.completion_note,
+            completion_links: storesCompletionProof ? completionLinks : task.completion_links,
+            completion_files: storesCompletionProof ? (normalizedCompletionFiles ?? completionFiles) : task.completion_files,
           },
       include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
     });
@@ -281,14 +397,28 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Errore durante il salvataggio della Task. Riprova." }, { status: 500 });
   }
 
-  if (status === "COMPLETED" && task.created_by_id !== session.user.id) {
+  if (isCompletionRequest && task.created_by_id !== session.user.id) {
     await createNotification({
-        user_id: task.created_by_id,
-        title: `Task completata: ${task.title}`,
-        message: `${session.user.name} ha completato la task in ${Math.floor((updated.timer_seconds ?? 0) / 60)} min.`,
-        type: "TASK",
-        action_url: "/tasks",
+      user_id: task.created_by_id,
+      title: `Completamento da confermare: ${task.title}`,
+      message: `${session.user.name} ha inviato la richiesta di completamento. Controlla la prova e conferma oppure rifiuta.`,
+      type: "TASK",
+      action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
     }).catch((error) => console.error("Task completion notification failed:", error));
+  } else if (isCompletionApproval || isCompletionRejection) {
+    const title = isCompletionApproval ? `Task confermata: ${task.title}` : `Completamento da rivedere: ${task.title}`;
+    const message = isCompletionApproval
+      ? `${session.user.name} ha confermato che la task è stata completata.`
+      : `${session.user.name} ha rifiutato la richiesta di completamento. La task è di nuovo in corso.`;
+    await Promise.all(task.assignees
+      .filter((assignee) => assignee.id !== session.user.id)
+      .map((assignee) => createNotification({
+        user_id: assignee.id,
+        title,
+        message,
+        type: "TASK",
+        action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
+      }).catch((error) => console.error("Task completion decision notification failed:", error))));
   }
   return NextResponse.json(updated);
 }
@@ -306,9 +436,9 @@ export async function PUT(request: NextRequest) {
   const title = String(payload.title ?? "").trim();
   const description = String(payload.description ?? "").trim();
   
-  const workerIds = Array.isArray(payload.assignedToIds)
+  const workerIds: string[] = Array.from(new Set<string>(Array.isArray(payload.assignedToIds)
     ? payload.assignedToIds.map(String).filter(Boolean)
-    : [String(payload.assignedToId ?? "")].filter(Boolean);
+    : [String(payload.assignedToId ?? "")].filter(Boolean)));
 
   const priority = String(payload.priority ?? "MEDIA").toUpperCase();
   const category = String(payload.category ?? "Operativa").trim() || "Operativa";
@@ -324,19 +454,27 @@ export async function PUT(request: NextRequest) {
   const task = await prisma.staffTask.findUnique({ where: { id }, include: { assignees: true } });
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
 
-  const workers = await prisma.user.findMany({
-    where: { ...taskWorkerWhere(), id: { in: workerIds } }
-  });
-  if (workers.length === 0) {
-    return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
+  const canAssignAcrossLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const isAssignee = task.assignees.some((worker) => worker.id === session.user.id);
+  const canEditTask = canAssignAcrossLocations
+    || session.user.role === "RESPONSABILE"
+    || task.created_by_id === session.user.id
+    || isAssignee;
+  if (!canEditTask) {
+    return NextResponse.json({ error: "Puoi modificare soltanto le task create da te o assegnate a te." }, { status: 403 });
   }
 
-  const firstLocationId = workers[0]?.sede_id;
-  if (!firstLocationId) {
-    return NextResponse.json({ error: "Lavoratori senza salone." }, { status: 400 });
+  const assignmentWhere = canAssignAcrossLocations
+    ? taskWorkerWhere()
+    : taskEscalationRecipientWhere(currentUser.sede_id);
+  const workers = await prisma.user.findMany({
+    where: { ...assignmentWhere, id: { in: workerIds } },
+  });
+  if (workers.length !== workerIds.length) {
+    return NextResponse.json({ error: "Puoi assegnare la task solo agli Admin o ai Responsabili autorizzati." }, { status: 403 });
   }
-  
-  if (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && (currentUser.sede_id !== task.location_id || currentUser.sede_id !== firstLocationId)) {
+
+  if (!canAssignAcrossLocations && currentUser.sede_id !== task.location_id) {
     return NextResponse.json({ error: "Puoi modificare task solo nel tuo salone." }, { status: 403 });
   }
 
@@ -358,6 +496,8 @@ export async function PUT(request: NextRequest) {
         })
     : existingChecklist.map((item) => ({ text: item.text, done: Boolean(item.done), completedBy: item.completedBy ?? null, completedAt: item.completedAt ?? null }));
 
+  const normalized = await normalizeTaskAttachment(attachmentName, photoUrl, id);
+
   const updated = await prisma.staffTask.update({
     where: { id },
     data: {
@@ -367,12 +507,13 @@ export async function PUT(request: NextRequest) {
       category,
       checklist,
       link_url: linkUrl || null,
-      attachment_name: attachmentName || null,
-      photo_url: photoUrl || null,
+      attachment_name: normalized.attachmentName,
+      attachment_url: normalized.attachmentUrl || (normalized.photoUrl ? null : task.attachment_url),
+      photo_url: normalized.photoUrl,
       assignees: {
         set: workers.map(w => ({ id: w.id }))
       },
-      location_id: firstLocationId,
+      location_id: task.location_id,
       due_date: dueDate && !Number.isNaN(dueDate.valueOf()) ? dueDate : null,
     },
     include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
@@ -387,7 +528,7 @@ export async function PUT(request: NextRequest) {
       title: `Task assegnata: ${title}`,
       message: description,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(updated.id)}`,
       read: false,
     }).catch(err => console.error("Notification failed for", worker.id, err))
   ));

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, Search, X } from "lucide-react";
+import { BriefcaseBusiness, ChevronDown, Search, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -13,6 +13,7 @@ type MenuItem = {
   label: string;
   iconName: string;
   section?: string;
+  badge?: number;
 };
 
 type SidebarFolder = {
@@ -20,6 +21,7 @@ type SidebarFolder = {
   title: string;
   routes: string[];
   labels?: Record<string, string>;
+  area?: "LAVORO" | "PERSONALE";
 };
 
 type DesktopSidebarNavProps = {
@@ -45,6 +47,7 @@ export function DesktopSidebarNav({
 }: DesktopSidebarNavProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
+  const [activeArea, setActiveArea] = useState<"LAVORO" | "PERSONALE">("LAVORO");
   const pathname = usePathname();
 
   const getSidebarLabel = (href: string, fallback: string) => {
@@ -56,18 +59,20 @@ export function DesktopSidebarNav({
   const filteredItems = items.filter((item) =>
     getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
   );
+  const hasAreaSwitch = sidebarConfig !== null
+    && !sidebarConfig.some((folder) => folder.id === "pc-cassa" || folder.id === "ex-dipendente");
+  const activePageArea = sidebarConfig?.find((folder) =>
+    folder.routes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
+  )?.area ?? "LAVORO";
 
   // Group items by Section or Config Folders
   const getRenderSections = () => {
-    if (sidebarConfig && Array.isArray(sidebarConfig) && sidebarConfig.length > 0) {
-      const renderedHrefs = new Set<string>();
-      const sectionsToRender = sidebarConfig.map((sec) => {
+    if (sidebarConfig !== null) {
+      const sectionsToRender = sidebarConfig
+        .filter((sec) => !hasAreaSwitch || (sec.area ?? "LAVORO") === activeArea)
+        .map((sec) => {
         const matchedItems = filteredItems
-          .filter((item) => {
-            const match = sec.routes.includes(item.href);
-            if (match) renderedHrefs.add(item.href);
-            return match;
-          })
+          .filter((item) => sec.routes.includes(item.href))
           .sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
 
         return {
@@ -77,14 +82,7 @@ export function DesktopSidebarNav({
         };
       });
 
-      const unassignedItems = filteredItems.filter((item) => !renderedHrefs.has(item.href));
-
-      return [
-        ...sectionsToRender.filter((s) => s.items.length > 0),
-        ...(unassignedItems.length > 0
-          ? [{ id: "fallback-unassigned", title: "Altre Pagine", items: unassignedItems }]
-          : []),
-      ];
+      return sectionsToRender.filter((section) => section.items.length > 0);
     }
 
     // Default grouping by item.section
@@ -107,12 +105,16 @@ export function DesktopSidebarNav({
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
   useEffect(() => {
+    if (hasAreaSwitch) setActiveArea(activePageArea);
+  }, [activePageArea, hasAreaSwitch, pathname]);
+
+  useEffect(() => {
     if (activeSectionId) {
       setOpenSectionId(activeSectionId);
       return;
     }
-    setOpenSectionId((current) => current ?? sections[0]?.id ?? null);
-  }, [activeSectionId, pathname]);
+    setOpenSectionId((current) => sections.some((section) => section.id === current) ? current : sections[0]?.id ?? null);
+  }, [activeArea, activeSectionId, pathname]);
 
   return (
     <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
@@ -149,6 +151,30 @@ export function DesktopSidebarNav({
         ) : null}
       </div>
 
+      {hasAreaSwitch ? (
+        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-white/12 bg-white/[0.06] p-1">
+          {(["PERSONALE", "LAVORO"] as const).map((area) => {
+            const selected = activeArea === area;
+            const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
+            return (
+              <button
+                key={area}
+                type="button"
+                onClick={() => setActiveArea(area)}
+                aria-pressed={selected}
+                className={cn(
+                  "flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-[9px] font-black uppercase tracking-[0.12em] transition",
+                  selected ? "bg-white text-zinc-900 shadow-sm" : "text-white/55 hover:text-white",
+                )}
+              >
+                <Icon className="size-3.5" />
+                {area === "PERSONALE" ? "Personale" : "Lavoro"}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto" aria-label="Navigazione principale">
         <div className="space-y-4 px-1 pb-4">
           {sections.map((section) => (
@@ -172,6 +198,7 @@ export function DesktopSidebarNav({
                   {section.items.map((item) => {
                     const isActive = isItemActive(item.href);
                     const displayLabel = getSidebarLabel(item.href, item.label);
+                    const itemBadge = item.href === "/notifications" ? unreadNotifications : item.badge ?? 0;
 
                     return (
                       <Link
@@ -195,9 +222,9 @@ export function DesktopSidebarNav({
                         </span>
                         <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
 
-                        {item.href === "/notifications" && unreadNotifications > 0 ? (
+                        {item.href === "/requests" || itemBadge > 0 ? (
                           <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
-                            {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                            {itemBadge > 99 ? "99+" : itemBadge}
                           </span>
                         ) : null}
                       </Link>
@@ -216,26 +243,34 @@ export function DesktopSidebarNav({
         </div>
       </nav>
 
-      <Link
-        href="/profile"
-        title={`${userName} - ${roleLabel}`}
-        className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-3 border-t border-white/10 px-2 pt-4 text-[color:var(--sidebar-text)] transition hover:opacity-80"
-      >
-        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10">
-          {userPhoto ? (
-            <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
-          ) : (
-            <span className="grid size-full place-items-center text-[11px] font-black">
-              {userName.slice(0, 2).toUpperCase()}
-            </span>
-          )}
-          <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />
-        </span>
-        <span className="sidebar-label min-w-0 text-left">
-          <span className="block truncate text-xs font-black">{userName}</span>
-          <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
-        </span>
-      </Link>
+      <div className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-2 border-t border-white/10 px-2 pt-4 text-[color:var(--sidebar-text)]">
+        <Link href="/profile" title={`${userName} - ${roleLabel}`} className="flex min-w-0 flex-1 items-center gap-3 transition hover:opacity-80">
+          <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10">
+            {userPhoto ? (
+              <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center text-[11px] font-black">
+                {userName.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+            <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />
+          </span>
+          <span className="sidebar-label min-w-0 text-left">
+            <span className="block truncate text-xs font-black">{userName}</span>
+            <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
+          </span>
+        </Link>
+        {["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? (
+          <Link
+            href="/remote"
+            title="Controlla da remoto un PC del salone"
+            className="sidebar-label inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition hover:bg-white/20"
+          >
+            <DynamicIcon name="MonitorCog" className="size-3.5" />
+            Remoto
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }

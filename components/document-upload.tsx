@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Field, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-type Worker = { id: string; name: string };
+type Worker = { id: string; name: string; role?: string; mansione?: string | null; photo_url?: string | null };
 
 type BulkFileItem = {
   id: string;
@@ -90,7 +90,9 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
 
     // 4. Match type
     let detectedType = "BUSTA_PAGA";
-    if (cleanName.includes("contratto")) {
+    if (cleanName.includes("contestazione") || cleanName.includes("richiamo disciplinare")) {
+      detectedType = "LETTERA_CONTESTAZIONE";
+    } else if (cleanName.includes("contratto")) {
       detectedType = "CONTRATTO";
     } else if (cleanName.includes("cu ") || cleanName.includes("cu_") || cleanName.includes("cu-") || cleanName.includes("certificazione")) {
       detectedType = "DOCUMENTO";
@@ -268,7 +270,11 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Dipendente</span>
                   <Select name="userId" required>
                     <option value="">Scegli dipendente</option>
-                    {workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
+                    {workers.map((worker) => (
+                      <option key={worker.id} value={worker.id}>
+                        {worker.name} {worker.mansione ? `(${worker.mansione})` : ""}
+                      </option>
+                    ))}
                   </Select>
                 </label>
 
@@ -282,6 +288,9 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
                   <Select name="type" defaultValue="BUSTA_PAGA">
                     <option value="BUSTA_PAGA">Busta paga</option>
                     <option value="CONTRATTO">Contratto</option>
+                    <option value="PROROGA">Proroga / rinnovo</option>
+                    <option value="CUD">CUD / Certificazione Unica</option>
+                    <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
                     <option value="DOCUMENTO">Documento</option>
                   </Select>
                 </label>
@@ -296,6 +305,11 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
                     <Field name="year" type="number" min={2020} max={2100} placeholder="Anno" />
                   </label>
                 </div>
+
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Note (facoltative)</span>
+                  <textarea name="notes" maxLength={2000} rows={3} placeholder="Note sul documento" className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-semibold outline-none dark:border-white/10 dark:bg-neutral-900" />
+                </label>
 
                 <label className="space-y-1">
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">File Documento</span>

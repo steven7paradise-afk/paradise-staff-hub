@@ -3,18 +3,55 @@ import { StaffDirectory } from "@/components/staff-directory";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { normalizeAccessRoutes } from "@/lib/roles";
+import { deriveAttendanceState } from "@/lib/attendance-state";
+import { attendanceActualMinutes, compareScheduledClock, currentRomeMinutes, isClosedSchedule, isRestSchedule, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
+import { ensureAutomaticLateRequests, isAutomaticLateReason } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 
-export default async function StaffPage() {
+function romeCalendarDate() {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+  return new Date(`${day}T00:00:00.000Z`);
+}
+
+function romeClock(date: Date | null | undefined) {
+  if (!date) return null;
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
+function currentRomeMonthRange() {
+  const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit" }).format(new Date());
+  const [year, month] = key.split("-").map(Number);
+  return {
+    start: new Date(Date.UTC(year, month - 1, 1)),
+    end: new Date(Date.UTC(year, month, 1)),
+    label: new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", month: "long", year: "numeric" }).format(new Date()),
+  };
+}
+
+export default async function StaffPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ employee?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const currentYear = new Date().getFullYear();
   const sicknessStart = new Date(currentYear, 0, 1);
   const sicknessEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+  const today = romeCalendarDate();
+  const tomorrow = new Date(today);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const month = currentRomeMonthRange();
   const calculateSicknessDays = (start: Date, end: Date) => {
     return Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   };
 
-  const [session, staff, locations, managers] = await Promise.all([
+  const [session, staff, locations, managers, todaySchedules, todayAttendanceLogs, approvedLeavesToday, monthlySchedules, monthlyAttendanceLogs, monthlyLeaves] = await Promise.all([
     auth(),
     prisma.user.findMany({
       where: {
@@ -37,7 +74,20 @@ export default async function StaffPage() {
         },
         last_edited_by: {
           select: { name: true }
-        }
+        },
+        documents: {
+          orderBy: [{ document_date: "desc" }, { created_at: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            file_url: true,
+            storage_path: true,
+            document_date: true,
+            notes: true,
+            created_at: true,
+          },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -52,7 +102,188 @@ export default async function StaffPage() {
       },
       orderBy: { name: "asc" },
     }),
+    prisma.scheduleEntry.findMany({
+      where: { date: { gte: today, lt: tomorrow } },
+      include: { category: true },
+    }),
+    prisma.attendanceLog.findMany({
+      where: { date: { gte: today, lt: tomorrow } },
+      orderBy: { timestamp: "asc" },
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        status: "APPROVED",
+        type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] },
+        start_date: { lt: tomorrow },
+        end_date: { gte: today },
+      },
+      select: { user_id: true, reason: true },
+    }),
+    prisma.scheduleEntry.findMany({
+      where: {
+        date: { gte: month.start, lt: tomorrow },
+        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      },
+      include: {
+        category: true,
+        location: { select: { name: true } },
+        user: { select: { location: { select: { name: true } } } },
+      },
+    }),
+    prisma.attendanceLog.findMany({
+      where: {
+        date: { gte: month.start, lt: tomorrow },
+        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      },
+      orderBy: { timestamp: "asc" },
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] },
+        start_date: { lt: month.end },
+        end_date: { gte: month.start },
+        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      },
+      select: { id: true, user_id: true, type: true, start_date: true, end_date: true, start_time: true, end_time: true, status: true, reason: true, medical_code: true, user: { select: { name: true } } },
+    }),
   ]);
+
+  if (session?.user?.role && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+    await ensureAutomaticLateRequests(today).catch((error) => console.error("Automatic late requests unavailable:", error));
+  }
+
+  const todayAutomaticLateRequests = await prisma.leaveRequest.findMany({
+    where: {
+      start_date: { gte: today, lt: tomorrow },
+      reason: { startsWith: "RITARDO AUTOMATICO — " },
+    },
+    select: { user_id: true, status: true },
+    orderBy: { created_at: "desc" },
+  });
+
+  const scheduleByUser = new Map(todaySchedules.map((entry) => [entry.user_id, entry]));
+  const attendanceByUser = new Map<string, typeof todayAttendanceLogs>();
+  for (const log of todayAttendanceLogs) {
+    const rows = attendanceByUser.get(log.user_id) || [];
+    rows.push(log);
+    attendanceByUser.set(log.user_id, rows);
+  }
+  const approvedLeaveUserIds = new Set(approvedLeavesToday.filter((request) => !isAutomaticLateReason(request.reason)).map((request) => request.user_id));
+  const automaticLateStatusByUser = new Map(todayAutomaticLateRequests.map((request) => [request.user_id, request.status]));
+  const monthLogsByUserDay = new Map<string, typeof monthlyAttendanceLogs>();
+  for (const log of monthlyAttendanceLogs) {
+    const key = `${log.user_id}:${log.date.toISOString().slice(0, 10)}`;
+    monthLogsByUserDay.set(key, [...(monthLogsByUserDay.get(key) ?? []), log]);
+  }
+  const monthlyAbsenceIds = new Set<string>();
+  const monthlyLateIds = new Set<string>();
+  const monthlyRecords: Array<{
+    id: string;
+    userId: string;
+    personName: string;
+    category: "ABSENCES" | "HOLIDAYS" | "SICKNESS" | "LATE";
+    dateLabel: string;
+    timeLabel: string;
+    eventLabel: string;
+    status: "GIUSTIFICATA" | "NON GIUSTIFICATA" | "IN ATTESA";
+    note: string;
+  }> = [];
+  const formatMonthlyDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+  const approvedMonthlyLeaves = monthlyLeaves.filter((request) => request.status === "APPROVED");
+  const todayKey = today.toISOString().slice(0, 10);
+  for (const schedule of monthlySchedules) {
+    if (isRestSchedule(schedule.category.name, schedule.category.code) || isClosedSchedule(schedule.category.name, schedule.category.code)) continue;
+    const dayKey = schedule.date.toISOString().slice(0, 10);
+    const dayLogs = monthLogsByUserDay.get(`${schedule.user_id}:${dayKey}`) ?? [];
+    const firstEntry = dayLogs.find((log) => log.type === "ENTRATA");
+    const hasClockEntry = dayLogs.some((log) => log.type === "ENTRATA" || log.type === "RIENTRO");
+    const approvedLeave = approvedMonthlyLeaves.find((request) => request.user_id === schedule.user_id && request.start_date <= schedule.date && request.end_date >= schedule.date);
+    const plannedStart = schedule.start_time || schedule.category.start_time || null;
+    const plannedEnd = schedule.end_time || schedule.category.end_time || null;
+    const policy = scheduledEntryPolicy({
+      plannedStart,
+      plannedEnd,
+      locationName: schedule.location?.name || schedule.user.location?.name,
+    });
+    const classifiedElsewhere = approvedLeave && ["FERIE", "MALATTIA", "RIPOSO"].includes(approvedLeave.type);
+    if (!classifiedElsewhere && !hasClockEntry && policy.deadlineMinutes !== null && (dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes() > policy.deadlineMinutes))) {
+      monthlyAbsenceIds.add(schedule.user_id);
+      monthlyRecords.push({
+        id: `absence-${schedule.id}`,
+        userId: schedule.user_id,
+        personName: staff.find((user) => user.id === schedule.user_id)?.name || "Dipendente",
+        category: "ABSENCES",
+        dateLabel: formatMonthlyDate(schedule.date),
+        timeLabel: `${plannedStart || "--:--"}–${plannedEnd || "--:--"}`,
+        eventLabel: "Mancata timbratura",
+        status: approvedLeave ? "GIUSTIFICATA" : "NON GIUSTIFICATA",
+        note: approvedLeave ? `${approvedLeave.type} approvata.` : "Nessuna entrata registrata e nessun giustificativo approvato.",
+      });
+    }
+    if (firstEntry && policy.deadlineMinutes !== null && attendanceActualMinutes(firstEntry) > policy.deadlineMinutes) {
+      monthlyLateIds.add(schedule.user_id);
+      const lateRequest = monthlyLeaves.find((request) => request.id === `auto-late:${schedule.user_id}:${dayKey}` || (request.user_id === schedule.user_id && request.reason?.startsWith("RITARDO AUTOMATICO — ") && request.start_date.toISOString().slice(0, 10) === dayKey));
+      const actualEntryMinutes = attendanceActualMinutes(firstEntry);
+      const delay = actualEntryMinutes - policy.deadlineMinutes;
+      monthlyRecords.push({
+        id: `late-entry-${firstEntry.id}`,
+        userId: schedule.user_id,
+        personName: staff.find((user) => user.id === schedule.user_id)?.name || "Dipendente",
+        category: "LATE",
+        dateLabel: formatMonthlyDate(schedule.date),
+        timeLabel: `${String(Math.floor(actualEntryMinutes / 60)).padStart(2, "0")}:${String(actualEntryMinutes % 60).padStart(2, "0")}`,
+        eventLabel: "Entrata in ritardo",
+        status: lateRequest?.status === "APPROVED" ? "GIUSTIFICATA" : lateRequest?.status === "REJECTED" ? "NON GIUSTIFICATA" : "IN ATTESA",
+        note: `Turno ${plannedStart || "--:--"}–${plannedEnd || "--:--"} · +${delay} minuti oltre il limite.`,
+      });
+    }
+  }
+  for (const log of monthlyAttendanceLogs) {
+    if (log.type !== "RIENTRO" || !/Rientro pausa in ritardo:/i.test(log.note || "")) continue;
+    monthlyLateIds.add(log.user_id);
+    const delay = log.note?.match(/ritardo (\d+) min/i)?.[1];
+    monthlyRecords.push({
+      id: `late-break-${log.id}`,
+      userId: log.user_id,
+      personName: staff.find((user) => user.id === log.user_id)?.name || "Dipendente",
+      category: "LATE",
+      dateLabel: formatMonthlyDate(log.date),
+      timeLabel: log.time || romeClock(log.timestamp) || "--:--",
+      eventLabel: "Rientro pausa in ritardo",
+      status: "IN ATTESA",
+      note: delay ? `Rientro avvenuto con ${delay} minuti di ritardo.` : (log.note || "Pausa oltre il limite consentito."),
+    });
+  }
+  const approvedHolidays = monthlyLeaves.filter((request) => request.type === "FERIE" && request.status === "APPROVED");
+  const approvedSickness = monthlyLeaves.filter((request) => request.type === "MALATTIA" && request.status === "APPROVED");
+  const monthlyHolidayIds = new Set(approvedHolidays.map((request) => request.user_id));
+  const monthlySicknessIds = new Set(approvedSickness.map((request) => request.user_id));
+  for (const request of approvedHolidays) {
+    monthlyRecords.push({
+      id: `holiday-${request.id}`,
+      userId: request.user_id,
+      personName: request.user.name,
+      category: "HOLIDAYS",
+      dateLabel: request.start_date.getTime() === request.end_date.getTime() ? formatMonthlyDate(request.start_date) : `${formatMonthlyDate(request.start_date)} – ${formatMonthlyDate(request.end_date)}`,
+      timeLabel: request.start_time && request.end_time ? `${request.start_time}–${request.end_time}` : "Giornata intera",
+      eventLabel: "Ferie",
+      status: "GIUSTIFICATA",
+      note: request.reason || "Ferie approvate dall’amministrazione.",
+    });
+  }
+  for (const request of approvedSickness) {
+    monthlyRecords.push({
+      id: `sickness-${request.id}`,
+      userId: request.user_id,
+      personName: request.user.name,
+      category: "SICKNESS",
+      dateLabel: request.start_date.getTime() === request.end_date.getTime() ? formatMonthlyDate(request.start_date) : `${formatMonthlyDate(request.start_date)} – ${formatMonthlyDate(request.end_date)}`,
+      timeLabel: "Giornata intera",
+      eventLabel: "Malattia",
+      status: request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA",
+      note: request.medical_code ? `Certificato INPS: ${request.medical_code}` : "Certificato INPS non presente.",
+    });
+  }
 
   return (
     <AppShell
@@ -75,6 +306,45 @@ export default async function StaffPage() {
             },
             { totalDays: 0, justifiedDays: 0, unjustifiedDays: 0 }
           );
+
+          const workforceData = user.workforce_data && typeof user.workforce_data === "object" && !Array.isArray(user.workforce_data)
+            ? user.workforce_data as Record<string, unknown>
+            : {};
+          const schedule = scheduleByUser.get(user.id);
+          const attendanceState = deriveAttendanceState(attendanceByUser.get(user.id) || []);
+          const plannedStart = schedule?.start_time || schedule?.category.start_time || null;
+          const plannedEnd = schedule?.end_time || schedule?.category.end_time || null;
+          const comparison = compareScheduledClock({
+            plannedStart,
+            plannedEnd,
+            locationName: user.location?.name,
+            categoryName: schedule?.category.name,
+            categoryCode: schedule?.category.code,
+            hasClockEntry: Boolean(attendanceState.firstEntry),
+            hasApprovedLeave: approvedLeaveUserIds.has(user.id),
+          });
+          const automaticLateStatus = automaticLateStatusByUser.get(user.id);
+          const unresolvedLate = Boolean(attendanceState.firstEntry) && automaticLateStatus && automaticLateStatus !== "APPROVED";
+          const lateApprovalStatus = unresolvedLate ? "PENDING" as const : null;
+          const attendanceStatus = !schedule
+            ? "NESSUN_TURNO"
+            : comparison.rest
+              ? "RIPOSO"
+              : comparison.closed
+                ? "GIUSTIFICATO"
+              : approvedLeaveUserIds.has(user.id)
+                ? "GIUSTIFICATO"
+                : unresolvedLate
+                  ? "RITARDO_DA_APPROVARE"
+                : attendanceState.status === "IN"
+                  ? "PRESENTE"
+                  : attendanceState.status === "BREAK"
+                    ? "IN_PAUSA"
+                    : attendanceState.firstEntry
+                      ? "USCITO"
+                      : comparison.absent
+                        ? "ASSENTE"
+                        : "ATTESO";
 
           return {
             id: user.id,
@@ -102,15 +372,53 @@ export default async function StaffPage() {
                 ? normalizeAccessRoutes((user.access_list as { view?: unknown }).view)
                 : [],
             iban: user.iban ?? "",
-            contractHistory: user.contract_history,
+            contractType: typeof workforceData.contractType === "string" ? workforceData.contractType : "",
+            contractRenewalStatus: typeof workforceData.contractRenewalStatus === "string" ? workforceData.contractRenewalStatus : "DA_VALUTARE",
+            contractHistory: Array.isArray(user.contract_history) ? user.contract_history as any[] : [],
+            documents: user.documents.map((document) => ({
+              id: document.id,
+              title: document.title,
+              type: document.type,
+              fileUrl: document.file_url,
+              storagePath: document.storage_path,
+              documentDate: document.document_date?.toISOString().slice(0, 10) ?? "",
+              notes: document.notes ?? "",
+              createdAt: document.created_at.toISOString(),
+            })),
             sicknessStats,
             lastEditedByName: user.last_edited_by?.name ?? null,
             lastEditedAt: user.last_edited_at?.toISOString() ?? null,
+            attendanceToday: {
+              status: attendanceStatus,
+              absent: comparison.absent || Boolean(unresolvedLate),
+              lateApprovalStatus,
+              plannedStart,
+              plannedEnd,
+              firstEntry: attendanceState.firstEntry
+                ? (() => {
+                  const minutes = attendanceActualMinutes({
+                    timestamp: new Date(attendanceState.firstEntry.timestamp),
+                    note: attendanceState.firstEntry.note,
+                  });
+                  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+                })()
+                : null,
+              elapsedMinutes: comparison.elapsedMinutes,
+            },
           };
         })}
         locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
         managers={managers.map((m) => ({ id: m.id, name: m.name, role: m.role }))}
         userRole={session?.user?.role ?? "DIPENDENTE"}
+        focusEmployeeId={params.employee ?? null}
+        monthlyOverview={{
+          monthLabel: month.label,
+          absences: Array.from(monthlyAbsenceIds),
+          holidays: Array.from(monthlyHolidayIds),
+          sickness: Array.from(monthlySicknessIds),
+          late: Array.from(monthlyLateIds),
+          records: monthlyRecords,
+        }}
       />
     </AppShell>
   );

@@ -240,7 +240,7 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
     const statuses: Record<string, { status?: string; sheetNote?: string; updatedAt: string; updatedBy: string }> = {};
 
     for (const row of rows.slice(1)) {
-      const status = normalizeAppointmentSheetStatus(row[7]);
+      const status = normalizeAppointmentSheetStatus(row[7] == null ? null : String(row[7]));
       if (!status && !String(row[9] || "").trim()) continue;
 
       for (const booking of lookupBookings) {

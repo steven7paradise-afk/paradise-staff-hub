@@ -5,6 +5,7 @@ import { getBrandingTheme } from "@/lib/branding";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { ensureClientControlForm, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { getShopifyOrderNamesBulk, isFuzzyNameMatch } from "@/lib/shopify";
@@ -42,6 +43,13 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Tablet Clock | Paradise",
     description: "Tablet clock-in and appointment manager interface.",
     manifest: "/tablet-clock-manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/tablet-clock-icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/tablet-clock-icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: "/tablet-clock-icon-180.png", sizes: "180x180", type: "image/png" }],
+    },
     appleWebApp: {
       capable: true,
       title: "Paradise Clock",
@@ -53,9 +61,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TabletClockPage({
   searchParams,
 }: {
-  searchParams: Promise<{ device?: string }>;
+  searchParams: Promise<{ device?: string; badge?: string }>;
 }) {
   const params = await searchParams;
+  if (params.badge) {
+    const nextParams = new URLSearchParams({ badge: params.badge });
+    if (params.device) nextParams.set("device", params.device);
+    redirect(`/tablet-clock/nfc?${nextParams.toString()}`);
+  }
   const [cookieStore, headerStore, session] = await Promise.all([
     cookies(),
     headers(),
@@ -296,6 +309,7 @@ export default async function TabletClockPage({
       tabletBranding={tabletBranding}
       clientControlFormId={clientControlFormId}
       todayAppointments={todayAppointments}
+      badgeToken={params.badge ?? null}
     />
   );
 }

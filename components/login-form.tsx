@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, signOut } from "next-auth/react";
-import { AlertCircle, Loader2, KeyRound, Mail } from "lucide-react";
+import { browserSupportsWebAuthn, platformAuthenticatorIsAvailable, startAuthentication } from "@simplewebauthn/browser";
+import { AlertCircle, Loader2, KeyRound, Mail, ScanFace } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 
 const DEFAULT_LOGIN_DESTINATION = "/dashboard";
@@ -33,7 +34,7 @@ function normalizeLoginDestination(value?: string | null, fallback = DEFAULT_LOG
 
 type LoginFormVariant = "default" | "mobile-overlay";
 
-export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant }) {
+export function LoginForm({ variant = "default", documentAccessExpired = false }: { variant?: LoginFormVariant; documentAccessExpired?: boolean }) {
   const [loginMode, setLoginMode] = useState<"email" | "pin">("pin");
   const [expandedMode, setExpandedMode] = useState<"email" | "pin" | null>(
     variant === "mobile-overlay" ? null : "pin",
@@ -43,9 +44,56 @@ export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant 
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const submittingRef = useRef(false);
   const router = useRouter();
   const isMobileOverlay = variant === "mobile-overlay";
+
+  useEffect(() => {
+    if (!browserSupportsWebAuthn()) return;
+    void platformAuthenticatorIsAvailable().then(setPasskeyAvailable).catch(() => setPasskeyAvailable(false));
+  }, []);
+
+  async function loginWithPasskey() {
+    if (submittingRef.current || passkeyLoading) return;
+    if (!passkeyAvailable) {
+      setError("Face ID o impronta non sono disponibili in questo browser. Apri Paradise dal tuo telefono oppure usa il PIN.");
+      return;
+    }
+    submittingRef.current = true;
+    setPasskeyLoading(true);
+    setError("");
+    try {
+      const callbackUrl = normalizeLoginDestination(new URLSearchParams(window.location.search).get("callbackUrl"));
+      await signOut({ redirect: false });
+      const optionsResponse = await fetch("/api/passkeys/auth/options", {
+        method: "POST",
+        headers: { "x-passkey-context": "app-login" },
+      });
+      const options = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(options.error || "Accesso biometrico non disponibile.");
+
+      const authentication = await startAuthentication(options);
+      const verifyResponse = await fetch("/api/passkeys/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-passkey-context": "app-login" },
+        body: JSON.stringify({ response: authentication }),
+      });
+      const verified = await verifyResponse.json();
+      if (!verifyResponse.ok || !verified.loginToken) throw new Error(verified.error || "Credenziale non riconosciuta.");
+
+      const result = await signIn("credentials", { passkeyToken: verified.loginToken, redirect: false, callbackUrl });
+      if (result?.error) throw new Error("Accesso non completato.");
+      window.location.replace(normalizeLoginDestination(result?.url, callbackUrl));
+    } catch (error) {
+      submittingRef.current = false;
+      setPasskeyLoading(false);
+      setError(error instanceof Error && error.name !== "NotAllowedError"
+        ? error.message
+        : "Accesso annullato. Se è il primo utilizzo, entra con PIN e attivalo dal Profilo.");
+    }
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,9 +127,16 @@ export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant 
       }
 
       if (result?.error) {
+        const accessStatus = await fetch("/api/auth/document-access-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(loginMode === "pin" ? { pin } : { email, password }),
+        }).then((response) => response.json()).catch(() => ({ expired: false }));
         submittingRef.current = false;
         setLoading(false);
-        setError(loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
+        setError(accessStatus.expired
+          ? "Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato."
+          : loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
         return;
       }
 
@@ -97,6 +152,32 @@ export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant 
 
   return (
     <div className={isMobileOverlay ? "space-y-4" : "space-y-5"}>
+      {documentAccessExpired ? (
+        <div className={isMobileOverlay
+          ? "rounded-2xl border border-rose-300/40 bg-rose-500/20 px-4 py-3 text-left text-sm font-bold text-white"
+          : "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800"}
+        >
+          Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato.
+        </div>
+      ) : null}
+      <div className="space-y-3">
+          <button
+            type="button"
+            onClick={loginWithPasskey}
+            disabled={loading || passkeyLoading}
+            className={isMobileOverlay
+              ? "flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-white/25 bg-white px-4 text-sm font-black text-black shadow-[0_14px_34px_rgba(0,0,0,0.24)] transition active:scale-[0.98] disabled:opacity-60"
+              : "flex min-h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-[#171717] px-4 text-sm font-black text-white shadow-sm transition hover:bg-black active:scale-[0.98] disabled:opacity-60"}
+          >
+            {passkeyLoading ? <Loader2 className="size-5 animate-spin" /> : <ScanFace className="size-5" />}
+            {passkeyLoading ? "Verifica in corso..." : "Accedi con Face ID / impronta"}
+          </button>
+          <div className={`flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.18em] ${isMobileOverlay ? "text-white/55" : "text-black/35 dark:text-white/35"}`}>
+            <span className={`h-px flex-1 ${isMobileOverlay ? "bg-white/20" : "bg-black/10 dark:bg-white/10"}`} />
+            oppure
+            <span className={`h-px flex-1 ${isMobileOverlay ? "bg-white/20" : "bg-black/10 dark:bg-white/10"}`} />
+          </div>
+      </div>
       {isMobileOverlay ? null : (
         <div className="space-y-2">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-black/40 dark:text-white/40">

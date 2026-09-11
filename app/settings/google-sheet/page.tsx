@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { RefreshCw, Save, Copy, CheckCircle2, AlertCircle, HelpCircle, FileSpreadsheet, DatabaseBackup } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { Button, Card, Field } from "@/components/ui";
 
 export default function GoogleSheetSettingsPage() {
@@ -135,8 +134,7 @@ export default function GoogleSheetSettingsPage() {
   }
 
   return (
-    <AppShell title="Google Sheet" subtitle="Esportazione automatica e sincronizzazione delle timbrature dei collaboratori." role="SUPER_ADMIN">
-      <div className="grid gap-6 xl:grid-cols-2">
+    <div className="grid gap-6 xl:grid-cols-2">
         {/* Settings form card */}
         <Card className="border border-white/50 bg-white/95 shadow-soft p-5 sm:p-6 flex flex-col justify-between">
           <div>
@@ -260,7 +258,6 @@ export default function GoogleSheetSettingsPage() {
             </div>
           </div>
         </Card>
-      </div>
-    </AppShell>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { formatPersonName } from "@/lib/person-name";
 import { UserRole } from "@prisma/client";
 
 const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Create the User / Employee
     const user = await prisma.user.create({
       data: {
-        name,
+        name: formatPersonName(name),
         email: email.trim().toLowerCase(),
         password_hash: await bcrypt.hash(password, 12),
         pin_hash: await bcrypt.hash(pin, 12),

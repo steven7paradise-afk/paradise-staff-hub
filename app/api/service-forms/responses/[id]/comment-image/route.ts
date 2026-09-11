@@ -128,7 +128,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       url: `/api/drive-image?id=${encodeURIComponent(driveFile.id)}`,
-      previewUrl: driveFile.thumbnailLink || `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFile.id)}&sz=w1200`,
+      previewUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFile.id)}&sz=w1200`,
       driveFileId: driveFile.id,
       driveFileUrl: driveFile.webViewLink,
       name: driveFile.name || fileName,

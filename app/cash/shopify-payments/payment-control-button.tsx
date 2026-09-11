@@ -65,7 +65,7 @@ export function PaymentControlButton({ payments }: { payments: PendingPayment[] 
         className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 text-xs font-black uppercase tracking-[0.12em] text-[#111017] transition hover:bg-[#F6E8EC] disabled:cursor-not-allowed disabled:opacity-55"
       >
         {running ? <LoaderCircle className="size-4 animate-spin" /> : payments.length ? <ScanSearch className="size-4" /> : <CheckCircle2 className="size-4 text-emerald-600" />}
-        {running ? `Controllo ${processed}/${payments.length}` : payments.length ? `Controllo ${payments.length} ordini` : "Tutto verificato"}
+        {running ? `Controllo ${processed}/${payments.length}` : payments.length ? `Verifica automaticamente ${payments.length}` : "Controllo automatico attivo"}
       </button>
       {running ? (
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">

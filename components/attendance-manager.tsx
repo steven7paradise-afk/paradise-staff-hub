@@ -16,6 +16,7 @@ type AttendanceLog = {
   device: string;
   type: string;
   timestamp: string;
+  date?: string;
   time: string;
   note: string;
   photoUrl?: string | null;
@@ -182,14 +183,18 @@ export function AttendanceManager({
     return people;
   }, [logs, workers]);
 
-  // Group all logs by employee (userId) and date (YYYY-MM-DD)
+  // Group by the saved shift date, not by the civil date of the timestamp.
+  // An exit after midnight can still belong to the shift started the day before.
   const groupedLogs = useMemo(() => {
     const groups: Record<string, AttendanceGroup> = {};
 
     const sortedLogs = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     for (const log of sortedLogs) {
-      const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(log.timestamp));
+      const savedShiftDate = log.date ? new Date(log.date) : null;
+      const datePart = savedShiftDate && !Number.isNaN(savedShiftDate.getTime())
+        ? savedShiftDate.toISOString().slice(0, 10)
+        : new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(log.timestamp));
       const groupKey = `${log.userId}-${datePart}`;
       const workerProfile = peopleById.get(log.userId);
 
@@ -403,6 +408,7 @@ export function AttendanceManager({
       device: editingId ? "Correzione manuale Admin" : "Inserimento manuale Admin",
       type: draft.type,
       timestamp: data.timestamp,
+      date: data.date,
       time: data.time,
       note: data.note ?? "",
       photoUrl: worker?.photoUrl ?? fallbackWorker?.photoUrl ?? null,

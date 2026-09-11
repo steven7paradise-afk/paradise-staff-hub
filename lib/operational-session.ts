@@ -4,9 +4,16 @@ import { prisma } from "@/lib/prisma";
 import {
   appointmentsPcCookieName,
   appointmentsPcWorkerCookieName,
+  appointmentsRemoteTargetCookieName,
+  appointmentsRemoteWorkerCookieName,
   checkPCAuthorization,
 } from "@/lib/appointments-pc-auth";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
+import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
+import {
+  appointmentStaffDisplayName,
+  isAlwaysActiveAppointmentStaff,
+} from "@/lib/appointment-staff-access";
 
 export type OperationalUser = {
   id: string;
@@ -27,32 +34,43 @@ function selectedWorkerIdentity(request: NextRequest) {
   }
 }
 
-export async function getOperationalUser(request: NextRequest): Promise<OperationalUser | null> {
+export async function getOperationalUser(
+  request: NextRequest,
+  options?: { requirePcWorker?: boolean; preferAuthenticatedAdmin?: boolean },
+): Promise<OperationalUser | null> {
   const session = await auth();
   const pcAuth = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value).catch(() => null);
-  if (pcAuth) {
+  const hasAuthenticatedAdmin = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  if (pcAuth && !(options?.preferAuthenticatedAdmin && hasAuthenticatedAdmin)) {
     const workerIdentity = selectedWorkerIdentity(request);
-    const worker = workerIdentity
+    const workerCandidate = workerIdentity
       ? await prisma.user.findFirst({
         where: {
           active: true,
-          sede_id: pcAuth.locationId,
           OR: [{ id: workerIdentity }, { name: workerIdentity }],
         },
         select: { id: true, name: true, email: true, role: true, sede_id: true },
         })
       : null;
+    const worker = workerCandidate && (
+      workerCandidate.sede_id === pcAuth.locationId ||
+      isAlwaysActiveAppointmentStaff(workerCandidate.name, workerCandidate.id)
+    ) ? workerCandidate : null;
 
     if (worker) {
       return {
         id: worker.id,
-        name: worker.name,
+        name: appointmentStaffDisplayName(worker.name, worker.id),
         email: worker.email,
         role: worker.role,
         sedeId: worker.sede_id,
         isPC: true,
       };
     }
+
+    if (options?.requirePcWorker) return null;
 
     return {
       id: "PC_CASSA",
@@ -64,11 +82,29 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
     };
   }
 
+  const remoteTarget = request.cookies.get(appointmentsRemoteTargetCookieName)?.value || "";
+  const remoteWorkerId = request.cookies.get(appointmentsRemoteWorkerCookieName)?.value || "";
+  const isAdmin = Boolean(session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
+  if (isAdmin && remoteTarget && remoteWorkerId) {
+    const worker = await resolveRemoteControllerWorker(session!.user.id, remoteTarget, remoteWorkerId);
+    if (worker) {
+      return {
+        id: worker.id,
+        name: worker.name,
+        email: worker.email,
+        role: worker.role,
+        sedeId: worker.sede_id,
+        isPC: true,
+      };
+    }
+  }
+
   if (!session?.user?.id) return null;
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, role: true, location: { select: { name: true } } },
+    select: { id: true, name: true, email: true, role: true, sede_id: true, active: true, location: { select: { name: true } } },
   }).catch(() => null);
+  if (!dbUser?.active) return null;
   if (
     dbUser &&
     isShiftProtectedPath(request.nextUrl.pathname) &&
@@ -76,11 +112,11 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
   ) return null;
 
   return {
-    id: session.user.id,
-    name: session.user.name ?? null,
-    email: session.user.email ?? null,
-    role: String(session.user.role ?? ""),
-    sedeId: session.user.sedeId ?? null,
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email,
+    role: dbUser.role,
+    sedeId: dbUser.sede_id,
     isPC: false,
   };
 }

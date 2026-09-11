@@ -76,6 +76,7 @@ export default async function AttendancePage() {
           device: log.device.device_name,
           type: log.type,
           timestamp: log.timestamp.toISOString(),
+          date: log.date.toISOString(),
           time: log.time,
           note: log.note ?? "",
           photoUrl: log.user.photo_url,

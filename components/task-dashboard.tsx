@@ -5,11 +5,14 @@ import {
   ArrowLeft,
   ArrowRight,
   Bell,
+  BookmarkCheck,
   CalendarDays,
   Check,
   CheckCircle2,
   ChevronRight,
   Clock3,
+  ExternalLink,
+  FileText,
   FileImage,
   Flag,
   Kanban,
@@ -32,6 +35,7 @@ import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { TASK_VIEW_OPTIONS, type TaskViewPreference } from "@/lib/task-view";
 
 type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
 type ChecklistItem = { text: string; done: boolean; completedBy?: string | null; completedAt?: string | null };
@@ -86,9 +90,9 @@ type TaskComment = {
   userPhoto: string | null; 
   createdAt: string; 
   updatedAt: string;
-  files?: { name: string; url?: string; previewUrl?: string; driveFileId?: string; driveFileUrl?: string }[] | null;
+  files?: { name: string; url?: string; previewUrl?: string; driveFileId?: string; driveFileUrl?: string; storagePath?: string; type?: string }[] | null;
 };
-type TaskView = "HOME" | "TABLE" | "BOARD" | "CALENDAR" | "LIST";
+type TaskView = TaskViewPreference;
 type TaskFilter = "TODAY" | "ACTIVE" | "NEW" | "WAITING" | "COMPLETED";
 type AttachmentPreview = { name: string; url: string; kind: "image" | "file" };
 type TodayAttendanceLog = { type: "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA"; timestamp: string; time: string };
@@ -105,8 +109,12 @@ function isCompletedTask(task: Task) {
   return ["COMPLETED", "DONE"].includes(normalizedStatus(task.status));
 }
 
+function isCompletionRequestedTask(task: Task) {
+  return normalizedStatus(task.status) === "COMPLETION_REQUESTED";
+}
+
 function isActiveTask(task: Task) {
-  return normalizedStatus(task.status) === "ACTIVE";
+  return normalizedStatus(task.status) === "ACTIVE" || isCompletionRequestedTask(task);
 }
 
 function isWaitingTask(task: Task) {
@@ -161,6 +169,7 @@ function startOfWeek(date: Date) {
 
 function statusLabel(status: string) {
   if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "Completato";
+  if (normalizedStatus(status) === "COMPLETION_REQUESTED") return "Da confermare";
   if (normalizedStatus(status) === "ACTIVE") return "In corso";
   if (isWaitingTask({ status } as Task)) return "Fermo";
   return "Da fare";
@@ -207,6 +216,40 @@ function Avatar({ name, photoUrl, className = "size-8" }: { name: string; photoU
   );
 }
 
+function AssigneeStack({
+  assignees,
+  className = "size-6",
+  maxVisible = 4,
+}: {
+  assignees: Task["assignees"];
+  className?: string;
+  maxVisible?: number;
+}) {
+  const visibleAssignees = assignees.slice(0, maxVisible);
+  const remaining = Math.max(0, assignees.length - visibleAssignees.length);
+  const label = assignees.length
+    ? `Assegnata a ${assignees.map((assignee) => assignee.name).join(", ")}`
+    : "Nessun collaboratore assegnato";
+
+  return (
+    <div className="flex shrink-0 -space-x-1.5" aria-label={label} title={label}>
+      {visibleAssignees.length ? visibleAssignees.map((assignee) => (
+        <Avatar
+          key={assignee.id}
+          name={assignee.name}
+          photoUrl={assignee.photoUrl}
+          className={`${className} ring-2 ring-white`}
+        />
+      )) : <Avatar name="Nessuno" photoUrl={null} className={className} />}
+      {remaining > 0 ? (
+        <span className={`${className} relative grid shrink-0 place-items-center rounded-full bg-neutral-900 text-[9px] font-black text-white ring-2 ring-white`}>
+          +{remaining}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function priorityTone(priority: string): "pink" | "gold" | "green" {
   if (priority === "ALTA") return "pink";
   if (priority === "BASSA") return "green";
@@ -215,6 +258,7 @@ function priorityTone(priority: string): "pink" | "gold" | "green" {
 
 function statusClasses(status: string) {
   if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "bg-emerald-100 text-emerald-800";
+  if (normalizedStatus(status) === "COMPLETION_REQUESTED") return "bg-sky-100 text-sky-800";
   if (normalizedStatus(status) === "ACTIVE") return "bg-yellow-100 text-yellow-800";
   if (isWaitingTask({ status } as Task)) return "bg-violet-100 text-violet-800";
   return "bg-red-100 text-red-800";
@@ -222,9 +266,17 @@ function statusClasses(status: string) {
 
 function calendarClasses(task: Task) {
   if (isCompletedTask(task)) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (isActiveTask(task)) return "border-yellow-200 bg-yellow-50 text-yellow-800";
+  if (isCompletionRequestedTask(task)) return "border-sky-300 bg-sky-50 text-sky-900 shadow-sm ring-1 ring-sky-200/70";
+  if (isActiveTask(task)) return "border-amber-400 bg-amber-100 text-amber-950 shadow-sm ring-1 ring-amber-300/60";
   if (isWaitingTask(task)) return "border-violet-200 bg-violet-50 text-violet-800";
   return "border-red-200 bg-red-50 text-red-700";
+}
+
+function calendarTaskOrder(task: Task) {
+  if (isActiveTask(task)) return 0;
+  if (isWaitingTask(task)) return 1;
+  if (isCompletedTask(task)) return 3;
+  return 2;
 }
 
 function fileToDataUrl(file: File) {
@@ -236,16 +288,104 @@ function fileToDataUrl(file: File) {
   });
 }
 
+const LARGE_IMAGE_OPTIMIZE_THRESHOLD = 8 * 1024 * 1024;
+const LARGE_IMAGE_TARGET_BYTES = 7 * 1024 * 1024;
+
+function canvasToJpeg(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error("Non riesco a ottimizzare questa immagine.")),
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
+async function optimizeLargeImage(file: File) {
+  if (!file.type.startsWith("image/") || file.size <= LARGE_IMAGE_OPTIMIZE_THRESHOLD) return file;
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    let bestBlob: Blob | null = null;
+    const attempts = [
+      { maxSide: 4096, quality: 0.92 },
+      { maxSide: 3600, quality: 0.88 },
+      { maxSide: 3200, quality: 0.84 },
+    ];
+
+    for (const attempt of attempts) {
+      const scale = Math.min(1, attempt.maxSide / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("Il browser non riesce a elaborare questa immagine.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(bitmap, 0, 0, width, height);
+      bestBlob = await canvasToJpeg(canvas, attempt.quality);
+      canvas.width = 1;
+      canvas.height = 1;
+      if (bestBlob.size <= LARGE_IMAGE_TARGET_BYTES) break;
+    }
+
+    if (!bestBlob || bestBlob.size > LARGE_IMAGE_OPTIMIZE_THRESHOLD) {
+      throw new Error(`${file.name}: l'immagine è troppo pesante per il caricamento. Esportala in JPG e riprova.`);
+    }
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "immagine";
+    return new File([bestBlob], `${baseName}-ottimizzata.jpg`, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
+function extractPastedFiles(event: React.ClipboardEvent | ClipboardEvent): File[] {
+  const files: File[] = [];
+  const items = event.clipboardData?.items;
+  if (items) {
+    for (const item of Array.from(items)) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          if (!file.name || file.name === "image.png" || file.name === "blob") {
+            const ext = (file.type.split("/")[1] || "png").replace(/[^a-z0-9]/g, "");
+            const renamed = new File([file], `imm-incollata-${Date.now()}.${ext}`, { type: file.type });
+            files.push(renamed);
+          } else {
+            files.push(file);
+          }
+        }
+      }
+    }
+  } else if (event.clipboardData?.files) {
+    for (const file of Array.from(event.clipboardData.files)) {
+      files.push(file);
+    }
+  }
+  return files;
+}
+
 function isImageName(name?: string | null) {
   return Boolean(name && /\.(png|jpe?g|webp|gif|avif)$/i.test(name));
 }
 
 function isPreviewableImage(url?: string | null) {
-  return Boolean(url && (/^data:image\//i.test(url) || /^https?:\/\//i.test(url)));
+  return Boolean(url && (/^data:image\//i.test(url) || /^blob:/i.test(url) || url.startsWith("/api/drive-image")));
 }
 
 function attachmentKind(url?: string | null, name?: string | null): AttachmentPreview["kind"] {
-  return isPreviewableImage(url) || isImageName(name) ? "image" : "file";
+  if (isImageName(name)) return "image";
+  if (name && /\.[a-z0-9]{2,8}$/i.test(name)) return "file";
+  return isPreviewableImage(url) ? "image" : "file";
+}
+
+function isPdfName(name?: string | null) {
+  return Boolean(name && /\.pdf$/i.test(name));
 }
 
 function taskFilePreviewUrl(file: { url?: string | null; previewUrl?: string | null; driveFileId?: string | null }) {
@@ -378,6 +518,13 @@ function workerMentionSlug(name: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function workerMentionRoleLabel(worker: Worker) {
+  if (worker.role === "SUPER_ADMIN") return "Super Admin";
+  if (worker.role === "ADMIN") return "Admin";
+  if (worker.role === "RESPONSABILE" || worker.mansione?.toLowerCase().includes("responsabile")) return "Responsabile";
+  return worker.mansione || "Collaboratore reparto";
+}
+
 function getActiveMentionQuery(value: string) {
   return value.match(/(^|\s)@([a-zA-Z0-9_]*)$/)?.[2] ?? null;
 }
@@ -388,18 +535,15 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, workers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; workers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
+export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
   const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
-  
-  const currentUserSedeId = workers.find((w) => w.id === userId)?.locationId ?? null;
-  const initialAllowedWorkers = (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN")
-    ? workers
-    : currentUserSedeId
-      ? workers.filter((w) => w.locationId === currentUserSedeId)
-      : [];
+  const canAssignAcrossTeam = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+  const initialAllowedWorkers = canAssignAcrossTeam ? workers : mentionableUsers;
 
   const [tasks, setTasks] = useState(initialTasks);
-  const [view, setView] = useState<TaskView>("HOME");
+  const [view, setView] = useState<TaskView>(initialView);
+  const [defaultView, setDefaultView] = useState<TaskView>(initialView);
+  const [defaultViewStatus, setDefaultViewStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [open, setOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Task | null>(null);
@@ -407,6 +551,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [selectedExtrasLoading, setSelectedExtrasLoading] = useState(false);
   const [selectedLoadError, setSelectedLoadError] = useState("");
   const detailRequestRef = useRef(0);
+  const initialTaskOpenedRef = useRef(false);
   const taskDetailPageRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
   const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ASSIGNED_TO_ME");
@@ -416,12 +561,34 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState<"updated" | "due" | "priority" | "title">("updated");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  async function saveDefaultView(nextView: TaskView) {
+    const previousView = defaultView;
+    setView(nextView);
+    setDefaultView(nextView);
+    setDefaultViewStatus("saving");
+    try {
+      const response = await fetch("/api/profile/task-view", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ view: nextView }),
+      });
+      if (!response.ok) throw new Error("Vista non salvata");
+      setDefaultViewStatus("saved");
+      window.setTimeout(() => setDefaultViewStatus("idle"), 2200);
+    } catch {
+      setDefaultView(previousView);
+      setDefaultViewStatus("error");
+    }
+  }
   const [calendarMode, setCalendarMode] = useState<"MONTH" | "WEEK">("MONTH");
   const [saving, setSaving] = useState(false);
   const [formStatus, setFormStatus] = useState("");
   const [completionTarget, setCompletionTarget] = useState<Task | null>(null);
   const [completionSaving, setCompletionSaving] = useState(false);
   const [completionError, setCompletionError] = useState("");
+  const [completionDecisionSaving, setCompletionDecisionSaving] = useState<"APPROVE" | "REJECT" | "">("");
+  const [completionDecisionError, setCompletionDecisionError] = useState("");
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerPaused, setTimerPaused] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -429,13 +596,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [commentFiles, setCommentFiles] = useState<NonNullable<TaskComment["files"]>>([]);
   const [commentUploading, setCommentUploading] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
+  const [commentError, setCommentError] = useState("");
   const [todayAttendanceLogs, setTodayAttendanceLogs] = useState<TodayAttendanceLog[]>([]);
   const [completion, setCompletion] = useState({ note: "", link: "", files: [] as CompletionFile[] });
   const [form, setForm] = useState({
     title: "",
     description: "",
-    assignedToId: initialAllowedWorkers[0]?.id ?? "",
-    assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[],
+    assignedToId: "",
+    assignedToIds: [] as string[],
     priority: "MEDIA",
     category: "Operativa",
     dueDate: "",
@@ -448,7 +616,16 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   useEffect(() => {
     if (!selected?.id) return;
     taskDetailPageRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    setCompletionDecisionError("");
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!initialTaskId || initialTaskOpenedRef.current) return;
+    const linkedTask = initialTasks.find((task) => task.id === initialTaskId);
+    if (!linkedTask) return;
+    initialTaskOpenedRef.current = true;
+    void openTask(linkedTask);
+  }, [initialTaskId, initialTasks]);
 
   const baseTasks = useMemo(() => {
     return canAssign 
@@ -483,12 +660,17 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
   const timerAttendance = attendanceTimerState(todayAttendanceLogs);
   const activeMentionQuery = getActiveMentionQuery(commentText);
-  const mentionSuggestions = activeMentionQuery === null
-    ? []
-    : workers
+  const allowedMentionUsers = mentionableUsers.filter((worker) =>
+    worker.role === "SUPER_ADMIN"
+    || worker.role === "ADMIN"
+    || Boolean(selected?.locationId && worker.locationId === selected.locationId)
+  );
+  const mentionSuggestions = activeMentionQuery && activeMentionQuery.length > 0
+    ? allowedMentionUsers
         .filter((worker) => worker.name.toLowerCase().includes(activeMentionQuery.toLowerCase()) || workerMentionSlug(worker.name).toLowerCase().includes(activeMentionQuery.toLowerCase()))
-        .slice(0, 5);
-  const mentionedWorkers = extractMentionedWorkers(commentText, workers);
+        .slice(0, 8)
+    : [];
+  const mentionedWorkers = extractMentionedWorkers(commentText, allowedMentionUsers);
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
 
   useEffect(() => {
@@ -506,6 +688,46 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    function handleGlobalPaste(event: ClipboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+
+      const pastedFiles = extractPastedFiles(event);
+      if (pastedFiles.length === 0) return;
+
+      const imageFile = pastedFiles.find((f) => f.type.startsWith("image/") || f.size > 0);
+      if (!imageFile) return;
+
+      if (open) {
+        event.preventDefault();
+        void attachPhoto(imageFile);
+        return;
+      }
+
+      if (completionTarget) {
+        event.preventDefault();
+        void attachCompletionFiles([imageFile]);
+        return;
+      }
+
+      if (selected) {
+        const isInput = tagName === "input" || tagName === "textarea";
+        const isPureImagePaste = Array.from(event.clipboardData?.items || []).some(
+          (item) => item.kind === "file" && item.type.startsWith("image/")
+        );
+
+        if (!isInput || isPureImagePaste) {
+          event.preventDefault();
+          void attachCommentFiles([imageFile]);
+        }
+      }
+    }
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => window.removeEventListener("paste", handleGlobalPaste);
+  }, [open, completionTarget, selected]);
   const timelineEvents = useMemo(() => {
     if (!selected) return [];
     const events: {
@@ -687,14 +909,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     ]);
     setFormStatus(`Task inviata a ${data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno"}. Notifica creata.`);
     setTimeout(() => {
-      setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
+      setForm({ title: "", description: "", assignedToId: "", assignedToIds: [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
       setFormStatus("");
       setOpen(false);
     }, 900);
   }
 
   function resetTaskForm() {
-    setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
+    setForm({ title: "", description: "", assignedToId: "", assignedToIds: [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
     setEditingTaskId(null);
     setFormStatus("");
     setOpen(false);
@@ -738,21 +960,30 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   async function attachPhoto(file: File | undefined) {
     if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      alert("Il file supera il limite di 50 MB.");
+      return;
+    }
     const dataUrl = await fileToDataUrl(file);
     setForm((current) => ({ ...current, attachmentName: file.name, photoUrl: dataUrl }));
   }
 
   async function attachMainFile(file: File | undefined) {
     if (!file) return;
-    if (file.type.startsWith("image/")) {
-      await attachPhoto(file);
+    if (file.size > 50 * 1024 * 1024) {
+      alert("Il file supera il limite di 50 MB.");
       return;
     }
-    setForm((current) => ({ ...current, attachmentName: file.name }));
+    const dataUrl = await fileToDataUrl(file);
+    setForm((current) => ({ ...current, attachmentName: file.name, photoUrl: dataUrl }));
   }
 
   async function attachDescriptionImage(file: File | undefined) {
     if (!selected || !file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      alert("Il file supera il limite di 50 MB.");
+      return;
+    }
     const dataUrl = await fileToDataUrl(file);
     const response = await fetch("/api/tasks", {
       method: "PATCH",
@@ -802,8 +1033,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     return () => window.clearInterval(interval);
   }, [tasks, timerAttendance.isWorking]);
 
-  async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[] }) {
-    const currentSeconds = getTaskCurrentSeconds(task, todayAttendanceLogs);
+  async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING" | "COMPLETION_REQUESTED", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[]; completionAction?: "REQUEST" | "APPROVE" | "REJECT" }) {
+    const isCompletionDecision = extra?.completionAction === "APPROVE" || extra?.completionAction === "REJECT";
+    const currentSeconds = isCompletionDecision ? task.timerSeconds : getTaskCurrentSeconds(task, todayAttendanceLogs);
     const nextTask = { 
       ...task, 
       status, 
@@ -842,13 +1074,22 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   }
 
   function requestTaskCompletion(task: Task) {
-    if (isCompletedTask(task)) {
+    if (isCompletedTask(task) || isCompletionRequestedTask(task)) {
       void openTask(task);
       return;
     }
     setCompletion({ note: "", link: "", files: [] });
     setCompletionError("");
     setCompletionTarget(task);
+  }
+
+  async function decideTaskCompletion(task: Task, action: "APPROVE" | "REJECT") {
+    if (completionDecisionSaving) return;
+    setCompletionDecisionSaving(action);
+    setCompletionDecisionError("");
+    const result = await updateStatus(task, action === "APPROVE" ? "COMPLETED" : "ACTIVE", { completionAction: action });
+    setCompletionDecisionSaving("");
+    if (!result.ok) setCompletionDecisionError(result.error);
   }
 
   function mapApiTask(data: any): Task {
@@ -984,29 +1225,53 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     });
   }
 
-  async function attachCompletionFiles(files: FileList | null) {
+  async function attachCompletionFiles(files: FileList | File[] | null) {
+    const fileList = Array.isArray(files) ? files : Array.from(files ?? []);
     const next: CompletionFile[] = [];
-    for (const file of Array.from(files ?? [])) {
-      if (file.type.startsWith("image/")) {
-        next.push({ name: file.name, url: await fileToDataUrl(file) });
-      } else {
-        next.push({ name: file.name });
-      }
+    for (const file of fileList) {
+      if (file.size > 50 * 1024 * 1024) continue;
+      next.push({ name: file.name, url: await fileToDataUrl(file) });
     }
-    setCompletion((current) => ({ ...current, files: next }));
+    setCompletion((current) => ({ ...current, files: [...current.files, ...next] }));
   }
 
 
-  async function attachCommentFiles(files: FileList | null) {
-    if (!files) return;
+  async function attachCommentFiles(files: FileList | File[] | null) {
+    if (!files || !selected) return;
+    const fileList = Array.isArray(files) ? files : Array.from(files);
+    if (fileList.length === 0) return;
+
+    setCommentError("");
     setCommentUploading(true);
-    const next = [...commentFiles];
-    for (const file of Array.from(files)) {
-      const url = await fileToDataUrl(file);
-      next.push({ name: file.name, url });
+    const uploaded: NonNullable<TaskComment["files"]> = [];
+    try {
+      for (const file of fileList) {
+        if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 50 MB.`);
+        const uploadFile = await optimizeLargeImage(file);
+        const uploadBody = new FormData();
+        uploadBody.append("taskId", selected.id);
+        uploadBody.append("file", uploadFile, uploadFile.name);
+        const response = await fetch("/api/tasks/comments/upload", {
+          method: "POST",
+          body: uploadBody,
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error || `Non riesco a caricare ${uploadFile.name}.`);
+        uploaded.push({
+          name: data.name || uploadFile.name,
+          url: data.url,
+          previewUrl: data.previewUrl,
+          driveFileId: data.driveFileId,
+          driveFileUrl: data.driveFileUrl,
+          type: data.type || uploadFile.type || "application/octet-stream",
+        });
+      }
+      setCommentFiles((current) => [...current, ...uploaded]);
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : "Caricamento non riuscito.");
+    } finally {
+      setCommentUploading(false);
     }
-    setCommentFiles(next);
-    setCommentUploading(false);
   }
 
   function removeCommentFile(index: number) {
@@ -1018,42 +1283,45 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     const trimmed = commentText.trim();
     if (commentSaving || (!trimmed && commentFiles.length === 0)) return;
     const isEdit = Boolean(editingCommentId);
+    setCommentError("");
     setCommentSaving(true);
-    const response = await fetch("/api/tasks/comments", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        isEdit 
-          ? { id: editingCommentId, message: trimmed, files: commentFiles } 
-          : { taskId: selected.id, message: trimmed, files: commentFiles }
-      ),
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/tasks/comments", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isEdit
+            ? { id: editingCommentId, message: trimmed, files: commentFiles }
+            : { taskId: selected.id, message: trimmed, files: commentFiles }
+        ),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || "Non riesco a salvare il commento.");
+      const comment: TaskComment = {
+        id: data.id,
+        message: data.message,
+        userId: data.user_id,
+        userName: data.user.name,
+        userPhoto: data.user.photo_url ?? null,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        files: data.files ? (typeof data.files === "string" ? JSON.parse(data.files) : data.files) : []
+      };
+      const commentAlreadyExists = selected.comments.some((item) => item.id === comment.id);
+      const comments = isEdit || commentAlreadyExists
+        ? selected.comments.map((item) => item.id === comment.id ? comment : item)
+        : [...selected.comments, comment];
+      const updated = { ...selected, comments };
+      setSelected(updated);
+      setTasks((current) => current.map((item) => item.id === selected.id ? updated : item));
+      setCommentText("");
+      setCommentFiles([]);
+      setEditingCommentId(null);
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : "Invio non riuscito.");
+    } finally {
       setCommentSaving(false);
-      return;
     }
-    const data = await response.json();
-    const comment: TaskComment = {
-      id: data.id,
-      message: data.message,
-      userId: data.user_id,
-      userName: data.user.name,
-      userPhoto: data.user.photo_url ?? null,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      files: data.files ? (typeof data.files === "string" ? JSON.parse(data.files) : data.files) : []
-    };
-    const commentAlreadyExists = selected.comments.some((item) => item.id === comment.id);
-    const comments = isEdit || commentAlreadyExists
-      ? selected.comments.map((item) => item.id === comment.id ? comment : item)
-      : [...selected.comments, comment];
-    const updated = { ...selected, comments };
-    setSelected(updated);
-    setTasks((current) => current.map((item) => item.id === selected.id ? updated : item));
-    setCommentText("");
-    setCommentFiles([]);
-    setEditingCommentId(null);
-    setCommentSaving(false);
   }
 
   function insertMention(worker: Worker) {
@@ -1063,6 +1331,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   function AttachmentCard({ name, url }: { name: string; url?: string | null }) {
     const kind = attachmentKind(url, name);
+    const isPdf = isPdfName(name);
     if (!url && isImageName(name)) return <MissingImagePreview name={name} />;
 
     return (
@@ -1072,20 +1341,27 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             {kind === "image" && url ? (
               <img src={url} alt={name} className="size-full object-cover" />
             ) : (
-              <Paperclip className="size-6 text-black/45" />
+              isPdf ? <FileText className="size-7 text-[#C66170]" /> : <Paperclip className="size-6 text-black/45" />
             )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-black/70">{name}</p>
-            <p className="mt-1 text-xs text-black/40">{kind === "image" ? "Immagine allegata" : "File allegato"}</p>
+            <p className="mt-1 text-xs text-black/40">{kind === "image" ? "Immagine allegata" : isPdf ? "PDF allegato" : "File allegato"}</p>
           </div>
           <Button
             type="button"
             variant="soft"
             disabled={!url}
-            onClick={() => url && setAttachmentPreview({ name, url, kind })}
+            onClick={() => {
+              if (!url) return;
+              if (kind === "image") {
+                setAttachmentPreview({ name, url, kind });
+              } else {
+                window.open(url, "_blank", "noopener,noreferrer");
+              }
+            }}
           >
-            Apri allegato
+            {isPdf ? "Apri PDF" : "Apri allegato"}
           </Button>
         </div>
       </div>
@@ -1126,25 +1402,17 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             event.stopPropagation();
             requestTaskCompletion(task);
           }}
-          className={cn("grid size-11 place-items-center rounded-xl transition", isCompletedTask(task) ? "text-emerald-700" : "hover:bg-[#FBE5EE]")}
-          aria-label={isCompletedTask(task) ? `Apri task completata: ${task.title}` : `Completa task: ${task.title}`}
+          className={cn("grid size-11 place-items-center rounded-xl transition", isCompletedTask(task) ? "text-emerald-700" : isCompletionRequestedTask(task) ? "text-sky-700" : "hover:bg-[#FBE5EE]")}
+          aria-label={isCompletedTask(task) ? `Apri task completata: ${task.title}` : isCompletionRequestedTask(task) ? `Apri richiesta di completamento: ${task.title}` : `Richiedi completamento: ${task.title}`}
         >
-          <span className={cn("grid size-5 place-items-center rounded-md border", isCompletedTask(task) ? "border-emerald-600 bg-emerald-600 text-white" : "border-black/20 bg-white")}>
-          {task.status === "COMPLETED" ? <Check className="size-3" /> : null}
+          <span className={cn("grid size-5 place-items-center rounded-md border", isCompletedTask(task) ? "border-emerald-600 bg-emerald-600 text-white" : isCompletionRequestedTask(task) ? "border-sky-500 bg-sky-100 text-sky-700" : "border-black/20 bg-white")}>
+          {task.status === "COMPLETED" ? <Check className="size-3" /> : isCompletionRequestedTask(task) ? <Clock3 className="size-3" /> : null}
           </span>
         </button>
         <div className="min-w-0">
           <p className="truncate font-semibold">{task.title}</p>
           <div className="mt-1 flex items-center gap-2 text-xs text-black/45">
-            <div className="flex -space-x-1 overflow-hidden">
-              {task.assignees && task.assignees.length > 0 ? (
-                task.assignees.map((assignee) => (
-                  <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-5 rounded-full ring-1 ring-white" />
-                ))
-              ) : (
-                <Avatar name="Nessuno" photoUrl={null} className="size-5" />
-              )}
-            </div>
+            <AssigneeStack assignees={task.assignees || []} className="size-5" />
             <span className="truncate">
               {task.assignees && task.assignees.length > 0 
                 ? task.assignees.length === 1 
@@ -1243,6 +1511,26 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               </button>
             );
           })}
+          <label className="mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-black/10 bg-black/[0.025] px-3 text-xs font-bold text-black/55 sm:ml-auto sm:mt-0 sm:w-auto">
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <BookmarkCheck className="size-4 text-[#C66170]" />
+              Vista iniziale
+            </span>
+            <select
+              value={defaultView}
+              disabled={defaultViewStatus === "saving"}
+              onChange={(event) => void saveDefaultView(event.target.value as TaskView)}
+              aria-label="Scegli la vista iniziale della pagina Task"
+              className="min-h-9 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black outline-none focus:border-[#C66170] focus:ring-2 focus:ring-[#C66170]/15 disabled:opacity-60"
+            >
+              {TASK_VIEW_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <span role="status" className={`min-w-12 text-right text-[10px] font-black ${defaultViewStatus === "error" ? "text-red-600" : "text-emerald-600"}`}>
+              {defaultViewStatus === "saving" ? "Salvo…" : defaultViewStatus === "saved" ? "Salvata" : defaultViewStatus === "error" ? "Riprova" : ""}
+            </span>
+          </label>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1397,7 +1685,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cerca task..." className="w-full bg-transparent text-sm outline-none" />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-auto min-w-36"><option value="ALL">Tutti stati</option><option value="DA FARE">Da fare</option><option value="IN CORSO">In corso</option><option value="COMPLETATO">Completato</option><option value="FERMO">Fermo</option></Select>
+              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-auto min-w-36"><option value="ALL">Tutti stati</option><option value="DA FARE">Da fare</option><option value="IN CORSO">In corso</option><option value="DA CONFERMARE">Da confermare</option><option value="COMPLETATO">Completato</option><option value="FERMO">Fermo</option></Select>
               <Select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="w-auto min-w-32"><option value="ALL">Priorita</option><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select>
               <Select value={sortKey} onChange={(event) => setSortKey(event.target.value as typeof sortKey)} className="w-auto min-w-32"><option value="updated">Aggiornate</option><option value="due">Scadenza</option><option value="priority">Priorita</option><option value="title">Titolo</option></Select>
               <Button variant="soft"><SlidersHorizontal className="size-4" /> Filtra</Button>
@@ -1427,15 +1715,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     <td className="px-4 py-4"><Badge tone={priorityTone(task.priority)}>{task.priority}</Badge></td>
                     <td className="px-4 py-4">
                       <span className="inline-flex items-center gap-2">
-                        <div className="flex -space-x-1.5 overflow-hidden">
-                          {task.assignees && task.assignees.length > 0 ? (
-                            task.assignees.map((assignee) => (
-                              <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-7 rounded-full ring-2 ring-white" />
-                            ))
-                          ) : (
-                            <Avatar name="Nessuno" photoUrl={null} className="size-7" />
-                          )}
-                        </div>
+                        <AssigneeStack assignees={task.assignees || []} className="size-7" />
                         <span className="truncate max-w-[150px]">
                           {task.assignees && task.assignees.length > 0 
                             ? task.assignees.length === 1 
@@ -1484,7 +1764,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 <div className="grid gap-3">
                   {column.tasks.length === 0 ? <p className="rounded-2xl bg-white/70 p-4 text-sm text-black/40">Nessuna task.</p> : null}
                   {column.tasks.map((task) => (
-                    <button key={task.id} onClick={() => void openTask(task)} className="rounded-2xl border border-black/5 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <button key={task.id} onClick={() => void openTask(task)} className="w-full min-w-0 overflow-hidden rounded-2xl border border-black/5 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="font-semibold leading-5">{task.title}</h3>
                         <span className="text-lg leading-none text-black/35">...</span>
@@ -1493,17 +1773,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                         <Badge tone={priorityTone(task.priority)}>{task.priority}</Badge>
                         <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-semibold text-black/50">{formatCategoryLabel(task.category)}</span>
                       </div>
-                      <div className="mt-4 flex items-center justify-between gap-3 text-xs text-black/45">
-                        <span className="inline-flex min-w-0 items-center gap-2">
-                          <div className="flex -space-x-1.5 overflow-hidden">
-                            {task.assignees && task.assignees.length > 0 ? (
-                              task.assignees.map((assignee) => (
-                                <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-6 rounded-full ring-2 ring-white" />
-                              ))
-                            ) : (
-                              <Avatar name="Nessuno" photoUrl={null} className="size-6" />
-                            )}
-                          </div>
+                      <div className="mt-4 flex min-w-0 items-center justify-between gap-3 text-xs text-black/45">
+                        <span className="inline-flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                          <AssigneeStack assignees={task.assignees || []} className="size-6" />
                           <span className="truncate">
                             {task.assignees && task.assignees.length > 0 
                               ? task.assignees.length === 1 
@@ -1512,7 +1784,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                               : task.assignedToName || "Nessuno"}
                           </span>
                         </span>
-                        <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" /> {formatTaskDate(task.dueDate)}</span>
+                        <span className="inline-flex shrink-0 items-center gap-1"><CalendarDays className="size-3.5" /> {formatTaskDate(task.dueDate)}</span>
                       </div>
                     </button>
                   ))}
@@ -1531,9 +1803,15 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       {view === "CALENDAR" ? (
         <Card className="bg-white p-0">
           <div className="flex flex-col gap-3 border-b border-black/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="soft">Oggi</Button>
               <h2 className="px-3 text-xl font-semibold">{calendarTitle}</h2>
+              {filteredTasks.some(isActiveTask) ? (
+                <span className="inline-flex min-h-8 items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-amber-900">
+                  <span className="size-2 rounded-full bg-amber-500 motion-safe:animate-pulse" />
+                  {filteredTasks.filter(isActiveTask).length} in corso
+                </span>
+              ) : null}
             </div>
             <div className="rounded-2xl bg-[#FAF7F9] p-1">
               <button onClick={() => setCalendarMode("MONTH")} className={`rounded-xl px-4 py-2 text-sm font-bold ${calendarMode === "MONTH" ? "bg-white shadow-sm" : "text-black/45"}`}>Mese</button>
@@ -1547,7 +1825,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               </div>
               <div className="grid grid-cols-7">
                 {calendarCells.map((date) => {
-                  const dayTasks = filteredTasks.filter((task) => localDateKey(taskCalendarDate(task)) === localDateKey(date));
+                  const dayTasks = filteredTasks
+                    .filter((task) => localDateKey(taskCalendarDate(task)) === localDateKey(date))
+                    .sort((left, right) => calendarTaskOrder(left) - calendarTaskOrder(right));
                   const visibleDayTasks = dayTasks.slice(0, calendarMode === "WEEK" ? 8 : 3);
                   const hiddenCount = dayTasks.length - visibleDayTasks.length;
                   const muted = date.getMonth() !== monthStart.getMonth();
@@ -1572,6 +1852,12 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                               calendarClasses(task),
                             )}
                           >
+                            {isActiveTask(task) ? (
+                              <span className="mb-1 inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.1em] text-amber-900">
+                                <span className="size-1.5 rounded-full bg-amber-500 motion-safe:animate-pulse" />
+                                {statusLabel(task.status)}
+                              </span>
+                            ) : null}
                             <span className="block whitespace-normal break-words">{task.title}</span>
                             <span className="mt-0.5 block text-[10px] font-medium opacity-70">{task.dueDate ? formatShortDateTime(task.dueDate) : `Creata ${formatTaskDate(task.createdAt)}`}</span>
                           </button>
@@ -1639,11 +1925,10 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   {selected.assignees && selected.assignees.length === 1 ? (
                     <Avatar name={selected.assignees[0].name} photoUrl={selected.assignees[0].photoUrl} className="size-9" />
                   ) : (
-                    <div className="flex -space-x-2">
-                      {(selected.assignees.length > 0 ? selected.assignees : [{ id: selected.assignedToId, name: selected.assignedToName || "Nessuno", photoUrl: selected.assignedToPhoto }]).slice(0, 4).map((assignee) => (
-                        <Avatar key={assignee.id || assignee.name} name={assignee.name} photoUrl={assignee.photoUrl ?? null} className="size-9 ring-2 ring-white" />
-                      ))}
-                    </div>
+                    <AssigneeStack
+                      assignees={selected.assignees.length > 0 ? selected.assignees : [{ id: selected.assignedToId, name: selected.assignedToName || "Nessuno", photoUrl: selected.assignedToPhoto }]}
+                      className="size-9"
+                    />
                   )}
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Assegnata a</p>
@@ -1744,9 +2029,12 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
             {/* Prova completamento (se presente) */}
             {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
-              <Card className="bg-white p-4 md:p-5">
-                <h2 className="font-semibold">Prova completamento</h2>
-                {selected.completionNote ? <p className="mt-4 leading-7 text-black/55">{selected.completionNote}</p> : null}
+              <Card className={cn("bg-white p-4 md:p-5", isCompletionRequestedTask(selected) && "border-sky-200 bg-sky-50/45")}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-semibold">{isCompletionRequestedTask(selected) ? "Prova inviata per conferma" : "Prova completamento"}</h2>
+                  {isCompletionRequestedTask(selected) ? <span className="rounded-full bg-sky-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-sky-800">Da confermare</span> : null}
+                </div>
+                {selected.completionNote ? <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-black/55">{selected.completionNote}</p> : null}
                 <div className="mt-4 grid gap-3">
                   {selected.completionFiles.map((file, index) => (
                     <AttachmentCard key={`${file.name}-${index}`} name={file.name} url={file.url} />
@@ -1867,18 +2155,27 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     className="min-h-16 w-full resize-none rounded-xl border border-black/5 bg-white px-3 py-2 text-sm shadow-xs outline-none transition focus:border-[#8064D8] md:min-h-20" 
                     value={commentText} 
                     onChange={(event) => setCommentText(event.target.value)} 
-                    placeholder="Scrivi un aggiornamento, nota o commento... usa @nome per taggare una persona" 
+                    onPaste={(event) => {
+                      const files = extractPastedFiles(event);
+                      if (files.length > 0) {
+                        event.preventDefault();
+                        void attachCommentFiles(files);
+                      }
+                    }}
+                    placeholder="Scrivi un aggiornamento o incolla un'immagine (Cmd+V / Ctrl+V)... usa @nome per taggare una persona" 
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @nome oppure scegli</span>
+                    <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @ seguito dal nome</span>
                     {mentionSuggestions.map((worker) => (
                       <button
                         key={worker.id}
                         type="button"
                         onClick={() => insertMention(worker)}
+                        title={`Tagga ${worker.name} · ${workerMentionRoleLabel(worker)}`}
                         className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-[#8064D8] ring-1 ring-black/5 hover:bg-[#F5F1FF]"
                       >
                         @{workerMentionSlug(worker.name)}
+                        <span className="ml-1 font-semibold text-black/35">· {workerMentionRoleLabel(worker)}</span>
                       </button>
                     ))}
                     {mentionedWorkers.map((worker) => (
@@ -1912,6 +2209,10 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     </div>
                   )}
 
+                  {commentError ? (
+                    <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{commentError}</p>
+                  ) : null}
+
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
@@ -1931,7 +2232,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                         </Button>
                       )}
                       <Button className="h-9 min-w-24 text-xs" disabled={commentUploading || commentSaving} onClick={saveComment}>
-                        <Send className="size-3.5" /> {commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
+                        <Send className="size-3.5" /> {commentUploading ? "Carico file..." : commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
                       </Button>
                     </div>
                   </div>
@@ -1969,7 +2270,32 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 </p>
               </Card>
             ) : null}
-            {isCompletedTask(selected) ? null : (
+            {isCompletedTask(selected) ? null : isCompletionRequestedTask(selected) ? (
+            <div className="sticky bottom-2 z-10 rounded-[20px] border border-sky-200 bg-white/95 p-3 shadow-xl backdrop-blur md:bottom-4 md:rounded-[24px]">
+              {selected.createdById === userId || role === "ZERO" ? (
+                <>
+                  <div className="mb-3 rounded-2xl bg-sky-50 px-4 py-3">
+                    <p className="text-sm font-black text-sky-950">Richiesta di completamento ricevuta</p>
+                    <p className="mt-1 text-xs leading-5 text-sky-800">Controlla la prova inviata, poi conferma oppure rimanda la task al personale.</p>
+                  </div>
+                  {completionDecisionError ? <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{completionDecisionError}</p> : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="soft" disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "REJECT")}>
+                      <X className="size-4" /> {completionDecisionSaving === "REJECT" ? "Invio..." : "Rifiuta"}
+                    </Button>
+                    <Button disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "APPROVE")}>
+                      <CheckCircle2 className="size-4" /> {completionDecisionSaving === "APPROVE" ? "Confermo..." : "Conferma completamento"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center">
+                  <p className="text-sm font-black text-sky-950">Richiesta inviata</p>
+                  <p className="mt-1 text-xs leading-5 text-sky-800">In attesa della conferma di {selected.createdByName}.</p>
+                </div>
+              )}
+            </div>
+            ) : (
             <div className="sticky bottom-2 z-10 grid grid-cols-1 gap-2 rounded-[20px] border border-black/5 bg-white/95 p-2 shadow-xl backdrop-blur sm:grid-cols-2 md:bottom-4 md:gap-3 md:rounded-[24px] md:p-3">
               {isNewTask(selected) ? (
                 <Button className="sm:col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
@@ -1989,7 +2315,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   >
                     {selected.status === "ACTIVE" ? "Metti fermo" : selected.timerSeconds > 0 ? "Riprendi in corso" : "Metti in corso"}
                   </Button>
-                  <Button onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> Completa task</Button>
+                  <Button onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> {selected.createdById === userId ? "Completa task" : "Richiedi completamento"}</Button>
                 </>
               )}
             </div>
@@ -2015,11 +2341,21 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               {attachmentPreview.kind === "image" ? (
                 <img src={attachmentPreview.url} alt={attachmentPreview.name} className="mx-auto max-h-[70dvh] w-full object-contain" />
               ) : (
-                <div className="grid min-h-64 place-items-center rounded-2xl bg-white text-center">
+                <div className="grid min-h-64 place-items-center rounded-2xl bg-white p-6 text-center shadow-sm">
                   <div>
-                    <Paperclip className="mx-auto size-10 text-black/45" />
-                    <p className="mt-3 font-semibold">{attachmentPreview.name}</p>
-                    <p className="mt-1 text-sm text-black/45">Anteprima non disponibile per questo tipo di file.</p>
+                    <Paperclip className="mx-auto size-12 text-[#A74758]" />
+                    <p className="mt-3 text-lg font-bold text-black/80">{attachmentPreview.name}</p>
+                    <p className="mt-1 text-sm text-black/45">File allegato disponibile su Google Drive.</p>
+                    {attachmentPreview.url ? (
+                      <a
+                        href={attachmentPreview.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#8E334E] px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#73273E]"
+                      >
+                        <ExternalLink className="size-4" /> Apri file in Google Drive
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -2033,8 +2369,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           <div className="my-auto w-full max-w-xl rounded-[28px] border border-white/70 bg-white p-6 shadow-2xl sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Completamento</p>
-                <h2 className="mt-2 text-2xl font-semibold">Invia prova task</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">{completionTarget.createdById === userId ? "Completamento" : "Richiesta di completamento"}</p>
+                <h2 className="mt-2 text-2xl font-semibold">{completionTarget.createdById === userId ? "Completa la task" : "Invia la prova"}</h2>
                 <p className="mt-1 font-semibold text-black/70">{completionTarget.title}</p>
                 <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(completionTarget, todayAttendanceLogs))}</p>
               </div>
@@ -2066,20 +2402,26 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               {completionError ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{completionError}</p> : null}
               <Button disabled={completionSaving} onClick={async () => {
                 if (!completion.note.trim()) {
-                  setCompletionError("Scrivi l’azione svolta prima di completare la Task.");
+                  setCompletionError("Scrivi l’azione svolta prima di inviare.");
                   return;
                 }
                 const links = completion.link.trim() ? [completion.link.trim()] : [];
                 setCompletionSaving(true);
                 setCompletionError("");
-                const result = await updateStatus(completionTarget, "COMPLETED", { completionNote: completion.note.trim(), completionLinks: links, completionFiles: completion.files });
+                const requiresConfirmation = completionTarget.createdById !== userId;
+                const result = await updateStatus(completionTarget, requiresConfirmation ? "COMPLETION_REQUESTED" : "COMPLETED", {
+                  completionNote: completion.note.trim(),
+                  completionLinks: links,
+                  completionFiles: completion.files,
+                  completionAction: requiresConfirmation ? "REQUEST" : undefined,
+                });
                 setCompletionSaving(false);
                 if (!result.ok) {
                   setCompletionError(result.error);
                   return;
                 }
                 setCompletionTarget(null);
-              }}><Send className="size-4" /> {completionSaving ? "Salvataggio..." : "Invia e completa"}</Button>
+              }}><Send className="size-4" /> {completionSaving ? "Salvataggio..." : completionTarget.createdById === userId ? "Completa task" : "Invia richiesta"}</Button>
             </div>
           </div>
         </GlobalFullscreenLayer>
@@ -2104,7 +2446,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Priorità</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
                 <div className="space-y-2 md:col-span-2">
-                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">Assegnato a <span className="normal-case tracking-normal text-black/40">· seleziona uno o più dipendenti</span></span>
+                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">Assegna a <span className="normal-case tracking-normal text-black/40">· {canAssignAcrossTeam ? "seleziona una o più persone" : "Admin o Responsabile"}</span></span>
                   <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-sm sm:grid-cols-2">
                     {initialAllowedWorkers.map((worker) => {
                       const isSelected = form.assignedToIds.includes(worker.id);

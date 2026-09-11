@@ -43,6 +43,8 @@ function fieldValue(order: OrderForBarcode, includes: string[]) {
 
 function orderNumber(order: OrderForBarcode) {
   return (
+    answerById(order, "order_shopify_order") ||
+    answerById(order, "field_1782221517924") ||
     answerById(order, "order_title") ||
     fieldValue(order, ["numero ordine", "ordine shopify", "codice ordine", "ordine"]) ||
     order.id.slice(0, 8)

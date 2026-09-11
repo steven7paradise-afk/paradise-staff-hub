@@ -9,13 +9,19 @@ export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
-export default async function CedoliniPage() {
+export default async function CedoliniPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ employee?: string; type?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   
   if (!allowedRoles.has(session.user.role)) {
     redirect("/dashboard");
   }
+
+  const params = await searchParams;
 
   const [documents, workers] = await Promise.all([
     prisma.document.findMany({
@@ -24,7 +30,7 @@ export default async function CedoliniPage() {
     }),
     prisma.user.findMany({
       where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
-      select: { id: true, name: true, role: true, mansione: true },
+      select: { id: true, name: true, role: true, mansione: true, photo_url: true, email: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -38,10 +44,12 @@ export default async function CedoliniPage() {
     file_url: document.file_url,
     storage_path: document.storage_path,
     created_at: document.created_at.toISOString(),
+    document_date: document.document_date?.toISOString() ?? null,
     user: {
       id: document.user.id,
       name: document.user.name,
       email: document.user.email,
+      photo_url: document.user.photo_url ?? null,
     },
   }));
 
@@ -55,7 +63,13 @@ export default async function CedoliniPage() {
         <DocumentUpload workers={workers} />
       </div>
       
-      <DocumentsViewer documents={documentItems} employeeView={false} workers={workers} />
+      <DocumentsViewer
+        documents={documentItems}
+        employeeView={false}
+        workers={workers}
+        initialWorkerId={params.employee ?? ""}
+        initialType={params.type ?? "ALL"}
+      />
     </AppShell>
   );
 }

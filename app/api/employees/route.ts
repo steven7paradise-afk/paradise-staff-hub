@@ -3,10 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
+import { createNotifications } from "@/lib/notifications";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
+const creatableRolesByActor: Record<string, Set<UserRole>> = {
+  ZERO: new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"]),
+  SUPER_ADMIN: new Set(["ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"]),
+  ADMIN: new Set(["RESPONSABILE", "MAGAZZINO", "DIPENDENTE"]),
+};
 
 function apiError(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status });
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     const email = String(data.email ?? "").trim().toLowerCase();
-    const name = String(data.name ?? "").trim();
+    const name = formatPersonName(String(data.name ?? ""));
     const providedPassword = String(data.password ?? "");
     const providedPin = String(data.pin ?? "");
     const password = providedPassword || temporaryPassword();
@@ -67,11 +74,14 @@ export async function POST(request: NextRequest) {
     const whatsappPhone = data.whatsappPhone ? String(data.whatsappPhone).trim() : null;
     const mansione = data.mansione ? String(data.mansione).trim() : null;
 
-    if (!name || !email || password.length < 8 || !/^\d{2,6}$/.test(pin)) {
+    if (!name || !email || password.length < 8 || !/^\d{4,6}$/.test(pin)) {
       return apiError("Nome, email, password valida e PIN da 4 a 6 numeri sono obbligatori.", 400);
     }
     if (!Object.values(UserRole).includes(role)) {
       return apiError("Ruolo non valido.", 400);
+    }
+    if (!creatableRolesByActor[session.user.role]?.has(role)) {
+      return apiError("Non hai i permessi per assegnare questo ruolo. Scegli un ruolo operativo consentito.", 403);
     }
     if (await isPinAlreadyAssigned(pin)) {
       return apiError("Questo PIN e gia assegnato a un altro lavoratore. Inserisci un codice unico.", 409);
@@ -101,7 +111,14 @@ export async function POST(request: NextRequest) {
         manager_id: data.managerId ? String(data.managerId) : null,
         access_list: data.accessList !== undefined ? data.accessList : undefined,
         hr_notes: data.hrNotes ? String(data.hrNotes) : null,
-        workforce_data: data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData) ? data.workforceData : undefined,
+        workforce_data: data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData)
+          ? data.workforceData
+          : (data.contractType || data.contractRenewalStatus
+              ? {
+                  contractType: data.contractType ? String(data.contractType).trim() : "",
+                  contractRenewalStatus: data.contractRenewalStatus ? String(data.contractRenewalStatus) : "DA_VALUTARE",
+                }
+              : undefined),
         contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,
         last_edited_by_id: session.user.id,
         last_edited_at: new Date(),
@@ -115,6 +132,33 @@ export async function POST(request: NextRequest) {
       emailStatus = { skipped: true, reason: error instanceof Error ? error.message : "Email non inviata" };
     }
 
+    let notificationStatus: { sent: boolean; reason?: string } = { sent: true };
+    try {
+      await createNotifications([
+        {
+          user_id: user.id,
+          title: "Account Paradise attivato",
+          message: "Il tuo profilo staff è stato creato. Apri il profilo per controllare i tuoi dati.",
+          type: "STAFF_ACCOUNT_CREATED",
+          action_url: "/profile",
+          read: false,
+        },
+        {
+          user_id: session.user.id,
+          title: "Nuovo dipendente creato",
+          message: `${name} è stato aggiunto correttamente allo staff.`,
+          type: "STAFF_CREATED",
+          action_url: `/staff?employee=${encodeURIComponent(user.id)}`,
+          read: false,
+        },
+      ]);
+    } catch (error) {
+      notificationStatus = {
+        sent: false,
+        reason: error instanceof Error ? error.message : "Notifica interna non inviata",
+      };
+    }
+
     return NextResponse.json({
       ...user,
       password_hash: undefined,
@@ -122,6 +166,7 @@ export async function POST(request: NextRequest) {
       pinConfigured: true,
       generatedCredentials: !providedPassword || !providedPin,
       emailStatus,
+      notificationStatus,
     });
   } catch (error) {
     console.error("Employee create error:", error);

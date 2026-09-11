@@ -2,20 +2,24 @@
 
 import Papa from "papaparse";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, ImagePlus, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Trash2, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { normalizeScannedOrderReference, orderCodeCandidates } from "@/lib/order-code-reader";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
 }
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
+const ORDER_PRODUCT_PHOTOS_KEY = "__orderProductPhotos";
 type OrderPhoto = {
+  id?: string;
   url: string;
   previewUrl?: string;
   name?: string;
@@ -24,6 +28,7 @@ type OrderPhoto = {
   driveFileUrl?: string;
   uploadedAt?: string;
   uploadedBy?: string;
+  stage?: string;
 };
 
 type OrderResponse = {
@@ -36,16 +41,37 @@ type OrderResponse = {
   created_at: string;
   updated_at: string;
   user_location_name?: string | null;
-  user?: { name?: string | null };
+  user?: { name?: string | null; photo_url?: string | null };
+  confirmed_by?: { id?: string; name?: string | null; photo_url?: string | null } | null;
   form?: { name?: string | null; fields?: Array<{ id: string; label: string; type: string }> };
 };
 
+function OrderActor({ order, detail = false }: { order: OrderResponse; detail?: boolean }) {
+  const actor = order.confirmed_by;
+  const name = actor?.name?.trim() || order.user?.name?.trim() || "Staff";
+  const photoUrl = actor?.photo_url || (!actor ? order.user?.photo_url : null);
+  const label = actor ? "Confermato da" : "Creato da";
+  const initials = name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className={cn("grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#f7dce8] font-black text-[#a83f6d]", detail ? "size-10 text-xs" : "size-6 text-[8px]")}>
+        {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={`Foto di ${name}`} className="size-full object-cover" /> : initials}
+      </span>
+      <span className="min-w-0">
+        <span className={cn("block truncate font-black uppercase tracking-[0.08em] text-black/35", detail ? "text-[10px]" : "text-[8px]")}>{label}</span>
+        <span className={cn("block truncate font-bold text-black/70", detail ? "mt-0.5 text-sm" : "text-[10px]")}>{name}</span>
+      </span>
+    </div>
+  );
+}
+
 const ORDER_COLUMNS = [
-  { id: "NEW", label: "Nuovo ordine", icon: ShoppingCart, color: "bg-pink-50 text-[#C66170] border-pink-100" },
-  { id: "PREPARING", label: "Preparando ordine", icon: Clock3, color: "bg-amber-50 text-amber-700 border-amber-100" },
-  { id: "ORDERED", label: "Ordinato", icon: Truck, color: "bg-violet-50 text-violet-700 border-violet-100" },
-  { id: "READY", label: "Arrivato / pronto", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
-  { id: "COMPLETED", label: "Completato", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+  { id: "NEW", label: "Da ordinare", helper: "Invia l’ordine al fornitore", icon: ShoppingCart, color: "bg-pink-50 text-[#C66170] border-pink-100" },
+  { id: "PREPARING", label: "In preparazione", helper: "Controlla dati e prodotti", icon: Clock3, color: "bg-amber-50 text-amber-700 border-amber-100" },
+  { id: "ORDERED", label: "Ordinato · in arrivo", helper: "Attendi l’arrivo dell’ordine", icon: Truck, color: "bg-violet-50 text-violet-700 border-violet-100" },
+  { id: "READY", label: "Pronto · azione richiesta", helper: "Spedisci, fissa l’appuntamento o prepara il ritiro", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
+  { id: "COMPLETED", label: "Consegnato", helper: "Operazione conclusa", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
 ];
 
 const monthsList = [
@@ -172,13 +198,13 @@ function isSartaOrder(order: OrderResponse) {
 function orderTitle(order: OrderResponse) {
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title) return title;
-  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  const clientName = answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
   if (clientName) return clientName;
   return "Ordine senza titolo";
 }
 
 function orderClientName(order: OrderResponse) {
-  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  const clientName = answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
   if (clientName) return clientName;
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title && isNaN(Number(title.replace("#", "").trim()))) {
@@ -188,7 +214,7 @@ function orderClientName(order: OrderResponse) {
 }
 
 function orderNumber(order: OrderResponse) {
-  const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
+  const title = answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title) return title;
   return `#${order.id.substring(0, 5).toUpperCase()}`;
 }
@@ -261,6 +287,37 @@ function orderDate(order: OrderResponse) {
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(order.created_at));
 }
 
+function orderCompletionTimestamp(order: OrderResponse) {
+  const pickup = orderPickup(order);
+  return pickup?.completedAt || pickup?.signature?.signedAt || order.updated_at || order.created_at;
+}
+
+function orderStatusDate(order: OrderResponse) {
+  const value = (order.status || "NEW") === "COMPLETED" ? orderCompletionTimestamp(order) : order.created_at;
+  return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function orderReadyTimestamp(order: OrderResponse) {
+  const readyEvent = Array.isArray(order.activity_log)
+    ? [...order.activity_log].reverse().find((event) => event?.to === "READY")
+    : null;
+
+  // Gli ordini importati conservano la loro data originale in created_at.
+  if (readyEvent?.note?.toLowerCase?.().includes("importato da csv")) return order.created_at;
+  return readyEvent?.at || order.updated_at || order.created_at;
+}
+
+function orderReadyAgeDays(order: OrderResponse) {
+  if ((order.status || "NEW") !== "READY") return 0;
+  const readyAt = new Date(orderReadyTimestamp(order)).getTime();
+  if (!Number.isFinite(readyAt)) return 0;
+  return Math.max(0, Math.floor((Date.now() - readyAt) / 86_400_000));
+}
+
+function isReadyOrderOverdue(order: OrderResponse) {
+  return orderReadyAgeDays(order) >= 3;
+}
+
 function orderPhoto(order: OrderResponse): OrderPhoto | null {
   const photo = order.answers?.[ORDER_PHOTO_KEY];
   if (!photo || typeof photo !== "object" || typeof photo.url !== "string") return null;
@@ -269,6 +326,37 @@ function orderPhoto(order: OrderResponse): OrderPhoto | null {
 
 function orderPhotoPreviewUrl(photo: OrderPhoto) {
   return photo.previewUrl || (photo.driveFileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(photo.driveFileId)}&sz=w1200` : photo.url);
+}
+
+function orderProductPhotos(order: OrderResponse): OrderPhoto[] {
+  return orderProductPhotoSlots(order).filter((photo): photo is OrderPhoto => Boolean(photo));
+}
+
+function orderProductPhotoSlots(order: OrderResponse): Array<OrderPhoto | null> {
+  const stored = order.answers?.[ORDER_PRODUCT_PHOTOS_KEY];
+  const photos: Array<OrderPhoto | null> = Array.isArray(stored)
+    ? stored.slice(0, 2).map((photo) => photo && typeof photo === "object" && typeof photo.url === "string" ? photo as OrderPhoto : null)
+    : [];
+  while (photos.length < 2) photos.push(null);
+  const legacy = orderPhoto(order);
+  if (!photos[0] && legacy) photos[0] = legacy;
+  return photos;
+}
+
+function orderTimeline(order: OrderResponse) {
+  const created = {
+    type: "CREATED",
+    action: "Ordine creato",
+    by: order.user?.name || "Staff",
+    at: order.created_at,
+    note: "La scheda ordine è stata aperta.",
+  };
+  const activity = Array.isArray(order.activity_log) ? order.activity_log.filter((event) => event && typeof event === "object") : [];
+  return [created, ...activity].sort((left, right) => {
+    const leftTime = new Date(left.at || left.date || 0).getTime();
+    const rightTime = new Date(right.at || right.date || 0).getTime();
+    return rightTime - leftTime;
+  });
 }
 
 function displayOrderFieldValue(value: any) {
@@ -297,6 +385,31 @@ function labelIncludes(label: string, terms: string[]) {
 
 function findOrderField(fields: Array<{ label: string; value: any; id: string }>, terms: string[]) {
   return fields.find((field) => labelIncludes(field.label, terms));
+}
+
+type OrderInfoGroup = "CLIENT" | "PRODUCT" | "PAYMENT" | "DELIVERY" | "OTHER";
+
+const ORDER_INFO_GROUPS: Array<{ id: OrderInfoGroup; label: string; helper: string }> = [
+  { id: "CLIENT", label: "Cliente e ordine", helper: "Riferimenti principali" },
+  { id: "PRODUCT", label: "Prodotto e lavorazione", helper: "Cosa deve essere preparato" },
+  { id: "DELIVERY", label: "Tempi e indicazioni", helper: "Scadenze e richieste operative" },
+  { id: "PAYMENT", label: "Pagamento", helper: "Importi e conferme" },
+  { id: "OTHER", label: "Altre informazioni", helper: "Dettagli aggiuntivi" },
+];
+
+function orderInfoGroup(label: string): OrderInfoGroup {
+  const clean = label.toLowerCase();
+  if (["ordine shopify", "numero ordine", "nome e cognome", "cliente", "email", "telefono", "whatsapp"].some((term) => clean.includes(term))) return "CLIENT";
+  if (["cosa dobbiamo", "peso", "extension", "fasce", "prodotto", "colore", "lunghezza", "grammi"].some((term) => clean.includes(term))) return "PRODUCT";
+  if (["data", "disponibil", "informazioni", "note", "consegna", "indirizzo", "scadenza"].some((term) => clean.includes(term))) return "DELIVERY";
+  if (["pagamento", "pagato", "importo", "quanto manca", "chi conferma", "saldo"].some((term) => clean.includes(term))) return "PAYMENT";
+  return "OTHER";
+}
+
+function visibleOrderFields(order: OrderResponse) {
+  return (order.form?.fields ?? [])
+    .filter((field) => !field.id.startsWith("__") && order.answers?.[field.id] !== null && order.answers?.[field.id] !== undefined && order.answers?.[field.id] !== "")
+    .map((field) => ({ ...field, value: order.answers[field.id] }));
 }
 
 function orderPickup(order: OrderResponse) {
@@ -340,6 +453,42 @@ function statusPillClass(status: string) {
   return "bg-[#FAF0F5] text-[#a94670] ring-1 ring-inset ring-pink-200";
 }
 
+function orderDeliveryAction(order: OrderResponse) {
+  const fields = order.form?.fields ?? [];
+  const deliveryField = fields.find((field) => {
+    const label = field.label.trim().toLowerCase();
+    return label === "consegna" || label.includes("modalità di consegna") || label.includes("modalita di consegna");
+  });
+  const addressField = fields.find((field) => field.label.toLowerCase().includes("indirizzo di spedizione"));
+  const delivery = deliveryField ? answerById(order, deliveryField.id).trim().toUpperCase() : "";
+  const address = addressField ? answerById(order, addressField.id).trim() : "";
+
+  if (delivery.includes("SPEDIZIONE")) {
+    return {
+      kind: "shipping" as const,
+      label: address ? `Spedisci a casa · ${address}` : "Spedisci a casa · controlla l’indirizzo",
+      address,
+    };
+  }
+  if (delivery.includes("RITIRO")) return { kind: "pickup" as const, label: "Ritiro in negozio · non spedire", address: "" };
+  if (delivery.includes("APPUNTAMENTO")) return { kind: "appointment" as const, label: "Fissa appuntamento con la cliente", address: "" };
+  return { kind: "unknown" as const, label: "Controlla la modalità di consegna", address: "" };
+}
+
+function hasShippingAddress(order: OrderResponse) {
+  const delivery = orderDeliveryAction(order);
+  return delivery.kind === "shipping" && Boolean(delivery.address);
+}
+
+function orderNextAction(order: OrderResponse) {
+  const status = order.status || "NEW";
+  if (status === "READY") return orderDeliveryAction(order).label;
+  if (status === "ORDERED") return "Non spedire ancora · attendi l’arrivo";
+  if (status === "PREPARING") return "Completa la preparazione";
+  if (status === "COMPLETED") return "Consegna completata";
+  return "Da inviare al fornitore";
+}
+
 export function OrderManager({
   initialOrders,
   canManage,
@@ -360,6 +509,7 @@ export function OrderManager({
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selected, setSelected] = useState<OrderResponse | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [mobileStatus, setMobileStatus] = useState("ALL");
   const [changingStatusTo, setChangingStatusTo] = useState<string | null>(null);
   const [statusNoteText, setStatusNoteText] = useState("");
@@ -370,9 +520,113 @@ export function OrderManager({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
+  const [shippingOnly, setShippingOnly] = useState(false);
   const [visibleMobileCount, setVisibleMobileCount] = useState(18);
   const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(null);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [scannerMessage, setScannerMessage] = useState("");
+  const scannerInstanceRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
+  const scannerRegionId = "order-barcode-camera";
   const requestedStatus = searchParams.get("status")?.toUpperCase() ?? null;
+
+  const stopBarcodeCamera = useCallback(() => {
+    const scanner = scannerInstanceRef.current;
+    scannerInstanceRef.current = null;
+    if (scanner) {
+      void scanner.stop()
+        .catch(() => null)
+        .finally(() => {
+          try { scanner.clear(); } catch { /* The reader may already be cleared. */ }
+        });
+    }
+    setCameraActive(false);
+  }, []);
+
+  const findOrderFromBarcode = useCallback((rawValue: string) => {
+    const normalized = normalizeScannedOrderReference(rawValue);
+    return orders.find((order) => {
+      const candidates = orderCodeCandidates({
+        responseId: order.id,
+        visibleOrderNumber: orderNumber(order),
+        answers: order.answers,
+      });
+      return candidates.has(normalized);
+    }) ?? null;
+  }, [orders]);
+
+  const openOrderFromBarcode = useCallback((rawValue: string) => {
+    const match = findOrderFromBarcode(rawValue);
+    if (!match) {
+      setScannerMessage(`Nessun ordine trovato per il codice “${rawValue.trim()}”.`);
+      return false;
+    }
+    stopBarcodeCamera();
+    setBarcodeInput("");
+    setScannerMessage(`Ordine ${orderNumber(match)} trovato.`);
+    setSelected(match);
+    return true;
+  }, [findOrderFromBarcode, stopBarcodeCamera]);
+
+  async function startBarcodeCamera() {
+    setScannerMessage("");
+    setCameraActive(true);
+    try {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const scanner = new Html5Qrcode(scannerRegionId, {
+        verbose: false,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+        ],
+      });
+      scannerInstanceRef.current = scanner;
+      const cameras = await Html5Qrcode.getCameras().catch(() => []);
+      const rearCamera = cameras.find((camera) => /back|rear|environment|posteriore/i.test(camera.label));
+      await scanner.start(
+        rearCamera?.id || { facingMode: "environment" },
+        {
+          fps: 12,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            return {
+              width: Math.floor(viewfinderWidth * 0.9),
+              height: Math.floor(Math.min(viewfinderHeight * 0.48, viewfinderWidth * 0.5)),
+            };
+          },
+          aspectRatio: 4 / 3,
+        },
+        (decodedText) => { openOrderFromBarcode(decodedText); },
+        () => { /* Frames without a barcode are expected while focusing. */ },
+      );
+    } catch (error) {
+      const scanner = scannerInstanceRef.current;
+      scannerInstanceRef.current = null;
+      try { scanner?.clear(); } catch { /* Ignore cleanup errors after denied camera access. */ }
+      const errorText = error instanceof Error ? `${error.name} ${error.message}` : String(error || "");
+      setScannerMessage(
+        /notallowed|permission|denied|permesso/i.test(errorText)
+          ? "Fotocamera bloccata. Consenti l’accesso alla fotocamera nelle impostazioni del browser e riprova."
+          : /notfound|devicesnotfound|camera.*not found/i.test(errorText)
+            ? "Nessuna fotocamera disponibile. Inserisci il numero ordine oppure usa un lettore USB."
+            : "Non riesco ad avviare la fotocamera. Riprova oppure inserisci il numero ordine manualmente.",
+      );
+      setCameraActive(false);
+    }
+  }
+
+  useEffect(() => () => {
+    const scanner = scannerInstanceRef.current;
+    scannerInstanceRef.current = null;
+    if (!scanner) return;
+    void scanner.stop().catch(() => null).finally(() => {
+      try { scanner.clear(); } catch { /* The component is already unmounted. */ }
+    });
+  }, []);
 
   useEffect(() => {
     const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
@@ -403,6 +657,31 @@ export function OrderManager({
     router.replace(nextUrl, { scroll: false });
   }
 
+  async function deleteOrder(order: OrderResponse) {
+    if (deletingId || !["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentUserRole)) return;
+
+    const confirmed = window.confirm(
+      `Eliminare definitivamente l'ordine ${orderNumber(order)} di ${orderClientName(order)}?\n\nQuesta azione non può essere annullata.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingId(order.id);
+    try {
+      const response = await fetch(`/api/service-forms/responses/${order.id}`, { method: "DELETE" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || "Impossibile eliminare l'ordine.");
+      }
+
+      setOrders((current) => current.filter((item) => item.id !== order.id));
+      closeSelectedOrder();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Errore durante l'eliminazione dell'ordine.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
     let result = orders;
@@ -415,6 +694,7 @@ export function OrderManager({
           orderNumber(order),
           orderItems(order),
           order.user?.name ?? "",
+          order.confirmed_by?.name ?? "",
           order.user_location_name ?? "",
           JSON.stringify(order.answers ?? {}),
         ].join(" ").toLowerCase();
@@ -425,7 +705,7 @@ export function OrderManager({
       result = orders.filter((order) => {
         const status = order.status || "NEW";
         if (status !== "COMPLETED") return true;
-        const d = new Date(order.created_at);
+        const d = new Date(orderCompletionTimestamp(order));
         return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
       });
     }
@@ -434,12 +714,16 @@ export function OrderManager({
       result = result.filter(order => getOrderTaskType(order) === selectedTaskType);
     }
 
+    if (shippingOnly) {
+      result = result.filter((order) => (order.status || "NEW") !== "COMPLETED" && hasShippingAddress(order));
+    }
+
     if (requestedStatus && ORDER_COLUMNS.some((column) => column.id === requestedStatus)) {
       result = result.filter((order) => (order.status || "NEW") === requestedStatus);
     }
 
     return result;
-  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, requestedStatus]);
+  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly, requestedStatus]);
 
   const mobileOrders = useMemo(() => {
     if (mobileStatus === "ALL") return filteredOrders;
@@ -456,7 +740,7 @@ export function OrderManager({
 
   useEffect(() => {
     setVisibleMobileCount(18);
-  }, [mobileStatus, query, selectedMonth, selectedYear, selectedTaskType]);
+  }, [mobileStatus, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly]);
 
   async function moveOrder(order: OrderResponse, status: string, note?: string) {
     setSavingId(order.id);
@@ -472,7 +756,7 @@ export function OrderManager({
     setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
   }
 
-  async function uploadPhoto(order: OrderResponse, file?: File) {
+  async function uploadPhotoSlot(order: OrderResponse, slot: number, file?: File) {
     if (!file) return;
     setPhotoError("");
 
@@ -485,6 +769,8 @@ export function OrderManager({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("stage", order.status || "NEW");
+      formData.append("slot", String(slot));
       const response = await fetch(`/api/orders/${order.id}/photo`, {
         method: "POST",
         body: formData,
@@ -493,10 +779,10 @@ export function OrderManager({
       if (!response.ok) {
         throw new Error(result.error || "Impossibile caricare la foto.");
       }
+      const updatedOrder = result.order as OrderResponse;
 
-      const updated = result.order as OrderResponse;
-      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
-      setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updatedOrder } : item));
+      setSelected((current) => current?.id === order.id ? { ...current, ...updatedOrder } : current);
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : "Impossibile caricare la foto.");
     } finally {
@@ -619,38 +905,40 @@ export function OrderManager({
   }
 
   return (
-    <div className="space-y-4 pb-8 md:space-y-6">
-      <div className="overflow-hidden rounded-[24px] border border-black/[0.06] bg-white shadow-sm md:rounded-[32px]">
+    <div className="space-y-3 pb-8 md:space-y-6">
+      <div className="overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm">
         <div className="p-4 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d]">Paradise Operations</p>
-            <div className="mt-1 flex items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Ordini</h1>
-              <span className="rounded-full bg-[#f8e5ee] px-2.5 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
+            <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d] md:block">Paradise Operations</p>
+            <div className="flex items-center gap-2.5 md:mt-1 md:gap-3">
+              <h1 className="text-2xl font-black tracking-[-0.03em] text-[#221b20] md:text-4xl md:font-semibold">Ordini</h1>
+              <span className="grid min-w-7 place-items-center rounded-full bg-[#f8e5ee] px-2 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
             </div>
-            <p className="mt-1 text-sm text-black/50">{canManage ? "Gestisci" : "Controlla"} preparazione, arrivo e consegna.</p>
+            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{canManage ? "Gestisci" : "Controlla"} cosa ordinare, cosa attendere e cosa spedire.</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-black/40">Mese:</span>
+          <div className="grid w-full gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:items-center lg:gap-3">
+            <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
+              <span className="sr-only">Periodo</span>
               <select
+                aria-label="Mese degli ordini"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="bg-black/5 border border-black/10 text-black text-xs font-bold rounded-full px-3 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition"
+                className="h-11 w-full rounded-xl border border-black/[0.08] bg-[#faf7f9] px-3 text-sm font-bold capitalize text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-1.5 lg:text-xs"
               >
                 {monthsList.map((m) => (
                   <option key={m.value} value={m.value}>
-                    {m.label.toUpperCase()}
+                    {m.label}
                   </option>
                 ))}
               </select>
               
               <select
+                aria-label="Anno degli ordini"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-black/5 border border-black/10 text-black text-xs font-bold rounded-full px-3 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition"
+                className="h-11 w-full rounded-xl border border-black/[0.08] bg-[#faf7f9] px-3 text-sm font-bold text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-1.5 lg:text-xs"
               >
                 {yearsList.map((y) => (
                   <option key={y} value={y}>
@@ -660,16 +948,38 @@ export function OrderManager({
               </select>
             </div>
 
-            <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 w-full lg:w-72">
-              <Search className="size-4 text-black/35" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
+            <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-2 lg:flex lg:items-center lg:gap-3">
+              <div className="flex h-11 min-w-0 items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-3 lg:w-72 lg:rounded-2xl">
+                <Search className="size-4 shrink-0 text-black/35" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca cliente o ordine" className="min-w-0 w-full bg-transparent text-sm outline-none" />
+                {query ? <button type="button" onClick={() => setQuery("")} aria-label="Cancella ricerca" className="grid size-7 shrink-0 place-items-center rounded-full text-black/35"><X className="size-3.5" /></button> : null}
+              </div>
+
+              <button
+                type="button"
+                aria-label={scannerOpen ? "Chiudi lettore codice" : "Leggi codice ordine"}
+                title="Leggi codice"
+                onClick={() => {
+                  if (scannerOpen) stopBarcodeCamera();
+                  setScannerOpen((current) => !current);
+                  setScannerMessage("");
+                }}
+                className={cn(
+                  "grid size-11 place-items-center rounded-xl border text-[#a94670] transition lg:inline-flex lg:w-auto lg:gap-2 lg:rounded-2xl lg:px-4 lg:text-xs lg:font-black",
+                  scannerOpen ? "border-[#d8739f] bg-[#f9dce9]" : "border-[#e8b9ce] bg-[#fff0f6] hover:bg-[#f9dce9]"
+                )}
+              >
+                <ScanBarcode className="size-4" />
+                <span className="hidden lg:inline">Leggi codice</span>
+              </button>
             </div>
             
-            <div className="relative">
+            <div className="relative w-full lg:w-auto">
               <select
+                aria-label="Tipo di ordine"
                 value={selectedTaskType}
                 onChange={(e) => setSelectedTaskType(e.target.value as any)}
-                className="appearance-none bg-black/5 border border-black/10 text-black text-xs font-black rounded-full pl-4 pr-9 py-2 outline-none cursor-pointer hover:bg-black/10 transition"
+                className="h-11 w-full appearance-none rounded-xl border border-black/[0.08] bg-[#faf7f9] pl-3 pr-9 text-sm font-bold text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-2 lg:text-xs lg:font-black"
                 style={{
                   backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23000000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
                   backgroundPosition: "right 0.6rem center",
@@ -677,18 +987,76 @@ export function OrderManager({
                   backgroundRepeat: "no-repeat"
                 }}
               >
-                <option value="ALL">TUTTI I COMPITI</option>
-                <option value="conversione">CONVERSIONE CAPELLI</option>
-                <option value="acquisto">ACQUISTO EXTENSION</option>
-                <option value="accessori">ACCESSORI</option>
-                <option value="altro">ALTRO</option>
+                <option value="ALL">Tutti i tipi</option>
+                <option value="conversione">Conversione capelli</option>
+                <option value="acquisto">Acquisto extension</option>
+                <option value="accessori">Accessori</option>
+                <option value="altro">Altro</option>
               </select>
             </div>
+
+            <button
+              type="button"
+              aria-pressed={shippingOnly}
+              onClick={() => {
+                setShippingOnly((current) => !current);
+                setMobileStatus("ALL");
+              }}
+              className={cn(
+                "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition lg:h-auto lg:w-auto lg:rounded-full lg:py-2 lg:text-xs",
+                shippingOnly
+                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              )}
+            >
+              <Truck className="size-4" />
+              Da spedire
+              {shippingOnly ? <X className="size-3.5" aria-hidden="true" /> : null}
+            </button>
           </div>
         </div>
+        {scannerOpen ? (
+          <div className="mt-5 rounded-3xl border border-[#efc5d7] bg-[#fff8fb] p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-black">Lettore codice a barre</p>
+                <p className="mt-1 text-xs text-black/50">Legge QR, codice a barre, numero ordine e link Shopify.</p>
+                <form
+                  className="mt-3 flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (barcodeInput.trim()) openOrderFromBarcode(barcodeInput);
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={barcodeInput}
+                    onChange={(event) => setBarcodeInput(event.target.value)}
+                    placeholder="Scansiona o inserisci il codice…"
+                    className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-[#d8739f]"
+                  />
+                  <button type="submit" className="rounded-2xl bg-[#b74660] px-5 text-sm font-black text-white">Apri</button>
+                </form>
+                {scannerMessage ? <p role="status" className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#a94670]">{scannerMessage}</p> : null}
+              </div>
+              <div className="lg:w-72">
+                {cameraActive ? (
+                  <div className="relative overflow-hidden rounded-2xl bg-black">
+                    <div id={scannerRegionId} className="aspect-video w-full overflow-hidden bg-black [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
+                    <button type="button" onClick={stopBarcodeCamera} className="absolute right-2 top-2 rounded-full bg-white/90 p-2 text-black"><X className="size-4" /></button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => { void startBarcodeCamera(); }} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white text-sm font-black text-black">
+                    <Camera className="size-4" /> Usa fotocamera
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
         </div>
 
-        <div className="grid grid-cols-3 border-t border-black/[0.06] bg-[#fffafd] sm:grid-cols-5">
+        <div className="hidden grid-cols-5 border-t border-black/[0.06] bg-[#fffafd] md:grid">
           {ORDER_COLUMNS.map((column) => {
             const Icon = column.icon;
             return (
@@ -713,36 +1081,39 @@ export function OrderManager({
       </div>
 
       <div className="space-y-3 md:hidden">
-        <div className="sticky top-0 z-20 -mx-1 space-y-3 border-y border-black/[0.06] bg-[#fff9fc]/95 px-1 py-3 backdrop-blur-xl">
-        <div className="flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="sticky top-0 z-20 rounded-2xl border border-black/[0.06] bg-white/95 p-2 shadow-[0_8px_24px_rgba(70,34,52,0.06)] backdrop-blur-xl">
+        <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             onClick={() => setMobileStatus("ALL")}
             className={cn(
-              "shrink-0 rounded-full border px-4 py-2.5 text-xs font-bold transition",
-              mobileStatus === "ALL" ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white text-black/50"
+              "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-black transition",
+              mobileStatus === "ALL" ? "bg-[#241d22] text-white shadow-sm" : "bg-transparent text-black/45"
             )}
           >
-            Tutti {filteredOrders.length}
+            Tutti <span className={cn("rounded-md px-1.5 py-0.5 text-[10px]", mobileStatus === "ALL" ? "bg-white/15" : "bg-black/[0.05]")}>{filteredOrders.length}</span>
           </button>
           {ORDER_COLUMNS.map((column) => {
             const count = orderCounts[column.id] || 0;
+            const Icon = column.icon;
             return (
               <button
                 key={column.id}
                 type="button"
                 onClick={() => setMobileStatus(column.id)}
                 className={cn(
-                  "shrink-0 rounded-full border px-4 py-2.5 text-xs font-bold transition",
-                  mobileStatus === column.id ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white text-black/50"
+                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-black transition",
+                  mobileStatus === column.id ? "bg-[#f7dce8] text-[#9f3e68] shadow-sm" : "bg-transparent text-black/45"
                 )}
               >
-                {column.label} {count}
+                <Icon className="size-3.5" />
+                {column.label}
+                <span className={cn("rounded-md px-1.5 py-0.5 text-[10px]", mobileStatus === column.id ? "bg-white/60" : "bg-black/[0.05]")}>{count}</span>
               </button>
             );
           })}
         </div>
-        <p className="px-2 text-[11px] font-bold text-black/40">
+        <p className="px-2 pb-0.5 pt-2 text-[10px] font-bold text-black/35">
           {mobileOrders.length} {mobileOrders.length === 1 ? "ordine trovato" : "ordini trovati"}
         </p>
         </div>
@@ -755,60 +1126,56 @@ export function OrderManager({
             const currentStatus = order.status || "NEW";
             const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
             const Icon = status.icon;
-            const taskType = getOrderTaskType(order);
             const photo = orderPhoto(order);
+            const readyAgeDays = orderReadyAgeDays(order);
+            const readyOverdue = isReadyOrderOverdue(order);
             return (
               <button
                 key={order.id}
                 type="button"
                 onClick={() => setSelected(order)}
                 className={cn(
-                  "w-full overflow-hidden rounded-[18px] border text-left shadow-sm transition active:scale-[0.99]",
-                  taskType === "conversione"
-                    ? "border-l-4 border-l-pink-500 border-pink-200/60 bg-pink-50/10"
-                    : taskType === "acquisto"
-                    ? "border-l-4 border-l-amber-500 border-amber-200/60 bg-amber-50/10"
-                    : taskType === "accessori"
-                    ? "border-l-4 border-l-indigo-500 border-indigo-200/60 bg-indigo-50/10"
-                    : "border-l-4 border-l-slate-400 border-slate-200/60 bg-slate-50/10"
+                  "w-full overflow-hidden rounded-[20px] border text-left shadow-[0_8px_24px_rgba(74,38,56,0.055)] transition active:scale-[0.99]",
+                  readyOverdue ? "border-amber-300 bg-amber-50" : "border-black/[0.06] bg-white"
                 )}
               >
-                <div className="flex min-h-[112px]">
+                <div className="flex gap-3 p-3">
                   {photo ? (
                     <img
                       src={orderPhotoPreviewUrl(photo)}
                       alt={`Foto di ${orderTitle(order)}`}
-                      className="w-24 shrink-0 object-cover sm:w-32"
+                      className="size-[76px] shrink-0 rounded-2xl object-cover"
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
                       }}
                     />
                   ) : (
-                    <div className="grid w-16 shrink-0 place-items-center bg-black/[0.025] sm:w-20">
-                      <Icon className="size-5 text-black/20" />
+                    <div className="grid size-[76px] shrink-0 place-items-center rounded-2xl bg-[#faf3f7]">
+                      <Icon className="size-5 text-[#bd5b85]" />
                     </div>
                   )}
-                  <div className="min-w-0 flex-1 p-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.06em]", statusPillClass(currentStatus))}>
-                            {status.label}
-                          </span>
-                          <span className="text-[10px] font-bold text-black/35">{orderNumber(order)}</span>
-                        </div>
-                        <h3 className="mt-2 line-clamp-1 text-base font-black leading-5 text-black">{orderClientName(order)}</h3>
+                  <div className="min-w-0 flex-1 py-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.05em]", readyOverdue ? "bg-amber-200 text-amber-900 ring-1 ring-inset ring-amber-300" : statusPillClass(currentStatus))}>
+                          {readyOverdue ? `Pronto da ${readyAgeDays} giorni` : status.label}
+                        </span>
+                        <span className="text-[10px] font-bold text-black/35">#{String(orderNumber(order)).replace(/^#/, "")}</span>
                       </div>
-                      <ChevronRight className="mt-1 size-5 shrink-0 text-black/25" />
+                      <span className="shrink-0 text-[10px] font-semibold text-black/35">{orderStatusDate(order)}</span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-xs font-medium leading-4 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
-                    <div className="mt-2 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-black/35">
-                      <span className="truncate">{order.user_location_name ?? "Sede non indicata"}</span>
-                      <span>·</span>
-                      <span className="truncate">{order.user?.name ?? "Staff"}</span>
-                      <span className="ml-auto shrink-0">{orderDate(order)}</span>
-                    </div>
+                    <h3 className="mt-1.5 line-clamp-2 text-[15px] font-black leading-[1.15] tracking-[-0.01em] text-[#211b20]">{orderClientName(order)}</h3>
+                    <p className="mt-1 line-clamp-1 text-[11px] font-medium leading-4 text-black/48">{orderItems(order) || "Nessun dettaglio prodotti"}</p>
+                    <p className={cn("mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.04em]", readyOverdue ? "text-amber-900" : currentStatus === "READY" ? "text-blue-700" : "text-black/38")}>{orderNextAction(order)}</p>
                   </div>
+                </div>
+                <div className="flex min-w-0 items-center gap-1.5 border-t border-black/[0.05] px-3 py-2.5 text-[10px] font-bold text-black/38">
+                  <span className="truncate">{order.user_location_name ?? "Sede non indicata"}</span>
+                  <span className="text-black/20">•</span>
+                  <OrderActor order={order} />
+                  <span className="ml-auto grid size-7 shrink-0 place-items-center rounded-full bg-[#faf3f7] text-[#b24f7a]">
+                    <ChevronRight className="size-4" />
+                  </span>
                 </div>
               </button>
             );
@@ -834,7 +1201,10 @@ export function OrderManager({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Icon className="size-5" />
-                  <h2 className="font-semibold">{column.label}</h2>
+                  <div>
+                    <h2 className="font-semibold leading-tight">{column.label}</h2>
+                    <p className="mt-1 text-[10px] font-semibold leading-tight opacity-60">{column.helper}</p>
+                  </div>
                 </div>
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black/55">{columnOrders.length}</span>
               </div>
@@ -845,6 +1215,8 @@ export function OrderManager({
                 {columnOrders.map((order) => {
                   const photo = orderPhoto(order);
                   const taskType = getOrderTaskType(order);
+                  const readyAgeDays = orderReadyAgeDays(order);
+                  const readyOverdue = isReadyOrderOverdue(order);
                   const borderStyle = taskType === "conversione" 
                     ? "border-l-4 border-l-pink-500 border-t border-r border-b border-pink-200/60" 
                     : taskType === "acquisto"
@@ -859,7 +1231,8 @@ export function OrderManager({
                       onClick={() => setSelected(order)} 
                       className={cn(
                         "overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md border border-slate-100",
-                        borderStyle
+                        borderStyle,
+                        readyOverdue && "!border-amber-300 !border-l-amber-500 bg-amber-50"
                       )}
                     >
                       {photo ? (
@@ -880,13 +1253,32 @@ export function OrderManager({
                           </div>
                           <Eye className="size-4 shrink-0 text-black/35" />
                         </div>
+                        {readyOverdue ? (
+                          <span className="mt-3 inline-flex rounded-full bg-amber-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.05em] text-amber-900 ring-1 ring-inset ring-amber-300">
+                            Pronto da {readyAgeDays} giorni
+                          </span>
+                        ) : null}
                         <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
+                        <div className={cn(
+                          "mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.04em]",
+                          readyOverdue ? "bg-amber-200 text-amber-900" : column.id === "READY" ? "bg-blue-100 text-blue-800" : "bg-black/[0.035] text-black/45"
+                        )}>
+                          {column.id === "READY" ? (() => {
+                            const delivery = orderDeliveryAction(order);
+                            const ActionIcon = delivery.kind === "shipping" ? Truck : delivery.kind === "appointment" ? CalendarDays : MapPin;
+                            return <ActionIcon className="mt-0.5 size-3.5 shrink-0" />;
+                          })() : null}
+                          <span>{orderNextAction(order)}</span>
+                        </div>
                         <div className="mt-3 flex flex-wrap gap-2 items-center">
                           {renderTaskBadge(taskType)}
                           <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
                           {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
                         </div>
-                        <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderDate(order)}</p>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <OrderActor order={order} />
+                          <span className="shrink-0 text-[10px] font-semibold text-black/35">{orderStatusDate(order)}</span>
+                        </div>
                       </div>
                     </button>
                   );
@@ -898,14 +1290,12 @@ export function OrderManager({
       </div>
 
       {selected ? (
-        <GlobalFullscreenLayer className="bg-black/35 backdrop-blur-sm">
+        <GlobalFullscreenLayer className="bg-[#F7F5F6]">
         <div
-          className="grid h-full w-full place-items-end p-0 lg:place-items-center lg:p-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeSelectedOrder();
-          }}
+          className="h-full w-full"
         >
-          <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-[30px] bg-white p-3 shadow-2xl lg:max-w-7xl lg:rounded-[28px] lg:p-5">
+          <div className="h-full w-full overflow-y-auto bg-[#F7F5F6] p-3 lg:p-6">
+            <div className="mx-auto w-full max-w-[1500px]">
             <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-black/5 bg-white/95 pb-4 backdrop-blur">
               <div className="flex min-w-0 items-center gap-3">
                 <button onClick={closeSelectedOrder} className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition hover:bg-black/[0.03]"><ArrowLeft className="size-5" /></button>
@@ -920,6 +1310,17 @@ export function OrderManager({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentUserRole) ? (
+                  <Button
+                    variant="soft"
+                    onClick={() => void deleteOrder(selected)}
+                    disabled={deletingId === selected.id}
+                    className="border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {deletingId === selected.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    <span className="hidden sm:inline">Elimina</span>
+                  </Button>
+                ) : null}
                 <Button
                   variant="soft"
                   onClick={() => void import("@/lib/order-label-pdf-client")
@@ -931,129 +1332,167 @@ export function OrderManager({
                 <Button variant="soft" onClick={closeSelectedOrder}><X className="size-4" /> Chiudi</Button>
               </div>
             </div>
-            <div className="mb-4 grid gap-3 rounded-[22px] border border-black/5 bg-[#FBF8FA] p-3 md:grid-cols-4">
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><MapPin className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Salone</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{selected.user_location_name ?? "Non indicato"}</p>
+            <div className="mb-3 flex min-h-14 items-center overflow-x-auto rounded-2xl border border-black/[0.07] bg-white px-4 shadow-sm">
+              <div className="flex min-w-max items-center divide-x divide-black/[0.08]">
+                <div className="flex items-center gap-2.5 pr-5">
+                  <MapPin className="size-4 text-[#8064D8]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-black/35">Salone</span>
+                  <b className="text-sm text-black/75">{selected.user_location_name ?? "Non indicato"}</b>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><UserRound className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Creato da</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{selected.user?.name ?? "Staff"}</p>
+                <div className="flex items-center gap-2.5 px-5">
+                  <UserRound className="size-4 text-[#8064D8]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-black/35">Creato da</span>
+                  <b className="text-sm text-black/75">{selected.user?.name ?? "Staff"}</b>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><CalendarDays className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Data creazione</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{orderDate(selected)}</p>
+                <div className="flex items-center gap-2.5 px-5">
+                  <CalendarDays className="size-4 text-[#8064D8]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-black/35">Creato</span>
+                  <b className="text-sm text-black/75">{orderDate(selected)}</b>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><Clock3 className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Ultima modifica</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{formatDateTime(selected.updated_at)}</p>
+                <div className="flex items-center gap-2.5 pl-5 text-xs text-black/40">
+                  <Clock3 className="size-4" /> Ultima modifica {formatDateTime(selected.updated_at)}
                 </div>
               </div>
             </div>
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <Card className="bg-white">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-black uppercase tracking-[0.14em] text-black/55">Informazioni ordine</h3>
-                  <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[11px] font-bold text-black/40">
-                    {(selected.form?.fields ?? []).filter((field) => selected.answers?.[field.id] && !field.id.startsWith("__")).length} campi
-                  </span>
+            <div className="mb-4 overflow-x-auto rounded-2xl border border-black/10 bg-white px-4 py-3.5 shadow-sm">
+              <div className="flex min-w-[720px] items-start">
+                {ORDER_COLUMNS.map((column, index) => {
+                  const currentIndex = ORDER_COLUMNS.findIndex((item) => item.id === (selected.status || "NEW"));
+                  const complete = index < currentIndex;
+                  const active = index === currentIndex;
+                  const Icon = column.icon;
+                  return (
+                    <div key={column.id} className="relative flex flex-1 flex-col items-center text-center">
+                      {index > 0 ? (
+                        <span className={cn("absolute right-1/2 top-[15px] h-px w-full", index <= currentIndex ? "bg-slate-950" : "bg-black/15")} />
+                      ) : null}
+                      <span className={cn(
+                        "relative z-[1] grid size-8 place-items-center rounded-full border bg-white transition",
+                        complete && "border-slate-950 bg-slate-950 text-white",
+                        active && "border-[#C66170] bg-[#C66170] text-white shadow-[0_0_0_5px_rgba(198,97,112,0.12)]",
+                        !complete && !active && "border-black/15 text-black/35",
+                      )}>
+                        {complete ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
+                      </span>
+                      <span className={cn("mt-2 text-[10px] font-black uppercase tracking-[0.07em]", active ? "text-[#A83F6D]" : complete ? "text-slate-950" : "text-black/35")}>{column.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="flex flex-col gap-5">
+              <Card className="order-2 bg-white">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A83F6D]">Percorso ordine</p>
+                    <h3 className="mt-1 text-lg font-black text-slate-950">Timeline attività</h3>
+                    <p className="mt-1 text-sm text-black/45">Stati, note e foto restano nello stesso percorso.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-950 px-3 py-1.5 text-[11px] font-black text-white">{orderTimeline(selected).length} eventi</span>
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {(selected.form?.fields ?? []).map((field) => {
-                    const value = selected.answers?.[field.id];
-                    if (!value) return null;
-                    if (field.id.startsWith("__")) return null;
-                    const isFile = typeof value === "object" && (value.storagePath || value.driveFileUrl || value.webViewLink || value.url);
-                    const displayValue = displayOrderFieldValue(value);
-                    const FieldIcon = orderFieldIcon(field.label);
+                <div className="mt-6">
+                  {orderTimeline(selected).map((log: any, idx: number) => {
+                    const isPhoto = log.type === "PHOTO_ADDED";
+                    const isCreated = log.type === "CREATED";
+                    const destination = ORDER_COLUMNS.find((column) => column.id === log.to);
+                    const source = ORDER_COLUMNS.find((column) => column.id === log.from);
+                    const photo = isPhoto ? orderProductPhotos(selected).find((item) => (item.id || item.driveFileId) === log.photoId) : null;
+                    const title = isPhoto
+                      ? "Foto prodotto aggiunta"
+                      : isCreated
+                        ? "Ordine creato"
+                        : log.action || `Stato aggiornato: ${source?.label ?? log.from ?? "iniziale"} → ${destination?.label ?? log.to ?? "nuovo stato"}`;
+                    const EventIcon = isPhoto ? Camera : isCreated ? ShoppingCart : destination?.icon || Clock3;
                     return (
-                      <div key={field.id} className="rounded-2xl border border-black/5 bg-[#FBF8FA] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.12em] text-black/35">{field.label}</p>
-                          {FieldIcon ? <FieldIcon className="size-4 shrink-0 text-[#C66170]" /> : null}
+                      <div key={`${log.at || log.date || idx}-${idx}`} className="relative grid grid-cols-[38px_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
+                        {idx < orderTimeline(selected).length - 1 ? <span className="absolute left-[18px] top-9 h-[calc(100%-18px)] w-px bg-black/10" /> : null}
+                        <span className={cn("relative z-[1] grid size-[38px] place-items-center rounded-full border", idx === 0 ? "border-[#C66170] bg-[#C66170] text-white" : "border-black/10 bg-white text-black/55")}>
+                          <EventIcon className="size-4" />
+                        </span>
+                        <div className="rounded-2xl border border-black/[0.07] bg-[#FCFAFB] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="font-black text-slate-950">{title}</p>
+                              <p className="mt-1 text-xs font-semibold text-black/40">{log.by || log.user || "Staff"}</p>
+                            </div>
+                            <time className="text-[11px] font-bold text-black/35">{formatDateTime(log.at || log.date)}</time>
+                          </div>
+                          {log.note ? <p className="mt-3 whitespace-pre-wrap rounded-xl bg-white p-3 text-sm leading-6 text-black/70 ring-1 ring-black/[0.05]">{log.note}</p> : null}
+                          {photo ? (
+                            <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-xl border border-black/5 bg-white">
+                              <img src={orderPhotoPreviewUrl(photo)} alt="Foto prodotto nella timeline" className="h-40 w-full object-cover" />
+                            </a>
+                          ) : null}
                         </div>
-                        {isFile ? (
-                          <a href={serviceFormFileUrl(value)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]">
-                            <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
-                          </a>
-                        ) : (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-black/75">{displayValue}</p>
-                        )}
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Log attività / cambi di stato */}
-                {Array.isArray(selected.activity_log) && (selected.activity_log as any[]).length > 0 && (
-                  <div className="mt-6 space-y-4 border-t border-black/5 pt-6">
-                    <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-black/40">Cronologia Stati e Note</h3>
-                    <div className="grid gap-3">
-                      {(selected.activity_log as any[]).map((log: any, idx: number) => {
-                        const logDate = log.at || log.date;
-                        let formattedDate = "";
-                        if (logDate) {
-                          try {
-                            formattedDate = new Intl.DateTimeFormat("it-IT", { 
-                              day: "2-digit", 
-                              month: "short", 
-                              hour: "2-digit", 
-                              minute: "2-digit" 
-                            }).format(new Date(logDate));
-                          } catch (e) {
-                            formattedDate = "";
-                          }
-                        }
-
-                        let title = "";
-                        if (log.action) {
-                          title = log.action;
-                        } else if (log.from !== undefined || log.to !== undefined) {
-                          const colFrom = ORDER_COLUMNS.find((c) => c.id === log.from);
-                          const colTo = ORDER_COLUMNS.find((c) => c.id === log.to);
-                          title = `Stato cambiato da ${colFrom?.label ?? log.from ?? 'sconosciuto'} a ${colTo?.label ?? log.to ?? 'sconosciuto'}`;
-                        } else {
-                          title = "Attività registrata";
-                        }
-
-                        const actor = log.by || log.user || "Staff";
-
-                        return (
-                          <div key={idx} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-4 text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-extrabold text-black/75">
-                                {title}
-                              </span>
-                              {formattedDate && (
-                                <span className="text-[11px] text-black/40">
-                                  {formattedDate}
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 text-xs text-black/45">Modificato da: {actor}</p>
-                            {log.note && (
-                              <div className="mt-3 rounded-xl bg-white p-3 border border-black/5">
-                                <p className="text-xs font-bold text-black/35 mb-1">Nota stato:</p>
-                                <p className="text-sm text-black/80 whitespace-pre-wrap">{log.note}</p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+              </Card>
+              <Card className="order-1 bg-white">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A83F6D]">Scheda completa</p>
+                    <h3 className="mt-1 text-lg font-black text-slate-950">Riepilogo dell’ordine</h3>
+                  </div>
+                  <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[11px] font-bold text-black/40">
+                    {visibleOrderFields(selected).length} campi
+                  </span>
+                </div>
+                <div className="mt-5 rounded-[22px] border border-[#E8DDE2] bg-[#FCF8FA] p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Ordine Shopify</p>
+                      <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">{orderNumber(selected)}</p>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Cliente</p>
+                      <p className="mt-1 text-lg font-black text-slate-950">{orderClientName(selected)}</p>
                     </div>
                   </div>
-                )}
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-black/[0.07] pt-4">
+                    <span className={cn("rounded-full px-3 py-1.5 text-[11px] font-black", statusPillClass(selected.status || "NEW"))}>{statusLabel(selected.status || "NEW")}</span>
+                    <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-black/55 ring-1 ring-black/[0.07]">Creato {orderDate(selected)}</span>
+                    <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-black/55 ring-1 ring-black/[0.07]">{selected.user_location_name || "Sede non indicata"}</span>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  {ORDER_INFO_GROUPS.map((group) => {
+                    const fields = visibleOrderFields(selected).filter((field) => orderInfoGroup(field.label) === group.id);
+                    if (!fields.length) return null;
+                    return (
+                      <section key={group.id} className={cn("overflow-hidden rounded-[20px] border bg-white", group.id === "DELIVERY" ? "border-[#E5B5C5]" : "border-black/[0.08]")}>
+                        <div className={cn("border-b px-4 py-3", group.id === "DELIVERY" ? "border-[#E5B5C5] bg-[#FFF4F7]" : "border-black/[0.07] bg-[#FAFAFA]")}>
+                          <h4 className="text-sm font-black text-slate-950">{group.label}</h4>
+                          <p className="mt-0.5 text-[11px] text-black/40">{group.helper}</p>
+                        </div>
+                        <dl className="divide-y divide-black/[0.07] px-4">
+                          {fields.map((field) => {
+                            const value = field.value;
+                            const isFile = typeof value === "object" && (value.storagePath || value.driveFileUrl || value.webViewLink || value.url);
+                            const FieldIcon = orderFieldIcon(field.label);
+                            return (
+                              <div key={field.id} className="py-3.5">
+                                <dt className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.12em] text-black/35">
+                                  {field.label}
+                                  {FieldIcon ? <FieldIcon className="size-3.5 shrink-0 text-[#C66170]" /> : null}
+                                </dt>
+                                <dd className="mt-1.5 whitespace-pre-wrap break-words text-sm font-bold leading-6 text-black/75">
+                                  {isFile ? (
+                                    <a href={serviceFormFileUrl(value)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[#8064D8]">
+                                      <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
+                                    </a>
+                                  ) : displayOrderFieldValue(value)}
+                                </dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                      </section>
+                    );
+                  })}
+                </div>
 
                 <ResponseComments
                   responseId={selected.id}
@@ -1072,58 +1511,52 @@ export function OrderManager({
                   }}
                 />
               </Card>
+              </div>
               <div className="space-y-4">
                 <Card className="bg-white">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Camera className="size-5 text-[#C66170]" />
-                      <h3 className="font-semibold">Foto ordine</h3>
+                      <ImagePlus className="size-5 text-[#C66170]" />
+                      <h3 className="font-black">Foto prodotto</h3>
                     </div>
-                    {orderPhoto(selected)?.driveFileUrl ? (
-                      <a href={orderPhoto(selected)!.driveFileUrl} target="_blank" rel="noreferrer" className="text-xs font-black text-[#C66170] hover:underline">
-                        Drive
-                      </a>
-                    ) : null}
+                    <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-black text-black/45">{orderProductPhotos(selected).length}</span>
                   </div>
-                  {orderPhoto(selected) ? (
-                    (() => {
-                      const photo = orderPhoto(selected)!;
-                      const previewUrl = orderPhotoPreviewUrl(photo);
-                      return (
-                    <div className="mt-4">
-                      <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="grid h-80 place-items-center overflow-hidden rounded-2xl border border-black/5 bg-[#F8F3F6]">
-                        <img src={previewUrl} alt={`Foto di ${orderTitle(selected)}`} className="max-h-80 w-full object-contain" />
-                      </a>
-                      <p className="mt-2 truncate text-center text-xs font-semibold text-black/45">{photo.name ?? "Foto ordine"}</p>
-                    </div>
-                      );
-                    })()
-                  ) : (
-                    <div className="mt-4 grid h-48 place-items-center rounded-2xl border-2 border-dashed border-black/10 bg-black/[0.02] text-center text-sm text-black/40">
-                      <div>
-                        <Camera className="mx-auto mb-2 size-7" />
-                        Nessuna foto caricata
+                  <p className="mt-1 text-xs leading-5 text-black/45">Documenta il prodotto in ogni fase. Le foto non sostituiscono quelle precedenti.</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                    {orderProductPhotoSlots(selected).map((photo, index) => (
+                      <div key={index} className="overflow-hidden rounded-2xl border border-black/[0.08] bg-[#FCFAFB]">
+                        <div className="flex items-center justify-between border-b border-black/[0.07] bg-white px-3 py-2.5">
+                          <span className="text-xs font-black text-slate-950">Foto {index + 1}</span>
+                          <span className="text-[10px] font-bold text-black/35">{photo ? statusLabel(photo.stage || "NEW") : "Da aggiungere"}</span>
+                        </div>
+                        {photo ? (
+                          <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="group relative block overflow-hidden">
+                            <img src={orderPhotoPreviewUrl(photo)} alt={`Foto prodotto ${index + 1}`} className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+                            <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8 text-[10px] font-bold text-white">{photo.uploadedBy || "Staff"}</span>
+                          </a>
+                        ) : (
+                          <div className="grid h-32 place-items-center text-center text-black/35">
+                            <div><ImagePlus className="mx-auto mb-2 size-6" /><span className="text-xs font-bold">Nessuna foto</span></div>
+                          </div>
+                        )}
+                        <label className={cn("m-2 flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#C66170] px-3 text-xs font-black text-white transition hover:bg-[#B45464]", uploadingPhoto && "pointer-events-none opacity-60")}>
+                          {uploadingPhoto ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                          {photo ? `Sostituisci Foto ${index + 1}` : `Carica Foto ${index + 1}`}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingPhoto}
+                            onChange={(event) => {
+                              void uploadPhotoSlot(selected, index, event.target.files?.[0]);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
                       </div>
-                    </div>
-                  )}
-                  <label className={cn(
-                    "mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#C66170] px-4 text-sm font-bold text-white transition hover:bg-[#B45464]",
-                    uploadingPhoto && "pointer-events-none opacity-60"
-                  )}>
-                    {uploadingPhoto ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                    {uploadingPhoto ? "Caricamento..." : orderPhoto(selected) ? "Sostituisci foto" : "Carica foto"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={uploadingPhoto}
-                      onChange={(event) => {
-                        void uploadPhoto(selected, event.target.files?.[0]);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <p className="mt-2 text-center text-[11px] text-black/35">JPG, PNG o WEBP · massimo 10 MB</p>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-center text-[11px] text-black/35">Due foto · JPG, PNG o WEBP · massimo 10 MB ciascuna</p>
                   {photoError ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600">{photoError}</p> : null}
                 </Card>
                 <Card className="bg-white">
@@ -1229,7 +1662,7 @@ export function OrderManager({
                         f.label?.toLowerCase().includes("codice")
                       );
                       const shopifyOrderVal = shopifyOrderField ? selected.answers?.[shopifyOrderField.id] : null;
-                      const finalOrderVal = selected.answers?.field_1782221517924 || shopifyOrderVal;
+                      const finalOrderVal = selected.answers?.order_shopify_order || selected.answers?.field_1782221517924 || shopifyOrderVal;
                       return (
                         <p>
                           <span className="text-black/40">Ordine Shopify:</span>{" "}
@@ -1243,31 +1676,8 @@ export function OrderManager({
                     <p className="inline-flex items-center gap-2"><CalendarDays className="size-4 text-black/40" /> {orderDate(selected)}</p>
                   </div>
                 </Card>
-                {currentUserRole === "SUPER_ADMIN" && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!confirm("Sei sicuro di voler eliminare definitivamente questo ordine? Questa azione non può essere annullata.")) return;
-                      try {
-                        const response = await fetch(`/api/service-forms/responses/${selected.id}`, {
-                          method: "DELETE"
-                        });
-                        if (response.ok) {
-                          setOrders(current => current.filter(item => item.id !== selected.id));
-                          closeSelectedOrder();
-                        } else {
-                          alert("Errore durante l'eliminazione dell'ordine.");
-                        }
-                      } catch (err) {
-                        alert("Errore di connessione.");
-                      }
-                    }}
-                    className="w-full inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-sm font-black text-red-700 transition hover:bg-red-100"
-                  >
-                    Elimina Ordine
-                  </button>
-                )}
               </div>
+            </div>
             </div>
           </div>
         </div>

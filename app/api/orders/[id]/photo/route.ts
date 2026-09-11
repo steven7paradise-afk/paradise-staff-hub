@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { uploadOrderPhotoToGoogleDrive } from "@/lib/google-drive";
 import { getOperationalUser } from "@/lib/operational-session";
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
+const ORDER_PRODUCT_PHOTOS_KEY = "__orderProductPhotos";
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const PRODUCT_PHOTO_SLOTS = 2;
 
 type RouteParams = { params: Promise<{ id: string }> };
 type OrderField = { id: string; label?: string | null };
@@ -41,6 +44,8 @@ function fieldValue(order: OrderForPhoto, includes: string[]) {
 
 function orderClientName(order: OrderForPhoto) {
   return (
+    answerById(order, "order_client_name") ||
+    answerById(order, "field_1782212649889") ||
     answerById(order, "client_name") ||
     fieldValue(order, ["nome cliente", "cliente", "nome e cognome", "nome"]) ||
     "Cliente"
@@ -49,6 +54,8 @@ function orderClientName(order: OrderForPhoto) {
 
 function orderNumber(order: OrderForPhoto) {
   return (
+    answerById(order, "order_shopify_order") ||
+    answerById(order, "field_1782221517924") ||
     answerById(order, "order_title") ||
     fieldValue(order, ["numero ordine", "ordine shopify", "codice ordine", "ordine"]) ||
     order.id.slice(0, 8)
@@ -103,7 +110,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const response = await prisma.serviceFormResponse.findUnique({
       where: { id },
-      select: { id: true, answers: true, form: { select: { fields: true } } },
+      select: { id: true, answers: true, activity_log: true, form: { select: { fields: true } } },
     });
 
     if (!response) {
@@ -120,20 +127,44 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const number = orderNumber(response);
     const cleanNumber = cleanFilePart(number) || "SENZA-ORDINE";
     const cleanClient = cleanFilePart(clientName) || "CLIENTE";
-    const safeFileName = `${cleanNumber}-${cleanClient}.${fileExtension(file)}`;
+    const uploadStamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safeFileName = `${cleanNumber}-${cleanClient}-${uploadStamp}.${fileExtension(file)}`;
     const buffer = Buffer.from(await file.arrayBuffer());
     const driveFile = await uploadOrderPhotoToGoogleDrive(buffer, safeFileName, file.type, clientName, number);
     const currentAnswers = answersRecord(response);
 
     const photo = {
+      id: driveFile.id,
       url: `/api/drive-image?id=${encodeURIComponent(driveFile.id)}`,
-      previewUrl: driveFile.thumbnailLink || `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFile.id)}&sz=w1200`,
+      previewUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFile.id)}&sz=w1200`,
       driveFileId: driveFile.id,
       driveFileUrl: driveFile.webViewLink,
       name: driveFile.name || safeFileName,
       originalName: file.name,
       uploadedAt: new Date().toISOString(),
       uploadedBy: user.name || "Staff",
+      stage: String(data.get("stage") || "NEW"),
+    };
+
+    const requestedSlot = Number(data.get("slot"));
+    const slot = Number.isInteger(requestedSlot) && requestedSlot >= 0 && requestedSlot < PRODUCT_PHOTO_SLOTS ? requestedSlot : 0;
+    const legacyPhoto = currentAnswers[ORDER_PHOTO_KEY];
+    const existingPhotos = Array.isArray(currentAnswers[ORDER_PRODUCT_PHOTOS_KEY])
+      ? (currentAnswers[ORDER_PRODUCT_PHOTOS_KEY] as unknown[]).slice(0, PRODUCT_PHOTO_SLOTS)
+      : [];
+    while (existingPhotos.length < PRODUCT_PHOTO_SLOTS) existingPhotos.push(null);
+    if (!existingPhotos[0] && legacyPhoto && typeof legacyPhoto === "object") existingPhotos[0] = legacyPhoto;
+    const nextPhotos = [...existingPhotos];
+    nextPhotos[slot] = photo;
+    const currentLog = Array.isArray(response.activity_log) ? (response.activity_log as unknown[]) : [];
+    const photoLogEntry = {
+      type: "PHOTO_ADDED",
+      action: `Foto prodotto ${slot + 1} aggiunta`,
+      photoId: photo.id,
+      photoSlot: slot,
+      stage: photo.stage,
+      by: photo.uploadedBy,
+      at: photo.uploadedAt,
     };
 
     const updated = await prisma.serviceFormResponse.update({
@@ -141,8 +172,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: {
         answers: {
           ...currentAnswers,
-          [ORDER_PHOTO_KEY]: photo,
-        },
+          [ORDER_PHOTO_KEY]: nextPhotos[0] || photo,
+          [ORDER_PRODUCT_PHOTOS_KEY]: nextPhotos,
+        } as Prisma.InputJsonValue,
+        activity_log: [...currentLog, photoLogEntry] as Prisma.InputJsonValue,
       },
       include: {
         user: true,
@@ -150,7 +183,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    return NextResponse.json({ photo, order: updated });
+    return NextResponse.json({ photo, photos: nextPhotos, order: updated });
   } catch (error) {
     console.error("Failed to upload order image:", error);
     return NextResponse.json({ error: uploadErrorMessage(error) }, { status: 500 });

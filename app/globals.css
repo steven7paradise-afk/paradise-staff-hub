@@ -4,6 +4,87 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes responsible-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes responsible-selected-in {
+  0% {
+    opacity: 0.45;
+    transform: translateY(18px) scale(0.82);
+  }
+  70% {
+    transform: translateY(-2px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes responsible-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(36px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes responsible-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.responsible-picker {
+  animation: responsible-picker-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.responsible-picker-selected {
+  animation: responsible-selected-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.responsible-picker-option {
+  transition: transform 220ms ease, border-color 220ms ease, opacity 220ms ease;
+}
+
+.responsible-picker-option:hover {
+  transform: translateY(-3px) scale(1.06);
+}
+
+.responsible-sheet {
+  animation: responsible-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.responsible-sheet-backdrop {
+  animation: responsible-backdrop-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .responsible-picker,
+  .responsible-picker-selected {
+    animation: none;
+  }
+
+  .responsible-sheet,
+  .responsible-sheet-backdrop {
+    animation: none;
+  }
+
+  .responsible-picker-option {
+    transition: none;
+  }
+}
+
 :root {
   --primary: #ffa8dd;
   --secondary: #ffd6ea;
@@ -116,6 +197,13 @@
     linear-gradient(145deg, color-mix(in srgb, var(--background) 88%, white), var(--background));
 }
 
+/* Appuntamenti è una schermata operativa ad alta densità: un canvas uniforme
+   riduce il rumore visivo e mantiene leggibili filtri e righe durante la cassa. */
+.app-content-surface:has(.appointments-workspace),
+.app-content-surface:has(.appointments-workspace) .app-liquid-canvas {
+  background: #f6eef2;
+}
+
 .app-content-surface .app-liquid-canvas :is(
   [class~="bg-white"],
   [class~="bg-white/50"],
@@ -217,14 +305,15 @@
   background-color: rgba(38, 35, 45, 0.72) !important;
 }
 
-/* Profilo: immagine capelli originale e gerarchia Liquid Glass adattiva. */
+/* Profilo: fondo uniforme senza immagine o stacchi orizzontali. */
 .profile-liquid-page {
   isolation: isolate;
-  background:
-    radial-gradient(ellipse 72% 46% at 0% 0%, color-mix(in srgb, var(--primary) 34%, transparent), transparent 72%),
-    radial-gradient(ellipse 62% 48% at 100% 6%, rgba(198, 158, 124, 0.42), transparent 72%),
-    radial-gradient(ellipse 74% 48% at 48% 100%, color-mix(in srgb, var(--secondary) 42%, transparent), transparent 72%),
-    linear-gradient(145deg, #f8e9ef 0%, #ead9ce 46%, #d7bea8 100%);
+  background: #ffffff;
+}
+
+.app-content-surface:has(.profile-liquid-page),
+.app-content-surface:has(.profile-liquid-page) .app-liquid-canvas {
+  background: #ffffff !important;
 }
 
 .profile-liquid-page > :not([class*="fixed"]) {
@@ -276,11 +365,12 @@
 }
 
 .dark .app-content-surface .profile-liquid-page {
-  background:
-    radial-gradient(ellipse 72% 46% at 0% 0%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 72%),
-    radial-gradient(ellipse 62% 48% at 100% 6%, rgba(162, 119, 84, 0.22), transparent 72%),
-    radial-gradient(ellipse 74% 48% at 48% 100%, color-mix(in srgb, var(--gradient) 14%, transparent), transparent 72%),
-    linear-gradient(145deg, #211c20 0%, #1a1719 48%, #121114 100%) !important;
+  background: #191719 !important;
+}
+
+.dark .app-content-surface:has(.profile-liquid-page),
+.dark .app-content-surface:has(.profile-liquid-page) .app-liquid-canvas {
+  background: #191719 !important;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
@@ -330,10 +420,7 @@
 
 @media (max-width: 767px) {
   .profile-liquid-page {
-    background:
-      radial-gradient(circle at 10% 2%, color-mix(in srgb, var(--primary) 36%, transparent), transparent 30rem),
-      radial-gradient(circle at 100% 24rem, rgba(199, 159, 126, 0.32), transparent 34rem),
-      linear-gradient(165deg, #f8e8ef 0%, #ebdcd3 42%, #ddc6b2 100%);
+    background: #ffffff;
   }
 
   .profile-liquid-page .profile-glass-hero,
@@ -349,10 +436,7 @@
   }
 
   .dark .app-content-surface .profile-liquid-page {
-    background:
-      radial-gradient(circle at 10% 2%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30rem),
-      radial-gradient(circle at 100% 24rem, rgba(157, 111, 80, 0.18), transparent 34rem),
-      linear-gradient(165deg, #231d21 0%, #191619 52%, #121114 100%) !important;
+    background: #191719 !important;
   }
 }
 
@@ -452,6 +536,34 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
+/* Richieste: variante Apple-inspired. Usa il font di sistema e separa
+   contenuto e controlli con materiali sottili, senza ridurre il contrasto. */
+.requests-liquid {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.requests-liquid .requests-glass-surface {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 8px 24px rgba(67, 45, 57, 0.07);
+}
+
+.requests-liquid :is([class*="text-black/35"], [class*="text-black/40"], [class*="text-black/45"]) {
+  color: rgba(35, 31, 33, 0.68);
+}
+
+.dark .app-content-surface .requests-liquid :is([class*="text-black/35"], [class*="text-black/40"], [class*="text-black/45"]) {
+  color: rgba(255, 255, 255, 0.68) !important;
+}
+
+.requests-liquid button:focus-visible,
+.requests-liquid input:focus-visible,
+.requests-liquid textarea:focus-visible,
+.requests-liquid select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--primary) 38%, transparent);
+  outline-offset: 2px;
+}
+
 .dark .app-content-surface .operations-liquid-page {
   color: rgba(255, 255, 255, 0.94);
   border-color: rgba(255, 255, 255, 0.12) !important;
@@ -497,6 +609,10 @@
     background-color: #fbf8fa !important;
   }
 
+  .requests-liquid .requests-glass-surface {
+    background-color: #fffdfd !important;
+  }
+
   .dark .operations-liquid-page,
   .dark .operations-liquid-page [class*="backdrop-blur"] {
     background-color: #211f27 !important;
@@ -520,7 +636,19 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   margin: 0;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--background);
@@ -533,6 +661,34 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+@media (max-width: 767px) {
+  /* Safari iOS ingrandisce automaticamente la pagina quando un campo ha un
+     carattere inferiore a 16px. Manteniamo quindi la scala del layout stabile
+     durante compilazione, ricerca e selezione. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  button,
+  input,
+  select,
+  textarea,
+  a {
+    touch-action: manipulation;
+  }
+
+  .paradise-theme-root,
+  .app-content-surface,
+  .app-liquid-canvas,
+  main {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+  }
 }
 
 .luxury-scroll {
@@ -551,9 +707,19 @@ textarea {
 @media (min-width: 1280px) {
   .sidebar-collapsed .sidebar-label,
   .sidebar-collapsed .sidebar-subtitle,
-  .sidebar-collapsed .sidebar-role,
-  .sidebar-collapsed .sidebar-badge {
+  .sidebar-collapsed .sidebar-role {
     display: none !important;
+  }
+
+  .sidebar-collapsed .sidebar-nav-link .sidebar-badge {
+    position: absolute;
+    right: 0.15rem;
+    top: 0.15rem;
+    display: block !important;
+    min-width: 1.1rem;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.58rem;
+    line-height: 1;
   }
 
 
@@ -1495,8 +1661,378 @@ textarea {
   background-color: #f8fafc !important;
 }
 
+/* Moduli operativi: workspace scuro a due colonne ispirato a una postazione POS. */
+.dark .service-form-wizard-workspace,
+.service-form-wizard-workspace {
+  color: #f7f5f6 !important;
+  background:
+    radial-gradient(circle at 78% 8%, rgba(167, 71, 88, 0.13), transparent 28%),
+    #090b0d !important;
+  color-scheme: dark !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-header,
+.service-form-wizard-workspace .service-form-wizard-header {
+  color: #f7f5f6 !important;
+  background: #121214 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step,
+.service-form-wizard-workspace .service-form-wizard-step {
+  color: #aaa5ab !important;
+  background: #1d1c1f !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step:hover,
+.service-form-wizard-workspace .service-form-wizard-step:hover {
+  color: #ffffff !important;
+  background: #29272b !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step[data-state="active"],
+.service-form-wizard-workspace .service-form-wizard-step[data-state="active"] {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #a74758, #c55d72) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 12px 26px rgba(167, 71, 88, 0.24) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step[data-state="done"],
+.service-form-wizard-workspace .service-form-wizard-step[data-state="done"] {
+  color: #96e8c2 !important;
+  background: rgba(36, 113, 80, 0.2) !important;
+  border-color: rgba(85, 211, 155, 0.2) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-footer,
+.service-form-wizard-workspace .service-form-wizard-footer {
+  color: #f7f5f6 !important;
+  background: rgba(27, 26, 29, 0.97) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-secondary,
+.service-form-wizard-workspace .service-form-wizard-secondary {
+  color: #dedade !important;
+  -webkit-text-fill-color: #dedade !important;
+  background: #302f33 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-secondary:hover,
+.service-form-wizard-workspace .service-form-wizard-secondary:hover {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #3a383d !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-field-card,
+.service-form-wizard-workspace .service-form-wizard-field-card {
+  color: #f7f5f6 !important;
+  background: #242326 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-description,
+.service-form-wizard-workspace .service-form-wizard-description {
+  color: #aaa5ab !important;
+  background: #242326 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-option,
+.service-form-wizard-workspace .service-form-wizard-option {
+  color: #dedade !important;
+  background: #302f33 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-option:hover,
+.service-form-wizard-workspace .service-form-wizard-option:hover {
+  color: #ffffff !important;
+  background: #39373c !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-option[data-state="selected"],
+.service-form-wizard-workspace .service-form-wizard-option[data-state="selected"] {
+  color: #ffb6c4 !important;
+  background: rgba(167, 71, 88, 0.17) !important;
+  border-color: #c65a70 !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-customer-list,
+.service-form-wizard-workspace .service-form-wizard-customer-list {
+  background: #1b1a1d !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-customer-row,
+.service-form-wizard-workspace .service-form-wizard-customer-row {
+  background: #29282c !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-customer-row:hover,
+.service-form-wizard-workspace .service-form-wizard-customer-row:hover {
+  background: #343237 !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark .service-form-wizard-workspace :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]),
+.service-form-wizard-workspace :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]) {
+  color: #f7f5f6 !important;
+}
+
+.dark .service-form-wizard-workspace :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]),
+.service-form-wizard-workspace :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]) {
+  color: #a9a4aa !important;
+}
+
+.dark .service-form-wizard-workspace :is(input, textarea, select),
+.service-form-wizard-workspace :is(input, textarea, select) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #302f33 !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  opacity: 1 !important;
+}
+
+.dark .service-form-wizard-workspace :is(input, textarea)::placeholder,
+.service-form-wizard-workspace :is(input, textarea)::placeholder {
+  color: #8f8990 !important;
+  -webkit-text-fill-color: #8f8990 !important;
+  opacity: 1 !important;
+}
+
+/* Tutti i formulari operativi usano superfici bianche ad alto contrasto. */
+.dark .service-form-wizard-workspace.service-form-wizard-light,
+.service-form-wizard-workspace.service-form-wizard-light {
+  color: #172033 !important;
+  background: #ffffff !important;
+  color-scheme: light !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-header,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-header,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-footer,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-footer {
+  color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-body,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-body {
+  color: #172033 !important;
+  background: #ffffff !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-field-card,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-field-card,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-description,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-description {
+  color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 14px 38px rgba(23, 32, 51, 0.07) !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary {
+  color: #475569 !important;
+  -webkit-text-fill-color: #475569 !important;
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step:hover,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step:hover,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option:hover,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option:hover,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary:hover,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary:hover {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="active"],
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="active"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #a74758 !important;
+  border-color: #a74758 !important;
+  box-shadow: 0 10px 24px rgba(167, 71, 88, 0.2) !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="done"],
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="done"] {
+  color: #047857 !important;
+  -webkit-text-fill-color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option[data-state="selected"],
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option[data-state="selected"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #a74758 !important;
+  border-color: #a74758 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-list,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-list,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-row,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-row {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]),
+.service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]) {
+  color: #172033 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]),
+.service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]) {
+  color: #64748b !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is(input, textarea, select),
+.service-form-wizard-workspace.service-form-wizard-light :is(input, textarea, select) {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is(input, textarea)::placeholder,
+.service-form-wizard-workspace.service-form-wizard-light :is(input, textarea)::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+@media (max-width: 639px) {
+  .service-form-wizard-workspace .service-form-wizard-footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
+
 @media (max-width: 1279px) {
   .cash-closing-workspace .cash-closing-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
+}
+
+/* Consegna ordine: il flusso resta compatto come una postazione operativa,
+   ma usa una superficie chiara coerente con le nuove schede ordine. */
+.pickup-workspace-light {
+  color-scheme: light;
+  color: #172033 !important;
+  background: #f6f4f5 !important;
+}
+
+.pickup-workspace-light [class*="bg-white/"] {
+  background: #ffffff !important;
+}
+
+.pickup-workspace-light [class*="bg-black/"] {
+  background: #f8fafc !important;
+}
+
+.pickup-workspace-light [class*="border-white/"] {
+  border-color: #e2e8f0 !important;
+}
+
+.pickup-workspace-light [class~="text-white"] {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+}
+
+.pickup-workspace-light .pickup-qr-button {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.pickup-workspace-light [class*="text-white/"] {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+}
+
+.pickup-workspace-light [class*="text-emerald-"] {
+  color: #047857 !important;
+}
+
+.pickup-workspace-light [class*="text-amber-"] {
+  color: #92400e !important;
+}
+
+.pickup-workspace-light [class*="text-rose-"],
+.pickup-workspace-light [class*="text-red-"] {
+  color: #be123c !important;
+}
+
+.pickup-workspace-light :is(input, textarea, select) {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.pickup-workspace-light :is(input, textarea)::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+/* Responsabile di turno: superficie operativa unica, bianca e opaca. Il
+   canvas globale usa vetro e gradienti; questa pagina li disattiva per evitare
+   stacchi di colore durante lo scorrimento del questionario. */
+.app-content-surface:has(.shift-responsible-page),
+.app-content-surface:has(.shift-responsible-page) .app-liquid-canvas,
+.app-content-surface .app-liquid-canvas .shift-responsible-page {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color-scheme: light;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-content-surface:has(.shift-responsible-programming-page),
+.app-content-surface:has(.shift-responsible-programming-page) .app-liquid-canvas,
+.app-content-surface .app-liquid-canvas .shift-responsible-programming-page {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color-scheme: light;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Tablet Clock lavora come una timbratrice: evita selezioni e menu contestuali
+   accidentali durante tocchi ripetuti, preservando i campi compilabili. */
+.tablet-kiosk-root,
+.tablet-kiosk-root :where(button, a, img, svg, p, span, h1, h2, h3, div) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.tablet-kiosk-root :where(button, a, [role="button"]) {
+  touch-action: manipulation;
+}
+
+.tablet-kiosk-root :where(input, textarea, select, [contenteditable="true"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }

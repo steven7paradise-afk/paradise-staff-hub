@@ -1,0 +1,63 @@
+export const DASHBOARD_SETTINGS_KEY = "dashboard_settings";
+
+export const DEFAULT_DASHBOARD_SETTINGS = {
+  salonGoal: 500,
+  workerGoal: 100,
+  workerBonusMap: {} as Record<string, { manualBonusPoints?: number; redeemedPoints?: number }>,
+  promos: [
+    {
+      id: "promo-1",
+      title: "LUGLIO GLOW -20% CHERATINA",
+      subtitle: "PROMO DELLA SETTIMANA",
+      description: "Tutti i trattamenti di cheratina e ristrutturazione a -20%. Proponilo alle clienti con colore o schiariture: massimo effetto, upsell naturale.",
+      badge: "VALIDA FINO AL 31 LUGLIO",
+      expirationDate: "2026-07-31",
+      ctaText: "CONDIVIDI COL CLIENTE",
+      ctaUrl: "/service-forms",
+      materialeGraficoUrl: "/documents",
+      active: true,
+      image: "",
+    },
+    {
+      id: "promo-2",
+      title: "SUMMER APP",
+      subtitle: "OFFERTA SPECIALE",
+      description: "Per lunghezze da 55 cm. La tua trasformazione Paradise con uno sconto esclusivo per l'estate.",
+      badge: "VALIDA FINO A FINE MESE",
+      expirationDate: "2026-08-31",
+      ctaText: "SCOPRI DI PIÙ",
+      ctaUrl: "/client-control",
+      materialeGraficoUrl: "/documents",
+      active: true,
+      image: "",
+    },
+  ],
+  sideCard1: {
+    category: "PORTA UN'AMICA",
+    title: "PIEGA IN OMAGGIO",
+    badge: "x2",
+    description: "NUOVA CLIENTE PRESENTATA = PIEGA GRATIS",
+    url: "/client-control",
+  },
+  sideCard2: {
+    category: "LOYALTY · PARADISE CARD",
+    title: "PUNTI DOPPI",
+    badge: "◆",
+    description: "SU TUTTI I PRODOTTI RETAIL FINO A DOMENICA",
+    url: "/tables",
+  },
+  productOfMonth: {
+    title: "PRO-GLOW SERUM",
+    subtitle: "CONSIGLIATO • UPSELL",
+    description: "Siero termoprotettivo. Perfetto da abbinare a ogni cheratina — provalo sulla cliente a fine servizio.",
+    originalPrice: 32,
+    discountPrice: 26,
+    badge: "RETAIL",
+    image: "",
+  },
+  communications: [
+    { id: "comm-1", title: "Nuovo protocollo cheratina", detail: "Da oggi si usa la linea Pro-Glow. Scheda tecnica nei documenti.", tag: "DIREZIONE • 2 ORE FA" },
+    { id: "comm-2", title: "Riunione staff venerdì 25", detail: "Ore 18:30 dopo chiusura. Presenza obbligatoria.", tag: "DIREZIONE • IERI" },
+    { id: "comm-3", title: "Consegna ordine prodotti", detail: "Arrivato il rifornimento retail: sistemare espositori.", tag: "MAGAZZINO • 2 GIORNI FA" },
+  ],
+};

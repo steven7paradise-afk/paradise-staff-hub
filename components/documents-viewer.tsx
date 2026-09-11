@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
@@ -10,6 +10,7 @@ import {
   Eye,
   FileText,
   FolderOpen,
+  Pencil,
   Image as ImageIcon,
   Sparkles,
   UserRound,
@@ -24,6 +25,8 @@ import {
 import { Badge, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+
 export type DocumentRecord = {
   id: string;
   title: string;
@@ -33,18 +36,39 @@ export type DocumentRecord = {
   file_url: string;
   storage_path: string | null;
   created_at: string;
+  document_date?: string | null;
   user: {
     id: string;
     name: string;
     email: string;
+    photo_url?: string | null;
   };
 };
+
+function StaffAvatar({ name, photoUrl, className = "size-9" }: { name: string; photoUrl?: string | null; className?: string }) {
+  const resolved = photoUrl ? resolveDrivePhotoUrl(photoUrl) : "";
+  const initials = (name || "N N").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  return (
+    <div className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#FAF0F4] text-xs font-black text-[#A74758] border border-black/10 shadow-2xs select-none", className)}>
+      {resolved ? (
+        <img src={resolved} alt={name} className="size-full object-cover" />
+      ) : (
+        <span>{initials}</span>
+      )}
+    </div>
+  );
+}
 
 const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
 const typeLabels: Record<string, string> = {
   BUSTA_PAGA: "Busta paga",
   CONTRATTO: "Contratto",
+  RINNOVO: "Rinnovo / proroga",
+  PROROGA: "Proroga / rinnovo",
+  CUD: "CUD / Certificazione Unica",
+  LETTERA_CONTESTAZIONE: "Lettera di contestazione",
   DOCUMENTO: "Documento HR",
 };
 
@@ -104,8 +128,8 @@ function DocumentMeta({ document, employeeView }: { document: DocumentRecord; em
         </span>
       ) : null}
       {!employeeView ? (
-        <span className="inline-flex items-center gap-1 rounded-full border border-black/5 bg-white px-3 py-1 text-xs font-semibold text-black/55">
-          <UserRound className="size-3" />
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-black/5 bg-white px-2.5 py-1 text-xs font-bold text-black/75 shadow-2xs">
+          <StaffAvatar name={document.user.name} photoUrl={document.user.photo_url} className="size-5 text-[9px]" />
           {document.user.name}
         </span>
       ) : null}
@@ -232,11 +256,13 @@ function DesktopPreview({
   document,
   employeeView,
   onDelete,
+  onEdit,
   deletingId
 }: {
   document: DocumentRecord;
   employeeView: boolean;
   onDelete?: (id: string) => void;
+  onEdit?: (document: DocumentRecord) => void;
   deletingId?: string;
 }) {
   const url = getDocumentUrl(document);
@@ -252,6 +278,16 @@ function DesktopPreview({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {!employeeView && onEdit ? (
+            <button
+              type="button"
+              onClick={() => onEdit(document)}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-paradise-noir shadow-sm hover:bg-black/[0.02]"
+            >
+              <Pencil className="size-4" />
+              Modifica
+            </button>
+          ) : null}
           {!employeeView && onDelete && (
             <button
               type="button"
@@ -323,20 +359,29 @@ export function DocumentsViewer({
   documents,
   employeeView,
   workers = [],
+  initialWorkerId = "",
+  initialType = "ALL",
 }: {
   documents: DocumentRecord[];
   employeeView: boolean;
-  workers?: { id: string; name: string; role?: string; mansione?: string | null }[];
+  workers?: { id: string; name: string; role?: string; mansione?: string | null; photo_url?: string | null; email?: string | null }[];
+  initialWorkerId?: string;
+  initialType?: string;
 }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState("");
-  const [selectedId, setSelectedId] = useState(documents[0]?.id ?? "");
+  const initialDocuments = initialWorkerId
+    ? documents.filter((document) => document.user.id === initialWorkerId && (initialType === "ALL" || document.type === initialType))
+    : documents;
+  const [selectedId, setSelectedId] = useState(initialDocuments[0]?.id ?? "");
   const [mobilePreview, setMobilePreview] = useState<DocumentRecord | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(documents[0]?.id ?? null);
+  const [editingDocument, setEditingDocument] = useState<DocumentRecord | null>(null);
+  const [savingDocument, setSavingDocument] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedWorkerId, setSelectedWorkerId] = useState("");
-  const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedWorkerId, setSelectedWorkerId] = useState(initialWorkerId);
+  const [selectedType, setSelectedType] = useState(initialType);
   const [selectedYear, setSelectedYear] = useState("ALL");
 
   // Delivery status verification states
@@ -417,6 +462,34 @@ export function DocumentsViewer({
     return { total, completed, missing, percentage, missingWorkers, completedWorkers };
   }, [workersWithStatus]);
 
+  const activeWorker = useMemo(() => {
+    if (!selectedWorkerId) return null;
+    const found = workers.find((w) => w.id === selectedWorkerId);
+    if (found) return found;
+    const docUser = documents.find((d) => d.user.id === selectedWorkerId)?.user;
+    if (docUser) {
+      return {
+        id: docUser.id,
+        name: docUser.name,
+        photo_url: docUser.photo_url,
+        mansione: "Collaboratore",
+        role: "STAFF",
+        email: docUser.email,
+      };
+    }
+    return null;
+  }, [selectedWorkerId, workers, documents]);
+
+  const workerDocStats = useMemo(() => {
+    if (!selectedWorkerId && !employeeView) return null;
+    const workerDocs = documents.filter((d) => !selectedWorkerId || d.user.id === selectedWorkerId);
+    const bustePagaCount = workerDocs.filter((d) => d.type === "BUSTA_PAGA").length;
+    const contrattiCount = workerDocs.filter((d) => d.type === "CONTRATTO").length;
+    const hrDocsCount = workerDocs.filter((d) => d.type === "DOCUMENTO").length;
+    const totalCount = workerDocs.length;
+    return { bustePagaCount, contrattiCount, hrDocsCount, totalCount };
+  }, [selectedWorkerId, employeeView, documents]);
+
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
       if (searchQuery.trim()) {
@@ -428,7 +501,7 @@ export function DocumentsViewer({
       if (selectedWorkerId && doc.user?.id !== selectedWorkerId) {
         return false;
       }
-      if (selectedType !== "ALL" && doc.type !== selectedType) {
+      if (selectedType !== "ALL" && (selectedType === "PROROGA" ? !["PROROGA", "RINNOVO"].includes(doc.type) : doc.type !== selectedType)) {
         return false;
       }
       if (selectedYear !== "ALL" && String(doc.year) !== selectedYear) {
@@ -454,6 +527,34 @@ export function DocumentsViewer({
       alert("Errore di connessione.");
     } finally {
       setDeletingId("");
+    }
+  }
+
+  async function handleEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingDocument) return;
+    setSavingDocument(true);
+    const values = new FormData(event.currentTarget);
+    try {
+      const response = await fetch(`/api/documents/${editingDocument.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: values.get("title"),
+          type: values.get("type"),
+          month: values.get("month"),
+          year: values.get("year"),
+          documentDate: values.get("documentDate"),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Modifica non riuscita.");
+      setEditingDocument(null);
+      router.refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Modifica non riuscita.");
+    } finally {
+      setSavingDocument(false);
     }
   }
 
@@ -552,23 +653,26 @@ export function DocumentsViewer({
                   key={worker.id}
                   type="button"
                   onClick={() => handleSelectWorker(worker.id)}
-                  className="w-full rounded-2xl border border-white/5 bg-white/5 p-4 text-left flex items-center justify-between transition-all active:scale-[0.98]"
+                  className="w-full rounded-2xl border border-white/5 bg-white/5 p-3.5 text-left flex items-center justify-between transition-all active:scale-[0.98] hover:bg-white/10"
                 >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <h3 className="text-sm font-extrabold text-white truncate">{worker.name}</h3>
-                    <p className="text-xs text-white/40 mt-0.5 font-semibold truncate">
-                      {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
-                    </p>
+                  <div className="flex items-center gap-3 min-w-0 flex-1 pr-3">
+                    <StaffAvatar name={worker.name} photoUrl={worker.photo_url} className="size-11 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-extrabold text-white truncate">{worker.name}</h3>
+                      <p className="text-xs text-white/50 mt-0.5 font-semibold truncate">
+                        {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2.5 shrink-0">
                     {worker.hasDoc ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/20">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/20">
                         <span className="size-1.5 rounded-full bg-emerald-400" />
                         Caricato
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-extrabold text-rose-400 border border-rose-500/20">
-                        <span className="size-1.5 rounded-full bg-rose-400" />
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-1 text-[10px] font-extrabold text-rose-400 border border-rose-500/20">
+                        <span className="size-1.5 rounded-full bg-rose-400 animate-pulse" />
                         Mancante
                       </span>
                     )}
@@ -579,22 +683,55 @@ export function DocumentsViewer({
             </div>
           </div>
         ) : (
-          /* MOBILE: User Document List (Original View adjusted for specific worker or self) */
+          /* MOBILE: User Document List */
           <>
-            <div className="bg-white/5 p-4 rounded-[24px] border border-white/5 space-y-3">
+            <div className="bg-white/5 p-4 rounded-[24px] border border-white/5 space-y-3.5">
               {!employeeView && (
                 <button
                   onClick={() => setSelectedWorkerId("")}
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-[#B85B68] hover:underline mb-1"
                 >
                   <ArrowLeft className="size-3.5" />
-                  Torna al personale
+                  Torna alla lista personale
                 </button>
               )}
               
-              <h2 className="text-lg font-extrabold text-white">
-                {employeeView ? "I tuoi documenti" : `Documenti di ${workers.find((w) => w.id === selectedWorkerId)?.name}`}
-              </h2>
+              <div className="flex items-center gap-3">
+                {activeWorker ? (
+                  <StaffAvatar name={activeWorker.name} photoUrl={activeWorker.photo_url} className="size-12 font-black text-sm" />
+                ) : (
+                  <div className="grid size-12 place-items-center rounded-full bg-white/10 text-white font-black">
+                    <UserRound className="size-6" />
+                  </div>
+                )}
+                <div>
+                  <h2 className="text-lg font-extrabold text-white">
+                    {employeeView ? "I tuoi documenti" : activeWorker?.name || "Documenti Dipendente"}
+                  </h2>
+                  {activeWorker && (
+                    <p className="text-xs text-white/50 font-semibold mt-0.5">
+                      {activeWorker.mansione || (activeWorker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {workerDocStats && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/10">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                    Totale: <strong>{workerDocStats.totalCount}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-500/30">
+                    Buste paga: <strong>{workerDocStats.bustePagaCount}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/20 px-2.5 py-0.5 text-[11px] font-bold text-slate-300 border border-slate-500/30">
+                    Contratti: <strong>{workerDocStats.contrattiCount}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-pink-500/20 px-2.5 py-0.5 text-[11px] font-bold text-pink-300 border border-pink-500/30">
+                    Documenti: <strong>{workerDocStats.hrDocsCount}</strong>
+                  </span>
+                </div>
+              )}
 
               <div className="relative">
                 <input
@@ -616,6 +753,9 @@ export function DocumentsViewer({
                   <option value="ALL">Tutti i tipi</option>
                   <option value="BUSTA_PAGA">Busta paga</option>
                   <option value="CONTRATTO">Contratto</option>
+                  <option value="PROROGA">Proroga / rinnovo</option>
+                  <option value="CUD">CUD / Certificazione Unica</option>
+                  <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
                   <option value="DOCUMENTO">Documento HR</option>
                 </select>
 
@@ -815,13 +955,16 @@ export function DocumentsViewer({
                       key={worker.id}
                       type="button"
                       onClick={() => handleSelectWorker(worker.id)}
-                      className="w-full rounded-2xl border border-black/5 bg-white p-3.5 text-left flex items-center justify-between transition hover:border-[#B85B68]/30 hover:bg-slate-50/50"
+                      className="w-full rounded-2xl border border-black/5 bg-white p-3.5 text-left flex items-center justify-between transition hover:border-[#B85B68]/30 hover:bg-slate-50/50 shadow-2xs"
                     >
-                      <div className="min-w-0 flex-1 pr-4">
-                        <h3 className="text-sm font-extrabold text-paradise-noir truncate">{worker.name}</h3>
-                        <p className="text-xs text-black/45 mt-0.5 font-semibold truncate">
-                          {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
-                        </p>
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
+                        <StaffAvatar name={worker.name} photoUrl={worker.photo_url} className="size-11 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-extrabold text-paradise-noir truncate">{worker.name}</h3>
+                          <p className="text-xs text-black/45 mt-0.5 font-semibold truncate">
+                            {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
+                          </p>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0">
@@ -844,23 +987,56 @@ export function DocumentsViewer({
               </div>
             </>
           ) : (
-            /* DESKTOP: Left Side - Selected worker's document archive (original style) */
+            /* DESKTOP: Left Side - Selected worker's document archive */
             <>
-              <div className="border-b border-black/5 bg-white/80 p-5 shrink-0">
+              <div className="border-b border-black/5 bg-white/80 p-5 shrink-0 space-y-3">
                 {!employeeView && (
                   <button
                     onClick={() => setSelectedWorkerId("")}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#B85B68] hover:underline mb-2"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#B85B68] hover:underline mb-1"
                   >
                     <ArrowLeft className="size-3.5" />
-                    Torna al personale
+                    Torna alla lista personale
                   </button>
                 )}
                 
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-black/35">Archivio documenti</p>
-                <h2 className="mt-1 text-xl font-extrabold text-paradise-noir truncate">
-                  {employeeView ? "I tuoi documenti" : `${workers.find((w) => w.id === selectedWorkerId)?.name}`}
-                </h2>
+                <div className="flex items-center gap-3.5">
+                  {activeWorker ? (
+                    <StaffAvatar name={activeWorker.name} photoUrl={activeWorker.photo_url} className="size-14 font-extrabold text-base" />
+                  ) : (
+                    <div className="grid size-14 place-items-center rounded-full bg-paradise-softPink text-paradise-noir font-extrabold">
+                      <UserRound className="size-7" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.28em] text-[#B85B68]">Archivio documenti</p>
+                    <h2 className="text-xl font-extrabold text-paradise-noir truncate">
+                      {employeeView ? "I tuoi documenti" : activeWorker?.name || "Documenti Dipendente"}
+                    </h2>
+                    {activeWorker && (
+                      <p className="text-xs font-bold text-black/45 mt-0.5">
+                        {activeWorker.mansione || (activeWorker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {workerDocStats && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-black/5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/5 bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                      Totale: <strong>{workerDocStats.totalCount}</strong>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                      Buste paga: <strong>{workerDocStats.bustePagaCount}</strong>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                      Contratti: <strong>{workerDocStats.contrattiCount}</strong>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-2.5 py-0.5 text-xs font-bold text-pink-700">
+                      Documenti HR: <strong>{workerDocStats.hrDocsCount}</strong>
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="border-b border-black/5 bg-slate-50/50 p-4 space-y-3 shrink-0">
@@ -889,6 +1065,9 @@ export function DocumentsViewer({
                     <option value="ALL">Tutti i tipi</option>
                     <option value="BUSTA_PAGA">Busta paga</option>
                     <option value="CONTRATTO">Contratto</option>
+                    <option value="PROROGA">Proroga / rinnovo</option>
+                    <option value="CUD">CUD / Certificazione Unica</option>
+                    <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
                     <option value="DOCUMENTO">Documento HR</option>
                   </select>
 
@@ -1058,6 +1237,7 @@ export function DocumentsViewer({
               document={selectedDocument}
               employeeView={employeeView}
               onDelete={handleDelete}
+              onEdit={setEditingDocument}
               deletingId={deletingId}
             />
           ) : (
@@ -1071,6 +1251,28 @@ export function DocumentsViewer({
           )}
         </div>
       </div>
+
+      {editingDocument ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingDocument(null); }}>
+          <form onSubmit={handleEdit} className="w-full max-w-2xl rounded-[30px] border border-white/40 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#B85B68]">Documento già caricato</p>
+                <h2 className="mt-1 text-2xl font-black text-paradise-noir">Modifica classificazione</h2>
+              </div>
+              <button type="button" onClick={() => setEditingDocument(null)} className="grid size-10 place-items-center rounded-full bg-black/5"><X className="size-5" /></button>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-bold text-black/55">Titolo</span><input name="title" defaultValue={editingDocument.title} required className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Tipologia</span><select name="type" defaultValue={editingDocument.type} required className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="CONTRATTO">Contratto</option><option value="PROROGA">Proroga / rinnovo</option><option value="BUSTA_PAGA">Cedolino / busta paga</option><option value="CUD">CUD / Certificazione Unica</option><option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option><option value="DOCUMENTO">Altro documento HR</option></select></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Data documento</span><input name="documentDate" type="date" defaultValue={editingDocument.document_date?.slice(0, 10) ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Mese cedolino</span><select name="month" defaultValue={editingDocument.month ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="">Non indicato</option>{monthNames.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Anno</span><input name="year" type="number" min="2000" max="2100" defaultValue={editingDocument.year ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setEditingDocument(null)} className="min-h-11 rounded-2xl border border-black/10 px-5 text-sm font-bold">Annulla</button><button disabled={savingDocument} className="min-h-11 rounded-2xl bg-paradise-pink px-5 text-sm font-black text-paradise-noir disabled:opacity-50">{savingDocument ? "Salvataggio..." : "Salva modifiche"}</button></div>
+          </form>
+        </div>
+      ) : null}
 
       {mobilePreview ? <MobilePreviewModal document={mobilePreview} employeeView={employeeView} onClose={() => setMobilePreview(null)} /> : null}
     </div>

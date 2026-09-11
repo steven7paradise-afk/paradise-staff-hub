@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { auth } from "@/lib/auth";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
-import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { getOperationalUser } from "@/lib/operational-session";
+import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 
 const SETTING_KEY = "appointment_status_overrides";
 
@@ -21,7 +19,7 @@ const allowedStatuses = new Set([
 const statusLabels: Record<CowlendarAppointmentStatus, string> = {
   PRENOTATO: "Confermato",
   NON_PRESENTATO: "Non presentato",
-  INIZIATO: "Iniziato",
+  INIZIATO: "In lavorazione",
   IN_ATTESA: "In attesa",
   COMPLETATO: "Completato",
   ARRIVATO_IN_RITARDO: "Arrivato in ritardo",
@@ -30,11 +28,59 @@ const statusLabels: Record<CowlendarAppointmentStatus, string> = {
 
 function normalizeStatusMap(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>;
+  return value as Record<string, {
+    status?: string;
+    updatedAt?: string;
+    updatedBy?: string;
+    startedAt?: string | null;
+    stoppedAt?: string | null;
+    elapsedSeconds?: number;
+  }>;
+}
+
+function formatElapsedTime(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+async function hasConfirmedClientControl(bookingId: string) {
+  const forms = await prisma.serviceForm.findMany({
+    where: { active: true },
+    select: { id: true, name: true, category: true },
+  });
+  const formIds = forms
+    .filter((form) => isClientControlFormName(form.name, form.category))
+    .map((form) => form.id);
+  if (!formIds.length) return false;
+
+  const response = await prisma.serviceFormResponse.findFirst({
+    where: {
+      form_id: { in: formIds },
+      answers: { path: ["booking_id"], equals: bookingId },
+    },
+    orderBy: { updated_at: "desc" },
+    select: { answers: true },
+  });
+  const answers = (response?.answers || {}) as Record<string, unknown>;
+  return Boolean(
+    response &&
+      answers.client_control_is_draft !== true &&
+      String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "")
+        .trim()
+        .toLowerCase() === "controllato",
+  );
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, {
+    requirePcWorker: true,
+    preferAuthenticatedAdmin: true,
+  });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
@@ -47,40 +93,54 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const bookingId = String(body?.bookingId || "").trim();
     const status = String(body?.status || "").trim().toUpperCase();
+    const transitionAt = new Date();
 
     if (!bookingId || !allowedStatuses.has(status)) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
     }
 
-    let cowlendarSync:
-      | Awaited<ReturnType<typeof updateCowlendarBookingStatus>>
-      | { ok: false; error: string }
-      | undefined;
-    try {
-      cowlendarSync = await updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus);
-    } catch (error) {
-      console.error("Failed to sync appointment status with Cowlendar:", error);
-      cowlendarSync = {
-        ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Cowlendar non ha accettato l'aggiornamento dello stato.",
-      };
+    if (status === "COMPLETATO" && !(await hasConfirmedClientControl(bookingId))) {
+      return NextResponse.json(
+        {
+          code: "CLIENT_CONTROL_REQUIRED",
+          error: "Prima di completare l’appuntamento devi confermare il Controllo Cliente.",
+        },
+        { status: 409 },
+      );
     }
 
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentMap = normalizeStatusMap(currentSetting?.value);
-    const previousStatus = currentMap[bookingId]?.status;
-    const signedBy = String(body?.signedBy || "").trim();
-    const updatedBy = signedBy ? signedBy : sessionUserName;
+    const previousEntry = currentMap[bookingId] || {};
+    const previousStatus = previousEntry.status;
+    const signedBy = operationalUser?.isPC ? "" : String(body?.signedBy || "").trim();
+    const updatedBy = signedBy || sessionUserName;
+
+    let startedAt = previousEntry.startedAt ?? null;
+    let stoppedAt = previousEntry.stoppedAt ?? null;
+    let elapsedSeconds = Number(previousEntry.elapsedSeconds || 0);
+
+    if (status === "INIZIATO" && (previousStatus !== "INIZIATO" || !startedAt)) {
+      startedAt = transitionAt.toISOString();
+      stoppedAt = null;
+      elapsedSeconds = 0;
+    } else if (status !== "INIZIATO" && previousStatus === "INIZIATO" && startedAt) {
+      const startedAtMs = new Date(startedAt).getTime();
+      if (Number.isFinite(startedAtMs)) {
+        elapsedSeconds = Math.max(0, Math.floor((transitionAt.getTime() - startedAtMs) / 1000));
+      }
+      stoppedAt = transitionAt.toISOString();
+    }
 
     const updatedMap = {
       ...currentMap,
       [bookingId]: {
         status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: transitionAt.toISOString(),
         updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
+        startedAt,
+        stoppedAt,
+        elapsedSeconds,
       },
     };
 
@@ -94,16 +154,51 @@ export async function POST(request: NextRequest) {
       ? statusLabels[previousStatus as CowlendarAppointmentStatus]
       : null;
     const nextLabel = statusLabels[status as CowlendarAppointmentStatus];
-    const statusComment = await prisma.shopifyOrderComment.create({
-      data: {
-        order_name: bookingId,
-        user_name: updatedBy,
-        user_role: sessionUserRole,
-        message: previousLabel && previousLabel !== nextLabel
-          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
-          : `Stato appuntamento impostato su ${nextLabel}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
-      },
-    });
+    const elapsedNote = previousStatus === "INIZIATO" && status !== "INIZIATO"
+      ? ` Tempo trascorso: ${formatElapsedTime(elapsedSeconds)}.`
+      : "";
+    // The local override is the source used by the appointments UI. Notes and
+    // the external Cowlendar sync are useful audit/integration work, but they
+    // must never make an already persisted status look as if it failed.
+    let statusComment = null;
+    try {
+      statusComment = await prisma.shopifyOrderComment.create({
+        data: {
+          order_name: bookingId,
+          user_name: updatedBy,
+          user_role: sessionUserRole,
+          message: previousLabel && previousLabel !== nextLabel
+            ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
+            : `Stato appuntamento impostato su ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
+        },
+      });
+    } catch (error) {
+      console.error("Appointment status saved, but audit note creation failed:", error);
+    }
+
+    let cowlendarSync:
+      | Awaited<ReturnType<typeof updateCowlendarBookingStatus>>
+      | { ok: false; error: string };
+    try {
+      cowlendarSync = await Promise.race([
+        updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus),
+        new Promise<{ ok: false; error: string }>((resolve) => {
+          setTimeout(
+            () => resolve({ ok: false, error: "Sincronizzazione Cowlendar in attesa." }),
+            3500,
+          );
+        }),
+      ]);
+    } catch (error) {
+      console.error("Appointment status saved, but Cowlendar sync failed:", error);
+      cowlendarSync = {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Cowlendar non ha accettato l'aggiornamento dello stato.",
+      };
+    }
 
     return NextResponse.json({ success: true, status: updatedMap[bookingId], statusComment, cowlendarSync });
   } catch (error) {

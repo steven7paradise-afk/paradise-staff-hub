@@ -1,0 +1,5 @@
+- generic [active] [ref=e1]:
+  - status "Caricamento della pagina":
+    - paragraph: Aggiornamento...
+  - button "Open Next.js Dev Tools" [ref=e7] [cursor=pointer]
+  - alert [ref=e11]

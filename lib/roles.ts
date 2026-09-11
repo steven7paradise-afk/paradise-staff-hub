@@ -17,7 +17,11 @@ export const roleLabels: Record<Role, string> = {
 
 export const routePermissions: Record<string, Role[]> = {
   "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/hub": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/programmazione-responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -34,21 +38,26 @@ export const routePermissions: Record<string, Role[]> = {
   "/service-forms": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/shopify-orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
-  "/foto": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/remote": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/consulenza-online": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/cash": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/cassa-live": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/invoices": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/refunds": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/rimborsi": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/client-control": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/client-control/giornata": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/fine-giornata": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/recruitment": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/staff": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/team": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/notifications": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/email": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/profile": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/settings": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/settings/app": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -64,20 +73,29 @@ export const routePermissions: Record<string, Role[]> = {
   "/settings/services": ["ZERO"],
   "/settings/forms": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/settings/sidebar": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/nfc": ["ZERO", "SUPER_ADMIN", "ADMIN"],
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
+  if (pathname === "/magazzino") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-  if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
-  if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
+  if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
+  if (pathname === "/orders" || pathname === "/shopify-orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms" || pathname === "/settings/nfc") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname.startsWith("/settings")) return ["ZERO"];
   return ["ZERO", "SUPER_ADMIN", "ADMIN"];
 }
 
 const legacyAccessRouteMap: Record<string, string> = {
   dashboard: "/dashboard",
+  hub: "/hub",
+  magazzino: "/magazzino",
+  inventario: "/magazzino",
+  "paradise hub": "/hub",
   "i miei turni": "/my-shifts",
   turni: "/my-shifts",
+  "responsabile di turno": "/responsabile-di-turno",
+  "programmazione responsabile di turno": "/programmazione-responsabile-di-turno",
   task: "/tasks",
   documenti: "/documents",
   planning: "/schedules",
@@ -86,8 +104,8 @@ const legacyAccessRouteMap: Record<string, string> = {
   social: "/social-calendar",
   ordini: "/orders",
   orders: "/orders",
-  magazzino: "/magazzino",
-  foto: "/foto",
+  "ordini shopify": "/shopify-orders",
+  "shopify orders": "/shopify-orders",
   appuntamenti: "/appointments",
   appointments: "/appointments",
   "consulenza online": "/consulenza-online",
@@ -95,12 +113,17 @@ const legacyAccessRouteMap: Record<string, string> = {
   cash: "/cash",
   transazioni: "/cash",
   "chiusure cassa": "/cash",
+  "cassa live": "/cassa-live",
+  "terminale pos": "/cassa-live",
   fatture: "/invoices",
   invoices: "/invoices",
   rimborsi: "/refunds",
   refunds: "/refunds",
   "controllo cliente": "/client-control",
   "client control": "/client-control",
+  "controllo giornata": "/client-control/giornata",
+  "fine giornata": "/fine-giornata",
+  "checklist fine giornata": "/fine-giornata",
   tabelle: "/tables",
   "tablet clock": "/tablet-clock",
   moduli: "/service-forms",
@@ -119,6 +142,7 @@ const legacyAccessRouteMap: Record<string, string> = {
   team: "/team",
   comunicazioni: "/notifications",
   notifiche: "/notifications",
+  email: "/email",
   profilo: "/profile",
   profile: "/profile",
   impostazioni: "/settings",
@@ -198,6 +222,18 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
     if (role === "ZERO") return;
     if (rawMap[role] !== undefined) next[role] = normalizePermissionSet(rawMap[role]);
   });
+  (["SUPER_ADMIN", "ADMIN"] as Role[]).forEach((role) => {
+    next[role] = {
+      view: Array.from(new Set([...next[role].view, "/fine-giornata"])),
+      edit: Array.from(new Set([...next[role].edit, "/fine-giornata"])),
+    };
+  });
+  (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"] as Role[]).forEach((role) => {
+    next[role] = {
+      view: Array.from(new Set([...next[role].view, "/magazzino"])),
+      edit: Array.from(new Set([...next[role].edit, "/magazzino"])),
+    };
+  });
   next.ZERO = defaults.ZERO;
   return next;
 }
@@ -212,6 +248,14 @@ export function normalizeMansionePermissions(value: unknown): MansionePermission
       .map(([name, permissions]) => [name.trim().toLowerCase(), normalizePermissionSet(permissions)] as const)
       .filter(([name]) => Boolean(name))
   );
+}
+
+// La mansione estende il ruolo: non deve nascondere pagine abilitate per il ruolo.
+export function mergePermissionSets(base: PermissionSet, extension?: PermissionSet | null): PermissionSet {
+  if (!extension) return base;
+  const view = Array.from(new Set([...base.view, ...extension.view]));
+  const edit = Array.from(new Set([...base.edit, ...extension.edit])).filter((route) => view.includes(route));
+  return { view, edit };
 }
 
 function matchRoute(pathname: string) {
@@ -233,6 +277,9 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
 
   if (pathname === "/") return true;
   if (isApiRoute(pathname)) return true;
+  if (pathname === "/remote" || pathname.startsWith("/remote/")) {
+    return ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
+  }
   if (role === "ZERO") return Boolean(matchRoute(pathname));
 
   const matchedRoute = matchRoute(pathname);
@@ -271,7 +318,7 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
   // Fallback to default edit rules defined in the matrix
   const isSettings = pathname.startsWith("/settings");
   if (isSettings) {
-    if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") {
+    if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms" || pathname === "/settings/nfc") {
       return role === "ADMIN";
     }
     return false;
@@ -283,6 +330,10 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
 
   if (pathname === "/orders" || pathname.startsWith("/orders/")) {
     return ["ADMIN", "RESPONSABILE"].includes(role);
+  }
+
+  if (pathname === "/shipping" || pathname.startsWith("/shipping/")) {
+    return ["ADMIN", "RESPONSABILE", "MAGAZZINO"].includes(role);
   }
 
   if (pathname === "/recruitment" || pathname.startsWith("/recruitment/")) {
@@ -310,11 +361,7 @@ export async function getEffectivePermissionSet(prisma: any, user: { id: string;
   const mansionePermissions = normalizeMansionePermissions(mansioneSetting?.value);
   const cleanMansione = user.mansione?.trim().toLowerCase();
 
-  if (role !== "ADMIN" && cleanMansione && mansionePermissions[cleanMansione]?.view.length > 0) {
-    return mansionePermissions[cleanMansione];
-  }
-
-  return rolePermissions[role];
+  return mergePermissionSets(rolePermissions[role], cleanMansione ? mansionePermissions[cleanMansione] : null);
 }
 
 export async function canAccessForUser(prisma: any, pathname: string, user: { id: string; role?: Role | string; mansione?: string | null; access_list?: any }) {

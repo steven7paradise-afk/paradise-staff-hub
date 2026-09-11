@@ -3,15 +3,17 @@ import { cookies } from "next/headers";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
+import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
-import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken } from "@/lib/cowlendar";
+import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey } from "@/lib/appointment-date";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +35,24 @@ function cleanTeamName(value?: string | null) {
     .trim();
 }
 
+function isUnassignedTeamName(value?: string | null) {
+  const normalized = normalizeName(cleanTeamName(value));
+  return normalized === "staff disponibile" ||
+    normalized === "staff assente paradise" ||
+    normalized === "non assegnato" ||
+    normalized === "non assegnati";
+}
+
 function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: string) {
   const normalizedTeamName = normalizeName(teamName);
   if (!normalizedTeamName) return null;
+
+  // Cowlendar espone Francesca con il nome pubblico "Francesca Paradise",
+  // mentre il suo profilo operativo interno si chiama "Franci".
+  if (normalizedTeamName === "francesca paradise") {
+    const franci = users.find((user) => normalizeName(user.name) === "franci");
+    if (franci) return franci;
+  }
 
   const exact = users.find((user) => normalizeName(user.name) === normalizedTeamName);
   if (exact) return exact;
@@ -53,47 +70,38 @@ function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: s
   return containsMatches.length === 1 ? containsMatches[0] : null;
 }
 
-function localDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function toIsoBoundary(date: Date, endOfDay = false) {
-  const copy = new Date(date);
-  if (endOfDay) copy.setHours(23, 59, 59, 999);
-  else copy.setHours(0, 0, 0, 0);
-  return copy.toISOString();
+async function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function parseLocalDateParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  const [year, month, day] = raw.split("-").map(Number);
-  const parsed = new Date(year, month - 1, day);
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) return null;
-  return parsed;
+  return isAppointmentDateKey(raw) ? raw : null;
 }
 
 function resolveAppointmentsRange(params: { [key: string]: string | string[] | undefined }) {
-  const today = new Date();
+  const today = appointmentDateKey();
   if (params.scope === "all") {
+    const [year, month] = today.split("-").map(Number);
     return {
-      start: new Date(today.getFullYear(), today.getMonth() - 1, 1),
-      end: new Date(today.getFullYear(), today.getMonth() + 4, 0),
+      start: new Date(Date.UTC(year, month - 2, 1, 12)).toISOString().slice(0, 10),
+      end: new Date(Date.UTC(year, month + 3, 0, 12)).toISOString().slice(0, 10),
     };
   }
-  const defaultStart = new Date(today);
-  const defaultEnd = new Date(today);
-
   const requestedStart = parseLocalDateParam(params.from);
   const requestedEnd = parseLocalDateParam(params.to);
-  const start = requestedStart || defaultStart;
-  const end = requestedEnd || requestedStart || defaultEnd;
+  const start = requestedStart || today;
+  const end = requestedEnd || requestedStart || today;
 
-  return start.getTime() <= end.getTime()
+  return start <= end
     ? { start, end }
     : { start: end, end: start };
 }
@@ -244,16 +252,18 @@ export default async function AppointmentsPage({
   navigationBasePath,
   pageTitle = "Appuntamenti",
   pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
-  salonWorkflowMode,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   forcePcSalon?: AppointmentSalonSlug;
   navigationBasePath?: string;
   pageTitle?: string;
   pageSubtitle?: string;
-  salonWorkflowMode?: "reception" | "queue" | "station";
 }) {
   const session = await auth();
+  const resolvedSearchParams = await searchParams;
+  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
+  const remoteTarget = typeof resolvedSearchParams?.remoteTarget === "string" ? resolvedSearchParams.remoteTarget.trim() : "";
+  const isAdminRemoteController = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
 
   let sessionUser = session?.user;
   let isPC = false;
@@ -261,7 +271,10 @@ export default async function AppointmentsPage({
 
   const cookieStore = await cookies();
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
-  const pcAuth = await checkPCAuthorization(pcToken);
+  const hasAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const pcAuth = hasAdministratorSession ? null : await checkPCAuthorization(pcToken);
   if (pcAuth) {
     isPC = true;
     pcLocationId = pcAuth.locationId;
@@ -274,13 +287,14 @@ export default async function AppointmentsPage({
     } as any;
   }
 
-  if (forcePcSalon && pcAuth) {
+  const forcedPcSalon = forcePcSalon || (isAdminRemoteController ? requestedSalon || "buenos-aires" : null);
+  if (forcedPcSalon && (pcAuth || isAdminRemoteController)) {
     const forcedLocation = await prisma.location.findFirst({
       where: {
         active: true,
-        OR: forcePcSalon === "buenos-aires"
+        OR: forcedPcSalon === "buenos-aires"
           ? [{ name: { contains: "Buenos", mode: "insensitive" } }, { name: { contains: "Corso", mode: "insensitive" } }]
-          : [{ name: { contains: forcePcSalon, mode: "insensitive" } }],
+          : [{ name: { contains: forcedPcSalon, mode: "insensitive" } }],
       },
       select: { id: true },
     });
@@ -300,13 +314,11 @@ export default async function AppointmentsPage({
 
   if (!sessionUser) redirect("/login");
 
-  const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
   const requestedView = resolvedSearchParams?.view;
   const initialView = requestedView === "week" || requestedView === "month" ? requestedView : "day";
   const requestedFocus = parseLocalDateParam(resolvedSearchParams?.focus);
   const appointmentRange = resolveAppointmentsRange(resolvedSearchParams);
-  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
   const kioskWorkerName = typeof resolvedSearchParams?.worker === "string" ? resolvedSearchParams.worker.trim() : "";
 
   const role = sessionUser.role as Role;
@@ -342,7 +354,7 @@ export default async function AppointmentsPage({
   const [localUsers, locations] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
-      select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
+      select: { id: true, name: true, role: true, photo_url: true, mansione: true, location: { select: { name: true } } },
     }),
     prisma.location.findMany({
       where: { active: true },
@@ -354,80 +366,113 @@ export default async function AppointmentsPage({
     : null;
   const initialSalon = requestedSalon || pcSalon || "tutti";
 
-  let loadError = "";
   let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
-  let services = [] as Awaited<ReturnType<typeof getCowlendarServices>>;
 
   if (hasCowlendarToken()) {
     try {
-      [bookings, services] = await Promise.all([
+      bookings = await resolveWithin(
         getCowlendarBookingsForRange({
-          startDate: toIsoBoundary(appointmentRange.start),
-          endDate: toIsoBoundary(appointmentRange.end, true),
+          startDate: appointmentDayBoundaryIso(appointmentRange.start),
+          endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
           limit: 5000,
           forceRefresh,
         }),
-        getCowlendarServices(forceRefresh),
-      ]);
+        [],
+        9_000,
+      );
     } catch (error) {
-      loadError = error instanceof Error ? error.message : "Errore nel caricamento appuntamenti.";
+      console.error("Errore nel caricamento appuntamenti:", error);
     }
   }
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
-  const safeServices = Array.isArray(services) ? services : [];
 
-  const corsoUsers = localUsers.filter((user) => isCorsoLocation(user.location?.name));
-  const pcDisplayUser = isPC && kioskWorkerName
+  const corsoUsers = localUsers.filter((user) =>
+    isCorsoLocation(user.location?.name) || normalizeName(user.name) === "franci"
+  );
+  const pcDisplayUser = (isPC || isAdminRemoteController) && kioskWorkerName
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
     : null;
 
-  const cowlendarTeamOptionsById = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
-  const cowlendarTeammates = [
-    ...safeBookings.flatMap((booking) => booking.teammates ?? []),
-    ...safeServices.flatMap((service) => service.teammates ?? []),
-  ];
+  const cowlendarTeamOptionsByName = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
+  const cowlendarTeammates = safeBookings.flatMap((booking) => booking.teammates ?? []);
 
   for (const mate of cowlendarTeammates) {
     const name = cleanTeamName(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim());
     const matchedUser = matchUserByTeamName(corsoUsers, name);
     if (!mate.id || !name || !matchedUser) continue;
-    cowlendarTeamOptionsById.set(mate.id, {
-      id: mate.id,
-      name,
+    cowlendarTeamOptionsByName.set(normalizeName(matchedUser.name), {
+      id: matchedUser.id,
+      name: matchedUser.name,
       photoUrl: matchedUser.photo_url || mate.thumbnail || null,
     });
   }
 
-  const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
+  for (const user of corsoUsers) {
+    const key = normalizeName(user.name);
+    if (!key || cowlendarTeamOptionsByName.has(key)) continue;
+    cowlendarTeamOptionsByName.set(key, {
+      id: user.id,
+      name: user.name,
+      photoUrl: user.photo_url || null,
+    });
+  }
 
-  const [shopifyOrderNames, statusSetting, botUpdateSetting, rawSheetStatusOverrides] = await Promise.all([
+  const corsoTeamOptions = [...cowlendarTeamOptionsByName.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
+
+  const [shopifyOrderNames, statusSetting, botUpdateSetting, teamOverrideSetting, rawSheetStatusOverrides, officeNoteSettings] = await Promise.all([
     getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_bot_updates" } }).catch(() => null),
-    getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
-      id: String(booking.id),
-      customerName:
-        booking.customer?.name?.trim() ||
-        [booking.form_data?.firstname, booking.form_data?.lastname]
-          .map((value: unknown) => String(value || "").trim())
-          .filter(Boolean)
-          .join(" ") ||
-        booking.booking_str ||
-        "",
-      customerPhone:
-        booking.customer?.phone ||
-        booking.form_data?.["Numero telefono"] ||
-        booking.form_data?.phone ||
-        booking.form_data?.telefono ||
-        null,
-      startDate: booking.start_date,
-    }))).catch(() => ({})),
+    prisma.setting.findUnique({ where: { key: "appointment_team_overrides" } }).catch(() => null),
+    resolveWithin(
+      getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
+        id: String(booking.id),
+        customerName:
+          booking.customer?.name?.trim() ||
+          [booking.form_data?.firstname, booking.form_data?.lastname]
+            .map((value: unknown) => String(value || "").trim())
+            .filter(Boolean)
+            .join(" ") ||
+          booking.booking_str ||
+          "",
+        customerPhone:
+          booking.customer?.phone ||
+          booking.form_data?.["Numero telefono"] ||
+          booking.form_data?.phone ||
+          booking.form_data?.telefono ||
+          null,
+        startDate: booking.start_date,
+      }))).catch(() => ({})),
+      {},
+      4_000,
+    ),
+    prisma.setting.findMany({
+      where: { key: { startsWith: "appointment_office_note:" } },
+      select: { key: true, value: true },
+    }).catch(() => []),
   ]);
+
+  const officeNotes = new Map<string, string>();
+  for (const setting of officeNoteSettings) {
+    const bookingId = setting.key.slice("appointment_office_note:".length);
+    const value = setting.value;
+    const text = value && typeof value === "object" && !Array.isArray(value) && "text" in value
+      ? String((value as { text?: unknown }).text || "").trim()
+      : "";
+    if (bookingId && text) officeNotes.set(bookingId, text);
+  }
 
   const statusOverrides =
     statusSetting?.value && typeof statusSetting.value === "object" && !Array.isArray(statusSetting.value)
-      ? (statusSetting.value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>)
+      ? (statusSetting.value as Record<string, {
+          status?: string;
+          updatedAt?: string;
+          updatedBy?: string;
+          startedAt?: string | null;
+          stoppedAt?: string | null;
+          elapsedSeconds?: number;
+        }>)
       : {};
   const botUpdates =
     botUpdateSetting?.value && typeof botUpdateSetting.value === "object" && !Array.isArray(botUpdateSetting.value)
@@ -436,6 +481,14 @@ export default async function AppointmentsPage({
           delayMinutes?: number | null;
           message?: string | null;
           updatedAt?: string;
+        }>)
+      : {};
+  const teamOverrides =
+    teamOverrideSetting?.value && typeof teamOverrideSetting.value === "object" && !Array.isArray(teamOverrideSetting.value)
+      ? (teamOverrideSetting.value as Record<string, {
+          teammates?: Array<{ id?: string; name?: string; photoUrl?: string | null }>;
+          updatedAt?: string;
+          updatedBy?: string;
         }>)
       : {};
   const sheetStatusOverrides = rawSheetStatusOverrides as Record<string, {
@@ -449,19 +502,31 @@ export default async function AppointmentsPage({
     .map((booking) => {
       const bookingDate = new Date(booking.start_date);
 
-      const teammates = (booking.teammates ?? [])
-        .map((mate) => {
+      const cowlendarBookingTeammates = (booking.teammates ?? [])
+        .flatMap((mate) => {
           const rawName = `${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim();
           const cleanedName = cleanTeamName(rawName);
+          if (isUnassignedTeamName(cleanedName)) return [];
           const matchedUser = matchUserByTeamName(localUsers, cleanedName);
 
-          return {
-            id: mate.id,
-            name: cleanedName,
+          return [{
+            id: matchedUser?.id || mate.id,
+            name: matchedUser?.name || cleanedName,
             photoUrl: matchedUser?.photo_url || mate.thumbnail || null,
-          };
+          }];
         })
         .filter((mate) => mate.name);
+      const overrideTeammates = teamOverrides[String(booking.id)]?.teammates;
+      const storedTeammates = Array.isArray(overrideTeammates)
+        ? overrideTeammates
+            .map((mate) => ({
+              id: String(mate.id || "").trim(),
+              name: String(mate.name || "").trim(),
+              photoUrl: mate.photoUrl || null,
+            }))
+            .filter((mate) => mate.id && mate.name)
+        : [];
+      const teammates = storedTeammates.length ? storedTeammates : cowlendarBookingTeammates;
 
       const teammateSalons = teammates
         .map((mate) => {
@@ -550,12 +615,13 @@ export default async function AppointmentsPage({
         serviceTitle: booking.service?.title || "Servizio",
         serviceImageUrl: findImageUrl(booking.service) || findImageUrl(booking),
         bookingType: booking.booking_type || null,
+        shopifyOrderId: booking.order_id ? String(booking.order_id) : null,
         bookingStr: booking.order_id 
           ? (shopifyOrderNames.get(String(booking.order_id)) || `#${booking.order_id}`) 
           : null,
         startDate: booking.start_date,
         endDate: booking.end_date || null,
-        dateKey: localDateKey(bookingDate),
+        dateKey: appointmentDateKey(bookingDate),
         inferredSalon,
         teammates,
         priceAmount: booking.price?.amount ?? null,
@@ -567,12 +633,16 @@ export default async function AppointmentsPage({
         localStatus: sheetStatusOverrides[String(booking.id)]?.status ?? statusOverrides[String(booking.id)]?.status ?? null,
         statusUpdatedAt: sheetStatusOverrides[String(booking.id)]?.updatedAt ?? statusOverrides[String(booking.id)]?.updatedAt ?? null,
         statusUpdatedBy: sheetStatusOverrides[String(booking.id)]?.updatedBy ?? statusOverrides[String(booking.id)]?.updatedBy ?? null,
+        statusStartedAt: statusOverrides[String(booking.id)]?.startedAt ?? null,
+        statusStoppedAt: statusOverrides[String(booking.id)]?.stoppedAt ?? null,
+        statusElapsedSeconds: statusOverrides[String(booking.id)]?.elapsedSeconds ?? 0,
         sheetMatched: Boolean(sheetStatusOverrides[String(booking.id)]),
         sheetNote: sheetStatusOverrides[String(booking.id)]?.sheetNote ?? null,
         customerUpdate: botUpdates[String(booking.id)] ?? null,
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
         notesText: notesText || null,
+        paradiseNote: officeNotes.get(String(booking.id)) || null,
         extraDetails,
       };
     })
@@ -586,6 +656,8 @@ export default async function AppointmentsPage({
       hideHeader
       pcMode={isPC}
       pcDisplayUser={pcDisplayUser ? { name: pcDisplayUser.name, photo_url: pcDisplayUser.photo_url } : kioskWorkerName ? { name: kioskWorkerName, photo_url: null } : null}
+      remoteController={isAdminRemoteController}
+      pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/${requestedSalon || "buenos-aires"}?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
     >
       {!hasCowlendarToken() ? (
         <div className="p-4 sm:p-6 lg:p-8">
@@ -603,17 +675,20 @@ export default async function AppointmentsPage({
         initialSalon={initialSalon}
         initialPcWorkerName={kioskWorkerName}
         initialView={initialView}
-        initialAnchorDate={localDateKey(requestedFocus || new Date())}
-        initialRangeFrom={localDateKey(appointmentRange.start)}
-        initialRangeTo={localDateKey(appointmentRange.end)}
+        initialAnchorDate={requestedFocus || appointmentDateKey()}
+        initialRangeFrom={appointmentRange.start}
+        initialRangeTo={appointmentRange.end}
         initialScopeAll={resolvedSearchParams?.scope === "all"}
         locations={locations}
         navigationBasePath={navigationBasePath}
         pageTitle={pageTitle}
         pageSubtitle={pageSubtitle}
-        salonWorkflowMode={salonWorkflowMode}
-        initialWorkflowWorkerName={sessionUser.name || ""}
-        initialWorkflowWorkerRole={String(sessionUser.role || "")}
+        canManageParadiseNotes={canManageAppointmentOfficeNotes({
+          role: pcDisplayUser?.role || role,
+          mansione: pcDisplayUser?.mansione || accessUser?.mansione,
+          locationName: pcDisplayUser?.location?.name || accessUser?.location?.name,
+          isPC,
+        })}
       />
     </AppShell>
   );

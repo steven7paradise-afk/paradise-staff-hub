@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { 
   CalendarDays, CheckSquare, Download, Mail, Palette, PanelsTopLeft, 
-  ShieldCheck, Smartphone, Table2, ClipboardList, Sparkles 
+  ShieldCheck, Smartphone, Table2, ClipboardList, Sparkles
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
@@ -38,7 +38,7 @@ export default async function SettingsPage() {
   const role = session.user.role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings", accessUser)
-    : (role === "ZERO" || role === "ZERO" || role === "ADMIN");
+    : role === "ADMIN";
 
   if (!canAccessPage) {
     redirect("/dashboard");

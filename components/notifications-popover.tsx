@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, Building2, CheckCheck, ExternalLink } from "lucide-react";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
-import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
+import { isAttendanceNotification, resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { cn } from "@/lib/utils";
 
 type NotificationItem = {
@@ -80,6 +80,11 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
     }
     setIsOpen(false);
+    if (isAttendanceNotification(item)) {
+      const pauseExceeded = /pausa.*superat|superamento.*pausa/i.test(`${item.title} ${item.message}`);
+      window.alert(`${pauseExceeded ? "Attenzione: pausa superata" : "Avviso timbratura"}\n\n${item.message}`);
+      return;
+    }
     const meta = parseNotificationMetadata(item);
     window.location.assign(resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder }));
   }
@@ -197,7 +202,7 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
                       </div>
                     )}
 
-                    {(item.actionUrl || item.type === "COMUNICAZIONE") && (
+                    {!isAttendanceNotification(item) && (item.actionUrl || item.type === "COMUNICAZIONE") && (
                       <Link
                         href={resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder })}
                         onClick={(event) => {

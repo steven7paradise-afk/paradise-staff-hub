@@ -30,8 +30,9 @@ type StaffRow = {
   location: string;
   firstEntry: string;
   shiftStart: string | null;
-  status: "IN" | "BREAK" | "OUT";
+  status: "IN" | "BREAK" | "OUT" | "ABSENT";
   lateMinutes: number;
+  absenceReason?: "NO_ENTRY" | "LATE_PENDING" | "LATE_REJECTED" | null;
 };
 
 type LeaveRow = {
@@ -86,6 +87,7 @@ export type ManagementDashboardData = {
   updatedAt: string;
   presentNow: number;
   clockedToday: StaffRow[];
+  absentToday: StaffRow[];
   lateStaff: StaffRow[];
   leaves: LeaveRow[];
   clientsToday: number;
@@ -124,36 +126,38 @@ function Avatar({ name, photoUrl, size = 44 }: { name: string; photoUrl: string 
 
 const revenueLineColors = ["#F080B7", "#62D4FF", "#72E0B1"];
 
-function ThreeMonthRevenueChart({ months, selectedDay, onSelectDay }: {
+function ThreeMonthControlsChart({ months, selectedDay, onSelectDay, subjectLabel }: {
   months: AnalyticsMonth[];
   selectedDay: number | null;
   onSelectDay: (day: number) => void;
+  subjectLabel: string;
 }) {
   const width = 1120;
   const height = 360;
   const plot = { left: 76, right: 24, top: 28, bottom: 50 };
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
-  const maxRevenue = Math.max(0, ...months.flatMap((month) => month.days.map((day) => day.revenue)));
-  const yMax = Math.max(500, Math.ceil(maxRevenue / 500) * 500);
-  const ticks = Array.from({ length: yMax / 500 + 1 }, (_, index) => index * 500);
+  const maxControls = Math.max(0, ...months.flatMap((month) => month.days.map((day) => day.controls)));
+  const tickStep = Math.max(1, Math.ceil(maxControls / 5));
+  const yMax = Math.max(5, Math.ceil(maxControls / tickStep) * tickStep);
+  const ticks = Array.from({ length: Math.floor(yMax / tickStep) + 1 }, (_, index) => index * tickStep);
   const x = (day: number) => plot.left + ((day - 1) / 30) * plotWidth;
   const y = (value: number) => plot.top + plotHeight - (value / yMax) * plotHeight;
-  const line = (month: AnalyticsMonth) => month.days.filter((day) => day.valid).map((day, index) => `${index ? "L" : "M"}${x(day.day)},${y(day.revenue)}`).join(" ");
+  const line = (month: AnalyticsMonth) => month.days.filter((day) => day.valid).map((day, index) => `${index ? "L" : "M"}${x(day.day)},${y(day.controls)}`).join(" ");
   const selectedValues = selectedDay ? months.map((month) => ({ month, day: month.days.find((item) => item.day === selectedDay) })) : [];
 
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="flex items-center gap-2"><TrendingUp className="size-5 text-[#f080b7]" /><h3 className="font-black">Fatturazione giornaliera · 3 mesi</h3></div><p className="mt-1 text-xs text-white/50">Transazioni Shopify verificate · Asse X: giorni 1–31 · Asse Y: incasso ogni 500 €</p></div>
+        <div><div className="flex items-center gap-2"><TrendingUp className="size-5 text-[#f080b7]" /><h3 className="font-black">Schede giornaliere · 3 mesi</h3></div><p className="mt-1 text-xs text-white/50">{subjectLabel} · Totale schede completate nei singoli giorni</p></div>
         <div className="flex flex-wrap gap-3">{months.map((month, index) => <span key={month.key} className="inline-flex items-center gap-2 text-[10px] font-black uppercase text-white/70"><span className="size-2.5 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} />{month.label}</span>)}</div>
       </div>
       <div className="mt-4 overflow-x-auto pb-2">
         <div className="relative min-w-[1120px]" style={{ aspectRatio: `${width}/${height}` }}>
-          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 h-full w-full" role="img" aria-label="Grafico della fatturazione giornaliera negli ultimi tre mesi">
-            {ticks.map((tick) => <g key={tick}><line x1={plot.left} x2={width - plot.right} y1={y(tick)} y2={y(tick)} stroke="rgba(255,255,255,0.10)" /><text x={plot.left - 12} y={y(tick) + 4} textAnchor="end" fill="rgba(255,255,255,0.55)" fontSize="11">{tick.toLocaleString("it-IT")} €</text></g>)}
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 h-full w-full" role="img" aria-label={`Grafico delle schede giornaliere negli ultimi tre mesi per ${subjectLabel}`}>
+            {ticks.map((tick) => <g key={tick}><line x1={plot.left} x2={width - plot.right} y1={y(tick)} y2={y(tick)} stroke="rgba(255,255,255,0.10)" /><text x={plot.left - 12} y={y(tick) + 4} textAnchor="end" fill="rgba(255,255,255,0.55)" fontSize="11">{tick}</text></g>)}
             {selectedDay ? <rect x={x(selectedDay) - 16} y={plot.top} width="32" height={plotHeight} rx="12" fill="rgba(255,255,255,0.06)" /> : null}
-            {months.map((month, index) => <g key={month.key}><path d={line(month)} fill="none" stroke={revenueLineColors[index]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><path d={`${line(month)} L${x(month.daysInMonth)},${plot.top + plotHeight} L${x(1)},${plot.top + plotHeight} Z`} fill={revenueLineColors[index]} opacity="0.055" />{month.days.filter((day) => day.valid && (day.revenue > 0 || day.day === selectedDay)).map((day) => <circle key={day.day} cx={x(day.day)} cy={y(day.revenue)} r={day.day === selectedDay ? 6 : 3.5} fill={revenueLineColors[index]} stroke={day.day === selectedDay ? "white" : "none"} strokeWidth="2" />)}</g>)}
+            {months.map((month, index) => <g key={month.key}><path d={line(month)} fill="none" stroke={revenueLineColors[index]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><path d={`${line(month)} L${x(month.daysInMonth)},${plot.top + plotHeight} L${x(1)},${plot.top + plotHeight} Z`} fill={revenueLineColors[index]} opacity="0.055" />{month.days.filter((day) => day.valid && (day.controls > 0 || day.day === selectedDay)).map((day) => <g key={day.day}><circle cx={x(day.day)} cy={y(day.controls)} r={day.day === selectedDay ? 6 : 3.5} fill={revenueLineColors[index]} stroke={day.day === selectedDay ? "white" : "none"} strokeWidth="2" />{day.controls > 0 ? <text x={x(day.day)} y={Math.max(plot.top + 10, y(day.controls) - 9)} textAnchor="middle" fill="white" fontSize="10" fontWeight="800">{day.controls}</text> : null}</g>)}</g>)}
             {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <text key={day} x={x(day)} y={height - 18} textAnchor="middle" fill={selectedDay === day ? "white" : "rgba(255,255,255,0.48)"} fontSize="10" fontWeight={selectedDay === day ? "800" : "500"}>{day}</text>)}
           </svg>
           <div className="absolute" style={{ left: `${plot.left / width * 100}%`, right: `${plot.right / width * 100}%`, top: `${plot.top / height * 100}%`, bottom: `${plot.bottom / height * 100}%` }}>
@@ -161,7 +165,7 @@ function ThreeMonthRevenueChart({ months, selectedDay, onSelectDay }: {
           </div>
         </div>
       </div>
-      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => { const shopify = day?.revenue || 0; const declared = day?.declaredRevenue || 0; const difference = declared - shopify; return <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><div className="mt-3 grid grid-cols-2 gap-2"><div><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Shopify</p><p className="mt-1 text-lg font-black tabular-nums text-white">{money.format(shopify)}</p></div><div><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Dichiarato</p><p className="mt-1 text-lg font-black tabular-nums text-[#f5b2d2]">{money.format(declared)}</p></div></div><div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3"><p className="text-[10px] font-semibold text-white/50">{day?.controls || 0} clienti svolti</p><p className={`text-[10px] font-black ${Math.abs(difference) < 0.01 ? "text-emerald-300" : "text-amber-300"}`}>{Math.abs(difference) < 0.01 ? "Coincide" : `Differenza ${difference > 0 ? "+" : ""}${money.format(difference)}`}</p></div></div>; })}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare lo stesso giorno nei tre mesi.</p>}
+      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-3 text-2xl font-black tabular-nums text-white">{day?.controls || 0}</p><p className="text-[10px] font-bold uppercase tracking-wider text-white/45">schede completate</p><p className="mt-3 border-t border-white/10 pt-3 text-xs font-black text-emerald-300">{money.format(day?.revenue || 0)} attribuiti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare il totale delle schede nei tre mesi.</p>}
     </div>
   );
 }
@@ -204,7 +208,7 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
 export function ManagementDashboard({ data }: { data: ManagementDashboardData }) {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [personnelView, setPersonnelView] = useState<"PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
+  const [personnelView, setPersonnelView] = useState<"PRESENT" | "ABSENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
@@ -235,14 +239,13 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       .then((payload) => {
         if (!active) return;
         setAnalytics(payload);
-        setSelectedWorkerId((current) => current || payload.workers[0]?.id || null);
       })
       .catch((error) => console.error("Dashboard client analytics unavailable:", error))
       .finally(() => active && setAnalyticsLoading(false));
     return () => { active = false; };
   }, []);
 
-  const selectedWorker = analytics?.workers.find((worker) => worker.id === selectedWorkerId) || analytics?.workers[0] || null;
+  const selectedWorker = analytics?.workers.find((worker) => worker.id === selectedWorkerId) || null;
   const selectedDayDetails = selectedWorker && selectedAnalyticsDay
     ? selectedWorker.months.find((month) => month.key === selectedAnalyticsDay.monthKey)?.days.find((day) => day.day === selectedAnalyticsDay.day) || null
     : null;
@@ -274,6 +277,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const sickness = data.leaves.filter((item) => item.type === "MALATTIA");
   const visibleStaff = personnelView === "LATE"
     ? data.lateStaff
+    : personnelView === "ABSENT"
+      ? data.absentToday
     : personnelView === "PRESENT"
       ? data.clockedToday.filter((item) => item.status === "IN" || item.status === "BREAK")
       : data.clockedToday;
@@ -294,7 +299,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const depositEnd = data.monthDeposits / movementTotal * 100;
   const withdrawalEnd = depositEnd + data.monthWithdrawals / movementTotal * 100;
 
-  function showPersonnelSection(view: "PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
+  function showPersonnelSection(view: "PRESENT" | "ABSENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
     const shouldOpen = personnelView !== view;
     setPersonnelView(shouldOpen ? view : null);
     if (!shouldOpen) return;
@@ -318,11 +323,12 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4">
+        <div className="grid grid-cols-2 md:grid-cols-5">
           <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
+          <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
           <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
           <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
-          <Metric label="Ritardi" value={String(data.lateStaff.length)} note="oltre 10 minuti" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
+          <Metric label="Ritardi" value={String(data.lateStaff.length)} note="presi in visione" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
         </div>
       </section>
 
@@ -339,12 +345,12 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       )}
 
-      {personnelView === "PRESENT" || personnelView === "LATE" ? (
+      {personnelView === "PRESENT" || personnelView === "ABSENT" || personnelView === "LATE" ? (
         <section id="personale-oggi" className="scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
-              <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "PRESENT" ? "Personale presente ora" : "Presenze e puntualità"}</h2>
+              <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "ABSENT" ? "Assenti rispetto al turno pianificato" : "Personale presente ora"}</h2>
             </div>
             <div className="flex items-center gap-1">
               <Link href="/attendance" className="hidden min-h-11 items-center rounded-full px-4 text-xs font-black uppercase text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none sm:inline-flex">Apri presenze</Link>
@@ -364,14 +370,14 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                   </div>
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-[10px] font-bold uppercase text-[#756d71]">Entrata</p>
-                  <p className="mt-1 font-black text-[#252025]">{staff.firstEntry}</p>
+                  <p className="text-[10px] font-bold uppercase text-[#756d71]">{staff.status === "ABSENT" && staff.absenceReason === "NO_ENTRY" ? "Turno previsto" : "Entrata"}</p>
+                  <p className="mt-1 font-black text-[#252025]">{staff.status === "ABSENT" && staff.absenceReason === "NO_ENTRY" ? staff.shiftStart || "--:--" : staff.firstEntry}</p>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${staff.status === "IN" ? "bg-[#dcf5e9] text-[#147553]" : staff.status === "BREAK" ? "bg-[#fff0ce] text-[#8a6310]" : "bg-[#eee9eb] text-[#655b60]"}`}>
-                    {staff.status === "IN" ? "Al lavoro" : staff.status === "BREAK" ? "In pausa" : "Uscito"}
+                  <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${staff.status === "IN" ? "bg-[#dcf5e9] text-[#147553]" : staff.status === "BREAK" ? "bg-[#fff0ce] text-[#8a6310]" : staff.status === "ABSENT" ? "bg-red-100 text-red-700" : "bg-[#eee9eb] text-[#655b60]"}`}>
+                    {staff.status === "IN" ? "Al lavoro" : staff.status === "BREAK" ? "In pausa" : staff.status === "ABSENT" ? "Assente" : "Uscito"}
                   </span>
-                  {staff.lateMinutes > 10 && <p className="mt-1 text-[11px] font-bold text-[#bd3b45]">+{staff.lateMinutes} min</p>}
+                  {staff.lateMinutes > 0 && <p className="mt-1 text-[11px] font-bold text-[#bd3b45]">{staff.absenceReason === "LATE_PENDING" ? `Ritardo da confermare · +${staff.lateMinutes} min` : staff.status === "ABSENT" ? `Nessuna timbratura · +${staff.lateMinutes} min oltre il limite` : `+${staff.lateMinutes} min`}</p>}
                 </div>
               </div>
             ))}
@@ -444,7 +450,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <div className="space-y-7 p-5 lg:p-8">
             <div className="flex gap-3 overflow-x-auto pb-2">
               {analytics.ranking.map((worker, index) => (
-                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId(worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
+                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId((current) => current === worker.id ? null : worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
                   <span className="text-sm font-black text-[#f3a0c8]">#{index + 1}</span>
                   <Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />
                   <span className="min-w-0"><span className="block truncate text-sm font-black">{worker.name}</span><span className="mt-1 block text-xs text-white/55">{worker.controls} schede</span></span>
@@ -452,9 +458,15 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
               ))}
             </div>
 
+            <ThreeMonthControlsChart
+              months={selectedWorker?.months ?? analytics.salon}
+              selectedDay={selectedComparisonDay}
+              onSelectDay={setSelectedComparisonDay}
+              subjectLabel={selectedWorker ? `Vista personale · ${selectedWorker.name}` : "Totale salone · clicca sul personale per filtrare"}
+            />
+
             {selectedWorker ? (
               <div className="space-y-5">
-                <ThreeMonthRevenueChart months={analytics.salon} selectedDay={selectedComparisonDay} onSelectDay={setSelectedComparisonDay} />
                 <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="rounded-[24px] border border-white/15 bg-[#172131] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
                   <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
@@ -471,13 +483,18 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                 </div>
 
                 <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-                  <div className="flex items-center gap-2"><LineChart className="size-5 text-[#f080b7]" /><h3 className="font-black">Attività giornaliera</h3><span className="ml-auto text-[10px] font-bold uppercase text-white/45">Passa il mouse sui giorni</span></div>
+                  <div className="flex flex-wrap items-center gap-2"><LineChart className="size-5 text-[#f080b7]" /><h3 className="font-black">Attività giornaliera</h3><span className="ml-auto text-[10px] font-bold uppercase text-white/45">Numero grande: schede · piccolo: giorno</span></div>
                   <div className="mt-5 overflow-x-auto pb-2">
                     <div className="min-w-[1580px] space-y-4 pb-2">
                       {selectedWorker.months.map((month) => {
                         const max = Math.max(1, ...month.days.map((day) => day.controls));
                         return <div key={month.key} className="grid grid-cols-[120px_repeat(31,44px)] items-center gap-1.5">
-                          <div className="pr-3"><p className="truncate text-xs font-black capitalize">{month.label}</p><p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p></div>
+                          <div className="sticky left-0 z-10 self-stretch bg-[#151e2c] pr-3 shadow-[12px_0_18px_-14px_rgba(0,0,0,0.95)]">
+                            <div className="flex h-full flex-col justify-center">
+                              <p className="truncate text-xs font-black capitalize">{month.label}</p>
+                              <p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p>
+                            </div>
+                          </div>
                           {month.days.map((day) => (
                             <div key={day.day} className="relative">
                               <button
@@ -498,9 +515,16 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                                   setDayTooltip({ x: rect.left + rect.width / 2, y: rect.top - 10, month, day });
                                 }}
                                 onBlur={() => setDayTooltip(null)}
-                                className={`grid size-11 place-items-end rounded-[9px] border pb-1 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f8b0d0] ${!day.valid ? "border-transparent bg-transparent text-transparent" : selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day ? "border-white bg-[#f080b7] text-white shadow-[0_0_0_3px_rgba(240,128,183,0.25)]" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.08] bg-white/[0.055] text-white/45 hover:bg-white/10"}`}
+                                className={`relative grid size-11 place-items-center rounded-[9px] border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f8b0d0] ${!day.valid ? "border-transparent bg-transparent text-transparent" : selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day ? "border-white bg-[#f080b7] text-white shadow-[0_0_0_3px_rgba(240,128,183,0.25)]" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.08] bg-white/[0.055] text-white/45 hover:bg-white/10"}`}
                                 style={day.valid && day.controls && !(selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day) ? { opacity: 0.42 + day.controls / max * 0.58 } : undefined}
-                              ><span>{day.day}</span></button>
+                              >
+                                {day.valid ? (
+                                  <>
+                                    <strong className={`text-sm font-black tabular-nums ${day.controls ? "text-white" : "text-white/25"}`}>{day.controls}</strong>
+                                    <span className="absolute bottom-0.5 right-1 text-[8px] font-semibold tabular-nums opacity-65">{day.day}</span>
+                                  </>
+                                ) : null}
+                              </button>
                             </div>
                           ))}
                         </div>;

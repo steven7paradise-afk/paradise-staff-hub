@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 
 const PIN_CACHE_TTL_MS = 60_000;
 type PinWorker = { id: string; name: string; photo_url: string | null; role: string; mansione: string | null };
@@ -45,12 +46,23 @@ export async function identifyWorkerByPin(pin: string, _locationId: string, _isO
   const lookup = pinLookup(pin);
   const cached = workerPinCache.get(lookup);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.worker;
+    const stillEnabled = await prisma.user.findFirst({
+      where: {
+        id: cached.worker.id,
+        active: true,
+        employee_status: { not: FORMER_EMPLOYEE_STATUS },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+      },
+      select: { id: true },
+    });
+    if (stillEnabled) return cached.worker;
+    workerPinCache.delete(lookup);
   }
 
   const quickMatch = await prisma.user.findFirst({
     where: {
       active: true,
+      employee_status: { not: FORMER_EMPLOYEE_STATUS },
       role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       pin_lookup: lookup,
     },
@@ -69,6 +81,7 @@ export async function identifyWorkerByPin(pin: string, _locationId: string, _isO
   const candidates = await prisma.user.findMany({
     where: {
       active: true,
+      employee_status: { not: FORMER_EMPLOYEE_STATUS },
       role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       pin_hash: { not: null },
     },
@@ -104,22 +117,18 @@ export async function isPinValidForUser(userId: string, pin: string, pinHash: st
   return valid;
 }
 
-export function isPinLookupMatchingPrefix(storedLookup: string | null | undefined, prefix: string) {
-  if (!storedLookup || !prefix || !/^\d{2,6}$/.test(prefix)) return false;
+export function isPinPrefixValidForUser(pinPrefix: string, storedLookup?: string | null) {
+  const prefix = pinPrefix.replace(/\D/g, "");
+  if (!/^\d{2}$/.test(prefix) || !storedLookup) return false;
 
-  // Direct match check
-  if (pinLookup(prefix) === storedLookup) return true;
-
-  const minLength = Math.max(2, prefix.length);
-  for (let length = minLength; length <= 6; length += 1) {
-    const suffixLength = length - prefix.length;
-    if (suffixLength < 0) continue;
-    const total = 10 ** suffixLength;
-    for (let index = 0; index < total; index += 1) {
-      const candidate = `${prefix}${String(index).padStart(suffixLength, "0")}`;
+  // Il PIN completo non viene mai decifrato: sul PC Cassa autorizzato verifichiamo
+  // le prime due cifre confrontando gli hash delle possibili combinazioni 4–6 cifre.
+  for (let suffixLength = 2; suffixLength <= 4; suffixLength += 1) {
+    const combinations = 10 ** suffixLength;
+    for (let value = 0; value < combinations; value += 1) {
+      const candidate = `${prefix}${String(value).padStart(suffixLength, "0")}`;
       if (pinLookup(candidate) === storedLookup) return true;
     }
   }
-
   return false;
 }

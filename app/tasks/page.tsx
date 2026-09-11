@@ -1,21 +1,24 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { TaskDashboard } from "@/components/task-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
+import { normalizeTaskView } from "@/lib/task-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function TasksPage() {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ task?: string; notification?: string }> }) {
+  const params = await searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
   const role = session.user.role as Role;
   const currentUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, mansione: true, sede_id: true, location: { select: { name: true } } },
+    select: { id: true, mansione: true, sede_id: true, default_task_view: true, location: { select: { name: true } } },
   });
   if (!hasTaskAccess(role, currentUser?.mansione, currentUser?.location?.name)) redirect("/dashboard");
 
@@ -36,38 +39,80 @@ export default async function TasksPage() {
         ],
       };
 
-  const [workers, tasks, categorySetting] = await Promise.all([
+  const mentionUserWhere: Prisma.UserWhereInput = {
+    active: true,
+    employee_status: { not: "Ex dipendente" },
+    role: { not: "ZERO" },
+    ...(canSeeAllTaskLocations ? {} : {
+      OR: [
+        { role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+        { sede_id: currentUser?.sede_id ?? undefined },
+      ],
+    }),
+  };
+  const taskListSelect = {
+    id: true,
+    title: true,
+    status: true,
+    priority: true,
+    category: true,
+    timer_seconds: true,
+    evaluation: true,
+    location_id: true,
+    created_by_id: true,
+    due_date: true,
+    started_at: true,
+    completed_at: true,
+    created_at: true,
+    updated_at: true,
+    assignees: { select: { id: true, name: true, photo_url: true } },
+    created_by: { select: { id: true, name: true, photo_url: true } },
+    location: { select: { id: true, name: true } },
+  } satisfies Prisma.StaffTaskSelect;
+
+  const [workers, mentionableUsers, tasks, categorySetting] = await Promise.all([
     prisma.user.findMany({
       where: workerWhere,
       select: { id: true, name: true, sede_id: true, photo_url: true, mansione: true, role: true },
       orderBy: [{ location: { name: "asc" } }, { name: "asc" }],
     }),
+    prisma.user.findMany({
+      where: mentionUserWhere,
+      select: { id: true, name: true, sede_id: true, photo_url: true, mansione: true, role: true },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+    }),
     prisma.staffTask.findMany({
       where: taskWhere,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        priority: true,
-        category: true,
-        timer_seconds: true,
-        evaluation: true,
-        location_id: true,
-        created_by_id: true,
-        due_date: true,
-        started_at: true,
-        completed_at: true,
-        created_at: true,
-        updated_at: true,
-        assignees: { select: { id: true, name: true, photo_url: true } },
-        created_by: { select: { id: true, name: true, photo_url: true } },
-        location: { select: { id: true, name: true } },
-      },
+      select: taskListSelect,
       orderBy: { created_at: "desc" },
       take: 120,
     }),
     prisma.setting.findUnique({ where: { key: "task_categories" } }),
   ]);
+  let requestedTaskId = params.task?.trim() || null;
+  if (!requestedTaskId && params.notification?.trim()) {
+    const legacyNotification = await prisma.notification.findFirst({
+      where: { id: params.notification.trim(), user_id: session.user.id, type: "TASK" },
+      select: { title: true },
+    });
+    const legacyTaskTitle = legacyNotification?.title
+      .replace(/^\s*(?:nuova task|task assegnata|task completata|nuovo commento|ti hanno taggato)\s*:\s*/i, "")
+      .trim();
+    if (legacyTaskTitle) {
+      requestedTaskId = (await prisma.staffTask.findFirst({
+        where: { AND: [taskWhere, { title: { equals: legacyTaskTitle, mode: "insensitive" } }] },
+        orderBy: { created_at: "desc" },
+        select: { id: true },
+      }))?.id ?? null;
+    }
+  }
+  const linkedTask = requestedTaskId && !tasks.some((task) => task.id === requestedTaskId)
+    ? await prisma.staffTask.findFirst({
+        where: { AND: [taskWhere, { id: requestedTaskId }] },
+        select: taskListSelect,
+      })
+    : null;
+  const visibleTasks = linkedTask ? [linkedTask, ...tasks] : tasks;
   const taskCategories = Array.isArray(categorySetting?.value)
     ? categorySetting.value.map(String)
     : ["Operativa", "Sala", "Reception", "Bar", "Cucina", "Pulizia", "Magazzino", "Clienti"];
@@ -78,10 +123,14 @@ export default async function TasksPage() {
         role={role}
         userId={session.user.id}
         userName={session.user.name ?? "Paradise"}
+        currentUserLocationId={currentUser?.sede_id ?? null}
         canManageTasks={canSeeAllTasks}
+        initialView={normalizeTaskView(currentUser?.default_task_view)}
+        initialTaskId={requestedTaskId}
         categories={taskCategories}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, locationId: worker.sede_id, photoUrl: worker.photo_url, mansione: worker.mansione, role: worker.role }))}
-        initialTasks={tasks.map((task) => ({
+        mentionableUsers={mentionableUsers.map((user) => ({ id: user.id, name: user.name, locationId: user.sede_id, photoUrl: user.photo_url, mansione: user.mansione, role: user.role }))}
+        initialTasks={visibleTasks.map((task) => ({
           id: task.id,
           title: task.title,
           description: "",

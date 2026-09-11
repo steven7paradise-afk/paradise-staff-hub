@@ -3,6 +3,7 @@ import { LeaveType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
+import { ensureLeaveAssistanceWorkflow, shouldCreateLeaveAssistanceWorkflow } from "@/lib/leave-assistance-workflow";
 import { prisma } from "@/lib/prisma";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
   const startTime = payload.startTime ? String(payload.startTime) : null;
   const endTime = payload.endTime ? String(payload.endTime) : null;
   const requestedUserId = payload.userId ? String(payload.userId) : session.user.id;
+  const medicalCode = type === "MALATTIA" && payload.medicalCode ? String(payload.medicalCode).trim() : null;
 
   if (!Object.values(LeaveType).includes(type) || !startDate || !endDate || endDate < startDate) {
     return NextResponse.json({ error: "Richiesta non valida" }, { status: 400 });
@@ -62,8 +64,8 @@ export async function POST(request: NextRequest) {
           end_time: endTime,
           reason: payload.reason ? String(payload.reason) : null,
           admin_note: approveImmediately && payload.adminNote ? String(payload.adminNote).trim() : null,
-          medical_code: payload.medicalCode ? String(payload.medicalCode).trim() : null,
-          sickness_unjustified: false,
+          medical_code: medicalCode,
+          sickness_unjustified: type === "MALATTIA" && !medicalCode,
           status: approveImmediately ? "APPROVED" : "PENDING",
           approved_by: approveImmediately ? session.user.id : null,
           approved_at: approveImmediately ? new Date() : null,
@@ -146,5 +148,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });
+  let assistanceWorkflow = null;
+  if (shouldCreateLeaveAssistanceWorkflow(null, leaveRequest.status, leaveRequest.type)) {
+    try {
+      assistanceWorkflow = await ensureLeaveAssistanceWorkflow(leaveRequest, session.user.id);
+    } catch (error) {
+      console.error("Errore durante la comunicazione e la creazione della task per Assistenza:", error);
+      assistanceWorkflow = { skipped: true, reason: "Comunicazione ad Assistenza non completata." };
+    }
+  }
+
+  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync, assistanceWorkflow });
 }

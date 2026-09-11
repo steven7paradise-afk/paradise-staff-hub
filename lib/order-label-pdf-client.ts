@@ -7,6 +7,7 @@ export type OrderLabelResponse = {
   answers?: Record<string, any> | null;
   created_at?: string;
   updated_at?: string;
+  user?: { name?: string | null } | null;
   user_location_name?: string | null;
   priority?: string | null;
   form?: { fields?: LabelField[] | null } | null;
@@ -16,19 +17,13 @@ type OrderLabelField = { id: string; label: string; value: any };
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
 
-const CODE128_PATTERNS = [
-  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
-  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
-  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
-  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
-  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
-  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
-  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
-  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
-  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
-  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
-  "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
-];
+// Lo stesso supporto fisico 102 x 90 mm viene inviato al driver in verticale:
+// 90 mm di larghezza e 102 mm di avanzamento. In questo modo Chrome/PM-241
+// mostrano "Verticale" e mantengono tutto il contenuto su una sola etichetta.
+const ORDER_LABEL_WIDTH_MM = 90;
+const ORDER_LABEL_HEIGHT_MM = 102;
+const ORDER_LABEL_CANVAS_WIDTH = 1800;
+const ORDER_LABEL_CANVAS_HEIGHT = 2040;
 
 function answerById(order: OrderLabelResponse, id: string) {
   const value = order.answers?.[id];
@@ -74,11 +69,11 @@ function fieldValue(order: OrderLabelResponse, terms: string[]) {
 }
 
 function orderClientName(order: OrderLabelResponse) {
-  return fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]) || "Cliente non indicato";
+  return answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]) || "Cliente non indicato";
 }
 
 function orderNumber(order: OrderLabelResponse) {
-  return answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || `#${order.id.substring(0, 5).toUpperCase()}`;
+  return answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || `#${order.id.substring(0, 5).toUpperCase()}`;
 }
 
 function orderItems(order: OrderLabelResponse) {
@@ -196,8 +191,8 @@ function svgToDataUrl(svg: string) {
   return new Promise<string>((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
-      const sourceWidth = 1520;
-      const sourceHeight = 1020;
+      const sourceWidth = ORDER_LABEL_CANVAS_WIDTH;
+      const sourceHeight = ORDER_LABEL_CANVAS_HEIGHT;
       const canvas = document.createElement("canvas");
       canvas.width = sourceWidth;
       canvas.height = sourceHeight;
@@ -216,56 +211,22 @@ function svgToDataUrl(svg: string) {
   });
 }
 
-function shopifyBarcodeValue(order: OrderLabelResponse, fields: OrderLabelField[], orderNo: string) {
-  const haystack = [
-    orderNo,
-    JSON.stringify(order.answers ?? {}),
-    ...fields.map((field) => displayValue(field.value)),
-  ].join(" ");
-  const adminMatch = haystack.match(/admin\.shopify\.com\/store\/[^/\s]+\/orders\/(\d+)/i);
-  if (adminMatch?.[1]) return adminMatch[1];
-  const orderUrlMatch = haystack.match(/\/orders\/(\d{8,})/i);
-  if (orderUrlMatch?.[1]) return orderUrlMatch[1];
-  const numericOrder = orderNo.replace(/\D/g, "");
-  return numericOrder || order.id;
+export function orderLabelBarcodeValue(orderId: string, visibleOrderNumber?: string) {
+  const compactOrderNumber = String(visibleOrderNumber || "")
+    .replace(/^#/, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .slice(0, 20);
+  return compactOrderNumber || orderId;
 }
 
-async function resolveBarcode(order: OrderLabelResponse, fields: OrderLabelField[], orderNo: string) {
-  const fallback = shopifyBarcodeValue(order, fields, orderNo);
-  try {
-    const response = await fetch(`/api/orders/${encodeURIComponent(order.id)}/shopify-barcode`, { cache: "no-store" });
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.barcodeValue) return fallback;
-    return String(data.barcodeValue);
-  } catch {
-    return fallback;
-  }
-}
-
-function code128Values(value: string) {
-  const safe = value
-    .split("")
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      return code >= 32 && code <= 127 ? char : "-";
-    })
-    .join("");
-  const values = [104, ...safe.split("").map((char) => char.charCodeAt(0) - 32)];
-  const checksum = values.reduce((sum, code, index) => sum + code * (index === 0 ? 1 : index), 0) % 103;
-  return [...values, checksum, 106];
-}
-
-function drawCode128(doc: any, value: string, x: number, y: number, width: number, height: number) {
-  const patterns = code128Values(value).map((code) => CODE128_PATTERNS[code]).join("");
-  const totalModules = patterns.split("").reduce((sum, item) => sum + Number(item), 0);
-  const moduleWidth = width / totalModules;
-  let cursor = x;
-  doc.setFillColor(0, 0, 0);
-  patterns.split("").forEach((item, index) => {
-    const segmentWidth = Number(item) * moduleWidth;
-    if (index % 2 === 0) doc.rect(cursor, y, segmentWidth, height, "F");
-    cursor += segmentWidth;
-  });
+export function orderLabelQrValue(
+  orderId: string,
+  visibleOrderNumber?: string,
+  baseUrl = "https://staff-paradise.tech",
+) {
+  const reference = encodeURIComponent(orderLabelBarcodeValue(orderId, visibleOrderNumber));
+  const target = new URL(`/o/${reference}`, baseUrl);
+  return target.toString();
 }
 
 export function isOrderLabelForm(form?: { name?: string | null; category?: string | null } | null) {
@@ -276,65 +237,96 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [152, 102] });
+  const { toDataURL: createQrDataUrl } = await import("qrcode");
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [ORDER_LABEL_WIDTH_MM, ORDER_LABEL_HEIGHT_MM],
+    compress: true,
+  });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
   const client = orderClientName(order);
-  const fields = fieldsFor(order);
-  const logoDataUrl = await fetch("/logo-label-paradise.png")
+  const createdAt = formatDateTime(order.created_at) || orderDate();
+  const compiledBy = order.user?.name?.trim() || "Non indicato";
+  const qrValue = orderLabelQrValue(order.id, orderNo);
+  const qrCodeDataUrl = await createQrDataUrl(qrValue, {
+    errorCorrectionLevel: "M",
+    margin: 2,
+    width: 800,
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+  const logoUrl = typeof window === "undefined"
+    ? "/logo-label-paradise.png"
+    : new URL("/logo-label-paradise.png", window.location.origin).toString();
+  const logoDataUrl = await fetch(logoUrl, { cache: "force-cache" })
     .then((response) => (response.ok ? response.blob() : null))
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
     .catch(() => "");
 
-  const initials = client.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-  const phoneField = findField(fields, ["telefono", "whatsapp"]);
-  const weightField = findField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
-  const service = orderItems(order) || fieldValue(order, ["servizio", "trattamento"]) || "Non indicato";
   const cleanOrderNo = `#${orderNo.replace(/^#/, "")}`;
-  const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
-  const weight = weightField ? displayValue(weightField.value) : "Non indicato";
-  const createdAt = orderDate(order.created_at);
-  const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="80" y="70" width="420" height="170" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="90" y="155" font-size="52" font-weight="800" fill="#111">Paradise Beauty</text>`;
+  const logoFallback = logoDataUrl
+    ? ""
+    : `<text x="450" y="150" text-anchor="middle" font-size="54" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1520" height="1020" viewBox="0 0 1520 1020">
-      <rect width="1520" height="1020" fill="#ffffff"/>
-      ${logoImage}
-      <rect x="1210" y="78" width="220" height="96" rx="22" fill="#ec5391"/>
-      <text x="1320" y="138" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#ffffff">ORDINE</text>
-      <text x="1320" y="295" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
-      <line x1="80" y1="355" x2="1440" y2="355" stroke="#ec5391" stroke-width="8"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="${ORDER_LABEL_CANVAS_WIDTH}" height="${ORDER_LABEL_CANVAS_HEIGHT}" viewBox="0 0 900 1020">
+      <rect width="900" height="1020" fill="#ffffff"/>
+      <rect x="55" y="35" width="790" height="190" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
+      ${logoFallback}
 
-      <circle cx="158" cy="520" r="70" fill="#ec5391"/>
-      <text x="158" y="543" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
-      <text x="270" y="500" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 34))}</text>
-      <text x="270" y="570" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 58))}</text>
+      <rect x="55" y="260" width="790" height="395" rx="30" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
+      <line x1="455" y1="290" x2="455" y2="625" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
+      <rect x="75" y="280" width="355" height="355" fill="#ffffff"/>
 
-      <rect x="80" y="662" width="1360" height="214" rx="28" fill="#ffffff" stroke="#f9c4de" stroke-width="7"/>
-      <text x="120" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
-      <text x="120" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
-      <line x1="120" y1="848" x2="545" y2="848" stroke="#f9c4de" stroke-width="6"/>
+      <text x="495" y="320" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">CLIENTE</text>
+      <text x="495" y="378" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#111111">${escapeSvgText(shortSvgText(client, 19))}</text>
+      <line x1="495" y1="418" x2="805" y2="418" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
+      <text x="495" y="468" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="495" y="535" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
+      <text x="495" y="604" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="1.2" fill="#111111">PRONTO</text>
+      <rect x="735" y="558" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
-      <text x="610" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
-      <text x="610" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 18))}</text>
-      <line x1="610" y1="848" x2="880" y2="848" stroke="#f9c4de" stroke-width="6"/>
+      <rect x="55" y="695" width="790" height="155" rx="24" fill="#ffffff" stroke="#e8c8d6" stroke-width="3"/>
+      <line x1="450" y1="720" x2="450" y2="825" stroke="#e8c8d6" stroke-width="3"/>
+      <text x="90" y="750" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">DATA ORDINE</text>
+      <text x="90" y="802" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(createdAt, 24))}</text>
+      <text x="490" y="750" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">COMPILATO DA</text>
+      <text x="490" y="802" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(compiledBy, 22))}</text>
 
-      <text x="940" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
-      <text x="940" y="810" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
-      <line x1="940" y1="848" x2="1185" y2="848" stroke="#f9c4de" stroke-width="6"/>
-
-      <text x="1240" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
-      <text x="1240" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
-      <line x1="1240" y1="848" x2="1400" y2="848" stroke="#f9c4de" stroke-width="6"/>
-
-      <text x="760" y="952" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" fill="#121216">Paradise Beauty - Etichetta ordine</text>
+      <text x="450" y="925" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" letter-spacing="1.2" fill="#111111">www.paradisebeauty.it</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
-  doc.addImage(labelImageDataUrl, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
-  return { doc, fileName: `Etichetta-orizzontale-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
+  const imageRatio = ORDER_LABEL_CANVAS_WIDTH / ORDER_LABEL_CANVAS_HEIGHT;
+  const pageRatio = pageWidth / pageHeight;
+  const imageWidth = imageRatio > pageRatio ? pageWidth : pageHeight * imageRatio;
+  const imageHeight = imageRatio > pageRatio ? pageWidth / imageRatio : pageHeight;
+  const imageX = (pageWidth - imageWidth) / 2;
+  const imageY = (pageHeight - imageHeight) / 2;
+  doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
+  // Il logo viene aggiunto direttamente al PDF. Se resta annidato nello SVG,
+  // Safari e Chromium possono ometterlo durante la stampa immediata del nuovo ordine.
+  if (logoDataUrl) {
+    const logoX = imageX + imageWidth * (245 / 900);
+    const logoY = imageY + imageHeight * (70 / 1020);
+    const logoWidth = imageWidth * (410 / 900);
+    const logoHeight = imageHeight * (130 / 1020);
+    doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoWidth, logoHeight, undefined, "FAST");
+  }
+  // Add the QR directly to jsPDF. Embedding a data-URL image inside the SVG
+  // and then rasterizing that SVG causes Chromium/WebKit to occasionally drop
+  // the nested image, producing an empty QR box on newly-created labels.
+  const qrX = imageX + imageWidth * (75 / 900);
+  const qrY = imageY + imageHeight * (280 / 1020);
+  const qrWidth = imageWidth * (355 / 900);
+  const qrHeight = imageHeight * (355 / 1020);
+  doc.addImage(qrCodeDataUrl, "PNG", qrX, qrY, qrWidth, qrHeight, undefined, "NONE");
+  return {
+    doc,
+    labelImageDataUrl,
+    fileName: `Etichetta-102x90-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`,
+  };
 }
 
 export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
@@ -342,19 +334,28 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
   doc.save(fileName);
 }
 
-export async function printOrderLabelPdf(order: OrderLabelResponse) {
-  const { doc, fileName } = await buildOrderLabelPdf(order);
-  const blobUrl = URL.createObjectURL(doc.output("blob"));
-  const printWindow = window.open(blobUrl, "_blank", "noopener,noreferrer");
-  if (!printWindow) {
-    doc.save(fileName);
-    return;
+export async function printOrderLabelPdf(order: OrderLabelResponse, preparedPrintWindow?: Window | null) {
+  // Apriamo subito la finestra per non farla bloccare dal browser. Stampiamo
+  // direttamente il PDF 102 x 90: la pagina HTML intermedia aggiungeva
+  // intestazioni/piè di pagina e poteva dividere il layout in due fogli.
+  const printWindow = preparedPrintWindow === undefined ? window.open("", "_blank") : preparedPrintWindow;
+
+  try {
+    const { doc, fileName } = await buildOrderLabelPdf(order);
+    doc.setProperties({ title: fileName });
+    doc.autoPrint({ variant: "non-conform" });
+
+    if (!printWindow) {
+      doc.save(fileName);
+      return;
+    }
+
+    printWindow.opener = null;
+    const pdfUrl = URL.createObjectURL(doc.output("blob"));
+    printWindow.location.replace(pdfUrl);
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 10 * 60 * 1000);
+  } catch (error) {
+    printWindow?.close();
+    throw error;
   }
-  const print = () => {
-    printWindow.focus();
-    printWindow.print();
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-  };
-  printWindow.addEventListener("load", print, { once: true });
-  window.setTimeout(print, 800);
 }

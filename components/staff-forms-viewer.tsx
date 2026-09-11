@@ -2,10 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ScanLine, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, Store, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { cn } from "@/lib/utils";
 
 function serviceFormFileUrl(answer: any) {
@@ -82,6 +83,7 @@ type PickupReadyOrder = {
     label: string;
     name: string;
     url: string;
+    previewUrl?: string;
     type?: string;
     isImage?: boolean;
     previewable?: boolean;
@@ -104,6 +106,17 @@ type CashDailySummary = {
   total: number;
   card: number;
   cash: number;
+  grossCash: number;
+  refunds: number;
+  netCash: number;
+  refundCount: number;
+  refundRows: Array<{
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    processedAt: string;
+  }>;
   other: number;
   orders: number;
   transactions?: number;
@@ -130,6 +143,49 @@ type CashOrderRow = {
   controlResponseId?: string | null;
   controlClientName?: string | null;
   controlDeclaredAmount?: number | null;
+};
+
+type AutomaticDailyCloseSummary = {
+  available: boolean;
+  date: string;
+  locationName: string;
+  before19: boolean;
+  controlDeclaredCash: number;
+  controlShopifyCash: number;
+  shopifyCash: number;
+  shopifyGrossCash: number;
+  shopifyCashRefunds: number;
+  cashRefundCount: number;
+  cashRefundRows: Array<{
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    processedAt: string;
+  }>;
+  difference: number;
+  controlCount: number;
+  completedControlCount: number;
+  completedControlRows: Array<{
+    responseId: string;
+    clientName: string;
+    order: string;
+    result: string;
+    completedAt: string;
+  }>;
+  missingControlCount: number;
+  missingControlCash: number;
+  missingControlRows: Array<{
+    orderId: string;
+    order: string;
+    clientName: string;
+    amount: number;
+    state: "INCOMPLETA" | "MANCANTE";
+    controlResponseId: string | null;
+  }>;
+  shopifyOrders: number;
+  alreadyClosed: boolean;
+  existing?: { id: string; signedAt: string; signedBy: string } | null;
 };
 
 function formatEuro(value: number | null | undefined) {
@@ -197,6 +253,26 @@ function pickupOrderDetails(order: PickupReadyOrder) {
   return details;
 }
 
+function pickupStructuredNotes(order: PickupReadyOrder) {
+  const highlights: Array<{ label: string; value: string }> = [];
+  const narrative: string[] = [];
+
+  String(order.notes || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const match = line.match(/^([^:]{2,48}\??):\s*(.+)$/);
+      if (match && highlights.length < 4) {
+        highlights.push({ label: match[1].trim(), value: match[2].trim() });
+      } else {
+        narrative.push(line);
+      }
+    });
+
+  return { highlights, narrative };
+}
+
 function pickupProofUrl(order: PickupReadyOrder) {
   return order.pickup?.proof?.driveFileUrl || order.pickup?.proof?.webViewLink || order.pickup?.proof?.webContentLink || "";
 }
@@ -214,6 +290,7 @@ export function StaffFormsViewer({
   currentUserId,
   currentUserName,
   currentUserRole,
+  canClosePastDays = false,
   autoFillFormId,
   autoFillFormName,
   pastCustomers = [],
@@ -224,6 +301,7 @@ export function StaffFormsViewer({
   currentUserId: string;
   currentUserName: string;
   currentUserRole: string;
+  canClosePastDays?: boolean;
   autoFillFormId?: string;
   autoFillFormName?: string;
   pastCustomers?: Array<{
@@ -245,18 +323,24 @@ export function StaffFormsViewer({
   const [customSelectValue, setCustomSelectValue] = useState<string>("");
   const [showPastCustomers, setShowPastCustomers] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const customerSearchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [showPickupModal, setShowPickupModal] = useState(false);
+  const [showPosTerminal, setShowPosTerminal] = useState(false);
+  const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [pickupQuery, setPickupQuery] = useState("");
   const [pickupName, setPickupName] = useState("");
   const [pickupPin, setPickupPin] = useState("");
   const [pickupPaidConfirmed, setPickupPaidConfirmed] = useState(false);
-  const [pickupProof, setPickupProof] = useState<File | null>(null);
   const [pickupSubmitting, setPickupSubmitting] = useState(false);
   const [pickupMessage, setPickupMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pickupReadyOrders, setPickupReadyOrders] = useState<PickupReadyOrder[]>([]);
   const [pickupLoadingOrders, setPickupLoadingOrders] = useState(false);
   const [pickupSelectedOrder, setPickupSelectedOrder] = useState<PickupReadyOrder | null>(null);
   const [pickupStatusNotice, setPickupStatusNotice] = useState<PickupStatusNotice | null>(null);
+  const pickupDetailScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const pickupScannerRef = React.useRef<any>(null);
+  const [pickupScannerOpen, setPickupScannerOpen] = useState(false);
+  const [pickupScannerMessage, setPickupScannerMessage] = useState("");
   const [cashSummary, setCashSummary] = useState<CashDailySummary | null>(null);
   const [cashSummaryLoading, setCashSummaryLoading] = useState(false);
   const [cashSummaryError, setCashSummaryError] = useState("");
@@ -264,6 +348,12 @@ export function StaffFormsViewer({
     { id: "cash-order-1", order: "", amount: "" },
   ]);
   const [activeCashCustomerIndex, setActiveCashCustomerIndex] = useState(0);
+  const [dailyCloseOpen, setDailyCloseOpen] = useState(false);
+  const [dailyCloseLoading, setDailyCloseLoading] = useState(false);
+  const [dailyCloseSubmitting, setDailyCloseSubmitting] = useState(false);
+  const [dailyCloseSummary, setDailyCloseSummary] = useState<AutomaticDailyCloseSummary | null>(null);
+  const [dailyCloseMessage, setDailyCloseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [dailyCloseDate, setDailyCloseDate] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date()));
 
   const handleSelectCustomer = (cust: any) => {
     setAnswers((prev) => ({
@@ -326,11 +416,72 @@ export function StaffFormsViewer({
     }
   }, []);
 
+  const stopPickupScanner = React.useCallback(async () => {
+    const scanner = pickupScannerRef.current;
+    pickupScannerRef.current = null;
+    if (scanner) {
+      try { await scanner.stop(); } catch { /* Scanner already stopped. */ }
+      try { scanner.clear(); } catch { /* Reader has already been removed. */ }
+    }
+    setPickupScannerOpen(false);
+  }, []);
+
+  const startPickupScanner = React.useCallback(async () => {
+    setPickupScannerMessage("");
+    setPickupScannerOpen(true);
+    try {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const scanner = new Html5Qrcode("pickup-qr-reader", {
+        verbose: false,
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128],
+      });
+      pickupScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 15, qrbox: (width, height) => ({ width: Math.floor(Math.min(width, height) * 0.72), height: Math.floor(Math.min(width, height) * 0.72) }) },
+        (decodedText) => {
+          let value = decodedText.trim();
+          try {
+            const decodedUrl = new URL(value);
+            value = decodedUrl.searchParams.get("ordine") || decodedUrl.searchParams.get("order") || decodeURIComponent(decodedUrl.pathname.split("/").filter(Boolean).pop() || value);
+          } catch { /* A plain order number is already valid. */ }
+          setPickupQuery(value);
+          setPickupScannerMessage(`Ordine ${value} letto correttamente.`);
+          void stopPickupScanner();
+        },
+        () => { /* Frames without a readable code are expected. */ },
+      );
+    } catch {
+      setPickupScannerMessage("Fotocamera non disponibile. Controlla il permesso oppure usa la ricerca manuale.");
+      await stopPickupScanner();
+    }
+  }, [stopPickupScanner]);
+
   React.useEffect(() => {
     if (showPickupModal) {
       void loadPickupReadyOrders();
+    } else {
+      void stopPickupScanner();
     }
-  }, [showPickupModal, loadPickupReadyOrders]);
+  }, [showPickupModal, loadPickupReadyOrders, stopPickupScanner]);
+
+  React.useEffect(() => () => {
+    const scanner = pickupScannerRef.current;
+    pickupScannerRef.current = null;
+    if (!scanner) return;
+    void scanner.stop().catch(() => null).finally(() => {
+      try { scanner.clear(); } catch { /* Component is already unmounted. */ }
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!showPickupModal) return;
+    const frame = window.requestAnimationFrame(() => {
+      pickupDetailScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showPickupModal, pickupSelectedOrder?.id]);
 
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -412,6 +563,9 @@ export function StaffFormsViewer({
       return;
     }
 
+    const savedCustomer = pastCustomers.find((customer) =>
+      String(customer.vatNumber || "").replace(/\D/g, "") === vat
+    );
     setLoadingVat(true);
     setVatLookupStatus(null);
 
@@ -424,13 +578,22 @@ export function StaffFormsViewer({
 
       setAnswers(prev => ({
         ...prev,
-        "invoice_client_name": data.name,
-        "invoice_address": data.address,
+        invoice_client_type: "Azienda / Libero Professionista (Partita IVA)",
+        invoice_vat_number: vat,
+        invoice_client_name: data.name,
+        invoice_address: data.address,
+        invoice_fiscal_code: data.taxNumber || prev.invoice_fiscal_code || "",
+        invoice_vat_verified_by: data.source,
+        invoice_sdi_code: savedCustomer?.sdiCode || prev.invoice_sdi_code || "",
+        invoice_pec: savedCustomer?.pec || prev.invoice_pec || "",
       }));
 
+      const savedDetails = savedCustomer?.sdiCode || savedCustomer?.pec
+        ? "\n• PEC / SDI recuperati dallo storico Paradise"
+        : "";
       setVatLookupStatus({
         success: true,
-        message: `✓ AZIENDA TROVATA\n• Ragione Sociale: ${data.name}\n• Indirizzo: ${data.address}`
+        message: `✓ DATI VERIFICATI CON VIES + SIBILL\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}`
       });
     } catch (err: any) {
       setVatLookupStatus({
@@ -443,13 +606,20 @@ export function StaffFormsViewer({
   };
 
   const handleShopifyOrderLookup = async () => {
-    const query = String(answers["invoice_shopify_order"] || "").trim();
+    const isOrderFormLookup = isOrderLabelForm(selectedForm);
+    const queryFieldId = isOrderFormLookup ? "order_shopify_order" : "invoice_shopify_order";
+    const query = String(answers[queryFieldId] || "").trim();
+
+    if (!query) {
+      setShopifyLookupStatus({ success: false, message: "Inserisci il numero dell'ordine Shopify." });
+      return;
+    }
     
     setLoadingShopify(true);
     setShopifyLookupStatus(null);
 
     try {
-      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/shopify-order-lookup?strict=1&query=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Errore di caricamento.");
@@ -457,17 +627,43 @@ export function StaffFormsViewer({
 
       setAnswers(prev => {
         const nextAnswers = { ...prev };
-        if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
-        if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
-        if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
-        if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
+        if (isOrderFormLookup) {
+          if (data.orderName) nextAnswers["order_shopify_order"] = data.orderName;
+          if (data.clientName) nextAnswers["order_client_name"] = data.clientName;
+          if (data.email) nextAnswers["order_client_email"] = data.email;
+          if (data.phone) nextAnswers["order_client_phone"] = data.phone;
+          nextAnswers["order_paid_amount"] = String(data.paidAmount ?? 0);
+        } else {
+          const isCompanyInvoice = String(prev.invoice_client_type || "").toLowerCase().includes("azienda") ||
+            String(prev.invoice_client_type || "").toLowerCase().includes("professionista");
+          if (data.orderName) nextAnswers["invoice_shopify_order"] = data.orderName;
+          if (!isCompanyInvoice && data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
+          if (!isCompanyInvoice && data.billingAddress) nextAnswers["invoice_address"] = data.billingAddress;
+          if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
+          if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
+          if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
+          if (data.netAmount !== null && data.netAmount !== undefined) nextAnswers["invoice_shopify_net_amount"] = String(data.netAmount);
+          if (data.totalTax !== null && data.totalTax !== undefined) nextAnswers["invoice_shopify_tax_amount"] = String(data.totalTax);
+          nextAnswers["invoice_shopify_financial_status"] = data.financialStatus || "";
+          nextAnswers["invoice_shopify_paid_amount"] = String(data.paidAmount ?? 0);
+          nextAnswers["invoice_shopify_verified"] = true;
+
+          if (data.paymentMethod === "CARTA") {
+            nextAnswers["invoice_payment_method"] = "Carta di Credito / Bancomat";
+          } else if (data.paymentMethod === "CONTANTI" || data.paymentMethod === "CASHMATIC") {
+            nextAnswers["invoice_payment_method"] = "Contanti";
+          } else if (data.paymentMethod === "MISTO") {
+            nextAnswers["invoice_payment_method"] = "Altro";
+            nextAnswers["invoice_payment_method_altro"] = "Pagamento misto";
+          }
+        }
         
         const titles = Array.isArray(data.lineItems) ? data.lineItems.map((it: any) => it.title) : [];
         let productsNote = `Importato da ordine Shopify ${data.orderName || ""}`;
         if (titles.length > 0) {
           productsNote += `\nProdotti: ${titles.join(", ")}`;
         }
-        nextAnswers["invoice_notes"] = productsNote;
+        if (!isOrderFormLookup) nextAnswers["invoice_notes"] = productsNote;
 
         return nextAnswers;
       });
@@ -478,8 +674,11 @@ export function StaffFormsViewer({
         : "Nessuno";
       setShopifyLookupStatus({
         success: true,
-        message: `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "N/A"}\n• Totale: € ${data.totalPrice !== null ? data.totalPrice.toFixed(2) : "0.00"}\n• Prodotti: ${prodList}`
+        message: isOrderFormLookup
+          ? `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "Da completare"}\n• Ha pagato: € ${Number(data.paidAmount ?? 0).toFixed(2)}\n• Totale ordine: € ${Number(data.totalPrice ?? 0).toFixed(2)}`
+          : `✓ ORDINE VERIFICATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "Da completare"}\n• Totale: € ${Number(data.totalPrice ?? 0).toFixed(2)}\n• Imponibile: € ${Number(data.netAmount ?? 0).toFixed(2)} · IVA: € ${Number(data.totalTax ?? 0).toFixed(2)}\n• Pagamento: ${data.paymentMethod === "DA_VERIFICARE" ? "da verificare" : data.paymentMethod}\n• Prodotti: ${prodList}`
       });
+      if (isOrderFormLookup) setActiveFieldIndex(1);
     } catch (err: any) {
       setShopifyLookupStatus({
         success: false,
@@ -516,6 +715,11 @@ export function StaffFormsViewer({
   const isCashClosingForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CHIUSURA CASSA") || selectedForm.category.toUpperCase().includes("CASSA")
     : false;
+  const isSelectedOrderForm = isOrderLabelForm(selectedForm);
+  const isProfessionalWizardForm = Boolean(selectedForm) && !isCashClosingForm;
+  const isSelectedInvoiceForm = selectedForm
+    ? selectedForm.name.toUpperCase().includes("FATTURA") || selectedForm.category.toUpperCase().includes("FATTUR")
+    : false;
   const isSelectedClientControlForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
     : false;
@@ -523,6 +727,14 @@ export function StaffFormsViewer({
     CLIENT_CONTROL_FIELD_IDS.serviceOwner,
     CLIENT_CONTROL_FIELD_IDS.serviceStaff,
   ]);
+
+  React.useEffect(() => {
+    if (!isSelectedInvoiceForm || pastCustomers.length === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      customerSearchInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isSelectedInvoiceForm, selectedForm?.id, pastCustomers.length]);
 
   const isDefaultParticipantField = (fieldLabel: string) => {
     const labelUpper = fieldLabel.toUpperCase();
@@ -580,6 +792,9 @@ export function StaffFormsViewer({
   }).length;
 
   const isCurrentFieldValid = (field: FormField) => {
+    if (field.id === "order_shopify_order" || field.id === "invoice_shopify_order") {
+      return Boolean(String(answers[field.id] || "").trim()) && shopifyLookupStatus?.success === true;
+    }
     if (!field.required) return true;
 
     // Special case: group course participants details validation
@@ -623,7 +838,11 @@ export function StaffFormsViewer({
     if (!currentField) return;
 
     if (!isCurrentFieldValid(currentField)) {
-      setErrorMsg("Per favore, compila questo campo obbligatorio prima di procedere.");
+      setErrorMsg(
+        currentField.id === "order_shopify_order" || currentField.id === "invoice_shopify_order"
+          ? "Cerca e verifica l'ordine Shopify prima di continuare."
+          : "Per favore, compila questo campo obbligatorio prima di procedere."
+      );
       return;
     }
 
@@ -715,6 +934,8 @@ export function StaffFormsViewer({
   // Submission UI States
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("Inviato con successo");
+  const [successDetail, setSuccessDetail] = useState("Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.");
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleArchiveResponse = async (responseId: string) => {
@@ -769,9 +990,6 @@ export function StaffFormsViewer({
       formData.append("pickupName", pickupName.trim());
       if (pickupPin.trim()) formData.append("pickupPin", pickupPin.trim());
       formData.append("paidConfirmed", pickupPaidConfirmed ? "true" : "false");
-      if (pickupProof) {
-        formData.append("proof", pickupProof);
-      }
 
       const response = await fetch("/api/orders/pickup", {
         method: "POST",
@@ -793,7 +1011,6 @@ export function StaffFormsViewer({
       setPickupName("");
       setPickupPin("");
       setPickupPaidConfirmed(false);
-      setPickupProof(null);
       setPickupSelectedOrder(null);
     } catch (error) {
       setPickupMessage({
@@ -808,6 +1025,7 @@ export function StaffFormsViewer({
   const handleOpenForm = (form: FormTemplate) => {
     const isCashClosing = form.name.toUpperCase().includes("CHIUSURA CASSA") || form.category.toUpperCase().includes("CASSA");
     const isClientControl = form.name.toUpperCase().includes("CONTROLLO CLIENTE") || form.category.toUpperCase().includes("QUALITA");
+    const isInvoice = form.name.toUpperCase().includes("FATTURA") || form.category.toUpperCase().includes("FATTUR");
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
     setSelectedForm(form);
     setAnswers(
@@ -823,12 +1041,73 @@ export function StaffFormsViewer({
     );
     setFiles({});
     setSuccess(false);
+    setSuccessTitle("Inviato con successo");
+    setSuccessDetail("Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.");
     setErrorMsg("");
     setActiveFieldIndex(0);
     setCashOrderRows([{ id: `cash-order-${Date.now()}`, order: "", amount: "" }]);
     setActiveCashCustomerIndex(0);
-    setShowPastCustomers(false);
+    setShowPastCustomers(isInvoice && pastCustomers.length > 0);
     setCustomerSearchQuery("");
+    setShopifyLookupStatus(null);
+  };
+
+  const loadDailyClosing = async (date: string) => {
+    setDailyCloseOpen(true);
+    setDailyCloseLoading(true);
+    setDailyCloseSummary(null);
+    setDailyCloseMessage(null);
+    try {
+      const response = await fetch(`/api/cash/daily-close?date=${encodeURIComponent(date)}`, { cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || "Riepilogo chiusura non disponibile.");
+      setDailyCloseSummary(data);
+    } catch (error) {
+      setDailyCloseMessage({ type: "error", text: error instanceof Error ? error.message : "Riepilogo chiusura non disponibile." });
+    } finally {
+      setDailyCloseLoading(false);
+    }
+  };
+
+  const openDailyClosing = async () => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    setDailyCloseDate(today);
+    await loadDailyClosing(today);
+  };
+
+  const completeDailyClosing = async () => {
+    if (!dailyCloseSummary || dailyCloseSubmitting || dailyCloseSummary.alreadyClosed) return;
+    const confirmRefunds = dailyCloseSummary.shopifyCashRefunds > 0;
+    if (confirmRefunds && !window.confirm(
+      `ATTENZIONE: sono presenti ${dailyCloseSummary.cashRefundCount} rimborsi cash.\n\nIncassi lordi: ${formatEuro(dailyCloseSummary.shopifyGrossCash)}\nRimborsi: -${formatEuro(dailyCloseSummary.shopifyCashRefunds)}\nCash netto da chiudere: ${formatEuro(dailyCloseSummary.shopifyCash)}\n\nHai controllato gli ordini indicati nel riepilogo?`,
+    )) return;
+    const confirmEarly = dailyCloseSummary.before19;
+    if (confirmEarly && !window.confirm("Sono meno delle 19:00. Sei sicuro di voler effettuare adesso la chiusura giornaliera?")) return;
+
+    setDailyCloseSubmitting(true);
+    setDailyCloseMessage(null);
+    try {
+      const response = await fetch("/api/cash/daily-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmEarly, confirmRefunds, date: dailyCloseDate }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile registrare la chiusura giornaliera.");
+      setDailyCloseSummary((current) => current ? {
+        ...current,
+        alreadyClosed: true,
+        existing: { id: data.closing.id, signedAt: data.closing.signed_at, signedBy: data.closing.signature_name },
+      } : current);
+      setDailyCloseMessage({
+        type: "success",
+        text: data?.message || "Chiusura giornaliera registrata. I Controlli Cliente sono stati salvati e allineati a Shopify.",
+      });
+    } catch (error) {
+      setDailyCloseMessage({ type: "error", text: error instanceof Error ? error.message : "Impossibile registrare la chiusura giornaliera." });
+    } finally {
+      setDailyCloseSubmitting(false);
+    }
   };
 
   React.useEffect(() => {
@@ -901,6 +1180,27 @@ export function StaffFormsViewer({
   }, [autoFillFormId, autoFillFormName, forms]);
 
   const handleTextChange = (fieldId: string, value: string) => {
+    if (fieldId === "order_shopify_order" || fieldId === "invoice_shopify_order") {
+      setShopifyLookupStatus(null);
+      setAnswers((prev) => ({
+        ...prev,
+        [fieldId]: value,
+        ...(fieldId === "order_shopify_order" ? {
+          order_client_name: "",
+          order_client_email: "",
+          order_client_phone: "",
+          order_paid_amount: "",
+        } : {
+          invoice_shopify_verified: false,
+          invoice_shopify_items: [],
+          invoice_shopify_net_amount: "",
+          invoice_shopify_tax_amount: "",
+          invoice_shopify_financial_status: "",
+          invoice_shopify_paid_amount: "",
+        }),
+      }));
+      return;
+    }
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
   };
 
@@ -967,6 +1267,15 @@ export function StaffFormsViewer({
     setSubmitting(true);
     setErrorMsg("");
 
+    // The print tab must be opened during the user's click. Opening it only
+    // after the API request is completed makes Safari and Chrome block it.
+    const shouldPrintOrderLabel = isOrderLabelForm(selectedForm);
+    const orderLabelPrintWindow = shouldPrintOrderLabel ? window.open("", "_blank") : null;
+    if (orderLabelPrintWindow) {
+      orderLabelPrintWindow.document.title = "Preparazione etichetta ordine";
+      orderLabelPrintWindow.document.body.textContent = "Preparazione dell'etichetta in corso…";
+    }
+
     const formData = new FormData();
     formData.append("formId", selectedForm.id);
 
@@ -1018,20 +1327,33 @@ export function StaffFormsViewer({
       if (result.response) {
         setResponses((prev) => [result.response, ...prev]);
         if (isOrderLabelForm(result.response.form ?? selectedForm)) {
-          void import("@/lib/order-label-pdf-client")
-            .then(({ printOrderLabelPdf }) => printOrderLabelPdf(result.response))
-            .catch((labelError) => {
-              console.error("Failed to generate order label:", labelError);
-            });
+          const { printOrderLabelPdf } = await import("@/lib/order-label-pdf-client");
+          await printOrderLabelPdf(result.response, orderLabelPrintWindow);
+        } else {
+          orderLabelPrintWindow?.close();
         }
+      } else {
+        orderLabelPrintWindow?.close();
       }
 
+      const isInvoiceRequest = selectedForm.name.toLowerCase().includes("fattura");
+      if (isInvoiceRequest && result.sibillDraftSync?.success) {
+        setSuccessTitle("Bozza creata su Sibill");
+        setSuccessDetail("La richiesta è stata salvata come bozza. Non è stata inviata allo SdI.");
+      } else if (isInvoiceRequest) {
+        setSuccessTitle("Richiesta salvata");
+        setSuccessDetail("La bozza Sibill è in attesa. L’ufficio può riprovare dalla pagina Fatture senza ricompilare i dati.");
+      } else {
+        setSuccessTitle("Inviato con successo");
+        setSuccessDetail("Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.");
+      }
       setSuccess(true);
       setTimeout(() => {
         setSelectedForm(null);
         setSuccess(false);
-      }, 2000);
+      }, isInvoiceRequest ? 3500 : 2000);
     } catch (err) {
+      orderLabelPrintWindow?.close();
       console.error("Submission failed:", err);
       setErrorMsg(err instanceof Error ? err.message : "Si è verificato un errore, riprova.");
     } finally {
@@ -1040,7 +1362,7 @@ export function StaffFormsViewer({
   };
 
   return (
-    <div className="space-y-6 dark staff-forms-page">
+    <div className="min-h-dvh space-y-6 bg-[#050506] px-4 pb-8 pt-20 dark staff-forms-page sm:px-6 xl:px-8 xl:pb-10 xl:pt-24">
       <style dangerouslySetInnerHTML={{__html: `
         body, main, #__next, .staff-forms-page {
           background-color: #050506 !important;
@@ -1049,47 +1371,50 @@ export function StaffFormsViewer({
 
       {/* Tablet cash-register shortcuts */}
       <div className="w-full">
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#E8C98B]">
-              <div className="size-1.5 rounded-full bg-yellow-400 animate-pulse" />
-              Terminale operativo POS
-            </div>
-            <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">Cassa & Moduli</h1>
-            <p className="mt-2 text-xs font-semibold text-white/45">Interfaccia touch-friendly per la gestione rapida del salone.</p>
-          </div>
-        </div>
-
         {/* Unified POS Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-          {/* Card: Chiusura Cassa */}
           {cashClosingForm && (
             <button
               type="button"
-              onClick={() => handleOpenForm(cashClosingForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#A1B5FD]/30"
-              style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.15)" }}
+              onClick={() => void openDailyClosing()}
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#A8B8FF]/35 bg-gradient-to-br from-[#A8B8FF] to-[#D8DFFF] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.2)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <Calculator className="size-6 text-white" />
-              </div>
+              <span className="grid size-24 place-items-center rounded-[30px] bg-[#172554]/15 shadow-inner">
+                <Calculator className="size-14 text-[#172554]" />
+              </span>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#3b4b8c] opacity-80">CASSA</p>
-                <h2 className="mt-1 text-xl font-black text-[#111827] leading-tight">Chiusura Cassa</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#172554]/65">CONTANTI</p>
+                <h2 className="mt-1 text-xl font-black leading-tight text-[#172554]">Chiusura giornaliera</h2>
               </div>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setShowPosTerminal(true)}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#70E1CE]/35 bg-gradient-to-br from-[#70E1CE] to-[#BDF5EA] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(112,225,206,0.2)" }}
+          >
+            <span className="grid size-24 place-items-center rounded-[30px] bg-[#14532d]/15 shadow-inner">
+              <DynamicIcon name="CashRegister" className="size-14 text-[#14532d]" />
+            </span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#14532d]/65">PAGAMENTI</p>
+              <h2 className="mt-1 text-xl font-black leading-tight text-[#10251c]">PAGAMENTI IN CONTANTI</h2>
+            </div>
+          </button>
 
           {/* Card: Nuovo Ordine */}
           {orderForm && (
             <button
               type="button"
               onClick={() => handleOpenForm(orderForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#8DE0BD]/30"
-              style={{ boxShadow: "0 10px 30px rgba(141,224,189,0.15)" }}
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#8FE3B0]/35 bg-gradient-to-br from-[#8FE3B0] to-[#D2F6DE] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              style={{ boxShadow: "0 10px 30px rgba(143,227,176,0.16)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <ShoppingCart className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <ShoppingCart className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#204a37] opacity-80">ORDINI</p>
@@ -1107,11 +1432,11 @@ export function StaffFormsViewer({
               setPickupQuery("");
               setShowPickupModal(true);
             }}
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#C7F9CC] to-[#F0FFF4] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#C7F9CC]/40"
-            style={{ boxShadow: "0 10px 30px rgba(199,249,204,0.15)" }}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#CBEA7B]/40 bg-gradient-to-br from-[#CBEA7B] to-[#EFF8C9] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(203,234,123,0.16)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-              <PackageCheck className="size-6 text-white" />
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <PackageCheck className="size-14 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534] opacity-80">ORDINI</p>
@@ -1120,32 +1445,31 @@ export function StaffFormsViewer({
           </button>
 
           {/* Card: Pagamento Link */}
-          <a
-            href="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDCB82] to-[#FFE8B9] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDCB82]/30"
+          <button
+            type="button"
+            onClick={() => setShowPaymentLink(true)}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#FFC56E]/35 bg-gradient-to-br from-[#FFC56E] to-[#FFE3AD] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
             style={{ boxShadow: "0 10px 30px rgba(253,203,130,0.15)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-              <CreditCard className="size-6 text-white" />
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <CreditCard className="size-14 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6d4615] opacity-80">FORNITORI</p>
               <h2 className="mt-1 text-xl font-black text-[#211407] leading-tight">Pagamento Link</h2>
             </div>
-          </a>
+          </button>
 
           {/* Card: Richiesta Fattura Italiana */}
           {italianInvoiceForm && (
             <button
               type="button"
               onClick={() => handleOpenForm(italianInvoiceForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#7DD3FC] to-[#E0F2FE] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#7DD3FC]/30"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#79CFFF]/35 bg-gradient-to-br from-[#79CFFF] to-[#CAEFFF] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(125,211,252,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <ReceiptText className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <ReceiptText className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#0369A1] opacity-80">FATTURAZIONE</p>
@@ -1159,11 +1483,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(clientControlForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#E9D5FF] to-[#F3E8FF] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#E9D5FF]/30"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#CDB4FF]/35 bg-gradient-to-br from-[#CDB4FF] to-[#E9DDFF] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(233,213,255,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <ClipboardCheck className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <ClipboardCheck className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#581C87] opacity-80">QUALITÀ</p>
@@ -1177,11 +1501,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(candidaturaForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#F7A1C4] to-[#ffd5e7] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#F7A1C4]/30"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#F49AC2]/35 bg-gradient-to-br from-[#F49AC2] to-[#FFD0E4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(247,161,196,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <UserPlus className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <UserPlus className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#76274e] opacity-80">GENERALE</p>
@@ -1195,11 +1519,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(refundForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDA4AF] to-[#FFE4E6] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDA4AF]/30"
-              style={{ boxShadow: "0 10px 30px rgba(253,164,175,0.15)" }}
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#FF9E86]/35 bg-gradient-to-br from-[#FF9E86] to-[#FFD0C4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              style={{ boxShadow: "0 10px 30px rgba(255,158,134,0.16)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <RotateCcw className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <RotateCcw className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9F1239] opacity-80">AMMINISTRAZIONE</p>
@@ -1211,11 +1535,11 @@ export function StaffFormsViewer({
           {/* Card: Stato Ordini Link */}
           <Link
             href="/orders"
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FCA5A5] to-[#FEE2E2] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FCA5A5]/30"
-            style={{ boxShadow: "0 10px 30px rgba(252,165,165,0.15)" }}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#9BB7D4]/35 bg-gradient-to-br from-[#9BB7D4] to-[#D6E4F0] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(155,183,212,0.16)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-              <ShoppingBag className="size-6 text-white" />
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <ShoppingBag className="size-14 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7F1D1D] opacity-80">ORDINI</p>
@@ -1223,12 +1547,28 @@ export function StaffFormsViewer({
             </div>
           </Link>
 
+          {/* Card: Shopify Orders */}
+          <Link
+            href="/shopify-orders"
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#7ED6A5]/40 bg-gradient-to-br from-[#7ED6A5] to-[#D8F5E4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(126,214,165,0.17)" }}
+            aria-label="Apri gli ordini Shopify a schermo completo"
+          >
+            <div className="grid size-24 place-items-center rounded-[30px] bg-[#14532d]/18 shadow-inner">
+              <Store className="size-14 text-[#14532d]" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534]/70">SHOPIFY</p>
+              <h2 className="mt-1 text-xl font-black leading-tight text-[#14532d]">Ordini Shopify</h2>
+            </div>
+          </Link>
+
           {/* Render any other dynamic forms from database */}
           {regularForms.map((form, idx) => {
             const colors = [
-              { bg: "from-[#F3F4F6] to-[#E5E7EB]", text: "text-[#374151]", iconColor: "text-[#4B5563]", accent: "GENERALE" },
-              { bg: "from-[#F0FDF4] to-[#DCFCE7]", text: "text-[#166534]", iconColor: "text-[#15803D]", accent: "INFO" },
-              { bg: "from-[#FFF5F5] to-[#FFE3E3]", text: "text-[#991B1B]", iconColor: "text-[#B91C1C]", accent: "DIVERSO" },
+              { from: "#F4D58D", to: "#FFF0C2", text: "#4F3511", accent: "GENERALE" },
+              { from: "#9ADBC5", to: "#D7F3E9", text: "#14533E", accent: "INFO" },
+              { from: "#B8A7E8", to: "#E5DDF8", text: "#40316C", accent: "DIVERSO" },
             ];
             const color = colors[idx % colors.length];
             return (
@@ -1236,14 +1576,14 @@ export function StaffFormsViewer({
                 key={form.id}
                 type="button"
                 onClick={() => handleOpenForm(form)}
-                className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-black/5"
-                style={{ backgroundImage: `linear-gradient(to bottom right, ${color.bg.split(" ")[1]}, ${color.bg.split(" ")[3]})`, color: color.text }}
+                className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-black/5 p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+                style={{ backgroundImage: `linear-gradient(to bottom right, ${color.from}, ${color.to})`, color: color.text }}
               >
-                <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                  <ClipboardList className="size-6 text-white" />
+                <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                  <ClipboardList className="size-14 text-white" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: color.iconColor }}>{form.category.toUpperCase() || color.accent}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{form.category.toUpperCase() || color.accent}</p>
                   <h2 className="mt-1 text-xl font-black leading-tight truncate">{form.name}</h2>
                 </div>
               </button>
@@ -1252,15 +1592,246 @@ export function StaffFormsViewer({
         </div>
       </div>
 
+      {showPosTerminal && (
+        <GlobalFullscreenLayer className="bg-[#050506]">
+          <section className="flex h-full w-full flex-col overflow-hidden bg-[#050506]">
+            <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-[#0b0b0d] px-4 text-white sm:px-6">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-2xl bg-[#70E1CE]/15 text-[#70E1CE]">
+                  <DynamicIcon name="CashRegister" className="size-7" />
+                </span>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#70E1CE]">Pagamenti</p>
+                  <h2 className="text-lg font-black leading-tight">Pagamenti in contanti</h2>
+                </div>
+                <span className="inline-flex rounded-full border border-[#70E1CE]/25 bg-[#70E1CE]/10 px-2.5 py-1.5 text-[10px] font-black tracking-wide text-[#9af0df] sm:px-3 sm:text-xs">
+                  <span className="sm:hidden">PIN: 1234</span>
+                  <span className="hidden sm:inline">PIN di accesso: 1234</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPosTerminal(false)}
+                className="grid size-14 place-items-center rounded-2xl border border-white/20 bg-white/10 text-white shadow-sm transition hover:scale-105 hover:bg-white/15"
+                aria-label="Chiudi Pagamenti in contanti"
+              >
+                <X className="size-8" strokeWidth={2.5} />
+              </button>
+            </header>
+            <iframe
+              src="https://cashmatic-payment-production.up.railway.app/cassa-live"
+              title="Pagamenti in contanti"
+              loading="eager"
+              allow="clipboard-read; clipboard-write"
+              className="min-h-0 flex-1 border-0 bg-white"
+            />
+          </section>
+        </GlobalFullscreenLayer>
+      )}
+
+      {showPaymentLink && (
+        <GlobalFullscreenLayer className="bg-[#f6f9fc]">
+          <section className="flex h-full w-full flex-col overflow-hidden bg-[#f6f9fc]">
+            <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d8dee9] bg-white px-4 text-[#1f2937] shadow-sm sm:px-6">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-2xl bg-[#635bff]/10 text-[#635bff]">
+                  <CreditCard className="size-7" />
+                </span>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#635bff]">Pagamento sicuro</p>
+                  <h2 className="text-lg font-black leading-tight">Pagamento Link</h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentLink(false)}
+                className="grid size-11 place-items-center rounded-2xl border border-black/10 bg-[#f6f9fc] text-[#4b5563] transition hover:bg-[#eef1f6] hover:text-black"
+                aria-label="Chiudi Pagamento Link"
+              >
+                <X className="size-6" />
+              </button>
+            </header>
+            <iframe
+              src="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
+              title="Pagamento Link Stripe"
+              loading="eager"
+              allow="payment"
+              className="min-h-0 flex-1 border-0 bg-white"
+            />
+          </section>
+        </GlobalFullscreenLayer>
+      )}
+
+      {dailyCloseOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md sm:p-6">
+          <section className="max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-[32px] border border-white/10 bg-[#101014] text-white shadow-[0_36px_140px_rgba(0,0,0,.5)]">
+            <header className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-7">
+              <div className="flex items-start gap-3">
+                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#A1B5FD]/15 text-[#BCC9FF]"><Calculator className="size-6" /></span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BCC9FF]">Contanti</p>
+                  <h2 className="mt-1 text-2xl font-black">Chiusura giornaliera</h2>
+                  <p className="mt-1 text-sm font-semibold text-white/45">Salva i Controlli Cliente aperti, li confronta con Shopify e registra i contanti del giorno.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/55 transition hover:bg-white/10 hover:text-white" aria-label="Chiudi"><X className="size-5" /></button>
+            </header>
+
+            <div className="space-y-5 p-5 sm:p-7">
+              {canClosePastDays ? (
+                <div className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-[#BCC9FF]/20 bg-[#A1B5FD]/10 p-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Data della chiusura</p>
+                    <p className="mt-1 text-xs font-semibold text-white/50">Come amministratore puoi registrare anche una giornata precedente.</p>
+                  </div>
+                  <input
+                    type="date"
+                    value={dailyCloseDate}
+                    max={new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date())}
+                    disabled={dailyCloseLoading || dailyCloseSubmitting}
+                    onChange={(event) => {
+                      const date = event.target.value;
+                      if (!date) return;
+                      setDailyCloseDate(date);
+                      void loadDailyClosing(date);
+                    }}
+                    className="min-h-11 rounded-xl border border-white/15 bg-[#17171d] px-3 text-sm font-black text-white outline-none transition focus:border-[#BCC9FF] disabled:opacity-50"
+                  />
+                </div>
+              ) : null}
+              {dailyCloseLoading ? (
+                <div className="grid min-h-64 place-items-center"><div className="text-center"><Loader2 className="mx-auto size-8 animate-spin text-[#BCC9FF]" /><p className="mt-4 text-sm font-bold text-white/50">Lettura Controlli Cliente e Shopify…</p></div></div>
+              ) : dailyCloseSummary ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Sede</p><p className="mt-1 text-sm font-black">{dailyCloseSummary.locationName}</p></div>
+                    <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">{canClosePastDays ? "Giorno selezionato" : "Giorno corrente"}</p><p className="mt-1 text-sm font-black">{new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeZone: "Europe/Rome" }).format(new Date(`${dailyCloseSummary.date}T12:00:00Z`))}</p></div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-[24px] border border-emerald-300/20 bg-emerald-300/10 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Controlli Cliente collegati</p>
+                      <p className="mt-3 text-3xl font-black">{dailyCloseSummary.completedControlCount}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{formatEuro(dailyCloseSummary.controlShopifyCash)} con scheda trovata</p>
+                    </div>
+                    <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Incassi cash lordi</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyGrossCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Prima di sottrarre eventuali rimborsi</p>
+                    </div>
+                    <div className={cn("rounded-[24px] border p-5", dailyCloseSummary.shopifyCashRefunds > 0 ? "border-red-300/30 bg-red-300/10" : "border-white/10 bg-white/[0.04]")}>
+                      <p className={cn("text-[10px] font-black uppercase tracking-[0.16em]", dailyCloseSummary.shopifyCashRefunds > 0 ? "text-red-200" : "text-white/45")}>Rimborsi cash</p>
+                      <p className="mt-3 text-3xl font-black">-{formatEuro(dailyCloseSummary.shopifyCashRefunds)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.cashRefundCount} {dailyCloseSummary.cashRefundCount === 1 ? "rimborso rilevato" : "rimborsi rilevati"}</p>
+                    </div>
+                    <div className="rounded-[24px] border border-[#A1B5FD]/35 bg-[#A1B5FD]/15 p-5 ring-1 ring-[#A1B5FD]/10">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#DCE4FF]">Cash netto da chiudere</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/55">Incassi lordi meno rimborsi cash</p>
+                    </div>
+                  </div>
+
+                  {dailyCloseSummary.cashRefundRows?.length ? (
+                    <div className="rounded-2xl border border-red-300/35 bg-red-300/10 p-4" role="alert">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-200">Attenzione · rimborsi cash rilevati</p>
+                          <p className="mt-1 text-xs font-semibold leading-5 text-red-100/70">Il netto da chiudere è già stato ridotto. Controlla questi ordini prima di confermare.</p>
+                        </div>
+                        <span className="rounded-full bg-red-200 px-3 py-1.5 text-[10px] font-black uppercase text-red-950">-{formatEuro(dailyCloseSummary.shopifyCashRefunds)}</span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {dailyCloseSummary.cashRefundRows.map((refund) => (
+                          <div key={refund.orderId + refund.processedAt} className="rounded-xl border border-red-200/20 bg-black/15 px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-black text-white">{refund.clientName}</p>
+                                <p className="mt-1 text-[10px] font-semibold text-white/50">Ordine {refund.orderName.startsWith("#") ? refund.orderName : `#${refund.orderName}`} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(refund.processedAt))}</p>
+                              </div>
+                              <span className="shrink-0 text-sm font-black text-red-200">-{formatEuro(refund.amount)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {dailyCloseSummary.completedControlRows?.length ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Controlli Cliente trovati in Shopify</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {dailyCloseSummary.completedControlRows.slice(0, 8).map((row) => (
+                          <div key={row.responseId} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                            <p className="truncate text-xs font-black text-white">{row.clientName}</p>
+                            <p className="mt-1 truncate text-[10px] font-semibold text-white/40">{row.order ? `Ordine ${row.order.startsWith("#") ? row.order : `#${row.order}`}` : row.result}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {dailyCloseSummary.completedControlRows.length > 8 ? <p className="mt-3 text-[10px] font-bold text-white/35">Altri {dailyCloseSummary.completedControlRows.length - 8} Controlli Cliente collegati.</p> : null}
+                    </div>
+                  ) : null}
+
+                  {dailyCloseSummary.missingControlRows?.length ? (
+                    <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">Controlli Cliente mancanti</p>
+                          <p className="mt-1 text-xs font-semibold text-amber-100/60">Questi ordini Shopify non hanno alcun Controllo Cliente collegato. Le note incomplete non vengono conteggiate come scheda mancante.</p>
+                        </div>
+                        <span className="rounded-full bg-amber-200 px-3 py-1.5 text-[10px] font-black uppercase text-amber-950">{dailyCloseSummary.missingControlCount} · {formatEuro(dailyCloseSummary.missingControlCash)}</span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {dailyCloseSummary.missingControlRows.map((row) => (
+                          <div key={`${row.orderId}-${row.controlResponseId || "missing"}`} className="rounded-xl border border-amber-200/20 bg-black/15 px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-black text-white">{row.clientName === "Cliente Shopify" ? "Cliente da identificare" : row.clientName}</p>
+                                <p className="mt-1 truncate text-[10px] font-semibold text-white/45">Ordine {row.order.startsWith("#") ? row.order : `#${row.order}`} · {formatEuro(row.amount)}</p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-red-200 px-2 py-1 text-[9px] font-black uppercase text-red-950">Non inserito</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>Tutti gli ordini Contanti Shopify hanno un Controllo Cliente collegato.</p></div>
+                  )}
+
+                  <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Confronto importi delle schede collegate</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p><p className="mt-1 text-[10px] font-semibold text-white/40">Confronta il totale dichiarato con il totale dell’ordine. Nella chiusura entrano soltanto i Contanti Shopify.</p></div>
+                    <span className={cn("rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider", Math.abs(dailyCloseSummary.difference) < 0.01 ? "bg-emerald-300 text-emerald-950" : "bg-amber-200 text-amber-950")}>{Math.abs(dailyCloseSummary.difference) < 0.01 ? "Coincide" : "Da verificare"}</span>
+                  </div>
+
+                  {dailyCloseSummary.before19 && !dailyCloseSummary.alreadyClosed ? (
+                    <div className="flex gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm font-semibold leading-5 text-amber-100"><Clock className="mt-0.5 size-5 shrink-0" /><p>Sono meno delle 19:00. Prima di registrare la chiusura verrà chiesta una conferma della chiusura anticipata.</p></div>
+                  ) : null}
+                  {dailyCloseSummary.alreadyClosed ? (
+                    <div className="flex gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>La chiusura del giorno selezionato è già stata effettuata{dailyCloseSummary.existing?.signedBy ? ` da ${dailyCloseSummary.existing.signedBy}` : ""}. Non è possibile crearne una seconda.</p></div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {dailyCloseMessage ? <div className={cn("rounded-2xl border p-4 text-sm font-bold", dailyCloseMessage.type === "success" ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100" : "border-red-300/25 bg-red-300/10 text-red-100")}>{dailyCloseMessage.text}</div> : null}
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-white/[0.025] px-5 py-4 sm:px-7">
+              <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="min-h-12 rounded-2xl border border-white/10 px-5 text-sm font-black text-white/65 transition hover:bg-white/5">Chiudi</button>
+              <button type="button" onClick={() => void completeDailyClosing()} disabled={dailyCloseLoading || dailyCloseSubmitting || !dailyCloseSummary?.available || dailyCloseSummary?.alreadyClosed} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#A1B5FD] px-6 text-sm font-black text-[#172554] transition hover:bg-[#BCC9FF] disabled:cursor-not-allowed disabled:opacity-40">{dailyCloseSubmitting ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}{dailyCloseSubmitting ? "Salvo e allineo…" : "Salva controlli e chiudi"}</button>
+            </footer>
+          </section>
+        </div>
+      )}
+
       {/* PICKUP MODAL */}
       {showPickupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5">
+        <GlobalFullscreenLayer className="bg-[#f6f4f5]">
           <form
             onSubmit={handlePickupSubmit}
-            className="max-h-[92dvh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0b0b0c] text-white shadow-[0_35px_120px_rgba(0,0,0,0.35)]"
+            className="pickup-workspace-light flex h-full w-full flex-col overflow-hidden bg-[#f6f4f5] text-slate-950"
           >
-            <div className="border-b border-white/10 bg-white/[0.03] px-5 py-5 sm:px-7">
-              <div className="flex items-start justify-between gap-4">
+            <div className="flex-none border-b border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
+              <div className="mx-auto flex w-full max-w-[1900px] items-start justify-between gap-4">
                 <div className="flex gap-3">
                   <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
                     <PackageCheck className="size-6" />
@@ -1275,46 +1846,68 @@ export function StaffFormsViewer({
                   type="button"
                   onClick={() => !pickupSubmitting && setShowPickupModal(false)}
                   className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Chiudi consegna al cliente"
                 >
                   <X className="size-5" />
                 </button>
               </div>
             </div>
 
-            <div className="max-h-[calc(92dvh-170px)] space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
-              {pickupMessage && (
-                <div
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-sm font-bold",
-                    pickupMessage.type === "success"
-                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-                      : "border-red-400/25 bg-red-400/10 text-red-200"
-                  )}
-                >
-                  {pickupMessage.text}
-                </div>
-              )}
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2">
+            <div className="mx-auto min-h-0 w-full max-w-[1900px] flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 xl:overflow-hidden">
+              <div className="grid min-h-full gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(420px,0.78fr)_minmax(0,1.42fr)]">
+                <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pr-2">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                <div className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Cerca ordine</span>
-                  <input
-                    value={pickupQuery}
-                    onChange={(event) => setPickupQuery(event.target.value)}
-                    placeholder="Numero ordine, nome o telefono"
-                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
-                  />
-                </label>
+                  <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                    <span className="relative block">
+                      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-emerald-200/55" />
+                      <input
+                        value={pickupQuery}
+                        onChange={(event) => setPickupQuery(event.target.value)}
+                        placeholder="Numero ordine, nome o telefono"
+                        aria-label="Cerca ordine"
+                        className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-12 pr-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => pickupScannerOpen ? void stopPickupScanner() : void startPickupScanner()}
+                      className="pickup-qr-button inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
+                    >
+                      <ScanLine className="size-5" />
+                      <span className="hidden 2xl:inline">Leggi QR</span>
+                    </button>
+                  </span>
+                </div>
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Chi ritira</span>
-                  <input
-                    value={pickupName}
-                    onChange={(event) => setPickupName(event.target.value)}
-                    placeholder="Nome di chi ritira"
-                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
-                  />
+                  <span className="relative block">
+                    <User className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-emerald-200/55" />
+                    <input
+                      value={pickupName}
+                      onChange={(event) => setPickupName(event.target.value)}
+                      placeholder="Nome di chi ritira"
+                      className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-12 pr-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                    />
+                  </span>
                 </label>
               </div>
+
+              {pickupScannerOpen ? (
+                <div className="rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-950">Inquadra il QR dell’ordine</p>
+                      <p className="mt-0.5 text-xs text-slate-500">La ricerca partirà automaticamente.</p>
+                    </div>
+                    <button type="button" onClick={() => void stopPickupScanner()} className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500" aria-label="Chiudi lettore QR"><X className="size-4" /></button>
+                  </div>
+                  <div id="pickup-qr-reader" className="min-h-56 overflow-hidden rounded-2xl bg-slate-950" />
+                </div>
+              ) : pickupScannerMessage ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{pickupScannerMessage}</div>
+              ) : null}
 
               {pickupStatusNotice?.found && pickupStatusNotice.ready === false ? (
                 <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100">
@@ -1361,7 +1954,7 @@ export function StaffFormsViewer({
                   </button>
                 </div>
 
-                <div className="grid max-h-72 gap-3 overflow-y-auto pr-1">
+                <div className="grid max-h-[26rem] gap-3 overflow-y-auto overscroll-contain pr-1">
                   {pickupLoadingOrders ? (
                     <div className="flex min-h-24 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 text-sm font-bold text-white/50">
                       <Loader2 className="size-4 animate-spin" />
@@ -1392,11 +1985,16 @@ export function StaffFormsViewer({
                           )}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-300/10 text-emerald-200">
+                                <FileText className="size-4.5" />
+                              </span>
+                              <div className="min-w-0">
                               <p className="truncate text-base font-black text-white">{order.clientName}</p>
                               <p className="mt-0.5 text-xs font-bold text-white/45">
                                 {order.orderNumber} {order.phone ? `· ${order.phone}` : ""} {order.salon ? `· ${order.salon}` : ""}
                               </p>
+                              </div>
                             </div>
                             <span
                               className={cn(
@@ -1408,13 +2006,10 @@ export function StaffFormsViewer({
                             </span>
                           </div>
                           <div className="mt-3 grid gap-2 text-xs font-bold text-white/55 sm:grid-cols-3">
-                            <span className="rounded-xl bg-black/25 px-3 py-2">Pagato: {formatEuro(order.payment?.paid ?? 0)}</span>
+                            <span className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-emerald-100">Ha pagato: {formatEuro(order.payment?.paid ?? 0)}</span>
                             <span className="rounded-xl bg-black/25 px-3 py-2">Totale: {formatEuro(order.payment?.total)}</span>
                             <span className="rounded-xl bg-black/25 px-3 py-2">Creato: {formatPickupDate(order.createdAt) || "-"}</span>
                           </div>
-                          {selected && order.summary ? (
-                            <p className="mt-3 rounded-xl bg-black/25 px-3 py-2 text-xs font-semibold leading-5 text-white/50">{order.summary}</p>
-                          ) : null}
                         </button>
                       );
                     })
@@ -1422,6 +2017,57 @@ export function StaffFormsViewer({
                 </div>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setPickupPaidConfirmed((current) => !current)}
+                className={cn(
+                  "flex min-h-16 w-full items-center justify-between rounded-2xl border px-4 text-left transition active:scale-[0.99]",
+                  pickupPaidConfirmed
+                    ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
+                    : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
+                )}
+              >
+                <span>
+                  <span className="block text-sm font-black">Ha saldato tutto?</span>
+                  <span className="block text-xs font-semibold text-white/40">Conferma obbligatoria prima di completare.</span>
+                </span>
+                <span
+                  className={cn(
+                    "grid size-8 place-items-center rounded-full border",
+                    pickupPaidConfirmed ? "border-emerald-300 bg-emerald-300 text-black" : "border-white/20"
+                  )}
+                >
+                  {pickupPaidConfirmed && <Check className="size-4" />}
+                </span>
+              </button>
+
+              {pickupSelectedOrder?.attachments?.some((attachment) => attachment.previewable) ? (
+                <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Anteprima foto ordine</p>
+                  {pickupSelectedOrder.attachments
+                    .filter((attachment) => attachment.previewable)
+                    .slice(0, 1)
+                    .map((attachment, index) => (
+                      <a
+                        key={`${attachment.url}-preview-${index}`}
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group block overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                      >
+                        <img src={attachment.previewUrl || attachment.url} alt={attachment.name} className="h-48 w-full object-contain transition group-hover:scale-[1.01]" />
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                          <p className="truncate text-xs font-black text-white/70">{attachment.name}</p>
+                          <ArrowUpRight className="size-4 shrink-0 text-white/35" />
+                        </div>
+                      </a>
+                    ))}
+                </div>
+              ) : null}
+
+                </div>
+
+                <div ref={pickupDetailScrollRef} className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pl-1 xl:pr-2">
               {pickupSelectedOrder ? (
                 <div className="space-y-3 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1445,22 +2091,37 @@ export function StaffFormsViewer({
                       {pickupSelectedOrder.statusLabel || pickupSelectedOrder.status || "Stato non indicato"}
                     </span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Ordine</p>
-                      <p className="mt-1 font-black">{pickupSelectedOrder.orderNumber}</p>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="flex gap-3 rounded-2xl bg-black/20 p-4">
+                      <FileText className="mt-0.5 size-5 shrink-0 text-emerald-100/80" />
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Ordine</p>
+                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.orderNumber}</p></div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Pagato</p>
-                      <p className="mt-1 font-black">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p>
+                    <div className="flex gap-3 rounded-2xl border border-emerald-300/30 bg-emerald-300/15 p-4">
+                      <Banknote className="mt-0.5 size-5 shrink-0 text-emerald-100" />
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Ha pagato</p>
+                      <p className="mt-2 text-2xl font-black text-emerald-100">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p></div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Manca</p>
-                      <p className="mt-1 font-black">{formatEuro(pickupSelectedOrder.payment?.missing)}</p>
+                    <div className={cn(
+                      "flex gap-3 rounded-2xl border p-4",
+                      (pickupSelectedOrder.payment?.missing ?? 0) > 0
+                        ? "border-rose-300/30 bg-rose-300/15"
+                        : "border-white/10 bg-black/20"
+                    )}>
+                      <CreditCard className="mt-0.5 size-5 shrink-0 text-white/70" />
+                      <div><p className={cn(
+                        "text-[10px] font-black uppercase tracking-[0.16em]",
+                        (pickupSelectedOrder.payment?.missing ?? 0) > 0 ? "text-rose-200" : "text-white/45"
+                      )}>Da pagare</p>
+                      <p className={cn(
+                        "mt-2 text-2xl font-black",
+                        (pickupSelectedOrder.payment?.missing ?? 0) > 0 ? "text-rose-100" : "text-white"
+                      )}>{formatEuro(pickupSelectedOrder.payment?.missing)}</p></div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Salone</p>
-                      <p className="mt-1 font-black">{pickupSelectedOrder.salon || "-"}</p>
+                    <div className="flex gap-3 rounded-2xl bg-black/20 p-4">
+                      <MapPin className="mt-0.5 size-5 shrink-0 text-emerald-100/80" />
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Salone</p>
+                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.salon || "-"}</p></div>
                     </div>
                   </div>
                   {pickupSelectedOrder.statusAudit || pickupSelectedOrder.pickup ? (
@@ -1506,38 +2167,30 @@ export function StaffFormsViewer({
                   ) : null}
                   {pickupSelectedOrder.notes ? (
                     <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/70">Tutte le note ordine</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm font-bold leading-6 text-amber-50">{pickupSelectedOrder.notes}</p>
-                    </div>
-                  ) : null}
-                  {pickupSelectedOrder.attachments?.length ? (
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200/70">Foto e allegati ordine</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {pickupSelectedOrder.attachments.map((attachment, index) => (
-                          <a
-                            key={`${attachment.url}-${index}`}
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] transition hover:border-emerald-300/40 hover:bg-white/[0.09]"
-                          >
-                            {attachment.previewable ? (
-                              <img src={attachment.url} alt={attachment.name} className="h-36 w-full object-cover" />
-                            ) : (
-                              <div className="grid h-24 place-items-center bg-black/20">
-                                <FileText className="size-8 text-white/35" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/80">Tutte le note ordine</p>
+                      <div className="mt-3 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                        <div className="space-y-3">
+                          {pickupStructuredNotes(pickupSelectedOrder).highlights.map((note, index) => (
+                            <div key={`${note.label}-${index}`} className="flex gap-3">
+                              <ClipboardList className="mt-0.5 size-4 shrink-0 text-amber-100/75" />
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/50">{note.label}</p>
+                                <p className="mt-1 text-sm font-black leading-5 text-amber-50">{note.value}</p>
                               </div>
-                            )}
-                            <div className="flex items-center justify-between gap-3 p-3">
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-black uppercase tracking-[0.14em] text-white/35">{attachment.label}</p>
-                                <p className="mt-1 truncate text-sm font-black text-white">{attachment.name}</p>
-                              </div>
-                              <ArrowUpRight className="size-4 shrink-0 text-white/35 transition group-hover:text-emerald-200" />
                             </div>
-                          </a>
-                        ))}
+                          ))}
+                        </div>
+                        {pickupStructuredNotes(pickupSelectedOrder).narrative.length > 0 ? (
+                          <div className="border-t border-amber-100/20 pt-3 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                            <div className="flex gap-3">
+                              <FileText className="mt-0.5 size-4 shrink-0 text-amber-100/75" />
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/50">Note della lavorazione</p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-amber-50">{pickupStructuredNotes(pickupSelectedOrder).narrative.join("\n\n")}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -1553,107 +2206,89 @@ export function StaffFormsViewer({
                     </div>
                   </div>
                 </div>
-              ) : null}
-
-              <button
-                type="button"
-                onClick={() => setPickupPaidConfirmed((current) => !current)}
-                className={cn(
-                  "flex min-h-16 w-full items-center justify-between rounded-2xl border px-4 text-left transition active:scale-[0.99]",
-                  pickupPaidConfirmed
-                    ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
-                    : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
-                )}
-              >
-                <span>
-                  <span className="block text-sm font-black">Ha saldato tutto?</span>
-                  <span className="block text-xs font-semibold text-white/40">Conferma obbligatoria prima di completare.</span>
-                </span>
-                <span
-                  className={cn(
-                    "grid size-8 place-items-center rounded-full border",
-                    pickupPaidConfirmed ? "border-emerald-300 bg-emerald-300 text-black" : "border-white/20"
-                  )}
-                >
-                  {pickupPaidConfirmed && <Check className="size-4" />}
-                </span>
-              </button>
-
-              <label className="group relative flex min-h-36 w-full items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.04] transition hover:border-emerald-300/50 hover:bg-white/[0.07]">
-                <input
-                  type="file"
-                  accept="image/*,.heic,.heif,application/pdf"
-                  onChange={(event) => setPickupProof(event.target.files?.[0] ?? null)}
-                  className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                />
-                <div className="pointer-events-none flex flex-col items-center p-5 text-center">
-                  <Upload className="size-9 text-white/35 transition group-hover:text-emerald-300" />
-                  <span className="mt-3 text-sm font-black text-white">
-                    {pickupProof ? pickupProof.name : "Carica foto scontrino o ordine Shopify"}
-                  </span>
-                  <span className="mt-1 text-[11px] font-semibold text-white/35">Facoltativo se il saldo e gia stato verificato. Foto o PDF, massimo 12 MB.</span>
+              ) : (
+                <div className="grid min-h-56 place-items-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] p-8 text-center">
+                  <div>
+                    <PackageCheck className="mx-auto size-10 text-white/20" />
+                    <p className="mt-3 text-base font-black text-white/65">Seleziona un ordine pronto</p>
+                    <p className="mt-1 text-sm font-semibold text-white/35">Tutti i dettagli compariranno qui a destra.</p>
+                  </div>
                 </div>
-              </label>
+              )}
+
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
-              {pickupMessage ? (
-                <div
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-sm font-black",
-                    pickupMessage.type === "success"
-                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-                      : "border-red-400/25 bg-red-400/10 text-red-200"
-                  )}
-                >
-                  {pickupMessage.text}
+            <div className="flex-none border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
+              <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-3">
+                {pickupMessage ? (
+                  <div
+                    className={cn(
+                      "rounded-2xl border px-4 py-3 text-sm font-black",
+                      pickupMessage.type === "success"
+                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                        : "border-red-400/25 bg-red-400/10 text-red-200"
+                    )}
+                  >
+                    {pickupMessage.text}
+                  </div>
+                ) : null}
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={pickupSubmitting}
+                    onClick={() => setShowPickupModal(false)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/70 transition hover:bg-white/10 disabled:opacity-50 sm:w-auto"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={pickupSubmitting || (!!pickupSelectedOrder && pickupSelectedOrder.status !== "READY")}
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-5 py-3 text-sm font-black text-black transition hover:scale-[1.02] disabled:opacity-50 sm:w-auto"
+                  >
+                    {pickupSubmitting ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />}
+                    Completa ritiro
+                  </button>
                 </div>
-              ) : null}
-              <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                disabled={pickupSubmitting}
-                onClick={() => setShowPickupModal(false)}
-                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/70 transition hover:bg-white/10 disabled:opacity-50"
-              >
-                Annulla
-              </button>
-              <button
-                type="submit"
-                disabled={pickupSubmitting || (!!pickupSelectedOrder && pickupSelectedOrder.status !== "READY")}
-                className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-emerald-300 px-5 py-3 text-sm font-black text-black transition hover:scale-[1.02] disabled:opacity-50"
-              >
-                {pickupSubmitting ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />}
-                Completa ritiro
-              </button>
               </div>
             </div>
           </form>
-        </div>
+        </GlobalFullscreenLayer>
       )}
 
       {/* FILL OUT MODAL */}
       {selectedForm && (
+        <GlobalFullscreenLayer>
         <div className={cn(
           "fixed inset-0 z-50",
           isCashClosingForm && "cash-closing-workspace",
-          !isCashClosingForm && "service-form-fill-workspace",
+          isProfessionalWizardForm && "service-form-wizard-workspace",
+          isProfessionalWizardForm && "service-form-wizard-light",
           isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
-            : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
+            : isProfessionalWizardForm
+              ? "flex items-center justify-center overflow-hidden bg-white p-0"
+              : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
         )}>
           <div className={cn(
             "flex w-full flex-col border border-slate-100 bg-white text-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.25)] animate-in fade-in duration-200",
             isCashClosingForm
               ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_15%_0%,rgba(167,71,88,0.12),transparent_32%),linear-gradient(180deg,#faf8f9,#f3eef1)]"
+              : isProfessionalWizardForm
+                ? cn(
+                    "service-form-wizard-shell h-[100dvh] min-h-[100dvh] max-w-none overflow-hidden border-0 border-slate-200 bg-white shadow-none xl:!grid xl:grid-cols-[310px_minmax(0,1fr)]"
+                  )
               : "max-h-[92vh] max-w-4xl overflow-hidden rounded-[32px] zoom-in-95"
           )}>
             <div className={cn(
               "relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7",
-              isCashClosingForm && "cash-closing-header sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl"
+              isCashClosingForm && "cash-closing-header sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl",
+              isProfessionalWizardForm && "service-form-wizard-header relative z-30 shrink-0 px-6 py-6 xl:h-[100dvh] xl:border-b-0 xl:border-r xl:px-6 xl:py-8"
             )}>
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
-              <div className="flex items-start justify-between gap-4">
+                <div className={cn("flex items-start justify-between gap-4", isProfessionalWizardForm && "xl:block")}>
                 <div className="flex min-w-0 gap-3">
                   <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-slate-100 bg-slate-50 shadow-sm">
                     <DynamicIcon name={selectedForm.icon || "ClipboardList"} className="size-6 text-[#A74758]" />
@@ -1673,14 +2308,17 @@ export function StaffFormsViewer({
                 <button
                   type="button"
                   onClick={() => !submitting && setSelectedForm(null)}
-                  className="grid size-10 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600",
+                      isProfessionalWizardForm && "xl:absolute xl:right-5 xl:top-5"
+                    )}
                 >
                   <X className="size-5" />
                 </button>
               </div>
 
               {!success && visibleFields.length > 0 && (
-                <div className={cn("mt-5 space-y-3", isCashClosingForm && "mt-3")}>
+                <div className={cn("mt-5 space-y-3", isCashClosingForm && "mt-3", isProfessionalWizardForm && "xl:mt-12")}>
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
                     <span>Progresso compilazione</span>
                     <span>{progressPercentage}%</span>
@@ -1691,7 +2329,7 @@ export function StaffFormsViewer({
                       style={{ width: `${progressPercentage}%` }}
                     />
                   </div>
-                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <div className={cn("flex gap-1.5 overflow-x-auto pb-1", isProfessionalWizardForm && "xl:max-h-[calc(100vh-280px)] xl:flex-col xl:gap-2 xl:overflow-y-auto xl:pr-1")}>
                     {visibleFields.map((field, index) => {
                       const isActive = index === currentActiveIndex;
                       const isDone = field.type === "file"
@@ -1707,15 +2345,20 @@ export function StaffFormsViewer({
                           }}
                           className={cn(
                             "grid size-8 shrink-0 place-items-center rounded-full border text-[11px] font-black transition",
+                            isProfessionalWizardForm && "service-form-wizard-step xl:flex xl:h-auto xl:w-full xl:justify-start xl:gap-3 xl:rounded-2xl xl:px-3 xl:py-3 xl:text-left",
                             isActive
                               ? "border-[#A74758] bg-[#A74758] text-white"
                               : isDone
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                                 : "border-slate-200 bg-slate-50 text-slate-400"
                           )}
+                          data-state={isActive ? "active" : isDone ? "done" : "pending"}
                           title={field.label}
                         >
-                          {isDone && !isActive ? <Check className="size-3.5" /> : index + 1}
+                          <span className={cn(isProfessionalWizardForm && "xl:grid xl:size-7 xl:shrink-0 xl:place-items-center xl:rounded-full xl:border xl:border-current/25")}>
+                            {isDone && !isActive ? <Check className="size-3.5" /> : index + 1}
+                          </span>
+                          {isProfessionalWizardForm && <span className="hidden truncate text-xs font-black xl:block">{field.label}</span>}
                         </button>
                       );
                     })}
@@ -1729,8 +2372,8 @@ export function StaffFormsViewer({
                 <div className="grid size-20 place-items-center rounded-full border border-emerald-200 bg-emerald-50">
                   <CheckCircle2 className="size-10 text-emerald-500" />
                 </div>
-                <h3 className="mt-5 text-2xl font-black text-slate-900">Inviato con successo</h3>
-                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.</p>
+                <h3 className="mt-5 text-2xl font-black text-slate-900">{successTitle}</h3>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">{successDetail}</p>
               </div>
             ) : (
               <form 
@@ -1742,6 +2385,8 @@ export function StaffFormsViewer({
                   "flex min-h-[430px] flex-1 flex-col justify-between",
                   isCashClosingForm
                     ? "w-full overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
+                    : isProfessionalWizardForm
+                      ? "service-form-wizard-body min-h-0 w-full max-w-none overflow-y-auto bg-white px-5 py-7 sm:px-8 lg:px-12 lg:py-10"
                     : "overflow-y-auto bg-white p-5 sm:p-7"
                 )}
               >
@@ -1754,8 +2399,11 @@ export function StaffFormsViewer({
                     : ""
                 )}>
                   <div className="space-y-5">
-                  {selectedForm.description && currentActiveIndex === 0 && (
-                    <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
+                  {selectedForm.description && currentActiveIndex === 0 && !isSelectedOrderForm && (
+                    <div className={cn(
+                      "rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600",
+                      isProfessionalWizardForm && "service-form-wizard-description"
+                    )}>
                       {selectedForm.description}
                     </div>
                   )}
@@ -1764,6 +2412,12 @@ export function StaffFormsViewer({
                     <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">
                       <AlertCircle className="size-4 flex-shrink-0" />
                       <span>{errorMsg}</span>
+                    </div>
+                  )}
+
+                  {isSelectedOrderForm && currentActiveIndex > 0 && shopifyLookupStatus?.success && (
+                    <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold leading-6 text-emerald-800 whitespace-pre-line shadow-sm">
+                      {shopifyLookupStatus.message}
                     </div>
                   )}
 
@@ -1778,7 +2432,8 @@ export function StaffFormsViewer({
                       >
                         <div className={cn(
                           "rounded-[28px] border border-slate-100 bg-slate-50/50 p-5 shadow-sm sm:p-6",
-                          isCashClosingForm && "cash-closing-field-card"
+                          isCashClosingForm && "cash-closing-field-card",
+                          isProfessionalWizardForm && "service-form-wizard-field-card sm:p-8"
                         )}>
                           <div className="mb-5 space-y-2">
                             <span className="inline-flex rounded-full bg-slate-200/50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -1805,11 +2460,23 @@ export function StaffFormsViewer({
                                   required={field.required}
                                   value={answers[field.id] || ""}
                                   onChange={(e) => handleTextChange(field.id, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, field.type)}
+                                  onKeyDown={(e) => {
+                                    if (field.id === "invoice_vat_number" && e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleVatLookup();
+                                      return;
+                                    }
+                                    if ((field.id === "order_shopify_order" || field.id === "invoice_shopify_order") && e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleShopifyOrderLookup();
+                                      return;
+                                    }
+                                    handleKeyDown(e, field.type);
+                                  }}
                                   placeholder="Scrivi qui..."
                                   className={cn(
                                     "h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white",
-                                    (field.id === "invoice_vat_number" || field.id === "invoice_shopify_order") && "pr-32"
+                                    (field.id === "invoice_vat_number" || field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && "pr-36"
                                   )}
                                 />
                                 {field.id === "invoice_vat_number" && (
@@ -1824,10 +2491,10 @@ export function StaffFormsViewer({
                                     ) : (
                                       <Search className="size-3.5" />
                                     )}
-                                    Cerca
+                                    Verifica azienda
                                   </button>
                                 )}
-                                {field.id === "invoice_shopify_order" && (
+                                {(field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && (
                                   <button
                                     type="button"
                                     onClick={handleShopifyOrderLookup}
@@ -1839,7 +2506,7 @@ export function StaffFormsViewer({
                                     ) : (
                                       <Download className="size-3.5" />
                                     )}
-                                    Importa
+                                    {field.id === "order_shopify_order" ? "Cerca ordine" : "Verifica ordine"}
                                   </button>
                                 )}
                               </div>
@@ -1853,7 +2520,7 @@ export function StaffFormsViewer({
                                   {vatLookupStatus.message}
                                 </div>
                               )}
-                              {field.id === "invoice_shopify_order" && shopifyLookupStatus && (
+                              {(field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && shopifyLookupStatus && (
                                 <div className={cn(
                                   "text-xs font-semibold px-4 py-3 whitespace-pre-line rounded-2xl border animate-in fade-in slide-in-from-top-1 duration-200 mt-2",
                                   shopifyLookupStatus.success 
@@ -1892,61 +2559,97 @@ export function StaffFormsViewer({
 
                           {field.type === "select" && (
                             <div className="space-y-2.5 w-full">
-                              {field.id === "invoice_client_type" && showPastCustomers ? (
-                                <div className="space-y-3.5 w-full">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <h4 className="text-sm font-black text-slate-800">Seleziona Cliente Registrato</h4>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowPastCustomers(false);
-                                        setCustomerSearchQuery("");
-                                      }}
-                                      className="text-xs font-bold text-[#A74758] hover:underline"
-                                    >
-                                      Annulla
-                                    </button>
+                              <>
+                                {field.id === "invoice_client_type" && pastCustomers.length > 0 && (
+                                  <div className="mb-5 space-y-2">
+                                    <label className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                                      Cerca cliente registrato
+                                    </label>
+                                    <div className="relative">
+                                      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#A74758]" />
+                                      <input
+                                        ref={customerSearchInputRef}
+                                        type="search"
+                                        autoFocus
+                                        value={customerSearchQuery}
+                                        onFocus={() => setShowPastCustomers(true)}
+                                        onClick={() => setShowPastCustomers(true)}
+                                        onChange={(e) => {
+                                          setCustomerSearchQuery(e.target.value);
+                                          setShowPastCustomers(true);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") e.preventDefault();
+                                          if (e.key === "Escape") {
+                                            setShowPastCustomers(false);
+                                            e.currentTarget.blur();
+                                          }
+                                        }}
+                                        placeholder="Nome, ragione sociale, Partita IVA o Codice Fiscale"
+                                        aria-expanded={showPastCustomers}
+                                        aria-controls="invoice-customer-results"
+                                        className="h-16 w-full rounded-2xl border border-[#A74758]/30 bg-white pl-12 pr-16 text-base font-bold text-slate-800 shadow-[0_10px_30px_rgba(167,71,88,0.08)] outline-none transition focus:border-[#A74758] focus:ring-4 focus:ring-[#A74758]/10"
+                                      />
+                                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-[#A74758] px-2.5 py-1 text-[10px] font-black text-white">
+                                        {pastCustomers.length}
+                                      </span>
+                                    </div>
+
+                                    {showPastCustomers && (
+                                      <div id="invoice-customer-results" className={cn(
+                                        "max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10",
+                                        isProfessionalWizardForm && "service-form-wizard-customer-list"
+                                      )}>
+                                        {(() => {
+                                          const normalize = (value: string) => value
+                                            .normalize("NFD")
+                                            .replace(/[\u0300-\u036f]/g, "")
+                                            .toLowerCase()
+                                            .replace(/[^a-z0-9]/g, "");
+                                          const query = normalize(customerSearchQuery);
+                                          const filtered = pastCustomers.filter((customer) =>
+                                            !query || normalize([
+                                              customer.name,
+                                              customer.vatNumber,
+                                              customer.fiscalCode,
+                                            ].join(" ")).includes(query)
+                                          );
+                                          if (filtered.length === 0) {
+                                            return <p className="py-6 text-center text-sm font-semibold text-slate-400">Nessun cliente registrato trovato.</p>;
+                                          }
+                                          return filtered.map((cust) => (
+                                            <button
+                                              key={`${cust.vatNumber || cust.fiscalCode || cust.name}-${cust.name}`}
+                                              type="button"
+                                              onClick={() => handleSelectCustomer(cust)}
+                                              className={cn(
+                                                "flex w-full items-center justify-between gap-4 rounded-xl border border-transparent p-3 text-left transition hover:border-[#A74758]/15 hover:bg-[#A74758]/5",
+                                                isProfessionalWizardForm && "service-form-wizard-customer-row"
+                                              )}
+                                            >
+                                              <div className="min-w-0">
+                                                <p className="truncate text-sm font-black text-slate-900">{cust.name}</p>
+                                                <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                                                  {cust.vatNumber ? `P.IVA: ${cust.vatNumber}` : `CF: ${cust.fiscalCode.toUpperCase()}`}
+                                                </p>
+                                              </div>
+                                              <span className="shrink-0 rounded-full bg-[#A74758]/10 px-2.5 py-1 text-[10px] font-black uppercase text-[#A74758]">
+                                                {cust.type.includes("Azienda") ? "Azienda" : "Privato"}
+                                              </span>
+                                            </button>
+                                          ));
+                                        })()}
+                                      </div>
+                                    )}
+
+                                    <div className="flex items-center gap-3 pt-2">
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                      <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">oppure nuovo cliente</span>
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                    </div>
                                   </div>
-                                  <input
-                                    type="text"
-                                    value={customerSearchQuery}
-                                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                                    placeholder="Cerca per nome, codice fiscale o P.IVA..."
-                                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#A74758]"
-                                  />
-                                  <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 rounded-2xl bg-white p-2">
-                                    {(() => {
-                                      const filtered = pastCustomers.filter(c => 
-                                        c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                                        c.fiscalCode.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                                        c.vatNumber.toLowerCase().includes(customerSearchQuery.toLowerCase())
-                                      );
-                                      if (filtered.length === 0) {
-                                        return <p className="text-xs text-slate-400 text-center py-4">Nessun cliente registrato corrisponde alla ricerca.</p>;
-                                      }
-                                      return filtered.map((cust) => (
-                                        <button
-                                          key={cust.name}
-                                          type="button"
-                                          onClick={() => handleSelectCustomer(cust)}
-                                          className="flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-slate-50 border border-transparent hover:border-slate-100"
-                                        >
-                                          <div>
-                                            <p className="text-sm font-black text-slate-900">{cust.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                              {cust.vatNumber ? `P.IVA: ${cust.vatNumber}` : `CF: ${cust.fiscalCode.toUpperCase()}`}
-                                            </p>
-                                          </div>
-                                          <span className="text-[10px] font-black uppercase text-[#A74758] bg-[#A74758]/10 px-2.5 py-0.5 rounded-full">
-                                            {cust.type.includes("Azienda") ? "Azienda" : "Privato"}
-                                          </span>
-                                        </button>
-                                      ));
-                                    })()}
-                                  </div>
-                                </div>
-                              ) : (
-                                <>
+                                )}
+
                                   <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
                                     {field.options?.map((opt) => {
                                       const isSelected = answers[field.id] === opt;
@@ -1957,10 +2660,12 @@ export function StaffFormsViewer({
                                           onClick={() => handleSelectChange(field.id, opt)}
                                           className={cn(
                                             "flex min-h-14 w-full items-center justify-between rounded-2xl border p-4 text-left text-sm font-bold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                                            isProfessionalWizardForm && "service-form-wizard-option",
                                             isSelected
                                               ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm shadow-[#A74758]/5"
                                               : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                                           )}
+                                          data-state={isSelected ? "selected" : "idle"}
                                         >
                                           <span>{opt}</span>
                                           <div className={cn(
@@ -1986,26 +2691,7 @@ export function StaffFormsViewer({
                                       className="mt-2 h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                                     />
                                   )}
-                                  {field.id === "invoice_client_type" && pastCustomers.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
-                                      <p className="text-xs font-bold text-slate-400">Cliente già registrato in passato?</p>
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowPastCustomers(true)}
-                                        className="flex h-14 w-full items-center justify-between rounded-2xl border border-dashed border-[#A74758]/30 bg-[#A74758]/5 px-4 text-left text-sm font-extrabold text-[#A74758] transition hover:bg-[#A74758]/10 hover:border-[#A74758]/50 active:scale-[0.99]"
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <Search className="size-4" />
-                                          Cerca tra i Clienti Registrati
-                                        </span>
-                                        <span className="rounded-full bg-[#A74758] px-2.5 py-0.5 text-[10px] text-white">
-                                          {pastCustomers.length}
-                                        </span>
-                                      </button>
-                                    </div>
-                                  )}
-                                </>
-                              )}
+                              </>
                             </div>
                           )}
 
@@ -2440,7 +3126,7 @@ export function StaffFormsViewer({
                             <>
                               <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
                                 <div className="rounded-[24px] border border-white/10 bg-white/[0.065] p-5">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Atteso da Shopify</p>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Netto atteso da Shopify</p>
                                   <p className="mt-2 text-3xl font-black tracking-tight text-white">{formatEuro(cashSummary.cash)}</p>
                                   <p className="mt-2 text-xs font-bold text-white/40">{cashSummary.orders} {cashSummary.orders === 1 ? "ordine cash" : "ordini cash"}</p>
                                 </div>
@@ -2450,6 +3136,26 @@ export function StaffFormsViewer({
                                   <p className="mt-2 text-xs font-bold text-white/40">Aggiornato mentre compili</p>
                                 </div>
                               </div>
+
+                              {cashSummary.refundRows?.length ? (
+                                <div className="mt-3 rounded-2xl border border-red-300/30 bg-red-300/10 p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-200">Rimborsi cash rilevati</p>
+                                      <p className="mt-1 text-xs font-semibold text-white/55">Lordo {formatEuro(cashSummary.grossCash)} · rimborsi -{formatEuro(cashSummary.refunds)}</p>
+                                    </div>
+                                    <span className="rounded-full bg-red-200 px-3 py-1.5 text-[10px] font-black text-red-950">{cashSummary.refundCount}</span>
+                                  </div>
+                                  <div className="mt-3 space-y-2">
+                                    {cashSummary.refundRows.map((refund) => (
+                                      <div key={refund.orderId + refund.processedAt} className="flex items-center justify-between gap-3 rounded-xl bg-black/15 px-3 py-2 text-xs">
+                                        <span className="min-w-0 truncate font-bold">{refund.orderName} · {refund.clientName}</span>
+                                        <span className="shrink-0 font-black text-red-200">-{formatEuro(refund.amount)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
 
                               {(() => {
                                 const declared = Number(answers.cash_withdrawn) || 0;
@@ -2492,7 +3198,11 @@ export function StaffFormsViewer({
                 {/* Footer buttons */}
                 <div className={cn(
                   "sticky bottom-0 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur",
-                  isCashClosingForm ? "cash-closing-footer z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8" : "-mx-5 sm:-mx-7 sm:px-7"
+                  isCashClosingForm
+                    ? "cash-closing-footer z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                    : isProfessionalWizardForm
+                      ? "service-form-wizard-footer z-20 -mx-5 gap-2 px-5 pb-5 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-8 sm:px-8"
+                      : "-mx-5 sm:-mx-7 sm:px-7"
                 )}>
                   <div>
                     <Button
@@ -2506,7 +3216,10 @@ export function StaffFormsViewer({
                           setSelectedForm(null);
                         }
                       }}
-                      className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      className={cn(
+                        "rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200",
+                        isProfessionalWizardForm && "service-form-wizard-secondary"
+                      )}
                     >
                       Indietro
                     </Button>
@@ -2518,7 +3231,10 @@ export function StaffFormsViewer({
                       variant="soft"
                       disabled={submitting}
                       onClick={() => setSelectedForm(null)}
-                      className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      className={cn(
+                        "rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200",
+                        isProfessionalWizardForm && "service-form-wizard-secondary"
+                      )}
                     >
                       Annulla
                     </Button>
@@ -2554,6 +3270,7 @@ export function StaffFormsViewer({
             )}
           </div>
         </div>
+        </GlobalFullscreenLayer>
       )}
 
       {/* HISTORY / SUBMISSIONS LIST MODAL */}

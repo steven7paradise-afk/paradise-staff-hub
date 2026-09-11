@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
@@ -10,15 +10,16 @@ import { checkPCAuthorization, appointmentsPcCookieName, appointmentsPcWorkerCoo
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
-import { ensureCashClosingForm, isCashClosingFormName } from "@/lib/cash-closing-form";
+import { ensureCashClosingForm } from "@/lib/cash-closing-form";
 import { ensureClientControlForm } from "@/lib/client-control-form";
 import { ensureItalianInvoiceForm } from "@/lib/italian-invoice-form";
 import { ensureRefundForm } from "@/lib/refund-form";
-import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import {
   normalizeServiceFormsVisibility,
   SERVICE_FORMS_VISIBILITY_KEY,
 } from "@/lib/service-form-visibility";
+import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -28,22 +29,24 @@ function isInternalFotoOrderForm(form?: { name?: string | null; category?: strin
   return name === "FOTO ORDINI" || (category === "FOTO" && name.includes("FOTO"));
 }
 
-export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string }> }) {
+export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string; remoteTarget?: string }> }) {
   const searchParams = await props.searchParams;
   const fillId = searchParams.fillId;
   const fill = searchParams.fill;
+  const remoteTarget = typeof searchParams.remoteTarget === "string" ? searchParams.remoteTarget.trim() : "";
   const session = await auth();
   let sessionUser = session?.user;
   let isPC = false;
-  let pcLocationId = "";
   let pcDisplayUser: { name: string; photo_url?: string | null } | null = null;
   const cookieStore = await cookies();
 
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
-  const pcAuth = await checkPCAuthorization(pcToken);
+  const hasAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const pcAuth = hasAdministratorSession ? null : await checkPCAuthorization(pcToken);
   if (pcAuth) {
       isPC = true;
-      pcLocationId = pcAuth.locationId;
       sessionUser = {
         id: "PC_CASSA",
         name: pcAuth.name,
@@ -58,12 +61,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         const selectedWorker = await prisma.user.findFirst({
           where: {
             active: true,
-            sede_id: pcAuth.locationId,
             OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
           },
           select: { id: true, name: true, email: true, role: true, sede_id: true, photo_url: true },
         }).catch(() => null);
-        if (selectedWorker) {
+        const canUseSelectedProfile = selectedWorker && (
+          selectedWorker.sede_id === pcAuth.locationId ||
+          isAlwaysActiveAppointmentStaff(selectedWorker.name, selectedWorker.id)
+        );
+        if (selectedWorker && canUseSelectedProfile) {
           sessionUser = {
             id: selectedWorker.id,
             name: selectedWorker.name,
@@ -74,6 +80,27 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
           pcDisplayUser = { name: selectedWorker.name, photo_url: selectedWorker.photo_url };
         }
       }
+  }
+
+  const isAdminRemoteController = Boolean(
+    !pcAuth &&
+    remoteTarget &&
+    session?.user?.id &&
+    ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  if (isAdminRemoteController) {
+    const remoteWorker = await resolveRemoteControllerWorker(session!.user.id, remoteTarget);
+    if (remoteWorker) {
+      isPC = true;
+      sessionUser = {
+        id: remoteWorker.id,
+        name: remoteWorker.name,
+        email: remoteWorker.email,
+        role: remoteWorker.role,
+        sedeId: remoteWorker.sede_id,
+      } as any;
+      pcDisplayUser = { name: remoteWorker.name, photo_url: remoteWorker.photo_url };
+    }
   }
 
   if (!sessionUser) redirect("/login");
@@ -107,12 +134,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
 
   const locationId = sessionUser.sedeId;
 
-  const headerStore = await headers();
-  const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
-  const tabletDevice = requestedDevice
-    ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore))
-    : null;
-  const isVerifiedTabletDevice = Boolean(tabletDevice);
   const isManagementRole = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
@@ -146,11 +167,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     const allowedRoles = form.allowed_roles as string[] | null;
     const allowedLocations = form.allowed_location_ids as string[] | null;
     const isCandidacy = form.name.toUpperCase().includes("CANDIDATURA");
-    const isCashClosing = isCashClosingFormName(form.name, form.category);
-
-    if (isCashClosing && !isManagementRole && !isVerifiedTabletDevice) {
-      return false;
-    }
 
     if (!isManagementRole && !isCurrentUserInShift && offShiftHiddenIds.has(form.id)) {
       return false;
@@ -247,7 +263,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         answers: true,
       },
       orderBy: { created_at: "desc" },
-      take: 400
     }),
   ]);
 
@@ -258,13 +273,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     if (!ans) continue;
     const name = String(ans.invoice_client_name || "").trim();
     if (!name) continue;
-    const key = name.toLowerCase();
+    const vatNumber = String(ans.invoice_vat_number || "").replace(/\D/g, "");
+    const fiscalCode = String(ans.invoice_fiscal_code || "").replace(/\s/g, "").toUpperCase();
+    const key = vatNumber ? `vat:${vatNumber}` : fiscalCode ? `cf:${fiscalCode}` : `name:${name.toLowerCase()}`;
     if (!pastCustomersMap.has(key)) {
       pastCustomersMap.set(key, {
         name,
         type: ans.invoice_client_type || "Privato (Codice Fiscale)",
-        fiscalCode: ans.invoice_fiscal_code || "",
-        vatNumber: ans.invoice_vat_number || "",
+        fiscalCode,
+        vatNumber,
         sdiCode: ans.invoice_sdi_code || "",
         pec: ans.invoice_pec || "",
         address: ans.invoice_address || "",
@@ -290,7 +307,16 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   });
 
   return (
-    <AppShell title="Forms" role={role} hideHeader pcMode={isPC} pcDisplayUser={pcDisplayUser}>
+    <AppShell
+      title="Forms"
+      role={role}
+      hideHeader
+      edgeToEdgeMain
+      pcMode={isPC}
+      remoteController={isAdminRemoteController}
+      pcDisplayUser={pcDisplayUser}
+      pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/buenos-aires?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
+    >
       <StaffFormsViewer 
         forms={serializedForms} 
         employees={serializedEmployees} 
@@ -298,6 +324,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         currentUserId={sessionUser.id}
         currentUserName={pcDisplayUser?.name || sessionUser.name || "Dipendente"}
         currentUserRole={role}
+        canClosePastDays={Boolean(session?.user?.role && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role))}
         autoFillFormId={fillId}
         autoFillFormName={fill}
         pastCustomers={pastCustomers}

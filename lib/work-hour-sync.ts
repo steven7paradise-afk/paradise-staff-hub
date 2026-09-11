@@ -16,7 +16,7 @@ export async function unlockWorkHourRecord(userId: string, date: Date) {
 
   const logs = await prisma.attendanceLog.findMany({
     where: { user_id: userId, date: day },
-    select: { type: true, timestamp: true },
+    select: { type: true, timestamp: true, note: true },
     orderBy: { timestamp: "asc" },
   });
   const clock = calculateClockHours(logs);

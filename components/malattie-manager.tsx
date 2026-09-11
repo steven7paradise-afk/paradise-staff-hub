@@ -16,7 +16,9 @@ import {
   TrendingUp,
   Activity,
   UserRound,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  Trash2
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -40,6 +42,12 @@ type SickRequest = {
 };
 
 type WorkerOption = { id: string; name: string; photoUrl: string | null };
+type WorkerReportView = "UNJUSTIFIED" | "JUSTIFIED" | "ALL";
+
+function localDateValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
 
 function formatDate(dateStr: string) {
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(dateStr));
@@ -49,6 +57,13 @@ function calculateDays(start: string, end: string) {
   const diffTime = Math.abs(new Date(end).getTime() - new Date(start).getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
   return diffDays;
+}
+
+function displayedReason(request: SickRequest) {
+  if (!request.medicalCode && /registrata dall.amministrazione come malattia/i.test(request.reason || "")) {
+    return "Assenza senza timbratura rilevata automaticamente.";
+  }
+  return request.reason || "Nessuna nota inserita.";
 }
 
 export function MalattieManager({
@@ -70,10 +85,14 @@ export function MalattieManager({
   const [requests, setRequests] = useState(initialRequests);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [workerReportView, setWorkerReportView] = useState<WorkerReportView>("UNJUSTIFIED");
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
   const [inpsVerifier, setInpsVerifier] = useState<{ employeeName: string; fiscalCode: string; protocolCode: string } | null>(null);
   const [copiedField, setCopiedField] = useState<"cf" | "protocol" | null>(null);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ userId: workers[0]?.id || "", startDate: localDateValue(), endDate: localDateValue(), reason: "", medicalCode: "" });
+  const canManage = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole);
 
   const filteredRequests = useMemo(() => {
     return requests.filter((req) => {
@@ -154,6 +173,22 @@ export function MalattieManager({
     });
   }, [filteredRequests, workers]);
 
+  const workerReportCounts = useMemo(() => ({
+    UNJUSTIFIED: workerStats.filter((worker) => worker.status === "unjustified").length,
+    JUSTIFIED: workerStats.filter((worker) => worker.status === "justified").length,
+    ALL: workerStats.length,
+  }), [workerStats]);
+
+  const visibleWorkerStats = useMemo(() => {
+    if (workerReportView === "UNJUSTIFIED") {
+      return workerStats.filter((worker) => worker.status === "unjustified");
+    }
+    if (workerReportView === "JUSTIFIED") {
+      return workerStats.filter((worker) => worker.status === "justified");
+    }
+    return workerStats;
+  }, [workerReportView, workerStats]);
+
   async function handleUpdateCode(id: string, code: string) {
     setSavingId(id);
     setMessage("");
@@ -165,8 +200,8 @@ export function MalattieManager({
       });
       if (!res.ok) throw new Error("Errore durante l'aggiornamento.");
       const data = await res.json();
-      setRequests((curr) => curr.map((r) => r.id === id ? { ...r, medicalCode: data.leaveRequest.medical_code } : r));
-      setMessage("Codice medico aggiornato con successo.");
+      setRequests((curr) => curr.map((r) => r.id === id ? { ...r, medicalCode: data.leaveRequest.medical_code, sicknessUnjustified: data.leaveRequest.sickness_unjustified } : r));
+      setMessage(data.leaveRequest.medical_code ? "Certificato INPS salvato: l’assenza è ora registrata come malattia." : "Codice rimosso: la pratica resta registrata soltanto come assenza.");
     } catch (err) {
       alert("Impossibile salvare il codice certificato. Riprova.");
     } finally {
@@ -194,6 +229,64 @@ export function MalattieManager({
     }
   }
 
+  async function handleCreate() {
+    if (!createForm.userId || !createForm.startDate || !createForm.endDate) {
+      setMessage("Seleziona dipendente e periodo.");
+      return;
+    }
+    setSavingId("create");
+    setMessage("");
+    try {
+      const res = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...createForm, type: "MALATTIA", approveNow: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile aggiungere la pratica.");
+      const saved = data.leaveRequest;
+      setRequests((current) => [{
+        id: saved.id,
+        userId: saved.user_id,
+        employeeName: saved.user.name,
+        employeePhoto: saved.user.photo_url,
+        employeeFiscalCode: saved.user.fiscal_code,
+        startDate: saved.start_date,
+        endDate: saved.end_date,
+        startTime: saved.start_time,
+        endTime: saved.end_time,
+        reason: saved.reason,
+        status: saved.status,
+        medicalCode: saved.medical_code,
+        sicknessUnjustified: saved.sickness_unjustified,
+      }, ...current]);
+      setOpenCreate(false);
+      setCreateForm({ userId: workers[0]?.id || "", startDate: localDateValue(), endDate: localDateValue(), reason: "", medicalCode: "" });
+      setMessage(saved.medical_code ? "Malattia aggiunta con certificato INPS." : "Assenza aggiunta. Diventerà malattia quando inserirai il certificato INPS.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossibile aggiungere la pratica.");
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Eliminare questa pratica? Verrà rimossa anche dal planning e dal calendario.")) return;
+    setSavingId(id);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/requests/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile eliminare la pratica.");
+      setRequests((current) => current.filter((request) => request.id !== id));
+      setMessage("Pratica eliminata.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossibile eliminare la pratica.");
+    } finally {
+      setSavingId("");
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Statistics Card */}
@@ -206,10 +299,10 @@ export function MalattieManager({
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-red-400">
               <Activity className="size-4 text-red-300 animate-pulse" />
-              Gestione Assenze & Malattie
+              Gestione assenze e malattie
             </div>
             <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
-              Registro Malattie Staff
+              Registro assenze e malattie
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58">
               Pannello amministrativo per monitorare i giorni di malattia dello staff, verificare i codici di protocollo INPS e controllare le assenze giustificate.
@@ -239,7 +332,7 @@ export function MalattieManager({
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 xl:grid-cols-4">
             <div className="rounded-2xl border border-rose-500/15 bg-gradient-to-br from-rose-500/10 to-rose-500/2 text-rose-200 p-5 flex flex-col justify-between transition hover:scale-[1.02] duration-300">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">Giorni Malattia Totali</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">Giorni registrati</span>
                 <Heart className="size-4 opacity-80" />
               </div>
               <p className="mt-3 text-2xl font-black text-white tracking-tight leading-none">
@@ -249,7 +342,7 @@ export function MalattieManager({
 
             <div className="rounded-2xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-emerald-500/2 text-emerald-200 p-5 flex flex-col justify-between transition hover:scale-[1.02] duration-300">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">Malattia Giustificata</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">Malattia con certificato</span>
                 <ShieldCheck className="size-4 opacity-80" />
               </div>
               <p className="mt-3 text-2xl font-black text-white tracking-tight leading-none">
@@ -259,7 +352,7 @@ export function MalattieManager({
 
             <div className="rounded-2xl border border-red-500/15 bg-gradient-to-br from-red-500/10 to-red-500/2 text-red-200 p-5 flex flex-col justify-between transition hover:scale-[1.02] duration-300">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">Assenza Non Giustificata</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">Solo assenza</span>
                 <AlertCircle className="size-4 opacity-80 animate-pulse" />
               </div>
               <p className="mt-3 text-2xl font-black text-white tracking-tight leading-none">
@@ -270,24 +363,72 @@ export function MalattieManager({
         </div>
       </section>
 
+      {canManage ? <Card className="overflow-hidden border border-black/5 bg-white p-0 shadow-md dark:border-white/5 dark:bg-[#121212]">
+        <button type="button" onClick={() => setOpenCreate((value) => !value)} className="flex min-h-14 w-full items-center justify-between gap-3 px-5 text-left text-sm font-black">
+          <span className="inline-flex items-center gap-2"><Plus className="size-4 text-red-500" /> Aggiungi assenza o malattia</span>
+          <span className="text-lg text-black/30">{openCreate ? "−" : "+"}</span>
+        </button>
+        {openCreate ? <div className="grid gap-3 border-t border-black/5 bg-[#fffafb] p-5 sm:grid-cols-2 xl:grid-cols-5">
+          <label className="block"><span className="text-[10px] font-black uppercase text-black/45">Dipendente</span><Select value={createForm.userId} onChange={(event) => setCreateForm((current) => ({ ...current, userId: event.target.value }))} className="mt-1.5 h-11 w-full text-xs"><option value="">Seleziona</option>{workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}</Select></label>
+          <label className="block"><span className="text-[10px] font-black uppercase text-black/45">Dal</span><input type="date" value={createForm.startDate} onChange={(event) => setCreateForm((current) => ({ ...current, startDate: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-black/10 bg-white px-3 text-xs font-bold outline-none focus:border-red-400" /></label>
+          <label className="block"><span className="text-[10px] font-black uppercase text-black/45">Al</span><input type="date" value={createForm.endDate} min={createForm.startDate} onChange={(event) => setCreateForm((current) => ({ ...current, endDate: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-black/10 bg-white px-3 text-xs font-bold outline-none focus:border-red-400" /></label>
+          <label className="block"><span className="text-[10px] font-black uppercase text-black/45">Certificato INPS</span><input value={createForm.medicalCode} onChange={(event) => setCreateForm((current) => ({ ...current, medicalCode: event.target.value }))} placeholder="Facoltativo" className="mt-1.5 h-11 w-full rounded-xl border border-black/10 bg-white px-3 text-xs font-bold outline-none focus:border-red-400" /><span className="mt-1 block text-[9px] font-semibold text-black/35">Senza codice resta solo Assenza.</span></label>
+          <label className="block"><span className="text-[10px] font-black uppercase text-black/45">Motivo / nota</span><input value={createForm.reason} onChange={(event) => setCreateForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Facoltativo" className="mt-1.5 h-11 w-full rounded-xl border border-black/10 bg-white px-3 text-xs font-bold outline-none focus:border-red-400" /></label>
+          <div className="sm:col-span-2 xl:col-span-5"><button type="button" onClick={() => void handleCreate()} disabled={savingId === "create"} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-black px-5 text-xs font-black text-white disabled:opacity-50">{savingId === "create" ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Salva pratica</button></div>
+        </div> : null}
+      </Card> : null}
+
       {/* Analytics Card */}
       {workerStats.length > 0 && (
         <Card className="p-6 bg-white shadow-xl border border-black/5 dark:bg-[#121212] dark:border-white/5">
-          <div className="flex items-center gap-2 mb-4 border-b border-black/5 dark:border-white/5 pb-3">
-            <TrendingUp className="size-5 text-red-500" />
-            <h2 className="text-sm font-bold text-black dark:text-white uppercase tracking-wider">
-              Analisi e Report Dipendenti
-            </h2>
+          <div className="mb-4 border-b border-black/5 pb-4 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="size-5 text-red-500" />
+              <h2 className="text-sm font-bold text-black dark:text-white uppercase tracking-wider">
+                Analisi e Report Dipendenti
+              </h2>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Filtro report dipendenti">
+              {([
+                { value: "UNJUSTIFIED", label: "Non giustificati" },
+                { value: "JUSTIFIED", label: "Giustificati" },
+                { value: "ALL", label: "Tutti" },
+              ] as const).map((tab) => {
+                const active = workerReportView === tab.value;
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setWorkerReportView(tab.value)}
+                    className={cn(
+                      "inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 text-[11px] font-black transition",
+                      !active && "border-black/10 bg-white text-black/55 hover:border-black/20 hover:text-black dark:border-white/10 dark:bg-white/[0.03] dark:text-white/60",
+                      active && tab.value === "UNJUSTIFIED" && "border-rose-500 bg-rose-500 text-white shadow-sm",
+                      active && tab.value === "JUSTIFIED" && "border-emerald-600 bg-emerald-600 text-white shadow-sm",
+                      active && tab.value === "ALL" && "border-black bg-black text-white shadow-sm dark:border-white dark:bg-white dark:text-black"
+                    )}
+                  >
+                    {tab.label}
+                    <span className={cn("rounded-full px-2 py-0.5 text-[9px]", active ? "bg-white/20" : "bg-black/5 dark:bg-white/10")}>
+                      {workerReportCounts[tab.value]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+          {visibleWorkerStats.length > 0 ? (
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {workerStats.map((stat, idx) => {
+            {visibleWorkerStats.map((stat) => {
               const isUnjustified = stat.status === "unjustified";
               const isJustified = stat.status === "justified";
               const isNone = stat.status === "none";
 
               return (
                 <div 
-                  key={idx} 
+                  key={stat.id}
                   className={cn(
                     "flex items-center gap-3.5 p-4 rounded-3xl border transition hover:scale-[1.02] duration-300",
                     isUnjustified && "bg-rose-50/60 border-rose-200/80 dark:bg-rose-950/10 dark:border-rose-900/30 text-rose-900 dark:text-rose-200",
@@ -330,12 +471,12 @@ export function MalattieManager({
                         <div className="space-y-1">
                           {stat.justifiedDays > 0 && (
                             <span className="text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 leading-none">
-                              <ShieldCheck className="size-3 shrink-0 text-emerald-500" /> Giustificati: {stat.justifiedDays} gg
+                              <ShieldCheck className="size-3 shrink-0 text-emerald-500" /> Malattia: {stat.justifiedDays} gg
                             </span>
                           )}
                           {stat.unjustifiedDays > 0 && (
                             <span className="text-[9.5px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-0.5 leading-none">
-                              <AlertCircle className="size-3 shrink-0 text-rose-500 animate-pulse" /> Ingiustificati: {stat.unjustifiedDays} gg
+                              <AlertCircle className="size-3 shrink-0 text-rose-500" /> Assenza: {stat.unjustifiedDays} gg
                             </span>
                           )}
                         </div>
@@ -346,6 +487,11 @@ export function MalattieManager({
               );
             })}
           </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-black/10 bg-black/[0.015] px-5 py-8 text-center text-xs font-bold text-black/45 dark:border-white/10 dark:bg-white/[0.02] dark:text-white/45">
+              Nessun dipendente in questa categoria.
+            </div>
+          )}
         </Card>
       )}
 
@@ -399,7 +545,7 @@ export function MalattieManager({
               Nessuna pratica di malattia registrata nel periodo selezionato.
             </div>
           ) : (
-            <table className="w-full min-w-[1000px] text-left text-sm">
+            <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="bg-[#FAF7F9] dark:bg-white/5 text-[10px] font-black uppercase tracking-[0.14em] text-black/45 dark:text-white/45 border-b border-black/5 dark:border-white/5">
                 <tr>
                   <th className="px-5 py-4">Dipendente</th>
@@ -408,6 +554,7 @@ export function MalattieManager({
                   <th className="px-5 py-4">Certificato INPS (Giustificativo)</th>
                   <th className="px-5 py-4">Motivazione dello Staff</th>
                   <th className="px-5 py-4">Approvazione / Stato</th>
+                  {canManage ? <th className="px-5 py-4 text-right">Azioni</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5 dark:divide-white/5 bg-white dark:bg-[#121212]">
@@ -424,7 +571,7 @@ export function MalattieManager({
                         <div className="flex items-center gap-2.5">
                           {req.employeePhoto ? (
                             <img
-                              src={req.employeePhoto}
+                              src={resolveDrivePhotoUrl(req.employeePhoto)}
                               alt={req.employeeName}
                               className="size-8 rounded-full object-cover border border-black/10 shadow-sm shrink-0"
                             />
@@ -477,6 +624,7 @@ export function MalattieManager({
                         <div className="space-y-2">
                           {req.medicalCode ? (
                             <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-xs font-black uppercase text-emerald-700"><ShieldCheck className="size-3.5" />Giustificata</span>
                               <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
                                 <ShieldCheck className="size-3.5 text-emerald-600 shrink-0" />
                                 <span className="font-mono">{req.medicalCode}</span>
@@ -496,9 +644,9 @@ export function MalattieManager({
                               </button>
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-200 animate-pulse">
+                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-black uppercase text-rose-700 border border-rose-300">
                               <AlertCircle className="size-3.5 text-rose-600 shrink-0" />
-                              <span>Senza Certificato</span>
+                              <span>Assenza</span>
                             </div>
                           )}
 
@@ -527,7 +675,7 @@ export function MalattieManager({
 
                       <td className="px-5 py-4 max-w-[220px]">
                         <p className="text-xs text-black/75 dark:text-white/75 leading-relaxed break-words">
-                          {req.reason ? `"${req.reason}"` : "Nessuna nota inserita."}
+                          {displayedReason(req)}
                         </p>
                       </td>
 
@@ -552,6 +700,7 @@ export function MalattieManager({
                           </select>
                         </div>
                       </td>
+                      {canManage ? <td className="px-5 py-4 text-right"><button type="button" onClick={() => void handleDelete(req.id)} disabled={savingId === req.id} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-[10px] font-black text-rose-700 transition hover:bg-rose-100 disabled:opacity-50">{savingId === req.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />} Elimina</button></td> : null}
                     </tr>
                   );
                 })}

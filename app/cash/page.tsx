@@ -17,12 +17,14 @@ import {
   ShieldCheck,
   Store,
   UserRound,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CashActions } from "@/components/cash-actions";
 import { CashHistory } from "@/components/cash-history";
 import { CashReviewActions } from "@/components/cash-review-actions";
+import { CashClosingAmountEditor } from "@/components/cash-closing-amount-editor";
 import { CashDaySelector } from "@/components/cash-day-selector";
 import { Badge, Card } from "@/components/ui";
 import {
@@ -213,13 +215,19 @@ function vaultWithdrawalRecordToResponse(record: any) {
   };
 }
 
-export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string }> }) {
+export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string; vault?: string; movements?: string }> }) {
   const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const isDarwin = session.user.id === "cmpms4o9h0003l809zof30mni" || !!session.user.email?.toLowerCase().includes("darwin");
   const role = session.user.role as Role;
+  const canEditClosingAmount = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
+  const showAllVaultWithdrawals = searchParams.vault === "all";
+  const movementFilter = searchParams.movements === "closings"
+    ? "closings"
+    : searchParams.movements === "discrepancies"
+      ? "discrepancies"
+      : "all";
 
   const accessUser = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -228,7 +236,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const canAccessPage = accessUser 
     ? await canAccessForUser(prisma, "/cash", accessUser)
-    : (role !== "DIPENDENTE" || isDarwin);
+    : role !== "DIPENDENTE";
 
   if (!canAccessPage) redirect("/dashboard");
 
@@ -340,6 +348,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     const accountingDate = vaultAccountingDate(response);
     return accountingDate >= start && accountingDate < end;
   });
+  const visibleVaultWithdrawals = showAllVaultWithdrawals ? vaultWithdrawals : vaultWithdrawals.slice(0, 3);
+  const vaultToggleHref = `/cash?month=${selectedMonth}${searchParams.day ? `&day=${encodeURIComponent(searchParams.day)}` : ""}${showAllVaultWithdrawals ? "" : "&vault=all"}#prelievi-autorizzati`;
 
   const responses = latestClosingsByLocationDay(closingRecords.filter((response) => {
     const accountingDate = cashAccountingDate(response);
@@ -376,19 +386,18 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   const totalVaultOut = vaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
   // Derive the accounting total only from the Shopify transaction rows.
   // Vault movements, cash funds and manual cash records never enter here.
-  const shopifyCashExpected = shopifyRevenue.payments.reduce(
-    (sum, payment) =>
-      payment.method === "CONTANTI" || payment.method === "CASHMATIC"
-        ? sum + payment.amount
-        : sum,
-    0,
-  );
+  const shopifyCashExpected = shopifyRevenue.cash;
   const shopifyCashDifference = totalWithdrawn - shopifyCashExpected;
   const shopifyCashByDay = new Map<string, number>();
   for (const payment of shopifyRevenue.payments) {
     if (payment.method !== "CONTANTI" && payment.method !== "CASHMATIC") continue;
     const key = romeDayKey(new Date(payment.processedAt));
     shopifyCashByDay.set(key, (shopifyCashByDay.get(key) ?? 0) + payment.amount);
+  }
+  for (const refund of shopifyRevenue.refunds) {
+    if (refund.method !== "CONTANTI" && refund.method !== "CASHMATIC") continue;
+    const key = romeDayKey(new Date(refund.processedAt));
+    shopifyCashByDay.set(key, (shopifyCashByDay.get(key) ?? 0) - refund.amount);
   }
   const declaredCashByDay = new Map<string, number>();
   for (const response of responses) {
@@ -398,6 +407,9 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       (declaredCashByDay.get(key) ?? 0) + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)),
     );
   }
+  const discrepancyDayKeys = Array.from(new Set([...shopifyCashByDay.keys(), ...declaredCashByDay.keys()]))
+    .filter((key) => Math.abs((declaredCashByDay.get(key) ?? 0) - (shopifyCashByDay.get(key) ?? 0)) > 0.009)
+    .sort((left, right) => right.localeCompare(left));
 
   const weekClosesList = Array.isArray(allWeekCloses) ? allWeekCloses : [];
 
@@ -700,6 +712,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       note: String(answer(response, CASH_CLOSING_FIELD_IDS.notes) || "-"),
       closing: response,
       vault: null as any,
+      discrepancyMissingClosing: false,
     })),
     ...vaultWithdrawals.map((response) => ({
       id: `vault-${response.id}`,
@@ -715,8 +728,43 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       note: String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "-"),
       closing: null as any,
       vault: response,
+      discrepancyMissingClosing: false,
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const missingClosingDiscrepancies = discrepancyDayKeys
+    .filter((key) => !declaredCashByDay.has(key))
+    .map((key) => ({
+      id: `missing-closing-${key}`,
+      kind: "Chiusura mancante",
+      date: dateFromDayKey(key)!,
+      locationName: "Nessuna chiusura registrata",
+      operator: "—",
+      amount: 0,
+      amountClass: "text-amber-700",
+      detail: "Shopify registra contanti, ma non risulta una chiusura cassa per questa giornata.",
+      expectedShopifyCash: shopifyCashByDay.get(key) ?? 0,
+      declaredCashForDay: 0,
+      note: "Apri le transazioni Shopify e verifica la chiusura mancante.",
+      closing: null as any,
+      vault: null as any,
+      discrepancyMissingClosing: true,
+    }));
+  const discrepancyMovements = [
+    ...monthlyMovements.filter((movement) => movement.closing && Math.abs((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0)) > 0.009),
+    ...missingClosingDiscrepancies,
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const visibleMonthlyMovements = movementFilter === "closings"
+    ? monthlyMovements.filter((movement) => Boolean(movement.closing))
+    : movementFilter === "discrepancies"
+      ? discrepancyMovements
+      : monthlyMovements;
+
+  const cashQueryBase = `month=${selectedMonth}`;
+  const availabilityHref = `/cash?${cashQueryBase}#chiusure-sedi`;
+  const selectedDayHref = `/cash?${cashQueryBase}&day=${selectedDayKey}#dettaglio-giorno`;
+  const vaultOutHref = `/cash?${cashQueryBase}&vault=all#prelievi-autorizzati`;
+  const monthlyClosingsHref = `/cash?${cashQueryBase}&movements=closings#movimenti-cassa`;
+  const discrepancyHref = `/cash?${cashQueryBase}&movements=discrepancies#movimenti-cassa`;
 
   return (
     <AppShell
@@ -754,25 +802,33 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
 
           <div className="grid grid-cols-2 border-t border-black/10 lg:grid-cols-4">
-            <MetricCard label="Disponibilità saloni" value={formatMoney(netCash)} icon={CircleDollarSign} tone="gold" />
-            <MetricCard label={`Chiusure ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} value={formatMoney(selectedDayWithdrawn)} icon={ReceiptText} tone="blue" />
-            <MetricCard label="Uscito cassaforte" value={formatMoney(totalVaultOut)} icon={Calculator} tone="pink" />
-            <MetricCard label="Prelevato nel mese" value={formatMoney(totalWithdrawn)} icon={ShieldCheck} tone="green" />
+            <MetricCard href={availabilityHref} label="Disponibilità saloni" value={formatMoney(netCash)} note="Vedi origine e chiusure" icon={CircleDollarSign} tone="gold" />
+            <MetricCard href={selectedDayHref} label={`Chiusure ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} value={formatMoney(selectedDayWithdrawn)} note="Apri le transazioni del giorno" icon={ReceiptText} tone="blue" />
+            <MetricCard href={vaultOutHref} label="Uscito cassaforte" value={formatMoney(totalVaultOut)} note="Vedi tutte le uscite" icon={Calculator} tone="pink" />
+            <MetricCard href={monthlyClosingsHref} label="Prelevato nel mese" value={formatMoney(totalWithdrawn)} note="Vedi le chiusure del mese" icon={ShieldCheck} tone="green" />
           </div>
 
           <div className="grid border-t border-black/10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <div className="grid grid-cols-2 divide-x divide-black/10 lg:flex lg:divide-x-0">
-              <a href="#chiusure-sedi" className="flex min-h-16 items-center gap-3 px-5 py-3 hover:bg-[#FAF7F9]">
+            <div className="grid grid-cols-1 divide-y divide-black/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:flex lg:divide-x-0">
+              <a href="#chiusure-sedi" className="flex min-h-[72px] items-center gap-3 px-5 py-3 transition hover:bg-[#FAF7F9]">
                 <span className={`grid size-9 place-items-center rounded-md ${missingTodayCount ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
                   {missingTodayCount ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}
                 </span>
-                <span><strong className="block text-lg leading-none">{missingTodayCount}</strong><small className="text-[11px] font-bold text-black/45">sedi mancanti oggi</small></span>
+                <span>
+                  <strong className="block text-sm leading-tight">{missingTodayCount ? `${missingTodayCount} sedi senza chiusura` : "Tutte le sedi hanno chiuso"}</strong>
+                  <small className="mt-1 block text-[11px] font-bold text-black/45">{missingTodayCount ? "Apri e completa il controllo di oggi" : "Situazione giornaliera regolare"}</small>
+                </span>
+                <ArrowRight className="ml-auto size-4 text-black/25" />
               </a>
-              <a href="#movimenti-cassa" className="flex min-h-16 items-center gap-3 px-5 py-3 hover:bg-[#FAF7F9]">
+              <a href={discrepancyHref} className="flex min-h-[72px] items-center gap-3 px-5 py-3 transition hover:bg-[#FAF7F9]">
                 <span className={`grid size-9 place-items-center rounded-md ${pendingReviewCount ? "bg-pink-50 text-[#A74758]" : "bg-emerald-50 text-emerald-700"}`}>
                   <ShieldCheck className="size-4" />
                 </span>
-                <span><strong className="block text-lg leading-none">{pendingReviewCount}</strong><small className="text-[11px] font-bold text-black/45">controlli aperti</small></span>
+                <span>
+                  <strong className="block text-sm leading-tight">{pendingReviewCount ? `${pendingReviewCount} controlli da verificare` : "Nessun controllo in sospeso"}</strong>
+                  <small className="mt-1 block text-[11px] font-bold text-black/45">{pendingReviewCount ? "Rivedi differenze e chiusure" : "Movimenti già controllati"}</small>
+                </span>
+                <ArrowRight className="ml-auto size-4 text-black/25" />
               </a>
             </div>
             <div className="border-t border-black/10 p-4 lg:border-l lg:border-t-0">
@@ -793,7 +849,23 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
         </section>
 
-        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
+        <nav aria-label="Sezioni della cassa" className="-mx-4 overflow-x-auto border-y border-black/10 bg-white px-4 py-2 sm:mx-0 sm:rounded-lg sm:border">
+          <div className="flex min-w-max items-center gap-1">
+            {[
+              ["Giornata", "#dettaglio-giorno"],
+              ["Chiusure sedi", "#chiusure-sedi"],
+              ["Prelievi", "#prelievi-autorizzati"],
+              ["Movimenti", "#movimenti-cassa"],
+              ["Pagamenti Shopify", "#pagamenti-shopify"],
+            ].map(([label, href]) => (
+              <a key={href} href={href} className="inline-flex min-h-10 items-center rounded-md px-3 text-xs font-black text-black/55 transition hover:bg-[#FAF0F4] hover:text-[#A74758]">
+                {label}
+              </a>
+            ))}
+          </div>
+        </nav>
+
+        <Card id="pagamenti-shopify" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Registro separato Shopify</p>
@@ -814,9 +886,14 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               </Link>
             </div>
           </div>
-          <div className="p-5">
-            {paymentRows.length ? (
-              <div className="divide-y divide-black/5 overflow-hidden rounded-md border border-black/10">
+          <details className="group">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 border-t border-black/5 px-5 py-3 text-xs font-black text-[#A74758] marker:hidden hover:bg-[#FAF7F9]">
+              <span>{paymentRows.length ? `Mostra gli ultimi ${Math.min(4, paymentRows.length)} pagamenti` : "Nessun pagamento nel periodo"}</span>
+              <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="border-t border-black/5 p-5">
+              {paymentRows.length ? (
+                <div className="divide-y divide-black/5 overflow-hidden rounded-md border border-black/10">
                 {paymentRows.slice(0, 4).map((payment) => {
                   const isCashmatic = payment.method === "CASHMATIC";
                   const isCash = payment.method === "CONTANTI";
@@ -847,20 +924,21 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
                         <p className="text-base font-black">{formatMoney(payment.amount)}</p>
                         <p className={`mt-1 text-[10px] font-black uppercase ${isVerified ? "text-emerald-700" : "text-amber-700"}`}>
-                          {isCashmatic ? "Cashmatic" : isCash ? "Contanti" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
+                          {isCashmatic || isCash ? "Contanti" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
                         </p>
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAF7F9] px-5 py-8 text-center">
-                <ReceiptText className="mx-auto size-5 text-black/25" />
-                <p className="mt-2 text-sm font-bold text-black/45">Nessun pagamento Shopify registrato nel periodo.</p>
-              </div>
-            )}
-          </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAF7F9] px-5 py-8 text-center">
+                  <ReceiptText className="mx-auto size-5 text-black/25" />
+                  <p className="mt-2 text-sm font-bold text-black/45">Nessun pagamento Shopify registrato nel periodo.</p>
+                </div>
+              )}
+            </div>
+          </details>
         </Card>
 
         <Card className="-mx-4 rounded-none border-y border-black/10 bg-white p-5 shadow-none sm:mx-0 sm:rounded-lg sm:border">
@@ -898,7 +976,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           userSedeId={session.user.sedeId ?? null}
         />
 
-        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
+        <Card id="dettaglio-giorno" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="border-b border-black/5 p-5">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Dettaglio giorno</p>
             <h2 className="mt-1 text-2xl font-black capitalize">Clicca una data e controlla chiusura + timbrature</h2>
@@ -951,7 +1029,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                           </div>
                           <div className="rounded-2xl bg-[#FAF7F9] px-4 py-3 text-right">
                             <p className="text-[10px] font-black uppercase text-black/35">Prelevato</p>
-                            <p className="text-lg font-black text-[#A74758]">{formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))}</p>
+                            <CashClosingAmountEditor closingId={response.id} currentAmount={moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn))} canEdit={canEditClosingAmount} />
                           </div>
                         </div>
 
@@ -1004,7 +1082,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                         </div>
 
                         {answer(response, CASH_CLOSING_FIELD_IDS.notes) ? (
-                          <p className="mt-3 rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
+                          <p className="mt-3 whitespace-pre-wrap rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
                         ) : null}
                         <div className="mt-3">
                           <CashReviewActions closingId={response.id} initialReview={cashReview(response)} />
@@ -1047,8 +1125,19 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
         <section id="chiusure-sedi" className="grid scroll-mt-6 gap-4 xl:grid-cols-[1fr_380px]">
           <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
             <div className="border-b border-black/5 p-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Tutti i negozi</p>
-              <h2 className="mt-1 text-2xl font-black">Accumulo cash per sede</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Origine della disponibilità</p>
+              <h2 className="mt-1 text-2xl font-black">Da dove provengono i soldi disponibili</h2>
+              <p className="mt-1 text-sm leading-6 text-black/45">Apri ogni sede per controllare giorni, importi e operatori delle singole chiusure.</p>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <StoreValue label="Chiusure accumulate" value={formatMoney(totalWithdrawnCumulative)} />
+                <StoreValue label="Uscite cassaforte aperte" value={`− ${formatMoney(totalVaultOutCumulative - totalClosedVaultOutCumulative)}`} />
+                <StoreValue label="Versamenti banca" value={`− ${formatMoney(totalBankDepositsCumulative)}`} />
+                <StoreValue label="Altre uscite chiuse" value={`− ${formatMoney(totalWeeklyWithdrawalsCumulative)}`} />
+                <div className="flex flex-col justify-between rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-[10px] font-black uppercase leading-none tracking-wider text-emerald-700">Disponibile adesso</p>
+                  <p className="mt-2 text-base font-black leading-none text-emerald-900">{formatMoney(netCash)}</p>
+                </div>
+              </div>
             </div>
             <div className="divide-y divide-black/5">
               {storeRows.map((row) => (
@@ -1073,6 +1162,24 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     ) : (
                       <p className="mt-3 text-xs font-semibold text-black/35">Nessuna chiusura nel mese.</p>
                     )}
+                    {row.responses.length ? (
+                      <details className="group mt-3 rounded-2xl border border-black/5 bg-[#FAF7F9] p-3">
+                        <summary className="cursor-pointer list-none text-xs font-black text-[#A74758] marker:hidden">
+                          Vedi giorni e chiusure ({row.responses.length})
+                        </summary>
+                        <div className="mt-3 divide-y divide-black/5 border-t border-black/5">
+                          {row.responses.map((closing) => (
+                            <div key={closing.id} className="flex items-center justify-between gap-3 py-2 text-[11px]">
+                              <div>
+                                <p className="font-black text-black/70">{cashDate(closing)}</p>
+                                <p className="mt-0.5 font-semibold text-black/40">{signatureName(closing)}</p>
+                              </div>
+                              <strong className="shrink-0 text-[#A74758]">{formatMoney(moneyValue(answer(closing, CASH_CLOSING_FIELD_IDS.withdrawn)))}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
 
                   <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:w-[600px] shrink-0">
@@ -1125,7 +1232,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       {hasFundIssue ? <AlertTriangle className="size-5 text-[#F7DFA7]" /> : <CheckCircle2 className="size-5 text-emerald-300" />}
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-2">
-                      <MiniDark label="Prelevato" value={formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))} />
+                      <div className="rounded-2xl bg-white/[0.06] p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-white/35">Prelevato</p>
+                        <div className="mt-1"><CashClosingAmountEditor closingId={response.id} currentAmount={moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn))} canEdit={canEditClosingAmount} dark align="left" /></div>
+                      </div>
                       <MiniDark label="Fondo" value={formatMoney(fund)} />
                     </div>
                     <div className="mt-4 rounded-2xl bg-white/5 p-3">
@@ -1146,7 +1256,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       ) : null}
                     </div>
                     {answer(response, CASH_CLOSING_FIELD_IDS.notes) ? (
-                      <p className="mt-3 rounded-2xl border border-white/10 p-3 text-xs leading-5 text-white/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
+                      <p className="mt-3 whitespace-pre-wrap rounded-2xl border border-white/10 p-3 text-xs leading-5 text-white/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
                     ) : null}
                   </div>
                 );
@@ -1155,12 +1265,12 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </Card>
         </section>
 
-        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
+        <Card id="prelievi-autorizzati" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Cassaforte</p>
               <h2 className="mt-1 text-2xl font-black">Prelievi autorizzati</h2>
-              <p className="mt-1 text-sm text-black/45">Registro mensile di chi ha prelevato soldi dalla cassaforte e per quale motivo.</p>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-black/45">Gli ultimi prelievi del mese, ordinati dal più recente. Ogni registrazione mostra importo, motivo, sede, operatore e ricevuta.</p>
             </div>
             <div className="rounded-2xl bg-[#111017] px-4 py-3 text-right text-white">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Totale uscito</p>
@@ -1168,21 +1278,21 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             </div>
           </div>
           <div className="divide-y divide-black/5">
-            {vaultWithdrawals.map((response) => {
+            {visibleVaultWithdrawals.map((response, index) => {
               const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(vaultAccountingDate(response));
               const receipt = answer(response, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null;
               return (
-                <div key={response.id} className="grid gap-4 p-5 lg:grid-cols-[160px_170px_1fr_220px] lg:items-center">
+                <article key={response.id} className="grid gap-4 p-5 transition hover:bg-[#FFFBFD] lg:grid-cols-[150px_170px_1fr_230px] lg:items-center">
                   <div>
-                    <p className="text-[10px] font-black uppercase text-black/35">Giorno</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-black/35">Prelievo {index + 1}</p>
                     <p className="mt-1 font-black">{dateLabel}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-black/35">Somma</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-black/35">Importo</p>
                     <p className="mt-1 text-lg font-black text-[#A74758]">{formatMoney(moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)))}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase text-black/35">Motivo</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-black/35">Motivo del prelievo</p>
                     <p className="mt-1 break-words text-sm font-semibold leading-6 text-black/65">
                       {String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "Motivo non indicato")}
                     </p>
@@ -1207,7 +1317,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       Registrato {new Date(response.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
-                </div>
+                </article>
               );
             })}
             {vaultWithdrawals.length === 0 ? (
@@ -1216,13 +1326,33 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               </div>
             ) : null}
           </div>
+          {vaultWithdrawals.length > 3 ? (
+            <div className="flex flex-col items-center gap-2 border-t border-black/5 bg-[#FAF7F9] px-5 py-4 sm:flex-row sm:justify-between">
+              <p className="text-xs font-semibold text-black/45">
+                {showAllVaultWithdrawals ? `Stai vedendo tutti i ${vaultWithdrawals.length} prelievi del mese.` : `Mostrati i 3 prelievi più recenti su ${vaultWithdrawals.length}.`}
+              </p>
+              <Link href={vaultToggleHref} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#111017] px-5 text-xs font-black text-white transition hover:bg-black">
+                {showAllVaultWithdrawals ? "Mostra solo gli ultimi 3" : `Vedi gli altri ${vaultWithdrawals.length - 3}`}
+                {showAllVaultWithdrawals ? <ChevronLeft className="size-4 rotate-90" /> : <ChevronRight className="size-4 rotate-90" />}
+              </Link>
+            </div>
+          ) : null}
         </Card>
 
         <Card id="movimenti-cassa" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="border-b border-black/5 p-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
-            <h2 className="mt-1 text-2xl font-black">Tutti i movimenti</h2>
-            <p className="mt-1 text-sm text-black/45">Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
+                <h2 className="mt-1 text-2xl font-black">{movementFilter === "closings" ? "Chiusure cassa del mese" : movementFilter === "discrepancies" ? "Transazioni con scostamento" : "Tutti i movimenti"}</h2>
+                <p className="mt-1 text-sm text-black/45">{movementFilter === "closings" ? "Sono mostrate soltanto le somme prelevate nelle chiusure cassa." : movementFilter === "discrepancies" ? "Sono mostrate soltanto le giornate in cui il dichiarato non coincide con i contanti attesi da Shopify." : "Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato."}</p>
+              </div>
+              {movementFilter !== "all" ? (
+                <Link href={`/cash?month=${selectedMonth}#movimenti-cassa`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 text-xs font-black text-black/65">
+                  <X className="size-4" /> Mostra tutti i movimenti
+                </Link>
+              ) : null}
+            </div>
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">
@@ -1240,7 +1370,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                 <p className="mt-2 text-2xl font-black tabular-nums text-emerald-950">{formatMoney(totalWithdrawn)}</p>
                 <p className="mt-1 text-xs font-semibold text-emerald-800/60">Totale prelevato nelle chiusure, fondo escluso.</p>
               </div>
-              <div className={`rounded-2xl border p-4 ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+              <Link href={discrepancyHref} className={`group rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-sm ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
                 <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "text-amber-700" : "text-emerald-700"}`}>
                   {shopifyRevenue.available && Math.abs(shopifyCashDifference) <= 0.009 ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />} Scostamento da verificare
                 </div>
@@ -1248,12 +1378,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                   {shopifyRevenue.available ? formatMoney(shopifyCashDifference) : "—"}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-black/45">Dichiarato meno atteso. Positivo = contanti in più.</p>
-              </div>
+                <p className="mt-3 flex items-center gap-1 text-[11px] font-black text-amber-800">Vedi le transazioni che creano lo scostamento <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" /></p>
+              </Link>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1180px] text-left text-sm">
-              <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
+              <thead className="sticky top-0 z-10 bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
                 <tr>
                   <th className="px-5 py-3">Data</th>
                   <th className="px-5 py-3">Tipo</th>
@@ -1265,19 +1396,19 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5">
-                {monthlyMovements.map((movement) => {
+                {visibleMonthlyMovements.map((movement) => {
                   const review = movement.closing ? cashReview(movement.closing) : null;
                   const receipt = movement.vault
                     ? answer(movement.vault, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null
                     : null;
                   return (
-                    <tr key={movement.id} className="align-top">
+                    <tr key={movement.id} className={`align-top transition hover:bg-[#FFFBFD] ${movementFilter === "discrepancies" ? "bg-amber-50/45" : ""}`}>
                       <td className="px-5 py-4 font-bold">
                         {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(movement.date)}
                       </td>
                       <td className="px-5 py-4">
                         <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${
-                          movement.closing ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-[#A74758]"
+                          movement.discrepancyMissingClosing ? "bg-amber-100 text-amber-800" : movement.closing ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-[#A74758]"
                         }`}>
                           {movement.kind}
                         </span>
@@ -1290,49 +1421,61 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                         </span>
                       </td>
                       <td className={`px-5 py-4 text-right font-black ${movement.amountClass}`}>
-                        {formatMoney(movement.amount)}
+                        {movement.closing ? (
+                          <CashClosingAmountEditor closingId={movement.closing.id} currentAmount={movement.amount} canEdit={canEditClosingAmount} />
+                        ) : formatMoney(movement.amount)}
                       </td>
                       <td className="max-w-[420px] px-5 py-4 text-xs leading-5 text-black/55">
                         <p className="font-semibold text-black/65">{movement.detail}</p>
+                        {movement.note && movement.note !== "-" ? (
+                          <div className="mt-2 rounded-xl border border-black/5 bg-[#FAF7F9] p-3">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-black/35">Note registrazione</p>
+                            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-5 text-black/55">{movement.note}</p>
+                          </div>
+                        ) : null}
                         {movement.closing && shopifyRevenue.available ? (
                           <div className="mt-2 rounded-xl border border-black/5 bg-[#FAF7F9] p-3">
                             <p className="text-[9px] font-black uppercase tracking-wider text-black/35">Confronto totale giornata</p>
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold">
                               <span>Atteso Shopify: <strong>{formatMoney(movement.expectedShopifyCash ?? 0)}</strong></span>
-                              <span>Dichiarato: <strong>{formatMoney(movement.declaredCashForDay ?? 0)}</strong></span>
+                              <span>Chiusura registrata: <strong>{formatMoney(movement.declaredCashForDay ?? 0)}</strong></span>
                               <span className={Math.abs((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0)) <= 0.009 ? "text-emerald-700" : "text-amber-700"}>
-                                Differenza: <strong>{formatMoney((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0))}</strong>
+                                Scostamento chiusura/Shopify: <strong>{formatMoney((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0))}</strong>
                               </span>
                             </div>
-                          </div>
-                        ) : null}
-                        {review ? (
-                          <div className="mt-2 space-y-1">
-                            <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
-                              {cashReviewLabel(review.status)}
-                            </span>
-                            {review.reviewed_by_name ? (
-                              <p className="font-black text-black/55">
-                                Ultimo controllo: {review.reviewed_by_name}
-                                {review.reviewed_at ? ` - ${new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(review.reviewed_at))}` : ""}
-                              </p>
+                            {movementFilter === "discrepancies" ? (
+                              <Link href={`/cash?month=${selectedMonth}&day=${dayKey(movement.date)}#dettaglio-giorno`} className="mt-3 inline-flex items-center gap-1 text-[10px] font-black text-amber-800 underline underline-offset-2">
+                                Apri il dettaglio di questa giornata <ArrowRight className="size-3" />
+                              </Link>
                             ) : null}
                           </div>
                         ) : null}
-                        {review?.note ? <p className="mt-2 font-bold text-[#A74758]">Resp: {review.note}</p> : null}
                         {receipt?.url ? (
                           <a href={receipt.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex font-black text-[#A74758] underline-offset-4 hover:underline">
                             Vedi foto scontrino
                           </a>
                         ) : null}
                       </td>
-                      <td className="px-5 py-4">
-                        {movement.closing ? <CashReviewActions closingId={movement.closing.id} initialReview={review!} compact /> : <span className="text-xs font-semibold text-black/35">Registrato</span>}
+                      <td className="min-w-[320px] px-5 py-4">
+                        {movement.closing ? (
+                          <div className="space-y-2">
+                            <CashReviewActions closingId={movement.closing.id} initialReview={review!} compact />
+                            {movementFilter === "discrepancies" ? (
+                              <Link href={`/cash/shopify-payments?month=${selectedMonth}`} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 text-[11px] font-black text-amber-900">
+                                Apri transazioni Shopify <ArrowRight className="size-3.5" />
+                              </Link>
+                            ) : null}
+                          </div>
+                        ) : movement.discrepancyMissingClosing ? (
+                          <Link href={`/cash/shopify-payments?month=${selectedMonth}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-amber-100 px-4 text-xs font-black text-amber-900">
+                            Vedi transazioni Shopify <ArrowRight className="size-4" />
+                          </Link>
+                        ) : <span className="text-xs font-semibold text-black/35">Registrato</span>}
                       </td>
                     </tr>
                   );
                 })}
-                {monthlyMovements.length === 0 ? (
+                {visibleMonthlyMovements.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-black/40">Nessun movimento nel mese corrente.</td>
                   </tr>
@@ -1346,7 +1489,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   );
 }
 
-function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
+function MetricCard({ href, label, value, note, icon: Icon, tone }: { href: string; label: string; value: string; note: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
   const tones = {
     gold: "bg-[#FFF9E9] text-[#8A6A19]",
     blue: "bg-[#F2F5FF] text-[#4D61A8]",
@@ -1354,13 +1497,14 @@ function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: 
     green: "bg-[#EEFBF5] text-emerald-700",
   };
   return (
-    <div className={`min-h-28 border-b border-black/10 p-4 last:border-b-0 odd:border-r lg:border-b-0 lg:border-r lg:last:border-r-0 ${tones[tone]} sm:p-5`}>
+    <Link href={href} className={`group min-h-32 border-b border-black/10 p-4 last:border-b-0 odd:border-r transition hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black/30 lg:border-b-0 lg:border-r lg:last:border-r-0 ${tones[tone]} sm:p-5`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-black uppercase tracking-[0.14em] opacity-70">{label}</span>
-        <Icon className="size-4" />
+        <span className="grid size-8 place-items-center rounded-full bg-white/60"><Icon className="size-4" /></span>
       </div>
-      <p className="mt-5 text-xl font-black tracking-tight text-[#111017] sm:text-2xl">{value}</p>
-    </div>
+      <p className="mt-3 text-xl font-black tracking-tight text-[#111017] sm:text-2xl">{value}</p>
+      <p className="mt-2 flex items-center gap-1 text-[11px] font-bold opacity-65">{note}<ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" /></p>
+    </Link>
   );
 }
 

@@ -22,6 +22,5 @@ export default async function ReceptionPage({
     navigationBasePath: "/salone/reception",
     pageTitle: "Reception",
     pageSubtitle: "Tutti gli appuntamenti, gli arrivi e i servizi del salone",
-    salonWorkflowMode: "reception",
   });
 }

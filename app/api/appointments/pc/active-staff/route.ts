@@ -5,11 +5,27 @@ import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import {
+  appointmentStaffDisplayName,
+  isAlwaysActiveAppointmentStaff,
+} from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
+const STAFF_ALIAS_SETTING_KEY = "appointment_staff_aliases";
+type StaffAlias = {
+  userId?: string;
+  externalName?: string;
+};
+
+function normalizeStaffAliases(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, StaffAlias>;
+}
+
 export async function GET(request: NextRequest) {
   const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
+  const includeAllSalonStaff = request.nextUrl.searchParams.get("scope") === "salon";
   const session = await auth();
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
@@ -47,7 +63,8 @@ export async function GET(request: NextRequest) {
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
-    const workers = await prisma.user.findMany({
+    const [workers, aliasSetting] = await Promise.all([
+      prisma.user.findMany({
       where: { active: true },
       select: {
         id: true,
@@ -62,24 +79,43 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { name: "asc" },
-    });
+      }),
+      prisma.setting.findUnique({ where: { key: STAFF_ALIAS_SETTING_KEY } }),
+    ]);
+    const staffAliases = normalizeStaffAliases(aliasSetting?.value);
 
     const clockedInWorkers = workers
       .map((worker) => {
         const state = deriveAttendanceState(worker.attendance_logs);
+        const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
         return {
           id: worker.id,
-          name: worker.name,
+          name: appointmentStaffDisplayName(worker.name, worker.id),
           photo_url: worker.photo_url,
           sede_id: worker.sede_id,
           locationName: worker.location?.name ?? "",
-          status: state.status,
+          status: alwaysActive ? "IN" : state.status,
+          alwaysActive,
+          clockedInAt: state.firstEntry
+            ? new Date(state.firstEntry.timestamp).toISOString()
+            : null,
           breakStartedAt: state.status === "BREAK" && state.activePause
             ? new Date(state.activePause.timestamp).toISOString()
             : null,
+          externalIds: Object.entries(staffAliases)
+            .filter(([, alias]) =>
+              alias.userId === worker.id &&
+              !/^(staff disponibile|staff assente paradise|non assegnat[oi])$/i.test(String(alias.externalName || "").trim())
+            )
+            .map(([externalId]) => externalId),
         };
       })
-      .filter((w) => (w.status === "IN" || w.status === "BREAK") && (!locationId || w.sede_id === locationId));
+      .filter((worker) => includeAllSalonStaff
+        ? worker.alwaysActive || (!locationId || worker.sede_id === locationId)
+        : worker.alwaysActive || (
+            (worker.status === "IN" || worker.status === "BREAK") &&
+            (!locationId || worker.sede_id === locationId)
+          ));
 
     clockedInWorkers.sort((a, b) => a.name.localeCompare(b.name, "it"));
 

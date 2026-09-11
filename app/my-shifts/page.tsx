@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { coerceEmployeeScheduleMonth, isEmployeeScheduleMonthVisible, visibleScheduleMonthsForEmployee } from "@/lib/schedule-visibility";
 import { cn } from "@/lib/utils";
 import { calculateClockHours } from "@/lib/work-hours";
+import { isClosedSchedule } from "@/lib/scheduled-attendance";
 import { cookies } from "next/headers";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { MonthSelector, CurrentlyAtWork, TodayShiftCountdown, MonthlyWorkCalendar } from "./client-components";
@@ -81,7 +82,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const [user, schedules, logs, records] = await Promise.all([
     prisma.user.findUnique({ where: { id: targetUserId }, include: { location: true } }),
     prisma.scheduleEntry.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, include: { category: true }, orderBy: { date: "asc" } }),
-    prisma.attendanceLog.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
+    prisma.attendanceLog.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true, note: true }, orderBy: { timestamp: "asc" } }),
     prisma.workHourRecord.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } } }),
   ]);
   
@@ -191,8 +192,9 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
     
     const clock = calculateClockHours(dayLogs);
     const automaticHours = dayRecord?.paid_break ? clock.grossHours : clock.netHours;
-    const workedHours = dayRecord?.manual_override ? dayRecord.hours : automaticHours;
     const plannedHoursVal = plannedHours(daySchedule);
+    const paidClosedHours = isClosedSchedule(daySchedule?.category.name, daySchedule?.category.code) ? plannedHoursVal : 0;
+    const workedHours = dayRecord?.manual_override ? dayRecord.hours : Math.max(automaticHours, paidClosedHours);
 
     return {
       date,
@@ -359,6 +361,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       shiftTime={timeRange(todaySchedule)}
       startTime={todaySchedule?.start_time ?? todaySchedule?.category.start_time ?? null}
       endTime={todaySchedule?.end_time ?? todaySchedule?.category.end_time ?? null}
+      locationName={user.location?.name ?? null}
       breakDurationMinutes={breakDurationMinutes}
       initialLogs={todayLogs.map((log) => ({
         type: log.type as "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA",

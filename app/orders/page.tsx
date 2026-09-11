@@ -6,8 +6,11 @@ import { cookies } from "next/headers";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { ensureOrderForm, ORDER_FORM_CATEGORY } from "@/lib/order-form";
+import { resolveOrderConfirmer } from "@/lib/order-confirmation";
+import { isOrderVisibleForOperationalLocation } from "@/lib/order-visibility";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
+import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
 
 export const dynamic = "force-dynamic";
 
@@ -42,40 +45,53 @@ function isSartaOrder(response: any) {
   return Boolean(matchesCosa || matchesFasce);
 }
 
-export default async function OrdersPage() {
+export default async function OrdersPage(props: { searchParams: Promise<{ remoteTarget?: string }> }) {
+  const searchParams = await props.searchParams;
+  const remoteTarget = typeof searchParams.remoteTarget === "string" ? searchParams.remoteTarget.trim() : "";
   const session = await auth();
   const cookieStore = await cookies();
-  const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+  const hasAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const pcAuth = hasAdministratorSession
+    ? null
+    : await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
   const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
-  const isPC = Boolean(pcAuth);
+  const isAdminRemoteController = Boolean(
+    !pcAuth &&
+    remoteTarget &&
+    session?.user?.id &&
+    ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const remoteWorker = isAdminRemoteController
+    ? await resolveRemoteControllerWorker(session!.user.id, remoteTarget)
+    : null;
+  const isPC = Boolean(pcAuth || remoteWorker);
   if (!session?.user?.id && !pcAuth) redirect("/login");
-
-  const role = (isPC ? "RESPONSABILE" : session!.user.role) as Role;
-  const canManageOrders =
-    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
-    session?.user?.id === "cmpo4y9900001jr09bg1dnqxs" || // Jessinca Inturri (Jessica)
-    session?.user?.id === "cmpms4o9h0003l809zof30mni" || // Biy Darwin Ramirez Castillo (Darwin)
-    !!session?.user?.email?.toLowerCase().includes("jessica") ||
-    !!session?.user?.email?.toLowerCase().includes("darwin");
 
   const [dbUser] = await Promise.all([
     prisma.user.findUnique({
-      where: { id: isPC ? (selectedWorkerId || "PC_CASSA") : session!.user.id },
-      select: { mansione: true, role: true, location: { select: { name: true } } },
+      where: { id: remoteWorker?.id || (isPC ? (selectedWorkerId || "PC_CASSA") : session!.user.id) },
+      select: { id: true, name: true, photo_url: true, mansione: true, role: true, location: { select: { name: true } } },
     }),
     ensureOrderForm(isPC ? "u-super-admin" : session!.user.id),
   ]);
+
+  const role = (isPC ? "RESPONSABILE" : session!.user.role) as Role;
+  const canManageOrders =
+    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
 
   if (!isPC && dbUser && requiresBuenosAiresPcCassa(dbUser.role, dbUser.location?.name)) {
     redirect("/pc-non-autorizzato");
   }
 
   const isSarta =
-    dbUser?.mansione === "sarta" ||
-    session?.user?.id === "cmpo4y9900001jr09bg1dnqxs" ||
-    !!session?.user?.email?.toLowerCase().includes("jessica");
+    dbUser?.mansione?.trim().toLowerCase() === "sarta";
+  const selectedPcWorker = pcAuth && selectedWorkerId && dbUser
+    ? { name: dbUser.name, photo_url: dbUser.photo_url }
+    : null;
 
-  const responses = await prisma.serviceFormResponse.findMany({
+  const [responses, orderStaff] = await Promise.all([prisma.serviceFormResponse.findMany({
     where: {
       status: { not: "ARCHIVED" },
       form: {
@@ -88,30 +104,53 @@ export default async function OrdersPage() {
       },
     },
     include: {
-      user: { select: { id: true, name: true, role: true, photo_url: true, sede_id: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          photo_url: true,
+          sede_id: true,
+          location: { select: { name: true } },
+        },
+      },
       form: true,
     },
     orderBy: { created_at: "desc" },
     take: 300,
-  });
+  }), prisma.user.findMany({
+    where: { active: true },
+    select: { id: true, name: true, photo_url: true },
+  })]);
 
   const allOrders = responses
     .map((response) => ({
       ...response,
+      confirmed_by: resolveOrderConfirmer(response, orderStaff),
       created_at: response.created_at.toISOString(),
       updated_at: response.updated_at.toISOString(),
     }));
 
-  const orders = isPC && pcAuth
-    ? allOrders.filter((order) => order.user?.sede_id === pcAuth.locationId)
+  const operationalLocationId = pcAuth?.locationId || remoteWorker?.sede_id || "";
+  const orders = isPC && operationalLocationId
+    ? allOrders.filter((order) => isOrderVisibleForOperationalLocation(order, operationalLocationId))
     : allOrders;
 
   return (
-    <AppShell title="Ordini" subtitle="Pipeline ordini creati dai moduli operativi." role={role} hideHeader pcMode={isPC}>
+    <AppShell
+      title="Ordini"
+      subtitle="Pipeline ordini creati dai moduli operativi."
+      role={role}
+      hideHeader
+      pcMode={isPC}
+      remoteController={isAdminRemoteController}
+      pcDisplayUser={remoteWorker ? { name: remoteWorker.name, photo_url: remoteWorker.photo_url } : selectedPcWorker}
+      pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/buenos-aires?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
+    >
       <OrderManager
         initialOrders={orders as any}
         canManage={canManageOrders}
-        currentUserName={isPC ? "PC Cassa" : session?.user?.name ?? "Staff"}
+        currentUserName={remoteWorker?.name || selectedPcWorker?.name || (isPC ? "PC Cassa" : session?.user?.name ?? "Staff")}
         currentUserRole={role}
       />
     </AppShell>

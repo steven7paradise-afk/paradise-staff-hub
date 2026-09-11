@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToGoogleDrive } from "@/lib/google-drive";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
-import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
+import { cashClosingLocationOverride, cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
-import { isPinValidForUser, identifyWorkerByPin } from "@/lib/pin";
 import { getOperationalUser } from "@/lib/operational-session";
 import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
+import { isServiceFormFieldVisible } from "@/lib/service-form-visibility";
+import { createSibillDraft, SIBILL_ANSWER_KEYS } from "@/lib/sibill-invoice";
+import { enrichCompanyInvoiceIdentity, enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
 
 type FormSessionUser = {
   id: string;
@@ -104,11 +106,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Modulo non trovato." }, { status: 404 });
     }
 
-    const answersObj = JSON.parse(answersStr);
+    const isManager = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(sessionUser.role);
+    const allowedRoles = form.allowed_roles as string[] | null;
+    const allowedLocations = form.allowed_location_ids as string[] | null;
+    if (!form.active && !isManager) {
+      return NextResponse.json({ error: "Questo modulo non è attivo." }, { status: 403 });
+    }
+    if (!isManager && allowedRoles?.length && !allowedRoles.includes(sessionUser.role)) {
+      return NextResponse.json({ error: "Il tuo ruolo non può compilare questo modulo." }, { status: 403 });
+    }
+    if (!isManager && allowedLocations?.length && (!sessionUser.sedeId || !allowedLocations.includes(sessionUser.sedeId))) {
+      return NextResponse.json({ error: "Questo modulo non è disponibile per la tua sede." }, { status: 403 });
+    }
+
+    let answersObj: Record<string, any>;
+    try {
+      const parsed = JSON.parse(answersStr);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid answers");
+      answersObj = parsed;
+    } catch {
+      return NextResponse.json({ error: "Risposte del modulo non valide." }, { status: 400 });
+    }
     const isCashClosing = isCashClosingFormName(form.name, form.category);
 
     // Process file fields and upload them to Google Drive.
-    const fields = form.fields as Array<{ id: string; label: string; type: string; required?: boolean }>;
+    const fields = form.fields as Array<{
+      id: string;
+      label: string;
+      type: string;
+      required?: boolean;
+      show_if?: { field_id?: string | null; value?: unknown; operator?: string | null } | null;
+      show_ifs?: Array<{ field_id?: string | null; value?: unknown; operator?: string | null }> | null;
+    }>;
     for (const field of fields) {
       if (field.type === "file") {
         const file = data.get(field.id);
@@ -128,49 +157,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const location = sessionUser.sedeId
+    if (form.name.toLowerCase().includes("fattura")) {
+      try {
+        answersObj = await enrichInvoiceAnswersFromShopify(answersObj);
+        answersObj = await enrichCompanyInvoiceIdentity(answersObj);
+      } catch (error) {
+        return NextResponse.json({
+          error: error instanceof Error ? error.message : "Dati della fattura non verificati.",
+        }, { status: 400 });
+      }
+    }
+
+    const missingRequired = fields.find((field) => {
+      if (!field.required || !isServiceFormFieldVisible(field, answersObj)) return false;
+      const value = answersObj[field.id];
+      if (value === null || value === undefined) return true;
+      if (typeof value === "string") return value.trim().length === 0;
+      if (Array.isArray(value)) return value.length === 0;
+      return false;
+    });
+    if (missingRequired) {
+      return NextResponse.json({ error: `Il campo "${missingRequired.label}" è obbligatorio.` }, { status: 400 });
+    }
+
+    let location = sessionUser.sedeId
       ? await prisma.location.findUnique({ where: { id: sessionUser.sedeId } })
       : null;
 
+    if (isCashClosing && location) {
+      const overrideName = cashClosingLocationOverride(sessionUser.name, location.name);
+      if (overrideName) {
+        location = await prisma.location.findFirst({ where: { name: overrideName, active: true } }) || location;
+      }
+    }
+
     if (isCashClosing) {
-      const pinField = fields.find((field) => field.type === "pin" || field.id === CASH_CLOSING_FIELD_IDS.pin || field.label.toUpperCase().includes("PIN"));
-      const pinValue = pinField ? String(answersObj[pinField.id] ?? "").trim() : "";
-
-      if (!/^\d{2,6}$/.test(pinValue)) {
-        return NextResponse.json({ error: "Inserisci un PIN personale valido per firmare la chiusura cassa." }, { status: 401 });
-      }
-
-      let signingUser: { id: string; name: string; role: string; pin_hash?: string | null; pin_lookup?: string | null } | null = null;
-
-      if (sessionUser.id !== "PC_CASSA") {
-        signingUser = await prisma.user.findUnique({
-          where: { id: sessionUser.id },
-          select: { id: true, name: true, role: true, pin_hash: true, pin_lookup: true },
-        });
-      }
-
-      const found = await identifyWorkerByPin(pinValue, sessionUser.sedeId || "");
-      if (found) {
-        signingUser = { id: found.id, name: found.name, role: found.role };
-      } else if (signingUser?.pin_hash) {
-        const isValid = await isPinValidForUser(signingUser.id, pinValue, signingUser.pin_hash, signingUser.pin_lookup);
-        if (!isValid) signingUser = null;
-      } else {
-        signingUser = null;
-      }
-
+      const signingUser = await prisma.user.findUnique({
+        where: { id: dbUserId },
+        select: { id: true, name: true, role: true },
+      });
       if (!signingUser) {
-        return NextResponse.json({ error: "PIN personale non valido per firmare la chiusura cassa." }, { status: 401 });
+        return NextResponse.json({ error: "Lavoratore non disponibile per registrare la chiusura cassa." }, { status: 400 });
       }
 
       const fundValue = Number(String(answersObj[CASH_CLOSING_FIELD_IDS.fund] ?? "").replace(",", "."));
       const notesValue = String(answersObj[CASH_CLOSING_FIELD_IDS.notes] ?? "").trim();
       if (Number.isFinite(fundValue) && Math.abs(fundValue - 50) > 0.009 && !notesValue) {
         return NextResponse.json({ error: "Il fondo cassa e diverso da € 50,00: inserisci una nota di giustificazione." }, { status: 400 });
-      }
-
-      if (pinField) {
-        delete answersObj[pinField.id];
       }
 
       if (!location || !sessionUser.sedeId) {
@@ -206,7 +239,7 @@ export async function POST(request: NextRequest) {
       const cashClosing = await prisma.cashClosing.create({
         data: {
           user_id: signingUser.id,
-          location_id: sessionUser.sedeId,
+          location_id: location.id,
           date: accountingDate,
           withdrawn,
           fund,
@@ -245,7 +278,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const response = await prisma.serviceFormResponse.create({
+    let response = await prisma.serviceFormResponse.create({
       data: {
         form_id: formId,
         user_id: dbUserId,
@@ -259,6 +292,50 @@ export async function POST(request: NextRequest) {
         form: true,
       },
     });
+
+    // Invoice requests are mirrored to Sibill as drafts only. Failure here must
+    // never lose the form submitted by the salon: admins can retry from Fatture.
+    let sibillDraftSync: { success: boolean; documentId?: string; error?: string } | null = null;
+    if (form.name.toLowerCase().includes("fattura")) {
+      try {
+        const draft = await createSibillDraft({
+          answers: answersObj,
+          responseId: response.id,
+          createdAt: new Date(),
+        });
+        const draftCreatedAt = new Date().toISOString();
+        const linkedAnswers = {
+          ...answersObj,
+          [SIBILL_ANSWER_KEYS.documentId]: draft.id,
+          [SIBILL_ANSWER_KEYS.documentStatus]: draft.status,
+          [SIBILL_ANSWER_KEYS.documentNumber]: draft.number,
+          [SIBILL_ANSWER_KEYS.paymentStatus]: draft.paymentStatus,
+          [SIBILL_ANSWER_KEYS.draftCreatedAt]: draftCreatedAt,
+        };
+        response = await prisma.serviceFormResponse.update({
+          where: { id: response.id },
+          data: {
+            answers: linkedAnswers,
+            activity_log: [{
+              type: "SIBILL_DRAFT_CREATED",
+              documentId: draft.id,
+              documentNumber: draft.number,
+              by: sessionUser.name || "Staff",
+              at: draftCreatedAt,
+            }],
+          },
+          include: { user: true, form: true },
+        });
+        answersObj = linkedAnswers;
+        sibillDraftSync = { success: true, documentId: draft.id };
+      } catch (draftError) {
+        sibillDraftSync = {
+          success: false,
+          error: draftError instanceof Error ? draftError.message : "Bozza Sibill non creata.",
+        };
+        console.error("Automatic Sibill draft creation failed:", sibillDraftSync.error);
+      }
+    }
 
     // Automatically create a Candidate record if the form is for candidatura
     if (form.name.toUpperCase().includes("CANDIDATURA")) {
@@ -432,7 +509,7 @@ export async function POST(request: NextRequest) {
       console.error("Failed to send form submission notifications:", notificationError);
     }
 
-    return NextResponse.json({ response, googleSheetSync });
+    return NextResponse.json({ response, googleSheetSync, sibillDraftSync });
   } catch (error) {
     console.error("Form submission failed:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invio del modulo fallito." }, { status: 500 });

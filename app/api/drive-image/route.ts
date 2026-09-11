@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { downloadGoogleDriveFile } from "@/lib/google-drive";
+import { getOperationalUser } from "@/lib/operational-session";
 
-export async function GET(request: Request) {
+export async function GET(request: import("next/server").NextRequest) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  }
   const fileId = new URL(request.url).searchParams.get("id")?.trim();
   if (!fileId) {
     return NextResponse.json({ error: "File mancante" }, { status: 400 });

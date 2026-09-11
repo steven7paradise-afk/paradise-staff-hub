@@ -2,16 +2,19 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, Trash2, UserPlus, Printer, RefreshCw,
-  ChevronLeft, Copy, Check, HeartPulse
+  Archive, Plus, Trash2, UserPlus, Printer, ExternalLink, Pencil,
+  ChevronLeft, Copy, Check, HeartPulse, AlarmClock, Clock3, Umbrella, AlertTriangle
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
+import { EmployeeContractDocuments, type EmployeeContractDocument } from "@/components/employee-contract-documents";
+import { calendarDaysBetween, shouldShowContractRenewalPopup } from "@/lib/contract-renewal-reminders";
 
 type Employee = {
   id: string;
@@ -35,7 +38,10 @@ type Employee = {
   hrNotes: string;
   accessList: string[];
   iban?: string;
+  contractType?: string;
+  contractRenewalStatus?: string;
   contractHistory?: ContractHistoryItem[] | null;
+  documents?: EmployeeContractDocument[];
   sicknessStats?: {
     totalDays: number;
     justifiedDays: number;
@@ -43,6 +49,15 @@ type Employee = {
   };
   lastEditedByName?: string | null;
   lastEditedAt?: string | null;
+  attendanceToday?: {
+    status: "PRESENTE" | "IN_PAUSA" | "USCITO" | "ASSENTE" | "ATTESO" | "RIPOSO" | "GIUSTIFICATO" | "NESSUN_TURNO" | "RITARDO_DA_APPROVARE" | "RITARDO_RIFIUTATO";
+    absent: boolean;
+    lateApprovalStatus?: "PENDING" | "REJECTED" | null;
+    plannedStart: string | null;
+    plannedEnd: string | null;
+    firstEntry: string | null;
+    elapsedMinutes: number;
+  };
 };
 
 type ContractHistoryItem = {
@@ -52,6 +67,9 @@ type ContractHistoryItem = {
   status?: string;
   renewedAt?: string;
   note?: string;
+  documentId?: string;
+  documentTitle?: string;
+  documentUrl?: string;
 };
 
 type ContractRow = {
@@ -62,11 +80,115 @@ type ContractRow = {
   rinnovatoIl: string;
   scadenza: string;
   note: string;
+  documentTitle?: string;
+  documentUrl?: string;
   historyIndex?: number;
 };
 
+type ContractRenewalReminder = {
+  employee: Employee;
+  contractEnd: string;
+  daysLeft: number;
+  id: string;
+};
+
+function latestContractEnd(employee: Employee) {
+  const dates = [
+    employee.contractEnd,
+    ...(employee.contractHistory ?? []).map((item) => item.endDate || ""),
+  ].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
+  return dates.sort().at(-1) || "";
+}
+
+function romeTodayKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+type EmploymentHistoryEvent = {
+  id: string;
+  occurredAt: string;
+  type: string;
+  status: string;
+  note: string;
+  timeKnown?: boolean;
+};
+
+type EmploymentHistoryFilter = "ALL" | "CONTRACTS" | "REQUESTS" | "SICKNESS" | "ATTENDANCE" | "OTHER";
+
+function matchesEmploymentHistoryFilter(event: EmploymentHistoryEvent, filter: EmploymentHistoryFilter) {
+  if (filter === "ALL") return true;
+  const type = event.type.toLowerCase();
+  const status = event.status.toLowerCase();
+  const isContract = type.includes("contratto") || type.includes("rinnovo");
+  const isRequest = type.includes("richiesta") || type.includes("permesso") || type.includes("ferie") || type.includes("riposo");
+  const isSickness = type.includes("malattia") || status.includes("giustificata");
+  const isAttendance = type.includes("ritardo") || type.includes("timbratura") || status.includes("assente") || status.includes("ritardo");
+
+  if (filter === "CONTRACTS") return isContract;
+  if (filter === "REQUESTS") return isRequest;
+  if (filter === "SICKNESS") return isSickness;
+  if (filter === "ATTENDANCE") return isAttendance;
+  return !isContract && !isRequest && !isSickness && !isAttendance;
+}
+
+function employmentHistoryBadgeClass(event: EmploymentHistoryEvent) {
+  const status = event.status.toUpperCase();
+  const type = event.type.toLowerCase();
+
+  if (status.includes("APPROVATA")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (status.includes("NON GIUSTIFICATA")) {
+    return "border-yellow-300 bg-yellow-100 text-yellow-800";
+  }
+  if (status.includes("GIUSTIFICATA")) {
+    return "border-violet-300 bg-violet-100 text-violet-800";
+  }
+  if (type.includes("rientro pausa in ritardo")) {
+    return "border-orange-300 bg-orange-100 text-orange-800";
+  }
+  if (status.includes("ASSENTE") || status.includes("RIFIUTATA") || status.includes("RITARDO")) {
+    return "border-red-300 bg-red-100 text-red-700";
+  }
+  if (type.includes("contratto") || type.includes("rinnovo")) {
+    return "border-pink-300 bg-pink-100 text-pink-800";
+  }
+  if (type.includes("richiesta")) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  if (status.includes("ATTIVO")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
 type Location = { id: string; name: string };
 type Manager = { id: string; name: string; role: string };
+type MonthlyStaffOverview = {
+  monthLabel: string;
+  absences: string[];
+  holidays: string[];
+  sickness: string[];
+  late: string[];
+  records: MonthlyOverviewRecord[];
+};
+type MonthlyOverviewMode = "ABSENCES" | "HOLIDAYS" | "SICKNESS" | "LATE";
+type MonthlyOverviewRecord = {
+  id: string;
+  userId: string;
+  personName: string;
+  category: MonthlyOverviewMode;
+  dateLabel: string;
+  timeLabel: string;
+  eventLabel: string;
+  status: "GIUSTIFICATA" | "NON GIUSTIFICATA" | "IN ATTESA";
+  note: string;
+};
 
 async function readJsonResponse(response: Response) {
   const text = await response.text();
@@ -144,7 +266,6 @@ const ACCESS_PRESETS = [
   "/invoices",
   "/refunds",
   "/tables",
-  "/foto",
 ];
 
 const ACCESS_LABELS: Record<string, string> = {
@@ -169,7 +290,6 @@ const ACCESS_LABELS: Record<string, string> = {
   "/invoices": "Fatture",
   "/refunds": "Rimborsi",
   "/tables": "Tabelle",
-  "/foto": "Foto",
 };
 
 const DEFAULT_MANSIONI = [
@@ -184,24 +304,46 @@ const DEFAULT_MANSIONI = [
   "Vice responsabile salone"
 ];
 
+const CONTRACT_TYPE_OPTIONS = [
+  "Tempo indeterminato",
+  "Tempo determinato",
+  "Apprendistato",
+  "Tirocinio / Stage",
+  "Somministrazione",
+  "Collaborazione / Partita IVA",
+  "Altro",
+];
+
 export function StaffDirectory({
   initialStaff,
   locations,
   managers,
-  userRole
+  userRole,
+  focusEmployeeId,
+  monthlyOverview,
 }: {
   initialStaff: Employee[];
   locations: Location[];
   managers: Manager[];
   userRole: string;
+  focusEmployeeId?: string | null;
+  monthlyOverview: MonthlyStaffOverview;
 }) {
+  const router = useRouter();
+  const canManageContractRenewals = userRole === "ZERO" || userRole === "SUPER_ADMIN" || userRole === "ADMIN";
+  const createRoleOptions = userRole === "ADMIN"
+    ? ROLE_OPTIONS.filter((option) => option.value !== "ADMIN")
+    : ROLE_OPTIONS;
   const [staff, setStaff] = useState<Employee[]>(initialStaff);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterManager, setFilterManager] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [archiveMode, setArchiveMode] = useState(false);
+  const [expiryMode, setExpiryMode] = useState(false);
+  const [monthlyOverviewMode, setMonthlyOverviewMode] = useState<MonthlyOverviewMode | null>(null);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   
@@ -212,15 +354,70 @@ export function StaffDirectory({
   const [pinConfirmInput, setPinConfirmInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [showRenewalForm, setShowRenewalForm] = useState(false);
-  const [renewalDraft, setRenewalDraft] = useState({ startDate: "", endDate: "", note: "" });
+  const [editingRenewalIndex, setEditingRenewalIndex] = useState<number | null>(null);
+  const [renewalDraft, setRenewalDraft] = useState({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
   const [stats, setStats] = useState<{
     jobs: { count: number; growth: number };
     hours: { count: number; growth: number };
     shifts: { count: number; growth: number };
   } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistoryEvent[]>([]);
+  const [loadingEmploymentHistory, setLoadingEmploymentHistory] = useState(false);
+  const [employmentHistoryExpanded, setEmploymentHistoryExpanded] = useState(false);
+  const [employmentHistoryFilter, setEmploymentHistoryFilter] = useState<EmploymentHistoryFilter>("ALL");
   const [copiedPhotoUrl, setCopiedPhotoUrl] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
+  const [handledContractReminderIds, setHandledContractReminderIds] = useState<Set<string>>(new Set());
+  const [contractRemindersReady, setContractRemindersReady] = useState(false);
+  const [contractDecisionEmployeeId, setContractDecisionEmployeeId] = useState<string | null>(null);
+  const [contractDecisionError, setContractDecisionError] = useState("");
+
+  const todayKey = romeTodayKey();
+  const contractRenewalReminders = staff.flatMap((employee): ContractRenewalReminder[] => {
+    const contractEnd = latestContractEnd(employee);
+    const daysLeft = contractEnd ? calendarDaysBetween(todayKey, contractEnd) : null;
+    if (!shouldShowContractRenewalPopup({
+      active: employee.active && employee.employeeStatus !== "Ex dipendente",
+      daysLeft,
+      renewalStatus: employee.contractRenewalStatus,
+    }) || daysLeft === null) return [];
+    return [{ employee, contractEnd, daysLeft, id: `${employee.id}:${contractEnd}` }];
+  });
+  const currentContractReminder = contractRemindersReady
+    ? contractRenewalReminders.find((reminder) => !handledContractReminderIds.has(reminder.id)) || null
+    : null;
+  const contractPopupOpen = canManageContractRenewals && Boolean(currentContractReminder);
+
+  useEffect(() => {
+    const dismissed = new Set<string>();
+    for (const reminder of contractRenewalReminders) {
+      if (reminder.daysLeft <= 0) continue;
+      const storageKey = `paradise:contract-renewal-popup:${reminder.id}:${todayKey}`;
+      if (window.localStorage.getItem(storageKey) === "dismissed") dismissed.add(reminder.id);
+    }
+    setHandledContractReminderIds((current) => new Set([...current, ...dismissed]));
+    setContractRemindersReady(true);
+  // The reminder list is refreshed by server data; the date is intentionally fixed to the Rome calendar day.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff, todayKey]);
+
+  useEffect(() => {
+    if (!contractPopupOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [contractPopupOpen]);
+
+  useEffect(() => {
+    if (!isEditing) setStaff(initialStaff);
+  }, [initialStaff, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) return;
+    const timer = window.setInterval(() => router.refresh(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [isEditing, router]);
 
   useEffect(() => {
     if (isEditing && selectedEmployee?.id) {
@@ -234,6 +431,34 @@ export function StaffDirectory({
         .finally(() => setLoadingStats(false));
     }
   }, [isEditing, selectedEmployee?.id]);
+
+  useEffect(() => {
+    setEmploymentHistoryExpanded(false);
+    setEmploymentHistoryFilter("ALL");
+  }, [selectedEmployee?.id]);
+
+  useEffect(() => {
+    if (!isEditing || !selectedEmployee?.id) return;
+    let active = true;
+    setLoadingEmploymentHistory(true);
+    fetch(`/api/employees/${selectedEmployee.id}/history`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Storico non disponibile.");
+        return Array.isArray(data.events) ? data.events as EmploymentHistoryEvent[] : [];
+      })
+      .then((events) => {
+        if (active) setEmploymentHistory(events);
+      })
+      .catch((error) => {
+        console.error("Error loading employee history:", error);
+        if (active) setEmploymentHistory([]);
+      })
+      .finally(() => {
+        if (active) setLoadingEmploymentHistory(false);
+      });
+    return () => { active = false; };
+  }, [isEditing, selectedEmployee?.id]);
   
   // Modals creation state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -244,7 +469,35 @@ export function StaffDirectory({
   const [successMsg, setSuccessMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
-  const [syncingDrivePhotos, setSyncingDrivePhotos] = useState(false);
+
+  function syncRenewalDocumentInHistory(document: EmployeeContractDocument) {
+    setEmploymentHistory((current) => {
+      const withoutDocument = current.filter((event) => event.id !== `document-renewal-${document.id}`);
+      const normalizedType = document.type.toUpperCase();
+      if (!["CONTRATTO", "PROROGA", "RINNOVO"].includes(normalizedType)) return withoutDocument;
+      const occurredAt = document.documentDate
+        ? new Date(`${document.documentDate}T12:00:00.000Z`).toISOString()
+        : document.createdAt;
+      const event: EmploymentHistoryEvent = {
+        id: `document-renewal-${document.id}`,
+        occurredAt,
+        type: normalizedType === "PROROGA" ? "Proroga contratto" : normalizedType === "CONTRATTO" ? "Contratto caricato" : "Rinnovo contratto",
+        status: "REGISTRATA",
+        note: `${document.title} · documento presente nell'archivio del dipendente.`,
+        timeKnown: !document.documentDate,
+      };
+      return [...withoutDocument, event].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+    });
+  }
+
+  useEffect(() => {
+    if (!focusEmployeeId) return;
+    const employee = initialStaff.find((item) => item.id === focusEmployeeId);
+    if (!employee) return;
+    setSelectedEmployee(employee);
+    setEditForm({ ...employee });
+    setIsEditing(true);
+  }, [focusEmployeeId, initialStaff]);
 
   const [mansioniList, setMansioniList] = useState<string[]>(DEFAULT_MANSIONI);
   const [customMansioneEdit, setCustomMansioneEdit] = useState(false);
@@ -289,11 +542,90 @@ export function StaffDirectory({
   const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
   const archivedCount = staff.filter(isArchivedEmployee).length;
+  const isUpcomingContractExpiry = (employee: Employee) => {
+    if (isArchivedEmployee(employee) || !employee.contractEnd || employee.contractRenewalStatus === "RINNOVATO") return false;
+    const end = new Date(`${employee.contractEnd}T23:59:59`);
+    if (Number.isNaN(end.getTime())) return false;
+    const now = new Date();
+    const limit = new Date(now);
+    limit.setDate(limit.getDate() + 30);
+    return end.getTime() >= now.getTime() && end.getTime() <= limit.getTime();
+  };
+
+  const selectOverview = (mode: "active" | "former" | "expiring") => {
+    setSearchQuery("");
+    setFilterLocation("");
+    setFilterRole("");
+    setFilterManager("");
+    setArchiveMode(mode === "former");
+    setExpiryMode(mode === "expiring");
+    setMonthlyOverviewMode(null);
+    setFilterStatus(mode === "former" ? "Ex dipendente" : "");
+  };
+
+  const selectMonthlyOverview = (mode: MonthlyOverviewMode) => {
+    setSearchQuery("");
+    setFilterLocation("");
+    setFilterRole("");
+    setFilterManager("");
+    setFilterStatus("");
+    setArchiveMode(false);
+    setExpiryMode(false);
+    setMonthlyOverviewMode((current) => current === mode ? null : mode);
+  };
+
+  const dismissContractReminder = (reminder: ContractRenewalReminder) => {
+    if (reminder.daysLeft > 0) {
+      window.localStorage.setItem(`paradise:contract-renewal-popup:${reminder.id}:${todayKey}`, "dismissed");
+    }
+    setHandledContractReminderIds((current) => new Set(current).add(reminder.id));
+    setContractDecisionError("");
+  };
+
+  const saveContractRenewalDecision = async (status: "RINNOVATO" | "NON_RINNOVATO") => {
+    if (!currentContractReminder) return;
+    const reminder = currentContractReminder;
+    const employeeId = reminder.employee.id;
+    setContractDecisionEmployeeId(employeeId);
+    setContractDecisionError("");
+    try {
+      const response = await fetch(`/api/employees/${employeeId}/contract-renewal-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data?.error || "Decisione sul rinnovo non salvata.");
+      setStaff((current) => current.map((employee) => employee.id === employeeId
+        ? { ...employee, contractRenewalStatus: status }
+        : employee));
+      setHandledContractReminderIds((current) => new Set(current).add(reminder.id));
+      setSuccessMsg(status === "RINNOVATO"
+        ? `Hai indicato che il contratto di ${reminder.employee.name} verrà rinnovato.`
+        : `Hai indicato che il contratto di ${reminder.employee.name} non verrà rinnovato.`);
+      window.setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (error) {
+      setContractDecisionError(error instanceof Error ? error.message : "Decisione sul rinnovo non salvata.");
+    } finally {
+      setContractDecisionEmployeeId(null);
+    }
+  };
 
   // Filters
   const filteredStaff = staff.filter((emp) => {
     const archived = isArchivedEmployee(emp);
     if (archiveMode ? !archived : archived) return false;
+    if (expiryMode && !isUpcomingContractExpiry(emp)) return false;
+    const monthlyIds = monthlyOverviewMode === "ABSENCES"
+      ? monthlyOverview.absences
+      : monthlyOverviewMode === "HOLIDAYS"
+        ? monthlyOverview.holidays
+        : monthlyOverviewMode === "SICKNESS"
+          ? monthlyOverview.sickness
+          : monthlyOverviewMode === "LATE"
+            ? monthlyOverview.late
+            : null;
+    if (monthlyIds && !monthlyIds.includes(emp.id)) return false;
 
     const fullName = emp.name.toLowerCase();
     const query = searchQuery.toLowerCase();
@@ -309,6 +641,34 @@ export function StaffDirectory({
 
     return matchesSearch && matchesLocation && matchesStatus && matchesRole && matchesManager;
   });
+  const hasActiveDirectoryFilters = Boolean(
+    searchQuery || filterLocation || filterStatus || filterRole || filterManager || expiryMode || monthlyOverviewMode
+  );
+  const clearDirectoryFilters = () => {
+    setSearchQuery("");
+    setFilterLocation("");
+    setFilterStatus("");
+    setFilterRole("");
+    setFilterManager("");
+    setExpiryMode(false);
+    setMonthlyOverviewMode(null);
+  };
+  const openEmployeeProfile = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    setIsEditing(true);
+    setEditForm({ ...employee });
+    resetRenewalForm();
+    setPinInput("");
+    setPinConfirmInput("");
+    setPasswordInput("");
+    setErrorMsg("");
+    const isCustomRole = employee.mansione
+      && !mansioniList.some((role) => role.toLowerCase() === employee.mansione.toLowerCase());
+    setCustomMansioneEdit(Boolean(isCustomRole));
+  };
+  const visibleMonthlyRecords = monthlyOverviewMode
+    ? monthlyOverview.records.filter((record) => record.category === monthlyOverviewMode)
+    : [];
 
   async function printStaffListPdf() {
     const { jsPDF } = await import("jspdf");
@@ -460,6 +820,8 @@ export function StaffDirectory({
           hrNotes: editForm.hrNotes || undefined,
           iban: editForm.iban || undefined,
           contractHistory: getContractHistory(editForm),
+          contractType: editForm.contractType || "",
+          contractRenewalStatus: editForm.contractRenewalStatus || "DA_VALUTARE",
           pin: pinInput || undefined,
           password: passwordInput || undefined
         })
@@ -475,6 +837,7 @@ export function StaffDirectory({
       const mgrName = managers.find((m) => m.id === data.manager_id)?.name ?? "";
 
       const updated: Employee = {
+        ...editForm,
         id: data.id,
         name: data.name,
         email: data.email,
@@ -497,12 +860,15 @@ export function StaffDirectory({
         accessList: (data.access_list as string[]) ?? [],
         iban: data.iban ?? "",
         contractHistory: Array.isArray(data.contract_history) ? data.contract_history : [],
+        contractType: data.workforce_data?.contractType ?? editForm.contractType ?? "",
+        contractRenewalStatus: data.workforce_data?.contractRenewalStatus ?? editForm.contractRenewalStatus ?? "DA_VALUTARE",
+        documents: editForm.documents ?? [],
         sicknessStats: editForm.sicknessStats,
       };
 
       setStaff((prev) => prev.map((emp) => emp.id === updated.id ? updated : emp));
       setSelectedEmployee(updated);
-      setIsEditing(false);
+      setEditForm(updated);
       resetRenewalForm();
       setPinInput("");
       setPinConfirmInput("");
@@ -530,7 +896,8 @@ export function StaffDirectory({
 
   const resetRenewalForm = () => {
     setShowRenewalForm(false);
-    setRenewalDraft({ startDate: "", endDate: "", note: "" });
+    setEditingRenewalIndex(null);
+    setRenewalDraft({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
   };
 
   const getStatusTone = (status: string) => {
@@ -632,8 +999,11 @@ export function StaffDirectory({
       const emailText = data.emailStatus?.skipped
         ? " Email NON inviata: configura provider email o invia credenziali manualmente."
         : " Email con credenziali inviata al dipendente.";
+      const notificationText = data.notificationStatus?.sent === false
+        ? " Notifica interna non inviata: controlla il servizio notifiche."
+        : " Notifica interna inviata.";
         
-      setCreationMessage(`Dipendente creato con successo! PIN: ${pinInput || "generato automaticamente"} e password provvisoria generata. ${emailText}`);
+      setCreationMessage(`Dipendente creato con successo! PIN: ${pinInput || "generato automaticamente"} e password provvisoria generata. ${emailText}${notificationText}`);
       setNewEmployeeForm(null);
       setPinInput("");
       setPinConfirmInput("");
@@ -690,40 +1060,6 @@ export function StaffDirectory({
     }
   }
 
-  async function handleSyncDrivePhotos() {
-    setErrorMsg("");
-    setSuccessMsg("");
-    setSyncingDrivePhotos(true);
-
-    try {
-      const response = await fetch("/api/staff/photos/sync-drive", { method: "POST" });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Import foto da Drive non riuscito.");
-      }
-
-      const updated = Array.isArray(data.updated) ? data.updated : [];
-      if (updated.length) {
-        const photoById = new Map(updated.map((item: { id: string; photoUrl: string }) => [item.id, item.photoUrl]));
-        setStaff((prev) => prev.map((emp) => photoById.has(emp.id) ? { ...emp, photoUrl: String(photoById.get(emp.id)) } : emp));
-        setSelectedEmployee((prev) => prev && photoById.has(prev.id) ? { ...prev, photoUrl: String(photoById.get(prev.id)) } : prev);
-        setEditForm((prev) => prev && photoById.has(prev.id) ? { ...prev, photoUrl: String(photoById.get(prev.id)) } : prev);
-      }
-
-      setSuccessMsg(
-        updated.length
-          ? `Importate ${updated.length} foto già presenti nella cartella Drive.`
-          : "Nessuna nuova foto trovata nella cartella Drive."
-      );
-      setTimeout(() => setSuccessMsg(""), 4500);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Import foto da Drive non riuscito.");
-    } finally {
-      setSyncingDrivePhotos(false);
-    }
-  }
-
   const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
     <button
       type="button"
@@ -760,7 +1096,7 @@ export function StaffDirectory({
     return Array.isArray(employee?.contractHistory) ? employee.contractHistory : [];
   };
 
-  const buildContractsList = (startStr?: string, endStr?: string, history: ContractHistoryItem[] = []): ContractRow[] => {
+  const buildContractsList = (startStr?: string, endStr?: string, history: ContractHistoryItem[] = [], documents: EmployeeContractDocument[] = []): ContractRow[] => {
     if (!startStr) return [];
     const start = new Date(startStr);
     const end = endStr ? new Date(endStr) : null;
@@ -781,6 +1117,7 @@ export function StaffDirectory({
 
     history.forEach((item, historyIndex) => {
       const renewalEnd = item.endDate ? new Date(item.endDate) : null;
+      const linkedDocument = documents.find((document) => document.id === item.documentId);
       list.push({
         tipo: item.tipo || "Rinnovo",
         inizio: item.startDate ? formatContractDate(item.startDate) : "—",
@@ -789,6 +1126,8 @@ export function StaffDirectory({
         rinnovatoIl: item.renewedAt ? formatContractDate(item.renewedAt) : "—",
         scadenza: renewalEnd && !isNaN(renewalEnd.getTime()) ? getDaysLabel(renewalEnd) : "—",
         note: item.note || "Da confermare",
+        documentTitle: linkedDocument?.title || item.documentTitle,
+        documentUrl: linkedDocument?.fileUrl || item.documentUrl,
         historyIndex
       });
     });
@@ -820,15 +1159,35 @@ export function StaffDirectory({
     if (!editForm) return;
     const suggested = getSuggestedRenewalDates(editForm);
     setRenewalDraft({
+      tipo: "Proroga",
       startDate: suggested.startDate,
       endDate: suggested.endDate,
-      note: "Da confermare"
+      note: "Da confermare",
+      documentId: "",
     });
     setShowRenewalForm(true);
+    setEditingRenewalIndex(null);
     setErrorMsg("");
   };
 
-  const planContractRenewal = () => {
+  const openRenewalEditForm = (historyIndex: number) => {
+    if (!editForm) return;
+    const item = getContractHistory(editForm)[historyIndex];
+    if (!item) return;
+    setRenewalDraft({
+      tipo: item.tipo || "Proroga",
+      startDate: item.startDate || "",
+      endDate: item.endDate || "",
+      note: item.note || "",
+      documentId: item.documentId || "",
+    });
+    setEditingRenewalIndex(historyIndex);
+    setShowRenewalForm(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+  };
+
+  const planContractRenewal = async () => {
     if (!editForm) return;
     if (!renewalDraft.startDate || !renewalDraft.endDate) {
       setErrorMsg("Inserisci data inizio e data fine del rinnovo.");
@@ -846,27 +1205,89 @@ export function StaffDirectory({
       setErrorMsg("La data fine rinnovo deve essere successiva alla data inizio.");
       return;
     }
+    const linkedDocument = (editForm.documents ?? []).find((document) => document.id === renewalDraft.documentId);
+    if (!linkedDocument) {
+      setErrorMsg("Seleziona il documento della proroga o del rinnovo.");
+      return;
+    }
 
-    setEditForm((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        contractHistory: [
-          ...getContractHistory(prev),
-          {
-            tipo: "Rinnovo",
-            startDate: renewalDraft.startDate,
-            endDate: renewalDraft.endDate,
-            status: "Pianificato",
-            renewedAt: "",
-            note: renewalDraft.note.trim() || "Da confermare"
-          }
-        ]
-      };
-    });
-    setShowRenewalForm(false);
-    setRenewalDraft({ startDate: "", endDate: "", note: "" });
+    const historyItem: ContractHistoryItem = {
+      tipo: renewalDraft.tipo,
+      startDate: renewalDraft.startDate,
+      endDate: renewalDraft.endDate,
+      status: "Registrata",
+      renewedAt: editingRenewalIndex === null
+        ? new Date().toISOString()
+        : getContractHistory(editForm)[editingRenewalIndex]?.renewedAt || new Date().toISOString(),
+      note: renewalDraft.note.trim() || "Documento collegato",
+      documentId: linkedDocument.id,
+      documentTitle: linkedDocument.title,
+      documentUrl: linkedDocument.fileUrl,
+    };
+    const currentHistory = getContractHistory(editForm);
+    const historyIndex = editingRenewalIndex ?? currentHistory.length;
+    const nextHistory: ContractHistoryItem[] = editingRenewalIndex === null
+      ? [...currentHistory, historyItem]
+      : currentHistory.map((item, index) => index === editingRenewalIndex ? historyItem : item);
+    const nextEmployee = { ...editForm, contractHistory: nextHistory, contractRenewalStatus: "DA_VALUTARE" };
+    setSubmitting(true);
     setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const response = await fetch(`/api/employees/${editForm.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nextEmployee.name,
+          email: nextEmployee.email,
+          role: nextEmployee.role,
+          sedeId: nextEmployee.sedeId,
+          birthDate: nextEmployee.birthDate || undefined,
+          fiscalCode: nextEmployee.fiscalCode || undefined,
+          contractStart: nextEmployee.contractStart || undefined,
+          contractEnd: nextEmployee.contractEnd || undefined,
+          photoUrl: nextEmployee.photoUrl || undefined,
+          whatsappPhone: nextEmployee.whatsappPhone || undefined,
+          mansione: nextEmployee.mansione || undefined,
+          active: nextEmployee.active,
+          employeeStatus: nextEmployee.employeeStatus,
+          managerId: nextEmployee.managerId || null,
+          accessList: nextEmployee.accessList,
+          hrNotes: nextEmployee.hrNotes || undefined,
+          iban: nextEmployee.iban || undefined,
+          contractHistory: nextHistory,
+          contractType: nextEmployee.contractType || "",
+          contractRenewalStatus: "DA_VALUTARE",
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data?.error || "Proroga non salvata.");
+      setEditForm(nextEmployee);
+      setSelectedEmployee(nextEmployee);
+      setStaff((current) => current.map((employee) => employee.id === nextEmployee.id ? nextEmployee : employee));
+      setEmploymentHistory((current) => {
+        const eventId = `contract-renewal-${historyIndex}`;
+        const withoutPrevious = current.filter((event) => event.id !== eventId && event.id !== `document-renewal-${linkedDocument.id}`);
+        const event: EmploymentHistoryEvent = {
+          id: eventId,
+          occurredAt: new Date(`${renewalDraft.startDate}T12:00:00.000Z`).toISOString(),
+          type: renewalDraft.tipo === "Proroga" ? "Proroga contratto" : renewalDraft.tipo === "Contratto" ? "Nuovo contratto" : "Rinnovo contratto",
+          status: "REGISTRATA",
+          note: renewalDraft.note.trim() || `Documento collegato: ${linkedDocument.title}.`,
+          timeKnown: false,
+        };
+        return [...withoutPrevious, event].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+      });
+      setShowRenewalForm(false);
+      setEditingRenewalIndex(null);
+      setRenewalDraft({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
+      setSuccessMsg(`${renewalDraft.tipo} ${editingRenewalIndex === null ? "salvata" : "modificata"} e collegata al documento ${linkedDocument.title}.`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "Proroga non salvata.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const deleteContractRenewal = (historyIndex: number) => {
@@ -885,7 +1306,17 @@ export function StaffDirectory({
   const renderFullscreenEditor = () => {
     if (!editForm) return null;
 
-    const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm));
+    const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm), editForm.documents ?? []);
+    const currentContractEvent = employmentHistory.find((event) => {
+      const type = event.type.toLowerCase();
+      return type.includes("contratto") || type.includes("proroga") || type.includes("rinnovo");
+    }) ?? null;
+    const compactEmploymentHistory = [
+      ...(currentContractEvent ? [currentContractEvent] : []),
+      ...employmentHistory.filter((event) => event.id !== currentContractEvent?.id).slice(0, 3),
+    ];
+    const filteredEmploymentHistory = employmentHistory.filter((event) => matchesEmploymentHistoryFilter(event, employmentHistoryFilter));
+    const visibleEmploymentHistory = employmentHistoryExpanded ? filteredEmploymentHistory : compactEmploymentHistory;
 
     const PLATFORMS = [
       { key: "dashboard", label: "Dashboard", val: "/dashboard" },
@@ -909,7 +1340,6 @@ export function StaffDirectory({
       { key: "invoices", label: "Fatture", val: "/invoices" },
       { key: "refunds", label: "Rimborsi", val: "/refunds" },
       { key: "tables", label: "Tabelle", val: "/tables" },
-      { key: "foto", label: "Foto", val: "/foto" },
     ];
 
     const copyPhotoUrl = () => {
@@ -921,7 +1351,7 @@ export function StaffDirectory({
     };
 
     return (
-      <div className="staff-profile-editor w-full bg-transparent min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
+      <div className="staff-profile-editor w-full min-h-screen bg-[linear-gradient(135deg,#fff8fc_0%,#f8f3f6_48%,#fff_100%)] text-[#171717] pb-12 animate-in fade-in duration-200">
         <style dangerouslySetInnerHTML={{__html: `
           .staff-directory-editor-open main > header {
             display: none !important;
@@ -936,7 +1366,7 @@ export function StaffDirectory({
             background: transparent !important;
           }
         `}} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-1">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-1">
           <button
             type="button"
             onClick={() => {
@@ -951,9 +1381,9 @@ export function StaffDirectory({
           </button>
         </div>
 
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-3 w-full min-w-0 overflow-hidden">
-          <div className="bg-white rounded-[24px] sm:rounded-[32px] border border-[#F4E3EA] p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 min-w-0 w-full">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5 min-w-0 w-full">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-3 w-full min-w-0 overflow-hidden">
+          <div className="grid min-w-0 w-full gap-5 rounded-[24px] border border-[#F4E3EA] bg-white p-4 shadow-[0_14px_40px_rgba(104,62,79,0.07)] sm:p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.75fr)_auto] lg:items-center">
+            <div className="flex min-w-0 flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:text-left">
               <div className="relative size-20 sm:size-24 rounded-[22px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-2xl font-black text-neutral-800 shadow-md group shrink-0">
                 {editForm.photoUrl ? (
                   <img src={resolveDrivePhotoUrl(editForm.photoUrl)} alt={editForm.name} className="size-full object-cover" />
@@ -975,7 +1405,7 @@ export function StaffDirectory({
                 </label>
               </div>
 
-              <div className="min-w-0 w-full">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                   <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-neutral-900 break-words">{editForm.name}</h1>
                   <span className={cn(
@@ -987,47 +1417,64 @@ export function StaffDirectory({
                   </span>
                 </div>
 
-                <p className="text-xs font-semibold text-neutral-400 mt-0.5 capitalize">{editForm.mansione || "Nessuna mansione specificata"}</p>
+                <p className="mt-0.5 text-sm font-semibold capitalize text-neutral-500">{editForm.mansione || "Nessuna mansione specificata"}</p>
 
-                <div className="flex flex-wrap justify-center sm:justify-start gap-2 items-center mt-3">
+                <div className="mt-3 grid gap-2 text-left text-xs font-semibold text-neutral-600 sm:grid-cols-2">
                   {editForm.email && (
-                    <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold max-w-full truncate">
-                      ✉️ {editForm.email}
+                    <span className="flex min-w-0 items-center gap-2 rounded-xl bg-neutral-50 px-3 py-2">
+                      <Mail className="size-3.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">{editForm.email}</span>
                     </span>
                   )}
                   {editForm.whatsappPhone && (
-                    <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold">
-                      📱 {editForm.whatsappPhone}
+                    <span className="flex items-center gap-2 rounded-xl bg-neutral-50 px-3 py-2">
+                      <Phone className="size-3.5 shrink-0 text-neutral-400" />
+                      {editForm.whatsappPhone}
                     </span>
                   )}
-                  {editForm.contractStart && (
-                    <span className="bg-[#FAF7F6] text-[#B83D7F] border border-[#F4E3EA] px-2.5 py-1 rounded-full text-[11px] font-bold">
-                      📅 Inizio Contratto: {formatContractDate(editForm.contractStart)}
-                    </span>
-                  )}
-                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1">
-                    <MapPin className="size-3 text-red-500 shrink-0" />
-                    <span>{editForm.location}</span>
-                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0 justify-center">
+            <div className="grid gap-2 rounded-[18px] border border-[#F4E3EA] bg-[#FCFAFB] p-3 text-xs">
+              <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-2.5">
+                <Calendar className="mt-0.5 size-4 shrink-0 text-[#D96B94]" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Data di assunzione</p>
+                  <p className="mt-0.5 font-extrabold text-neutral-800">{editForm.contractStart ? formatContractDate(editForm.contractStart) : "Non impostata"}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-2.5">
+                <MapPin className="mt-0.5 size-4 shrink-0 text-[#D96B94]" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Sede / salone</p>
+                  <p className="mt-0.5 font-extrabold text-neutral-800">{editForm.location}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-2.5">
+                <Briefcase className="mt-0.5 size-4 shrink-0 text-[#D96B94]" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Tipologia contratto</p>
+                  <p className="mt-0.5 font-extrabold text-neutral-800">{editForm.contractType || "Non specificata"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 justify-center lg:justify-end">
               <button
                 type="button"
                 onClick={() => setShowFullForm(!showFullForm)}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#D96B94] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-95 whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[#D96B94] px-5 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-95"
               >
                 <SlidersHorizontal className="size-3.5" />
-                {showFullForm ? "▲ Nascondi Modifica" : "✏️ Modifica dipendente"}
+                {showFullForm ? "Chiudi modifica" : "Modifica dipendente"}
               </button>
             </div>
           </div>
         </div>
 
         {/* STATS KEY INDICATORS BANNER */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
             {[
               { title: "Lavori completati", count: stats?.jobs.count ?? 0, growth: stats?.jobs.growth ?? 0, unit: "" },
@@ -1057,10 +1504,15 @@ export function StaffDirectory({
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
-          <form onSubmit={handleSaveEmployee} className="space-y-6">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
+          <form onSubmit={handleSaveEmployee} className="space-y-4">
+            {successMsg && (
+              <div className="p-4 text-sm font-semibold text-emerald-800 bg-emerald-50 rounded-2xl border border-emerald-200 animate-in fade-in" role="status">
+                {successMsg}
+              </div>
+            )}
             {errorMsg && (
-              <div className="p-4 text-sm font-semibold text-rose-800 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in">
+              <div className="p-4 text-sm font-semibold text-rose-800 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in" role="alert">
                 {errorMsg}
               </div>
             )}
@@ -1289,6 +1741,29 @@ export function StaffDirectory({
                         </Select>
                       </label>
 
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipologia di contratto</span>
+                        <Select
+                          value={editForm.contractType || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, contractType: e.target.value } : null)}
+                        >
+                          <option value="">Non specificata</option>
+                          {CONTRACT_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+                        </Select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato rinnovo</span>
+                        <Select
+                          value={editForm.contractRenewalStatus || "DA_VALUTARE"}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, contractRenewalStatus: e.target.value } : null)}
+                        >
+                          <option value="DA_VALUTARE">Da valutare — avvisi 7, 3, 2, 1 giorni e alla scadenza</option>
+                          <option value="NON_RINNOVATO">Non verrà rinnovato</option>
+                          <option value="RINNOVATO">Verrà rinnovato — ferma gli avvisi</option>
+                        </Select>
+                      </label>
+
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block space-y-1">
                           <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Inizio contratto</span>
@@ -1412,13 +1887,16 @@ export function StaffDirectory({
             )}
 
             {/* STORICO CONTRATTI E RINNOVI (SEMPRE VISIBILE) */}
-            <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
+            <div className="bg-white rounded-[22px] border border-[#F4E3EA] p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
               <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
                     <ClipboardList className="size-4" />
                   </div>
-                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
+                  <div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Contratti, rinnovi e documenti fiscali</h2>
+                    <p className="mt-1 text-[10px] font-bold text-[#B83D7F]">{editForm.contractType || "Tipologia contratto non specificata"}</p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1426,13 +1904,29 @@ export function StaffDirectory({
                   className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#FCE5F3] px-4 text-xs font-bold text-[#B83D7F] transition hover:bg-[#F9D4E8] active:scale-[0.98]"
                 >
                   <Plus className="size-4" />
-                  Pianifica rinnovo
+                  Aggiungi proroga / rinnovo
                 </button>
               </div>
 
+              <div className="grid gap-4">
+
               {showRenewalForm && (
-                <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="mt-4 rounded-[20px] border border-[#F3B5D4] bg-[#FFF8FC] p-4 shadow-sm">
+                  <p className="mb-3 text-xs font-extrabold text-[#B83D7F]">
+                    {editingRenewalIndex === null ? "Nuova proroga o rinnovo" : "Modifica proroga o rinnovo"}
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo</span>
+                      <Select
+                        value={renewalDraft.tipo}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, tipo: e.target.value }))}
+                      >
+                        <option value="Proroga">Proroga</option>
+                        <option value="Rinnovo">Rinnovo</option>
+                        <option value="Contratto">Nuovo contratto</option>
+                      </Select>
+                    </label>
                     <label className="space-y-1">
                       <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data inizio rinnovo</span>
                       <Field
@@ -1457,7 +1951,27 @@ export function StaffDirectory({
                         placeholder="Da confermare"
                       />
                     </label>
+                    <label className="space-y-1 md:col-span-2 xl:col-span-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Documento collegato *</span>
+                      <Select
+                        required
+                        value={renewalDraft.documentId}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, documentId: e.target.value }))}
+                      >
+                        <option value="">Seleziona documento...</option>
+                        {(editForm.documents ?? []).map((document) => (
+                          <option key={document.id} value={document.id}>
+                            {document.title} · {document.type}{document.documentDate ? ` · ${formatContractDate(document.documentDate)}` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
                   </div>
+                  {(editForm.documents ?? []).length === 0 ? (
+                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                      Prima carica il documento qui sotto, poi selezionalo per collegarlo alla proroga o al rinnovo.
+                    </p>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
@@ -1472,9 +1986,10 @@ export function StaffDirectory({
                     <button
                       type="button"
                       onClick={planContractRenewal}
+                      disabled={submitting || (editForm.documents ?? []).length === 0}
                       className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#D96B94] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-[0.98]"
                     >
-                      Aggiungi rinnovo
+                      {submitting ? "Salvataggio..." : editingRenewalIndex === null ? `Aggiungi ${renewalDraft.tipo.toLowerCase()}` : "Salva modifiche"}
                     </button>
                   </div>
                 </div>
@@ -1491,6 +2006,7 @@ export function StaffDirectory({
                       <th className="py-2.5">Rinnovato il</th>
                       <th className="py-2.5">Scadenza tra</th>
                       <th className="py-2.5">Note</th>
+                      <th className="py-2.5">Documento</th>
                       <th className="py-2.5 text-right">Azioni</th>
                     </tr>
                   </thead>
@@ -1506,7 +2022,8 @@ export function StaffDirectory({
                               "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide",
                               c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
                               c.stato === "Completato" && "bg-neutral-100 text-neutral-600",
-                              c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100"
+                              c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100",
+                              c.stato === "Registrata" && "bg-pink-100 text-pink-800 border border-pink-200"
                             )}>
                               {c.stato}
                             </span>
@@ -1514,16 +2031,39 @@ export function StaffDirectory({
                           <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
                           <td className="py-3 text-[#D96B94] font-bold">{c.scadenza}</td>
                           <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
+                          <td className="py-3">
+                            {c.documentUrl ? (
+                              <a
+                                href={c.documentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-xl border border-pink-200 bg-pink-50 px-2.5 py-1.5 text-[10px] font-extrabold text-pink-700 transition hover:bg-pink-100"
+                                title={c.documentTitle || "Apri documento collegato"}
+                              >
+                                <ExternalLink className="size-3" /> Apri PDF
+                              </a>
+                            ) : <span className="text-neutral-300">—</span>}
+                          </td>
                           <td className="py-3 text-right">
                             {c.historyIndex !== undefined ? (
-                              <button
-                                type="button"
-                                onClick={() => deleteContractRenewal(c.historyIndex!)}
-                                className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
-                                title="Elimina rinnovo"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openRenewalEditForm(c.historyIndex!)}
+                                  className="inline-flex size-8 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-700 transition hover:bg-blue-100 active:scale-95"
+                                  title="Modifica proroga o rinnovo"
+                                >
+                                  <Pencil className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteContractRenewal(c.historyIndex!)}
+                                  className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
+                                  title="Elimina rinnovo"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
                             ) : (
                               <span className="text-neutral-300">—</span>
                             )}
@@ -1532,7 +2072,7 @@ export function StaffDirectory({
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8} className="py-6 text-center text-neutral-400 italic">
+                        <td colSpan={9} className="py-6 text-center text-neutral-400 italic">
                           Nessuna data di contratto configurata per questo dipendente.
                         </td>
                       </tr>
@@ -1540,7 +2080,114 @@ export function StaffDirectory({
                   </tbody>
                 </table>
               </div>
+              </div>
+
+              <EmployeeContractDocuments
+                embedded
+                employeeId={editForm.id}
+                employeeName={editForm.name}
+                documents={editForm.documents ?? []}
+                onUploaded={(document) => {
+                  syncRenewalDocumentInHistory(document);
+                  setEditForm((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
+                  setSelectedEmployee((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
+                  setStaff((prev) => prev.map((employee) => employee.id === editForm.id
+                    ? { ...employee, documents: [document, ...(employee.documents ?? [])] }
+                    : employee));
+                }}
+                onUpdated={(document) => {
+                  syncRenewalDocumentInHistory(document);
+                  const replaceDocument = (items: EmployeeContractDocument[] | undefined) => (items ?? []).map((item) => item.id === document.id ? document : item);
+                  setEditForm((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
+                  setSelectedEmployee((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
+                  setStaff((prev) => prev.map((employee) => employee.id === editForm.id
+                    ? { ...employee, documents: replaceDocument(employee.documents) }
+                    : employee));
+                }}
+              />
             </div>
+
+            <div className="rounded-[22px] border border-[#F4E3EA] bg-white p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
+              <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <ListCheck className="size-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico lavorativo</h2>
+                    <p className="mt-1 text-[10px] font-semibold text-neutral-400">Contratti, richieste, giustificazioni e confronto turni/timbrature</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {employmentHistoryExpanded ? (
+                    <Select
+                      value={employmentHistoryFilter}
+                      onChange={(event) => setEmploymentHistoryFilter(event.target.value as EmploymentHistoryFilter)}
+                      className="min-h-9 w-auto min-w-44 text-xs"
+                      aria-label="Filtra storico lavorativo"
+                    >
+                      <option value="ALL">Tutti gli eventi</option>
+                      <option value="CONTRACTS">Contratti e rinnovi</option>
+                      <option value="REQUESTS">Richieste</option>
+                      <option value="SICKNESS">Malattie</option>
+                      <option value="ATTENDANCE">Ritardi e assenze</option>
+                      <option value="OTHER">Altri eventi</option>
+                    </Select>
+                  ) : null}
+                  <Badge tone="pink">
+                    {employmentHistoryExpanded ? `${filteredEmploymentHistory.length} eventi` : `${compactEmploymentHistory.length} di ${employmentHistory.length}`}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="soft"
+                    onClick={() => {
+                      setEmploymentHistoryExpanded((current) => !current);
+                      setEmploymentHistoryFilter("ALL");
+                    }}
+                    className="min-h-9 rounded-xl bg-[#FFF0F7] px-3 text-xs font-extrabold text-[#B83D7F]"
+                  >
+                    {employmentHistoryExpanded ? "Mostra meno" : "Vedi tutto"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-[820px] w-full divide-y divide-black/5 text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                      <th className="py-2.5 pr-4">Data</th>
+                      <th className="py-2.5 pr-4">Ora</th>
+                      <th className="py-2.5 pr-4">Tipo</th>
+                      <th className="py-2.5 pr-4">Stato</th>
+                      <th className="py-2.5">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
+                    {loadingEmploymentHistory ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Caricamento storico...</td></tr>
+                    ) : visibleEmploymentHistory.length === 0 ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Nessun evento lavorativo registrato.</td></tr>
+                    ) : visibleEmploymentHistory.map((event) => {
+                      const occurredAt = new Date(event.occurredAt);
+                      return (
+                        <tr key={event.id} className="align-top transition hover:bg-neutral-50/60">
+                          <td className="whitespace-nowrap py-3 pr-4 font-extrabold text-neutral-900">{new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
+                          <td className="whitespace-nowrap py-3 pr-4">{event.timeKnown === false ? "—" : new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
+                          <td className="py-3 pr-4 font-extrabold text-neutral-900">{event.type}</td>
+                          <td className="py-3 pr-4">
+                            <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide", employmentHistoryBadgeClass(event))}>
+                              {event.status}
+                            </span>
+                          </td>
+                          <td className="max-w-xl py-3 font-normal leading-5 text-neutral-500">{event.note || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </form>
         </div>
       </div>
@@ -1553,61 +2200,108 @@ export function StaffDirectory({
 
   return (
     <div className="w-full space-y-6">
-      {/* Top Filter Bar */}
-      <div className="bg-white/70 p-5 rounded-3xl border border-black/5 dark:bg-neutral-900/40 dark:border-white/10 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full sm:max-w-md">
-            <Search className="absolute left-4 top-3.5 size-4 text-black/40 dark:text-white/40" />
-            <Field 
+      {canManageContractRenewals && currentContractReminder ? (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/55 px-3 py-6 backdrop-blur-[2px] sm:px-8" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contract-renewal-popup-title"
+            aria-describedby="contract-renewal-popup-description"
+            className="relative w-full max-w-6xl overflow-hidden border-y-[10px] border-white bg-[linear-gradient(145deg,#202020_0%,#090909_55%,#171717_100%)] text-white shadow-[0_30px_100px_rgba(0,0,0,0.60)]"
+          >
+            <div className="max-h-[88vh] overflow-y-auto px-6 py-7 sm:px-12 sm:py-10 lg:px-16">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-lg font-black tracking-[0.36em] sm:text-2xl">PARADISE</p>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/55">Avviso contratti</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissContractReminder(currentContractReminder)}
+                  className="min-h-11 self-start px-2 text-sm font-semibold text-white/75 underline underline-offset-4 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  Prosegui senza decidere
+                </button>
+              </div>
+
+              <div className="mt-8 grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
+                <span className={cn(
+                  "grid size-14 place-items-center rounded-full border",
+                  currentContractReminder.daysLeft <= 0
+                    ? "border-white/50 bg-white/15 text-white"
+                    : "border-white/25 bg-white/[0.08] text-white/80",
+                )}>
+                  <AlertTriangle className="size-6" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 id="contract-renewal-popup-title" className="text-2xl font-black tracking-tight sm:text-3xl">
+                    {currentContractReminder.daysLeft < 0
+                      ? "Contratto scaduto"
+                      : currentContractReminder.daysLeft === 0
+                        ? "Il contratto scade oggi"
+                        : "Contratto in scadenza"}
+                  </h2>
+                  <p id="contract-renewal-popup-description" className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/65 sm:text-base">
+                    Indica se il contratto di <strong className="text-white">{currentContractReminder.employee.name}</strong> verrà rinnovato. Se il contratto è già scaduto, questo avviso ricomparirà a ogni ingresso nella pagina Staff finché non sarà dichiarato il rinnovo.
+                  </p>
+                  <div className="mt-6 grid gap-3 border-y border-white/10 py-5 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Dipendente</p><p className="mt-1 font-black text-white">{currentContractReminder.employee.name}</p></div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Sede</p><p className="mt-1 font-black text-white">{currentContractReminder.employee.location}</p></div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Scadenza</p><p className="mt-1 font-black text-white">{formatContractDate(currentContractReminder.contractEnd)}</p></div>
+                  </div>
+                  <p className={cn("mt-4 text-sm font-black", currentContractReminder.daysLeft <= 0 ? "text-white" : "text-white/70") }>
+                    {currentContractReminder.daysLeft < 0
+                      ? `Scaduto da ${Math.abs(currentContractReminder.daysLeft)} ${Math.abs(currentContractReminder.daysLeft) === 1 ? "giorno" : "giorni"}`
+                      : currentContractReminder.daysLeft === 0
+                        ? "Scade oggi"
+                        : currentContractReminder.daysLeft === 1
+                          ? "Manca 1 giorno"
+                          : `Mancano ${currentContractReminder.daysLeft} giorni`}
+                  </p>
+                </div>
+              </div>
+
+              {contractDecisionError ? <p className="mt-5 border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white" role="alert">{contractDecisionError}</p> : null}
+
+              <div className="mt-8 flex flex-col justify-end gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={contractDecisionEmployeeId === currentContractReminder.employee.id}
+                  onClick={() => void saveContractRenewalDecision("NON_RINNOVATO")}
+                  className="min-h-14 border border-white/35 bg-white/[0.07] px-6 text-sm font-black uppercase tracking-wide text-white transition hover:border-white hover:bg-white/15 disabled:cursor-wait disabled:opacity-50"
+                >
+                  Non verrà rinnovato
+                </button>
+                <button
+                  type="button"
+                  disabled={contractDecisionEmployeeId === currentContractReminder.employee.id}
+                  onClick={() => void saveContractRenewalDecision("RINNOVATO")}
+                  className="min-h-14 bg-white px-8 text-sm font-black uppercase tracking-wide text-black shadow-[0_10px_30px_rgba(255,255,255,0.12)] transition hover:bg-neutral-200 disabled:cursor-wait disabled:opacity-50"
+                >
+                  {contractDecisionEmployeeId === currentContractReminder.employee.id ? "Salvataggio..." : "Verrà rinnovato"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      <section className="overflow-hidden rounded-[24px] border border-[#eadde4] bg-white shadow-[0_12px_35px_rgba(104,62,79,0.06)] dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex flex-col gap-4 p-4 sm:p-5 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+            <Field
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca dipendente per nome, email, mansione..." 
-              className="pl-11 min-h-11"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Cerca per nome, email o mansione"
+              aria-label="Cerca nel personale"
+              className="min-h-12 rounded-2xl border-neutral-200 bg-[#fcfafb] pl-11 pr-4 text-sm shadow-none focus:bg-white dark:border-white/10 dark:bg-neutral-950"
             />
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <Link
-              href="/recruitment"
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-paradise-noir shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-neutral-900 dark:text-white"
-            >
-              <UserPlus className="size-4" /> Talent System
-            </Link>
-            <Button
-              type="button"
-              variant="soft"
-              onClick={printStaffListPdf}
-              className="min-h-11 shrink-0 rounded-2xl bg-white text-paradise-noir"
-            >
-              <Printer className="size-4" /> Stampa lista
-            </Button>
-            {isAuthorizedToEdit && (
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:justify-end">
+            {isAuthorizedToEdit ? (
               <Button
-                type="button"
-                variant="soft"
-                onClick={handleSyncDrivePhotos}
-                disabled={syncingDrivePhotos}
-                className="min-h-11 shrink-0 rounded-2xl bg-white text-paradise-noir"
-              >
-                <RefreshCw className={cn("size-4", syncingDrivePhotos && "animate-spin")} />
-                {syncingDrivePhotos ? "Importo..." : "Importa foto Drive"}
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant={archiveMode ? "dark" : "soft"}
-              onClick={() => {
-                setArchiveMode((current) => !current);
-                setFilterStatus("");
-              }}
-              className={cn(
-                "min-h-11 shrink-0 rounded-2xl",
-                archiveMode ? "bg-neutral-900 text-white hover:bg-neutral-800" : "bg-white text-paradise-noir"
-              )}
-            >
-              <Archive className="size-4" /> Archivio {archivedCount > 0 ? `(${archivedCount})` : ""}
-            </Button>
-            {isAuthorizedToEdit && (
-              <Button 
                 onClick={() => {
                   setShowCreateModal(true);
                   setNewEmployeeForm({
@@ -1626,7 +2320,7 @@ export function StaffDirectory({
                     managerId: "",
                     hrNotes: "",
                     accessList: [],
-                    iban: ""
+                    iban: "",
                   });
                   setCreationMessage("");
                   setErrorMsg("");
@@ -1634,60 +2328,184 @@ export function StaffDirectory({
                   setPinConfirmInput("");
                   setPasswordInput("");
                 }}
-                className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300 rounded-2xl min-h-11 shrink-0"
+                className="col-span-2 min-h-11 rounded-2xl bg-[#171717] px-5 text-white shadow-sm transition hover:bg-[#343434] sm:col-span-1"
               >
-                <Plus className="size-4" /> Nuovo Dipendente
+                <Plus className="size-4" /> Nuovo dipendente
               </Button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              aria-expanded={showFilters}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs font-bold text-neutral-700 transition hover:border-[#d96b94] hover:text-[#a73568] lg:hidden dark:border-white/10 dark:bg-neutral-900 dark:text-white"
+            >
+              <SlidersHorizontal className="size-4" /> Filtri
+            </button>
+            <Link
+              href="/recruitment"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs font-bold text-neutral-700 transition hover:border-[#d96b94] hover:text-[#a73568] dark:border-white/10 dark:bg-neutral-900 dark:text-white"
+            >
+              <UserPlus className="size-4" /> Candidati
+            </Link>
+            <Button
+              type="button"
+              variant={archiveMode ? "dark" : "soft"}
+              onClick={() => {
+                setArchiveMode((current) => !current);
+                setExpiryMode(false);
+                setMonthlyOverviewMode(null);
+                setFilterStatus("");
+              }}
+              className={cn(
+                "min-h-11 rounded-2xl px-4 text-xs",
+                archiveMode ? "bg-neutral-900 text-white hover:bg-neutral-800" : "border border-[#eadde4] bg-white text-neutral-700"
+              )}
+            >
+              <Archive className="size-4" /> Archivio {archivedCount > 0 ? `(${archivedCount})` : ""}
+            </Button>
+            <Button
+              type="button"
+              variant="soft"
+              onClick={printStaffListPdf}
+              className="min-h-11 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs text-neutral-700"
+            >
+              <Printer className="size-4" /> Stampa
+            </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Select 
-            value={filterLocation} 
-            onChange={(e) => setFilterLocation(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti i saloni</option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </Select>
-
-          <Select 
-            value={filterRole} 
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti i livelli di ruolo</option>
-            {ROLE_OPTIONS.map((role) => (
-              <option key={role.value} value={role.value}>{role.label}</option>
-            ))}
-          </Select>
-
-          <Select 
-            value={filterStatus} 
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti gli stati</option>
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </Select>
-
-          <Select 
-            value={filterManager} 
-            onChange={(e) => setFilterManager(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti i responsabili</option>
-            {managers.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </Select>
+        <div className={cn(
+          "border-t border-[#f1e7ec] bg-[#fcfafb] px-4 py-4 sm:px-5",
+          showFilters ? "block" : "hidden lg:block",
+        )}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Select value={filterLocation} onChange={(event) => setFilterLocation(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti i saloni</option>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </Select>
+            <Select value={filterRole} onChange={(event) => setFilterRole(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti i ruoli</option>
+              {ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </Select>
+            <Select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti gli stati</option>
+              {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+            </Select>
+            <Select value={filterManager} onChange={(event) => setFilterManager(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti i responsabili</option>
+              {managers.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}
+            </Select>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-neutral-500">
+              <strong className="text-neutral-900 dark:text-white">{filteredStaff.length}</strong> {filteredStaff.length === 1 ? "persona trovata" : "persone trovate"}
+            </p>
+            {hasActiveDirectoryFilters ? (
+              <button type="button" onClick={clearDirectoryFilters} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-[#a73568] transition hover:bg-[#f8e8f0]">
+                <X className="size-3.5" /> Azzera filtri
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      </section>
+
+      <section aria-label={`Riepilogo presenze di ${monthlyOverview.monthLabel}`} className="grid grid-cols-2 overflow-hidden rounded-[22px] border border-[#eadde4] bg-white shadow-sm lg:grid-cols-4 dark:border-white/10 dark:bg-neutral-900">
+        <button type="button" onClick={() => selectMonthlyOverview("ABSENCES")} aria-pressed={monthlyOverviewMode === "ABSENCES"} className={cn("group flex min-h-24 items-center justify-between border-b border-r border-[#f1e7ec] p-4 text-left transition hover:bg-orange-50/50 lg:border-b-0", monthlyOverviewMode === "ABSENCES" && "bg-orange-50")}>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-500">Assenze</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.absences.length}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Persone assenti · {monthlyOverview.monthLabel}</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-orange-50 text-orange-700"><AlarmClock className="size-5" /></span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => selectMonthlyOverview("HOLIDAYS")}
+          className={cn(
+            "group flex min-h-24 items-center justify-between border-b border-[#f1e7ec] p-4 text-left transition hover:bg-amber-50/50 lg:border-b-0 lg:border-r",
+            monthlyOverviewMode === "HOLIDAYS" && "bg-amber-50",
+          )}
+          aria-pressed={monthlyOverviewMode === "HOLIDAYS"}
+        >
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-600">Ferie</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.holidays.length}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Persone in ferie · {monthlyOverview.monthLabel}</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-amber-50 text-amber-700"><Umbrella className="size-5" /></span>
+        </button>
+
+        <button type="button" onClick={() => selectMonthlyOverview("SICKNESS")} aria-pressed={monthlyOverviewMode === "SICKNESS"} className={cn("group flex min-h-24 items-center justify-between border-r border-[#f1e7ec] p-4 text-left transition hover:bg-violet-50/50", monthlyOverviewMode === "SICKNESS" && "bg-violet-50")}>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-500">Malattie</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.sickness.length}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Persone in malattia · {monthlyOverview.monthLabel}</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-violet-50 text-violet-700"><HeartPulse className="size-5" /></span>
+        </button>
+
+        <button type="button" onClick={() => selectMonthlyOverview("LATE")} aria-pressed={monthlyOverviewMode === "LATE"} className={cn("group flex min-h-24 items-center justify-between p-4 text-left transition hover:bg-rose-50/50", monthlyOverviewMode === "LATE" && "bg-rose-50")}>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">Ritardi</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.late.length}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Entrate e rientri · {monthlyOverview.monthLabel}</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-rose-50 text-rose-700"><Clock3 className="size-5" /></span>
+        </button>
+
+      </section>
+
+      {monthlyOverviewMode ? (
+        <section className="overflow-hidden rounded-[24px] border border-[#F4E3EA] bg-white shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
+          <div className="flex flex-col gap-3 border-b border-black/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#D96B94]">Dettaglio mensile</p>
+              <h2 className="mt-1 text-lg font-black text-neutral-900">
+                {monthlyOverviewMode === "ABSENCES" ? "Assenze" : monthlyOverviewMode === "HOLIDAYS" ? "Ferie" : monthlyOverviewMode === "SICKNESS" ? "Malattie" : "Ritardi"} · {monthlyOverview.monthLabel}
+              </h2>
+            </div>
+            <button type="button" onClick={() => setMonthlyOverviewMode(null)} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[#F3B5D4] bg-white px-4 text-xs font-extrabold text-[#B83D7F]">
+              <X className="size-4" /> Chiudi dettaglio
+            </button>
+          </div>
+          <div className="overflow-x-auto px-5 pb-5">
+            <table className="mt-2 min-w-[880px] w-full divide-y divide-black/5 text-left text-xs">
+              <thead>
+                <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                  <th className="py-3 pr-4">Persona</th>
+                  <th className="py-3 pr-4">Giorno</th>
+                  <th className="py-3 pr-4">Ora / turno</th>
+                  <th className="py-3 pr-4">Evento</th>
+                  <th className="py-3 pr-4">Stato</th>
+                  <th className="py-3">Dettagli</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/5 text-neutral-700">
+                {visibleMonthlyRecords.length ? visibleMonthlyRecords.map((record) => (
+                  <tr key={record.id} className="align-top hover:bg-neutral-50/60">
+                    <td className="py-3 pr-4 font-extrabold text-neutral-900">{record.personName}</td>
+                    <td className="whitespace-nowrap py-3 pr-4 font-semibold">{record.dateLabel}</td>
+                    <td className="whitespace-nowrap py-3 pr-4 font-semibold">{record.timeLabel}</td>
+                    <td className="py-3 pr-4 font-bold">{record.eventLabel}</td>
+                    <td className="py-3 pr-4">
+                      <span className={cn(
+                        "inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide",
+                        record.status === "GIUSTIFICATA" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        record.status === "NON GIUSTIFICATA" && "border-red-200 bg-red-50 text-red-700",
+                        record.status === "IN ATTESA" && "border-amber-200 bg-amber-50 text-amber-800",
+                      )}>{record.status}</span>
+                    </td>
+                    <td className="max-w-md py-3 text-neutral-500">{record.note}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="py-8 text-center font-semibold text-neutral-400">Nessun evento registrato nel mese.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {successMsg && (
         <div className="p-3.5 text-xs font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200 dark:border-emerald-900">
@@ -1709,42 +2527,58 @@ export function StaffDirectory({
               <h2 className="mt-1 text-lg font-black">Account bloccati ed ex dipendenti</h2>
               <p className="mt-1 text-xs opacity-75">Qui trovi solo profili disattivati o segnati come ex dipendente.</p>
             </div>
-            <Button type="button" variant="soft" onClick={() => setArchiveMode(false)} className="bg-white">
+              <Button type="button" variant="soft" onClick={() => selectOverview("active")} className="bg-white">
               Torna allo staff attivo
             </Button>
           </div>
         </div>
       ) : null}
 
-      {/* Grid of employee cards */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b54e7c]">
+            {archiveMode ? "Archivio" : "Directory"}
+          </p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-neutral-900 dark:text-white">
+            {archiveMode ? "Personale archiviato" : "Personale attivo"}
+          </h2>
+        </div>
+        <span className="rounded-full border border-[#eadde4] bg-white px-3 py-1.5 text-xs font-bold text-neutral-600 shadow-sm dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300">
+          {filteredStaff.length} {filteredStaff.length === 1 ? "profilo" : "profili"}
+        </span>
+      </div>
+
       {filteredStaff.length === 0 ? (
-        <div className="text-center py-16 bg-white/40 border border-black/5 dark:bg-neutral-900/10 dark:border-white/5 rounded-3xl">
-          <p className="text-neutral-500 font-medium">Nessun dipendente trovato con i filtri selezionati.</p>
+        <div className="rounded-[24px] border border-dashed border-[#ddcbd4] bg-white px-5 py-14 text-center dark:border-white/10 dark:bg-neutral-900">
+          <div className="mx-auto grid size-11 place-items-center rounded-2xl bg-[#f8e8f0] text-[#a73568]"><Search className="size-5" /></div>
+          <p className="mt-4 font-bold text-neutral-800 dark:text-white">Nessun dipendente trovato</p>
+          <p className="mt-1 text-sm text-neutral-500">Modifica la ricerca oppure rimuovi i filtri applicati.</p>
+          {hasActiveDirectoryFilters ? (
+            <button type="button" onClick={clearDirectoryFilters} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl bg-neutral-900 px-4 text-xs font-bold text-white transition hover:bg-neutral-700">
+              <X className="size-4" /> Azzera filtri
+            </button>
+          ) : null}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {filteredStaff.map((emp) => (
-            <Card 
+            <Card
               key={emp.id}
-              onClick={() => {
-                setSelectedEmployee(emp);
-                setIsEditing(true);
-                setEditForm({ ...emp });
-                resetRenewalForm();
-                setPinInput("");
-                setPinConfirmInput("");
-                setPasswordInput("");
-                setErrorMsg("");
-                const isCustom = emp.mansione && 
-                  !mansioniList.map(m => m.toLowerCase()).includes(emp.mansione.toLowerCase());
-                setCustomMansioneEdit(Boolean(isCustom));
+              role="button"
+              tabIndex={0}
+              aria-label={`Apri la scheda di ${emp.name}`}
+              onClick={() => openEmployeeProfile(emp)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openEmployeeProfile(emp);
+                }
               }}
-              className="group p-5 cursor-pointer flex flex-col justify-between border-black/5 bg-white dark:bg-neutral-900 shadow-sm hover:shadow-luxury hover:-translate-y-1 transition-all duration-300"
+              className="group flex min-h-[280px] cursor-pointer flex-col justify-between overflow-hidden rounded-[22px] border-[#eadde4] bg-white p-0 shadow-[0_8px_24px_rgba(104,62,79,0.05)] transition duration-200 hover:border-[#dca8bf] hover:shadow-[0_14px_32px_rgba(104,62,79,0.11)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d96b94] focus-visible:ring-offset-2 dark:border-white/10 dark:bg-neutral-900"
             >
-              <div className="space-y-4">
-                {/* Photo & Basic header */}
-                <div className="flex items-center gap-4">
-                  <div className="relative size-14 rounded-2xl overflow-hidden border border-black/5 bg-paradise-softPink/20 shrink-0 shadow-sm flex items-center justify-center font-bold text-lg text-paradise-noir">
+              <div className="p-5">
+                <div className="flex items-start gap-3.5">
+                  <div className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#eadde4] bg-[#f8e8f0] text-lg font-bold text-paradise-noir shadow-sm">
                     {emp.photoUrl ? (
                       <img src={resolveDrivePhotoUrl(emp.photoUrl)} alt={emp.name} className="size-full object-cover" />
                     ) : (
@@ -1770,71 +2604,66 @@ export function StaffDirectory({
                       </label>
                     )}
                   </div>
-                  <div className="space-y-0.5">
-                    <h3 className="font-bold text-sm text-paradise-noir dark:text-white group-hover:text-paradise-pink transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="min-w-0 text-[15px] font-extrabold leading-5 text-paradise-noir transition-colors group-hover:text-[#a73568] dark:text-white">
                       {emp.name}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-semibold text-neutral-500">{emp.mansione || "Collaboratore"}</span>
-                      <span className="text-[10px] text-neutral-300">•</span>
+                      </h3>
                       <Badge tone={getStatusTone(emp.employeeStatus)}>{emp.employeeStatus}</Badge>
                     </div>
+                    <p className="mt-1 truncate text-xs font-semibold text-neutral-500">{emp.mansione || "Collaboratore"}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {emp.attendanceToday?.absent ? <Badge tone="pink">Assente oggi</Badge> : null}
+                      {emp.attendanceToday?.lateApprovalStatus === "PENDING" ? <Badge tone="gold">Ritardo da confermare</Badge> : null}
+                    </div>
                   </div>
                 </div>
 
-                {/* Info List */}
-                <div className="space-y-2 pt-2 border-t border-black/5 dark:border-white/5 text-xs text-neutral-500 dark:text-neutral-400">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="size-3.5 text-neutral-400" />
-                    <span>Salone: <strong className="text-neutral-700 dark:text-neutral-200">{emp.location}</strong></span>
+                <div className="mt-4 space-y-2.5 border-t border-[#f1e7ec] pt-4 text-xs text-neutral-500 dark:border-white/10 dark:text-neutral-400">
+                  {emp.attendanceToday?.plannedStart ? (
+                    <div className={cn("flex items-start gap-2 rounded-xl border px-3 py-2.5 font-semibold", emp.attendanceToday.absent ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700")}>
+                      <AlarmClock className="mt-0.5 size-3.5 shrink-0" />
+                      <span className="leading-4">
+                        Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.lateApprovalStatus
+                          ? `entrata ${emp.attendanceToday.firstEntry ?? "registrata"} · ritardo da confermare`
+                          : emp.attendanceToday.absent
+                          ? `nessuna timbratura (+${emp.attendanceToday.elapsedMinutes} min oltre il limite)`
+                          : emp.attendanceToday.firstEntry
+                            ? `entrata ${emp.attendanceToday.firstEntry}`
+                            : emp.attendanceToday.status === "GIUSTIFICATO"
+                              ? "assenza giustificata"
+                              : emp.attendanceToday.status === "RIPOSO"
+                                ? "riposo"
+                                : "in attesa dell’orario"}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <MapPin className="size-3.5 shrink-0 text-neutral-400" />
+                    <span className="truncate font-semibold text-neutral-700 dark:text-neutral-200">{emp.location}</span>
                   </div>
                   {emp.whatsappPhone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="size-3.5 text-neutral-400" />
-                      <span>{emp.whatsappPhone}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Phone className="size-3.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">{emp.whatsappPhone}</span>
                     </div>
                   )}
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="size-3.5 text-neutral-400" />
-                    <span>CF: <strong className="text-neutral-700 dark:text-neutral-200">{emp.fiscalCode || "Non inserito"}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="size-3.5 text-neutral-400" />
-                    <span>Nascita: <strong className="text-neutral-700 dark:text-neutral-200">{emp.birthDate ? formatContractDate(emp.birthDate) : "Non inserita"}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="size-3.5 text-neutral-400" />
-                    <span>IBAN: <strong className="text-neutral-700 dark:text-neutral-200">{emp.iban || "Non inserito"}</strong></span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mail className="size-3.5 shrink-0 text-neutral-400" />
+                    <span className="truncate">{emp.email}</span>
                   </div>
                   {emp.managerName && (
-                    <div className="flex items-center gap-2">
-                      <User className="size-3.5 text-neutral-400" />
-                      <span>Responsabile: <strong className="text-neutral-700 dark:text-neutral-200">{emp.managerName}</strong></span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <User className="size-3.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">Resp. <strong className="text-neutral-700 dark:text-neutral-200">{emp.managerName}</strong></span>
                     </div>
                   )}
                 </div>
-
-                {/* Access list badges */}
-                {emp.accessList.length > 0 && (
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block">Accessi attivi</span>
-                    <div className="flex flex-wrap gap-1">
-                      {emp.accessList.map((access) => (
-                        <span 
-                          key={access} 
-                          className="text-[9px] font-bold bg-[#F7E9EF] text-[#B85B68] dark:bg-neutral-800 dark:text-[#FFA8DD] px-1.5 py-0.5 rounded"
-                        >
-                          {ACCESS_LABELS[access] || access}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="pt-4 mt-auto flex items-center justify-between text-xs font-bold text-paradise-pink group-hover:text-[#E96BA8] transition-colors">
-                <span>Vedi scheda completa</span>
-                <span className="size-6 rounded-full bg-paradise-softPink/20 flex items-center justify-center font-bold text-sm group-hover:translate-x-1 transition-transform">&rarr;</span>
+              <div className="mt-auto flex items-center justify-between border-t border-[#f1e7ec] bg-[#fcfafb] px-5 py-3.5 text-xs font-bold text-[#a73568] transition-colors group-hover:bg-[#fff7fb] dark:border-white/10 dark:bg-neutral-950/40">
+                <span>Apri scheda</span>
+                <ExternalLink className="size-3.5 transition-transform group-hover:translate-x-0.5" />
               </div>
             </Card>
           ))}
@@ -1857,270 +2686,227 @@ export function StaffDirectory({
         </div>
       )}
 
-      {/* MODAL: CREATE MANUALLY NEW EMPLOYEE */}
+      {/* FULLSCREEN: CREATE MANUALLY NEW EMPLOYEE */}
       {showCreateModal && newEmployeeForm && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-md animate-in fade-in duration-200">
-          <Card className="w-full max-w-2xl p-0 border border-white/50 bg-white/95 dark:bg-neutral-900/95 shadow-luxury overflow-hidden rounded-[30px] flex flex-col max-h-[90vh]">
-            <div className="flex items-start justify-between border-b border-black/5 dark:border-white/5 bg-gradient-to-b from-white to-neutral-50/50 dark:from-neutral-900 dark:to-neutral-900 px-6 py-5 shrink-0">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-paradise-pink">HR ADMINISTRATION</p>
-                <h2 className="mt-1 text-xl font-bold text-paradise-noir dark:text-white">Nuovo Dipendente Manuale</h2>
+        <div className="fixed inset-0 z-50 bg-[#f4edf1] animate-in fade-in duration-200 dark:bg-neutral-950">
+          <Card className="flex h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-[#fbf8fa] p-0 shadow-none dark:bg-neutral-950">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#eadde4] bg-white px-4 py-4 dark:border-white/10 dark:bg-neutral-900 sm:px-7 sm:py-5 lg:px-12 2xl:px-20">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#f8d7e7] to-[#ffeaf3] text-[#b83d7f] shadow-sm">
+                  <UserPlus className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#b83d7f]">Anagrafica staff</p>
+                  <h2 className="truncate text-xl font-extrabold text-paradise-noir dark:text-white sm:text-2xl">Aggiungi nuovo dipendente</h2>
+                  <p className="mt-0.5 hidden text-xs font-medium text-neutral-500 sm:block">Inserisci i dati essenziali: le credenziali possono essere generate automaticamente.</p>
+                </div>
               </div>
               <button 
-                className="grid size-10 place-items-center rounded-xl border border-black/10 bg-white dark:bg-neutral-800 dark:border-white/10 shadow-sm transition hover:bg-paradise-nude active:scale-95" 
+                type="button"
+                aria-label="Chiudi"
+                className="grid size-10 shrink-0 place-items-center rounded-2xl border border-black/10 bg-white text-neutral-600 shadow-sm transition hover:border-[#e9a9c8] hover:bg-[#fff3f8] hover:text-[#b83d7f] active:scale-95 dark:border-white/10 dark:bg-neutral-800 dark:text-white/70"
                 onClick={() => setShowCreateModal(false)}
               >
-                <X className="size-5 text-black/70 dark:text-white/70" />
+                <X className="size-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateEmployee} className="flex-1 overflow-y-auto p-6 space-y-4 luxury-scroll">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Nome e Cognome *</span>
-                  <Field 
-                    required
-                    value={newEmployeeForm.name || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, name: e.target.value } : null)}
-                    placeholder="E.g. Angela Bianchi"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Email Aziendale *</span>
-                  <Field 
-                    required
-                    type="email"
-                    value={newEmployeeForm.email || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, email: e.target.value } : null)}
-                    placeholder="E.g. angela@paradisebeauty.it"
-                  />
-                </label>
+            {errorMsg && (
+              <div className="mx-4 mt-4 shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800 sm:mx-7 lg:mx-12 2xl:mx-20" role="alert">
+                {errorMsg}
               </div>
+            )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">URL Foto Profilo</span>
-                  <Field 
-                    value={newEmployeeForm.photoUrl || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)}
-                    placeholder="https://..."
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Numero WhatsApp</span>
-                  <Field 
-                    value={newEmployeeForm.whatsappPhone || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)}
-                    placeholder="E.g. +39..."
-                  />
-                </label>
-              </div>
+            <form onSubmit={handleCreateEmployee} className="flex min-h-0 flex-1 flex-col">
+              <div className="luxury-scroll flex-1 space-y-5 overflow-y-auto p-4 sm:p-6 lg:px-12 lg:py-8 2xl:px-20">
+                <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><User className="size-4" /></div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Dati personali</h3>
+                      <p className="text-[11px] font-medium text-neutral-500">Identità e contatti del dipendente</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Nome e cognome <b className="text-[#c23878]">*</b></span>
+                      <Field required autoComplete="name" value={newEmployeeForm.name || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, name: e.target.value } : null)} placeholder="Es. Angela Bianchi" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Email aziendale <b className="text-[#c23878]">*</b></span>
+                      <Field required type="email" autoComplete="email" value={newEmployeeForm.email || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, email: e.target.value } : null)} placeholder="nome@paradisebeauty.it" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Numero WhatsApp</span>
+                      <Field inputMode="tel" autoComplete="tel" value={newEmployeeForm.whatsappPhone || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)} placeholder="+39 333 000 0000" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Foto profilo</span>
+                      <Field type="url" value={newEmployeeForm.photoUrl || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)} placeholder="Incolla il link della foto" />
+                    </label>
+                  </div>
+                </section>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Mansione *</span>
-                  <Select 
-                    value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "custom") {
-                        setCustomMansioneCreate(true);
-                        setNewEmployeeForm(prev => prev ? { ...prev, mansione: "" } : null);
-                      } else {
-                        setCustomMansioneCreate(false);
-                        setNewEmployeeForm(prev => prev ? { ...prev, mansione: val } : null);
-                      }
-                    }}
-                  >
-                    <option value="">Seleziona mansione...</option>
-                    {mansioniList.map((m) => (
-                      <option key={m} value={m.toLowerCase()}>{m}</option>
-                    ))}
-                    <option value="custom">+ Aggiungi altra mansione...</option>
-                  </Select>
-                  {customMansioneCreate && (
-                    <Field 
-                      required
-                      value={newEmployeeForm.mansione || ""}
-                      onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
-                      placeholder="Inserisci nuova mansione..."
-                      className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
-                    />
-                  )}
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Stato Dipendente *</span>
-                  <Select 
-                    value={newEmployeeForm.employeeStatus || "Attivo"}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}
-                  >
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Ruolo Sistema *</span>
-                  <Select 
-                    value={newEmployeeForm.role || "DIPENDENTE"}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, role: e.target.value } : null)}
-                  >
-                    {ROLE_OPTIONS.map((role) => (
-                      <option key={role.value} value={role.value}>{role.label}</option>
-                    ))}
-                  </Select>
-                </label>
-              </div>
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><Briefcase className="size-4" /></div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Ruolo e sede</h3>
+                        <p className="text-[11px] font-medium text-neutral-500">Assegnazione operativa</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1.5 sm:col-span-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Mansione <b className="text-[#c23878]">*</b></span>
+                        <Select value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()} onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setCustomMansioneCreate(true);
+                            setNewEmployeeForm(prev => prev ? { ...prev, mansione: "" } : null);
+                          } else {
+                            setCustomMansioneCreate(false);
+                            setNewEmployeeForm(prev => prev ? { ...prev, mansione: val } : null);
+                          }
+                        }}>
+                          <option value="">Seleziona la mansione</option>
+                          {mansioniList.map((m) => <option key={m} value={m.toLowerCase()}>{m}</option>)}
+                          <option value="custom">+ Aggiungi altra mansione</option>
+                        </Select>
+                        {customMansioneCreate && <Field required value={newEmployeeForm.mansione || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)} placeholder="Scrivi la nuova mansione" className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200" />}
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Salone <b className="text-[#c23878]">*</b></span>
+                        <Select value={newEmployeeForm.sedeId || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, sedeId: e.target.value } : null)}>
+                          {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Responsabile</span>
+                        <Select value={newEmployeeForm.managerId || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, managerId: e.target.value } : null)}>
+                          <option value="">Nessuno</option>
+                          {managers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Stato <b className="text-[#c23878]">*</b></span>
+                        <Select value={newEmployeeForm.employeeStatus || "Attivo"} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}>
+                          {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Ruolo sistema <b className="text-[#c23878]">*</b></span>
+                        <Select value={newEmployeeForm.role || "DIPENDENTE"} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, role: e.target.value } : null)}>
+                          {createRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                        </Select>
+                      </label>
+                    </div>
+                  </section>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Salone Sede *</span>
-                  <Select 
-                    value={newEmployeeForm.sedeId || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, sedeId: e.target.value } : null)}
-                  >
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>{loc.name}</option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Responsabile Diretto</span>
-                  <Select 
-                    value={newEmployeeForm.managerId || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, managerId: e.target.value } : null)}
-                  >
-                    <option value="">Nessuno</option>
-                    {managers.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
-                  <Field 
-                    type="date"
-                    value={newEmployeeForm.birthDate || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
-                  <Field 
-                    value={newEmployeeForm.fiscalCode || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, fiscalCode: e.target.value } : null)}
-                    placeholder="Codice..."
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">IBAN</span>
-                  <Field 
-                    value={newEmployeeForm.iban || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
-                    placeholder="IT..."
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Inizio Rapporto *</span>
-                  <Field 
-                    required
-                    type="date"
-                    value={newEmployeeForm.contractStart || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Fine Contratto</span>
-                  <Field 
-                    type="date"
-                    value={newEmployeeForm.contractEnd || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-black/5 dark:border-white/5 pt-3">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">PIN Personalizzato (4-6 cifre)</span>
-                  <Field 
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="Lascia vuoto per generare casuale"
-                    maxLength={6}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">Conferma PIN</span>
-                  <Field 
-                    value={pinConfirmInput}
-                    onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="Ripeti PIN"
-                    maxLength={6}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">Password Provvisoria</span>
-                  <Field 
-                    type="password"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="Lascia vuoto per generare casuale"
-                  />
-                </label>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
-                <div className="flex flex-wrap gap-2">
-                  {ACCESS_PRESETS.map((access) => {
-                    const active = Array.isArray(newEmployeeForm.accessList) ? newEmployeeForm.accessList.includes(access) : false;
-                    return (
-                      <button
-                        key={access}
-                        type="button"
-                        onClick={() => toggleAccessInCreate(access)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95",
-                          active 
-                            ? "bg-paradise-pink/20 border-paradise-pink text-paradise-noir dark:text-white" 
-                            : "bg-white dark:bg-neutral-800 border-black/10 dark:border-white/10 text-neutral-500"
-                        )}
-                      >
-                        {ACCESS_LABELS[access] || access}
-                      </button>
-                    );
-                  })}
+                  <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><ClipboardList className="size-4" /></div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Contratto</h3>
+                        <p className="text-[11px] font-medium text-neutral-500">Dati amministrativi e durata</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Inizio rapporto <b className="text-[#c23878]">*</b></span>
+                        <Field required type="date" value={newEmployeeForm.contractStart || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)} />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Fine contratto</span>
+                        <Field type="date" value={newEmployeeForm.contractEnd || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)} />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Data di nascita</span>
+                        <Field type="date" value={newEmployeeForm.birthDate || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)} />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Codice fiscale</span>
+                        <Field value={newEmployeeForm.fiscalCode || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, fiscalCode: e.target.value.toUpperCase() } : null)} placeholder="Codice fiscale" />
+                      </label>
+                      <label className="space-y-1.5 sm:col-span-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">IBAN</span>
+                        <Field value={newEmployeeForm.iban || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)} placeholder="IT00 0000 0000 0000 0000 0000 000" />
+                      </label>
+                    </div>
+                  </section>
                 </div>
+
+                <section className="rounded-[22px] border border-[#efc5d9] bg-gradient-to-br from-[#fff7fa] to-[#fff] p-4 shadow-sm dark:border-[#6c3152] dark:from-[#25151f] dark:to-neutral-900 sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[#b83d7f] text-white shadow-sm"><Key className="size-4" /></div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Credenziali di accesso</h3>
+                        <p className="text-[11px] font-medium text-neutral-500">Lascia vuoto per generarle automaticamente</p>
+                      </div>
+                    </div>
+                    <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-extrabold text-emerald-700 sm:inline-flex">Invio via email</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#a33a70]">PIN (4–6 cifre)</span>
+                      <Field inputMode="numeric" autoComplete="off" value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Genera automaticamente" maxLength={6} />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#a33a70]">Conferma PIN</span>
+                      <Field inputMode="numeric" autoComplete="off" value={pinConfirmInput} onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Ripeti il PIN" maxLength={6} />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#a33a70]">Password provvisoria</span>
+                      <Field type="password" autoComplete="new-password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Genera automaticamente" />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><Shield className="size-4" /></div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Accessi abilitati</h3>
+                      <p className="text-[11px] font-medium text-neutral-500">Seleziona le aree visibili al dipendente</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ACCESS_PRESETS.map((access) => {
+                      const active = Array.isArray(newEmployeeForm.accessList) ? newEmployeeForm.accessList.includes(access) : false;
+                      return (
+                        <button key={access} type="button" onClick={() => toggleAccessInCreate(access)} className={cn(
+                          "inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all active:scale-95",
+                          active ? "border-[#c23878] bg-[#c23878] text-white shadow-sm" : "border-black/10 bg-[#fbf8fa] text-neutral-600 hover:border-[#e6a7c5] hover:bg-[#fff3f8] dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
+                        )}>
+                          {active && <Check className="size-3.5" />}
+                          {ACCESS_LABELS[access] || access}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <label className="block rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Note amministrazione HR</span>
+                  <textarea value={newEmployeeForm.hrNotes || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, hrNotes: e.target.value } : null)} placeholder="Aggiungi informazioni interne sul contratto o sul dipendente…" rows={2} className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-[#fbf8fa] p-3 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/15 dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </label>
               </div>
 
-              <label className="block space-y-1">
-                <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Note Amministrazione HR (Interne)</span>
-                <textarea 
-                  value={newEmployeeForm.hrNotes || ""}
-                  onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, hrNotes: e.target.value } : null)}
-                  placeholder="Dettagli del contratto..."
-                  rows={2}
-                  className="w-full rounded-2xl border border-black/10 bg-white/80 dark:bg-white/10 dark:text-white p-3 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                />
-              </label>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-black/5 dark:border-white/5">
+              <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#eadde4] bg-white px-4 py-4 shadow-[0_-10px_30px_rgba(91,49,73,0.06)] dark:border-white/10 dark:bg-neutral-900 sm:flex-row sm:items-center sm:justify-between sm:px-7 lg:px-12 2xl:px-20">
+                <p className="text-[11px] font-semibold text-neutral-500"><span className="text-[#c23878]">*</span> Campi obbligatori</p>
+                <div className="flex gap-3">
                 <Button type="button" variant="soft" onClick={() => setShowCreateModal(false)}>
                   Annulla
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={submitting}
-                  className="bg-gradient-to-r from-paradise-pink to-[#ffa8dd] text-paradise-noir font-bold"
+                  className="min-w-44 bg-gradient-to-r from-[#c23878] to-[#e16fa5] font-extrabold text-white shadow-lg shadow-[#c23878]/20"
                 >
-                  {submitting ? "Creazione..." : "Crea Dipendente"}
+                  {submitting ? "Salvataggio…" : "Salva dipendente"}
                 </Button>
+                </div>
               </div>
             </form>
           </Card>

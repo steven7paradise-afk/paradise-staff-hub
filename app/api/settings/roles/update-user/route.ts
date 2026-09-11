@@ -31,6 +31,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "ID utente mancante." }, { status: 400 });
     }
 
+    const existingUser = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (!existingUser) {
+      return NextResponse.json({ error: "Persona non trovata." }, { status: 404 });
+    }
+
     const updateData: any = {};
     if (role) {
       if (session.user.role !== "ZERO") {
@@ -41,6 +46,9 @@ export async function POST(request: NextRequest) {
       }
       if (role === "ZERO") {
         return NextResponse.json({ error: "Il ruolo Zero non si assegna dal pannello." }, { status: 403 });
+      }
+      if (existingUser.role === "ZERO") {
+        return NextResponse.json({ error: "Il ruolo Zero è protetto e non può essere spostato." }, { status: 403 });
       }
       updateData.role = role;
     }

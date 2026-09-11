@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
 import { appendShopifyOrderNote, getShopifyOrderCowlendarText, getShopifyOrderNoteText, extractShopifyOrderCodes } from "@/lib/shopify";
-import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { getOperationalUser } from "@/lib/operational-session";
 
 export async function GET(request: NextRequest) {
@@ -21,9 +18,14 @@ export async function GET(request: NextRequest) {
   const cleanOrder = orderName ? orderName.replace(/^#/, "").trim() : "";
   const cleanBookingId = bookingId ? bookingId.trim() : "";
   const cleanClientName = clientNameParam ? clientNameParam.trim().toLowerCase() : "";
+  const appointmentDateParam = searchParams.get("appointmentDate");
+  const appointmentDate = appointmentDateParam ? new Date(appointmentDateParam) : null;
+  const appointmentTimestamp = appointmentDate && Number.isFinite(appointmentDate.getTime())
+    ? appointmentDate.getTime()
+    : Number.POSITIVE_INFINITY;
 
   try {
-    const [comments, shopifyNote, cowlendarOrderNote, rawResponses] = await Promise.all([
+    const [comments, shopifyNote, cowlendarOrderNote, responseByBooking, rawResponses] = await Promise.all([
       prisma.shopifyOrderComment.findMany({
         where: {
           OR: [
@@ -35,30 +37,52 @@ export async function GET(request: NextRequest) {
       }),
       orderName ? getShopifyOrderNoteText(orderName) : Promise.resolve(null),
       orderName ? getShopifyOrderCowlendarText(orderName) : Promise.resolve(null),
+      cleanBookingId
+        ? prisma.serviceFormResponse.findFirst({
+            where: {
+              answers: { path: ["booking_id"], equals: cleanBookingId },
+            },
+            orderBy: { updated_at: "desc" },
+            select: { id: true, answers: true, created_at: true },
+          })
+        : Promise.resolve(null),
       prisma.serviceFormResponse.findMany({
         orderBy: { created_at: "desc" },
-        take: 100,
+        take: 250,
         select: { id: true, answers: true, created_at: true },
       }),
     ]);
 
-    const existingControl = rawResponses.find((r) => {
+    const responseByOrder = rawResponses.find((r) => {
       const ans = (r.answers || {}) as Record<string, any>;
       const rBookingId = String(ans.booking_id || "").trim();
       const rOrder = String(ans.client_control_shopify_order || "").replace(/^#/, "").trim();
-      const rName = String(ans.client_control_client_name || "").trim().toLowerCase();
 
       if (cleanBookingId && rBookingId === cleanBookingId) return true;
       if (cleanOrder && rOrder === cleanOrder) return true;
-      if (cleanClientName && rName === cleanClientName) return true;
       return false;
     });
+    const existingControl = responseByBooking || responseByOrder || null;
+    const lastVisit = cleanClientName
+      ? rawResponses.find((response) => {
+          if (response.id === existingControl?.id) return false;
+          const answers = (response.answers || {}) as Record<string, any>;
+          const responseClientName = String(answers.client_control_client_name || "").trim().toLowerCase();
+          const isDraft = Boolean(answers.client_control_is_draft);
+          const correctness = String(answers.client_control_correctness || "");
+          return responseClientName === cleanClientName
+            && !isDraft
+            && !/no\s*show|non presentat/i.test(correctness)
+            && response.created_at.getTime() < appointmentTimestamp;
+        })
+      : null;
 
     return NextResponse.json({
       comments,
       shopifyNote,
       cowlendarOrderNote,
       existingControl: existingControl ? { id: existingControl.id, answers: existingControl.answers } : null,
+      lastVisitAt: lastVisit?.created_at.toISOString() || null,
     });
   } catch (error) {
     console.error("Failed to fetch appointment comments:", error);
@@ -67,7 +91,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, {
+    requirePcWorker: true,
+    preferAuthenticatedAdmin: true,
+  });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
@@ -85,20 +112,21 @@ export async function POST(request: NextRequest) {
     }
 
     const key = orderName || bookingId;
-    const authorName = signedBy ? signedBy : sessionUserName;
+    const effectiveSignedBy = operationalUser?.isPC ? "" : String(signedBy || "").trim();
+    const authorName = effectiveSignedBy || sessionUserName;
     
     const comment = await prisma.shopifyOrderComment.create({
       data: {
         order_name: key,
         user_name: authorName,
         user_role: sessionUserRole,
-        message: message.trim() + (signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""),
+        message: message.trim() + (effectiveSignedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""),
       },
     });
 
     const targetOrderCodes = extractShopifyOrderCodes(orderName);
     for (const code of targetOrderCodes) {
-      appendShopifyOrderNote(code, authorName, message.trim() + (signedBy ? ` [Cassa: ${sessionUserName}]` : ""))
+      appendShopifyOrderNote(code, authorName, message.trim() + (effectiveSignedBy ? ` [Cassa: ${sessionUserName}]` : ""))
         .catch((err) => console.error(`Failed to sync comment to Shopify order ${code}:`, err));
     }
 
@@ -110,7 +138,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, {
+    requirePcWorker: true,
+    preferAuthenticatedAdmin: true,
+  });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";

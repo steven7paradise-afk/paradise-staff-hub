@@ -5,8 +5,36 @@ import { prisma } from "@/lib/prisma";
 import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
 import { pinLookup } from "@/lib/pin";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
+import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { FORMER_EMPLOYEE_STATUS, hasFormerEmployeeDocumentAccess, isFormerEmployeeAllowedPath } from "@/lib/former-employee";
+import { isPcCassaAllowedPath } from "@/lib/pc-cassa-access";
+import { consumePasskeyGrant } from "@/lib/passkey";
+
+function isPublicOperationalRequest(pathname: string, method: string) {
+  if (pathname === "/login" || pathname === "/login/") return true;
+  if (pathname.startsWith("/api/auth/")) return true;
+  if (pathname === "/api/health") return true;
+  if (pathname === "/appointments/register" || pathname.startsWith("/appointments/register/")) return true;
+  if (pathname === "/tablet-clock" || pathname.startsWith("/tablet-clock/")) return true;
+  if (pathname === "/api/devices/activate") return true;
+  if (["/api/attendance/clock", "/api/attendance/identify", "/api/attendance/status", "/api/tablet-requests"].includes(pathname)) return true;
+  if (pathname.startsWith("/api/passkeys/auth/")) return true;
+  if (pathname === "/api/settings/tablet" && method === "GET") return true;
+  if ([
+    "/api/client-control/analytics",
+    "/api/client-control/note-suggestions",
+    "/api/client-control/polish-note",
+    "/api/client-control/tablet-submit",
+  ].includes(pathname)) return true;
+  if (pathname === "/api/appointments/pc/register") return true;
+  if (pathname === "/api/appointments/bot" || pathname === "/api/attendance/close-open-shifts") return true;
+  return false;
+}
 
 export const authConfig = {
+  // Coolify terminates HTTPS before forwarding requests to the container.
+  // Trust its forwarded host/protocol so Auth.js builds public callback URLs.
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: 60 * 60 * 24 * 180,
@@ -34,16 +62,33 @@ export const authConfig = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
         pin: { label: "PIN", type: "password" },
+        passkeyToken: { label: "Passkey token", type: "password" },
       },
       async authorize(credentials) {
+        const passkeyToken = String(credentials?.passkeyToken ?? "");
+        if (passkeyToken) {
+          const user = await consumePasskeyGrant(passkeyToken, "LOGIN");
+          if (!user) return null;
+          if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            sedeId: user.sede_id,
+            mansione: user.mansione,
+          };
+        }
+
         const pin = String(credentials?.pin ?? "").trim();
         if (pin) {
-          if (!/^\d{2,6}$/.test(pin)) return null;
+          if (!/^\d{4,6}$/.test(pin)) return null;
           const lookup = pinLookup(pin);
           const user = await prisma.user.findUnique({
             where: { pin_lookup: lookup },
           });
           if (!user?.active) return null;
+          if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
           return {
             id: user.id,
             name: user.name,
@@ -59,6 +104,7 @@ export const authConfig = {
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.active) return null;
+        if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return null;
@@ -86,16 +132,15 @@ export const authConfig = {
       } else if (token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true },
+          select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true, employee_status: true, workforce_data: true, last_edited_at: true },
         }).catch(() => null);
 
-        if (dbUser?.active) {
-          token.name = dbUser.name;
-          token.email = dbUser.email;
-          token.role = dbUser.role as Role;
-          token.sedeId = dbUser.sede_id;
-          token.mansione = dbUser.mansione ?? undefined;
-        }
+        if (!dbUser?.active) return null;
+        token.name = dbUser.name;
+        token.email = dbUser.email;
+        token.role = dbUser.role as Role;
+        token.sedeId = dbUser.sede_id ?? undefined;
+        token.mansione = dbUser.mansione ?? undefined;
       }
       return token;
     },
@@ -112,36 +157,28 @@ export const authConfig = {
     },
     async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
-      if (pathname === "/login" || pathname === "/login/") return true;
-      if (pathname.startsWith("/appointments/register")) return true;
-      if (pathname.startsWith("/api/attendance/clock")) return true;
+      if (isPublicOperationalRequest(pathname, request.method)) return true;
+
+      // An administrator may open the remote-control console from the cashier
+      // browser itself to reconnect that physical device. The PC cookie must not
+      // hide the administrator session for this one protected page.
+      const isAdminRemoteAccess =
+        (pathname === "/remote" || pathname.startsWith("/remote/")) &&
+        Boolean(auth?.user?.id) &&
+        ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(auth?.user?.role ?? "");
+      if (isAdminRemoteAccess) return true;
+
+      // A full administrator login from an authorized cashier PC is a real
+      // authenticated session and must use the administrator permission set.
+      const isAdministratorSession =
+        Boolean(auth?.user?.id) &&
+        ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(auth?.user?.role ?? "");
 
       // Strict lockdown for Cashier PCs with the operational APIs needed after profile selection.
-      const pcToken = request.cookies.get("appointments_pc_token")?.value;
-      if (pcToken) {
-        const isAllowedPage = 
-          pathname === "/appointments" || 
-          pathname.startsWith("/appointments/") ||
-          pathname === "/client-control" ||
-          pathname.startsWith("/client-control/") ||
-          pathname === "/orders" ||
-          pathname.startsWith("/orders/") ||
-          pathname === "/service-forms" || 
-          pathname.startsWith("/service-forms/");
-          
-        const isAllowedApi = 
-          pathname.startsWith("/api/appointments") || 
-          pathname.startsWith("/api/client-control") ||
-          pathname.startsWith("/api/orders") ||
-          pathname.startsWith("/api/service-forms") ||
-          pathname.startsWith("/api/shopify-order-lookup") ||
-          pathname.startsWith("/api/drive-image") ||
-          pathname.startsWith("/api/auth");
-
-        if (isAllowedPage || isAllowedApi) {
-          return true;
-        }
-        return false;
+      const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
+      const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
+      if (pcAuth && !isAdministratorSession) {
+        return isPcCassaAllowedPath(pathname);
       }
       
       if (!auth?.user?.id) return false;
@@ -153,11 +190,22 @@ export const authConfig = {
             id: true,
             role: true,
             mansione: true,
+            active: true,
+            employee_status: true,
+            workforce_data: true,
+            last_edited_at: true,
             location: { select: { name: true } },
           }
         });
 
-        if (!dbUser) return false;
+        if (!dbUser?.active) return false;
+        if (dbUser.employee_status === FORMER_EMPLOYEE_STATUS) {
+          if (!hasFormerEmployeeDocumentAccess(dbUser.workforce_data, dbUser.last_edited_at)) {
+            return Response.redirect(new URL("/login?documentAccessExpired=1", request.nextUrl));
+          }
+          if (isFormerEmployeeAllowedPath(pathname)) return true;
+          return Response.redirect(new URL("/documents", request.nextUrl));
+        }
         if (
           isShiftProtectedPath(pathname) &&
           !(await canAccessSalonShiftModules(dbUser))

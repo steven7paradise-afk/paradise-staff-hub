@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
-import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/app/api/settings/dashboard/route";
+import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { DashboardSettingsClient } from "./dashboard-settings-client";
 
 export const dynamic = "force-dynamic";

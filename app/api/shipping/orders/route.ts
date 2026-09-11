@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, role: true, mansione: true, active: true },
+    });
+    if (!user?.active || !(await canAccessForUser(prisma, "/shipping", user))) {
+      return NextResponse.json({ error: "Permessi insufficienti" }, { status: 403 });
     }
 
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;

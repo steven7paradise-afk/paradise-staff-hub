@@ -1,5 +1,26 @@
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Normalizza i riferimenti che vengono normalmente incollati da Shopify:
+ * #27159, 27159, "ordine #27159" oppure l'URL dell'ordine nell'Admin.
+ */
+export function normalizeShopifyOrderReference(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const adminUrlId = raw.match(/\/orders\/(\d{10,})(?:[/?#]|$)/i)?.[1];
+  if (adminUrlId) return adminUrlId;
+
+  const hashNumber = raw.match(/#\s*(\d{3,})\b/);
+  if (hashNumber) return `#${hashNumber[1]}`;
+
+  const compact = raw.replace(/[\s\u00a0]+/g, "");
+  if (/^\d{3,}$/.test(compact)) return compact;
+
+  const labelledNumber = raw.match(/(?:ordine|order|shopify)\D{0,20}(\d{3,})\b/i)?.[1];
+  return labelledNumber ? `#${labelledNumber}` : null;
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 800): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -169,6 +190,111 @@ export async function getShopifyOrderNamesBulk(orderIds: (string | number | null
 }
 
 /**
+ * Loads Shopify order notes in a small number of bulk requests. This is used
+ * after the appointments page is already visible, so Shopify can never block
+ * the operational board.
+ */
+export async function getShopifyOrderNotesBulk(
+  orderReferences: (string | number | null | undefined)[],
+): Promise<Map<string, string>> {
+  const notes = new Map<string, string>();
+  const cleanReferences = Array.from(
+    new Set(
+      orderReferences
+        .map((reference) => String(reference || "").trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 200);
+  if (!cleanReferences.length) return notes;
+
+  const directIds = cleanReferences.filter((reference) => /^\d{10,}$/.test(reference));
+  const requestedNames = Array.from(new Set(
+    cleanReferences
+      .filter((reference) => !/^\d{10,}$/.test(reference))
+      .map((reference) => reference.replace(/^#?/, "#"))
+      .filter((reference) => /^#\d{3,}$/.test(reference)),
+  ));
+
+  const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  if (!shop || !token) return notes;
+
+  const cachedByName = requestedNames.length
+    ? await prisma.shopifyOrderCache.findMany({
+        where: { order_name: { in: requestedNames } },
+      }).catch(() => [])
+    : [];
+  const cachedNameById = new Map(cachedByName.map((record) => [record.order_id, record.order_name]));
+  const cleanIds = Array.from(new Set([
+    ...directIds,
+    ...cachedByName.map((record) => record.order_id),
+  ]));
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < cleanIds.length; index += 50) {
+    chunks.push(cleanIds.slice(index, index + 50));
+  }
+
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const url = `https://${shop}/admin/api/2024-04/orders.json?ids=${chunk.join(",")}&status=any&fields=id,name,note`;
+      const response = await fetchWithTimeout(url, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      }, 1600);
+      if (!response.ok) return;
+      const payload = await response.json();
+      for (const order of Array.isArray(payload?.orders) ? payload.orders : []) {
+        const note = String(order?.note || "").trim();
+        if (!order?.id || !note) continue;
+        const orderId = String(order.id);
+        const orderName = String(order.name || cachedNameById.get(orderId) || "").trim();
+        notes.set(orderId, note);
+        if (orderName) notes.set(orderName.replace(/^#?/, "#"), note);
+      }
+    } catch (error) {
+      console.error("Error loading Shopify appointment notes:", error);
+    }
+  }));
+
+  const unresolvedNames = requestedNames.filter((orderName) => !notes.has(orderName));
+  if (unresolvedNames.length) {
+    try {
+      const url = `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,note`;
+      const response = await fetchWithTimeout(url, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      }, 3000);
+      if (response.ok) {
+        const payload = await response.json();
+        const unresolved = new Set(unresolvedNames);
+        for (const order of Array.isArray(payload?.orders) ? payload.orders : []) {
+          const orderName = String(order?.name || "").trim().replace(/^#?/, "#");
+          if (!unresolved.has(orderName)) continue;
+          const note = String(order?.note || "").trim();
+          if (note) notes.set(orderName, note);
+          if (order?.id) {
+            await prisma.shopifyOrderCache.upsert({
+              where: { order_id: String(order.id) },
+              update: { order_name: orderName },
+              create: { order_id: String(order.id), order_name: orderName },
+            }).catch(() => null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error loading recent Shopify appointment notes:", error);
+    }
+  }
+
+  return notes;
+}
+
+/**
  * Resolves the real Shopify admin order ID from either the visible order name
  * (e.g. #24492) or a direct Shopify order ID.
  */
@@ -277,7 +403,7 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
     const cleanMessage = message.trim();
     if (!cleanMessage) return true;
 
-    const cleanName = orderName.trim();
+    const cleanName = normalizeShopifyOrderReference(orderName) || orderName.trim();
     if (!cleanName) return false;
 
     let orderId: string | number | null = null;
@@ -739,12 +865,17 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
  */
 export async function getShopifyOrderDetails(orderName: string): Promise<{
   id: string;
+  orderName: string;
   clientName: string | null;
   totalPrice: number | null;
+  totalTax: number | null;
+  netAmount: number | null;
+  paidAmount: number;
   lineItems: Array<{ title: string; quantity: number; price: number }>;
   note: string | null;
   email: string | null;
   phone: string | null;
+  createdAt: string | null;
   financialStatus: string | null;
   paymentGateways: string[];
   paymentMethod: "CARTA" | "CASHMATIC" | "CONTANTI" | "MISTO" | "DA_VERIFICARE";
@@ -758,6 +889,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   paymentReference: string | null;
   transactionStatus: string | null;
   transactionProcessedAt: string | null;
+  billingAddress: string | null;
 } | null> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -768,7 +900,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       return null;
     }
 
-    const cleanName = orderName.trim();
+    const cleanName = normalizeShopifyOrderReference(orderName) || orderName.trim();
     if (!cleanName) return null;
 
     let orderData: any = null;
@@ -834,6 +966,19 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const clientName = fullName || null;
 
       const totalPrice = orderData.total_price ? parseFloat(orderData.total_price) : null;
+      const totalTax = orderData.total_tax !== null && orderData.total_tax !== undefined
+        ? Number.parseFloat(String(orderData.total_tax))
+        : null;
+      const netAmount = totalPrice !== null && totalTax !== null && Number.isFinite(totalTax)
+        ? Math.round((totalPrice - totalTax) * 100) / 100
+        : null;
+      const billing = orderData.billing_address || orderData.shipping_address || orderData.customer?.default_address || null;
+      const billingStreet = [billing?.address1, billing?.address2].filter(Boolean).join(", ");
+      const billingCity = [billing?.zip, billing?.city].filter(Boolean).join(" ");
+      const billingProvince = String(billing?.province_code || billing?.province || "").trim();
+      const billingAddress = [billingStreet, billingCity && `${billingCity}${billingProvince ? ` (${billingProvince})` : ""}`]
+        .filter(Boolean)
+        .join(", ") || null;
       
       const lineItems = Array.isArray(orderData.line_items) 
         ? orderData.line_items.map((item: any) => ({
@@ -846,6 +991,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const note = orderData.note || null;
       const email = orderData.customer?.email || null;
       const phone = orderData.customer?.phone || null;
+      const createdAt = orderData.created_at ? String(orderData.created_at) : null;
       const financialStatus = orderData.financial_status ? String(orderData.financial_status) : null;
       let paymentTransaction: any = null;
       let successfulPaymentTransactions: any[] = [];
@@ -904,15 +1050,21 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const paymentMethod = recognizedMethods.size > 1
         ? "MISTO" as const
         : paymentBreakdown[0]?.method ?? classifyShopifyPaymentMethod(paymentGateways);
+      const paidAmount = paymentBreakdown.reduce((total, payment) => total + payment.amount, 0);
 
       return {
         id: String(orderData.id),
+        orderName: String(orderData.name || cleanName),
         clientName,
         totalPrice,
+        totalTax: Number.isFinite(totalTax) ? totalTax : null,
+        netAmount,
+        paidAmount,
         lineItems,
         note,
         email,
         phone,
+        createdAt,
         financialStatus,
         paymentGateways,
         paymentMethod,
@@ -920,6 +1072,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         paymentReference: paymentTransaction?.authorization ? String(paymentTransaction.authorization) : paymentTransaction?.id ? String(paymentTransaction.id) : null,
         transactionStatus: paymentTransaction?.status ? String(paymentTransaction.status) : null,
         transactionProcessedAt: paymentTransaction?.processed_at ? String(paymentTransaction.processed_at) : paymentTransaction?.created_at ? String(paymentTransaction.created_at) : null,
+        billingAddress,
       };
     }
   } catch (error) {

@@ -34,12 +34,14 @@ import {
   Mic,
   Sparkles,
   Camera,
-  Trash2
+  Trash2,
+  Nfc
 } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { signIn, signOut } from "next-auth/react";
+import { browserSupportsWebAuthn, startAuthentication } from "@simplewebauthn/browser";
 import { useRouter } from "next/navigation";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 
@@ -396,12 +398,14 @@ export function TabletClock({
   tabletBranding,
   clientControlFormId,
   todayAppointments = [],
+  badgeToken,
 }: {
   device: TabletDevice | null;
   branding?: BrandingTheme;
   tabletBranding?: TabletBranding | null;
   clientControlFormId: string | null;
   todayAppointments?: any[];
+  badgeToken?: string | null;
 }) {
   const router = useRouter();
 
@@ -414,6 +418,9 @@ export function TabletClock({
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [pin, setPin] = useState("");
+  const [nfcSerial, setNfcSerial] = useState("");
+  const [showPinFallback, setShowPinFallback] = useState(true);
+  const badgeHandledRef = useRef(false);
   const [worker, setWorker] = useState<IdentifiedWorker | null>(null);
   const [imageError, setImageError] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
@@ -494,6 +501,10 @@ export function TabletClock({
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [identifying, setIdentifying] = useState(false);
+  const [faceIdentifying, setFaceIdentifying] = useState(false);
+  const [passkeyAttendanceToken, setPasskeyAttendanceToken] = useState("");
+  const [passkeyLoginToken, setPasskeyLoginToken] = useState("");
+  const logoTapRef = useRef({ count: 0, lastTap: 0 });
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundPack, setSoundPack] = useState<SoundPackId>("paradise");
   const [soundMenuOpen, setSoundMenuOpen] = useState(false);
@@ -516,6 +527,13 @@ export function TabletClock({
     const savedPack = window.localStorage.getItem("paradise-tablet-sound-pack") as SoundPackId | null;
     if (savedPack && soundPacks.some((pack) => pack.id === savedPack)) setSoundPack(savedPack);
   }, []);
+
+  useEffect(() => {
+    if (!device || !badgeToken || badgeHandledRef.current) return;
+    badgeHandledRef.current = true;
+    window.history.replaceState({}, "", "/tablet-clock");
+    void identifyNfc(badgeToken);
+  }, [badgeToken, device]);
 
   const visibleActions = worker ? clockActions.filter((action) => allowedActionsByStatus[worker.status].includes(action.type)) : [];
 
@@ -1225,6 +1243,9 @@ export function TabletClock({
         mansione: data.employeeMansione || null,
         todayShift: data.todayShift ?? null,
       });
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
+      setNfcSerial("");
       setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
       setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
       showFeedback("success", `${data.employeeName} riconosciuta. Scegli l'azione.`);
@@ -1241,11 +1262,116 @@ export function TabletClock({
     }
   }
 
+  async function identifyNfc(serialNumber: string) {
+    if (!serialNumber || !device || identifying) return;
+    setIdentifying(true);
+    try {
+      const response = await fetch("/api/attendance/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-device-id": device.id },
+        body: JSON.stringify({ nfcSerial: serialNumber }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Tessera non riconosciuta");
+      setNfcSerial(serialNumber);
+      setPin("");
+      setWorker({
+        id: data.employeeId, name: data.employeeName, status: data.status as ClockStatus,
+        photoUrl: data.employeePhotoUrl, role: data.employeeRole,
+        mansione: data.employeeMansione || null, todayShift: data.todayShift ?? null,
+      });
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
+      setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
+      setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
+      showFeedback("success", `${data.employeeName} riconosciuta. Scegli l'azione.`);
+      sound("success");
+    } catch (error) {
+      setNfcSerial("");
+      showFeedback("error", error instanceof Error ? error.message : "Tessera non riconosciuta");
+      sound("error");
+    } finally {
+      setIdentifying(false);
+    }
+  }
+
+  async function identifyFaceId() {
+    if (!device || worker || identifying || faceIdentifying) return;
+    if (!browserSupportsWebAuthn()) {
+      showFeedback("error", "Face ID non è supportato su questo browser.");
+      return;
+    }
+
+    setFaceIdentifying(true);
+    setMessage("Verifica Face ID in corso...");
+    try {
+      const optionsResponse = await fetch("/api/passkeys/auth/options", {
+        method: "POST",
+        headers: { "x-device-id": device.id },
+      });
+      const options = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(options.error || "Face ID non disponibile.");
+
+      const authentication = await startAuthentication(options);
+      const verifyResponse = await fetch("/api/passkeys/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-device-id": device.id },
+        body: JSON.stringify({ response: authentication }),
+      });
+      const data = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(data.error || "Face ID non riconosciuto.");
+
+      setWorker({
+        id: data.employeeId,
+        name: data.employeeName,
+        status: data.status as ClockStatus,
+        photoUrl: data.employeePhotoUrl,
+        role: data.employeeRole,
+        mansione: data.employeeMansione || null,
+        todayShift: data.todayShift ?? null,
+      });
+      setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
+      setPasskeyAttendanceToken(data.attendanceToken || "");
+      setPasskeyLoginToken(data.loginToken || "");
+      setPin("");
+      setNfcSerial("");
+      setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
+      showFeedback("success", `${data.employeeName} riconosciuta con Face ID. Scegli l’azione.`);
+      sound("success");
+    } catch (error) {
+      const message = error instanceof Error && error.name !== "NotAllowedError"
+        ? error.message
+        : "Verifica Face ID annullata.";
+      setWorker(null);
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
+      setMessage("Inserisci il tuo codice personale");
+      showFeedback("error", message);
+      sound("error");
+    } finally {
+      setFaceIdentifying(false);
+    }
+  }
+
+  function handleHiddenLogoTap() {
+    if (worker || faceIdentifying) return;
+    const nowMs = Date.now();
+    const nextCount = nowMs - logoTapRef.current.lastTap <= 1200 ? logoTapRef.current.count + 1 : 1;
+    logoTapRef.current = { count: nextCount, lastTap: nowMs };
+    if (nextCount >= 3) {
+      logoTapRef.current = { count: 0, lastTap: 0 };
+      void identifyFaceId();
+    }
+  }
+
   function updatePin(next: string) {
     const cleaned = next.replace(/\D/g, "").slice(0, 6);
     if (cleaned !== pin) sound("tap");
     setPin(cleaned);
+    setNfcSerial("");
     setWorker(null);
+    setPasskeyAttendanceToken("");
+    setPasskeyLoginToken("");
     setFeedback(null);
     setMessage(
       cleaned.length < 4
@@ -1257,7 +1383,7 @@ export function TabletClock({
   }
 
   async function clock(type: string, bypassEarlyExitCheck = false, bypassNightClockCheck = false) {
-    if (!worker || !/^\d{4,6}$/.test(pin) || !device) return;
+    if (!worker || (!/^\d{4,6}$/.test(pin) && !nfcSerial && !passkeyAttendanceToken) || !device) return;
 
     if (!bypassNightClockCheck && isNightClockAction(type)) {
       setPendingNightClockType(type);
@@ -1277,7 +1403,14 @@ export function TabletClock({
       const response = await fetch("/api/attendance/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-device-id": device.id },
-        body: JSON.stringify({ employeeId: worker.id, pin, type, note: "Timbratura tablet" }),
+        body: JSON.stringify({
+          employeeId: worker.id,
+          pin: pin || undefined,
+          nfcSerial: nfcSerial || undefined,
+          passkeyToken: passkeyAttendanceToken || undefined,
+          type,
+          note: passkeyAttendanceToken ? "Timbratura Face ID" : nfcSerial ? "Timbratura NFC" : "Timbratura tablet",
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -1295,12 +1428,18 @@ export function TabletClock({
           time: data.time,
         },
       ]);
-      const feedbackText = `${type} registrata alle ${data.time}${data.adjusted ? ` (ora rilevata ${data.actualTime})` : ""}.`;
+      const regularFeedback = `${type} registrata alle ${data.time}${data.adjusted ? ` (ora rilevata ${data.actualTime})` : ""}.`;
+      const feedbackText = data.lateRequest?.approvalRequired
+        ? `Entrata registrata alle ${data.actualTime}. Ritardo di ${data.lateRequest.minutes} minuti inviato all'amministrazione per l'approvazione.`
+        : regularFeedback;
       sound("success");
-      showFeedback("success", feedbackText);
+      showFeedback(data.lateRequest?.approvalRequired ? "info" : "success", feedbackText);
       setMessage(feedbackText);
       setWorker(null);
       setPin("");
+      setNfcSerial("");
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
     } catch {
       setMessage("Connessione non disponibile. Timbratura non registrata.");
       showFeedback("error", "Connessione non disponibile. Timbratura non registrata.");
@@ -1311,11 +1450,12 @@ export function TabletClock({
   }
 
   async function goToDashboard() {
-    if (!worker || !/^\d{4,6}$/.test(pin) || !device) return;
+    if (!worker || (!/^\d{4,6}$/.test(pin) && !passkeyLoginToken) || !device) return;
     setLoading("DASHBOARD");
     try {
       const response = await signIn("credentials", {
-        pin,
+        pin: pin || undefined,
+        passkeyToken: passkeyLoginToken || undefined,
         redirect: false,
       });
       if (response?.error) {
@@ -1326,6 +1466,8 @@ export function TabletClock({
       sound("success");
       setDashboardFrameLoading(true);
       setShowDashboard(true);
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
     } catch {
       showFeedback("error", "Errore durante l'accesso.");
       sound("error");
@@ -1457,6 +1599,9 @@ export function TabletClock({
       setWorker(null);
       setTodayLogs([]);
       setPin("");
+      setNfcSerial("");
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
       setFeedback(null);
       setMessage("Inserisci il tuo codice personale");
       setShowDashboard(false);
@@ -1527,6 +1672,9 @@ export function TabletClock({
     const privacyTimer = window.setTimeout(() => {
       setWorker(null);
       setPin("");
+      setNfcSerial("");
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
       setMessage("Inserisci il tuo codice personale");
       setFeedback(null);
     }, 30000);
@@ -1604,6 +1752,7 @@ export function TabletClock({
       setMessage("Richiesta inviata e firmata con codice personale.");
       setWorker(null);
       setPin("");
+      setNfcSerial("");
     } catch {
       setRequestMessage("Connessione non disponibile. Richiesta non inviata.");
       showFeedback("error", "Connessione non disponibile. Richiesta non inviata.");
@@ -1614,7 +1763,7 @@ export function TabletClock({
   if (!device) {
     return (
       <main
-        className="grid min-h-screen place-items-center bg-[color:var(--tablet-bg)] p-5 text-[color:var(--tablet-text)]"
+        className="tablet-kiosk-root grid min-h-screen place-items-center bg-[color:var(--tablet-bg)] p-5 text-[color:var(--tablet-text)]"
         style={tabletStyle}
       >
         <div className="rounded-[28px] border border-[#eadfd6] bg-white/80 px-10 py-12 text-center shadow-lg">
@@ -1650,7 +1799,13 @@ export function TabletClock({
     const logoUrl = tabletBranding?.logo_url || branding?.logo_url || null;
     return (
       <div className="text-center">
-        <div className={cn("mx-auto grid place-items-center overflow-hidden", compact ? "size-16 lg:size-20" : "size-28 lg:size-36")}>
+        <div
+          aria-label="Paradise Beauty"
+          className={cn(
+            "mx-auto grid place-items-center overflow-hidden rounded-2xl bg-transparent p-0",
+            compact ? "size-16 lg:size-20" : "size-28 lg:size-36",
+          )}
+        >
           {logoUrl ? (
             <img src={logoUrl} alt="Paradise Beauty" className="size-full object-contain" />
           ) : (
@@ -1793,7 +1948,7 @@ export function TabletClock({
   // Render private dashboard view
   if (showDashboard) {
     return (
-      <main className="h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
+      <main className="tablet-kiosk-root h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
         <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col overflow-hidden rounded-[26px] border-[10px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 xl:border-[16px]">
           {/* Dashboard Private Area Header */}
           <div className="flex items-center justify-between border-b border-black/10 px-6 py-4 bg-[color:var(--tablet-card)] shadow-sm">
@@ -1860,7 +2015,7 @@ export function TabletClock({
 
   // Render Kiosk clock/app screen
   return (
-    <main className="min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] min-[600px]:h-[100svh] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:p-4" style={tabletStyle}>
+    <main className="tablet-kiosk-root min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] min-[600px]:h-[100svh] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:p-4" style={tabletStyle}>
       <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 min-[600px]:h-[calc(100svh-2rem)] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
@@ -2026,10 +2181,14 @@ export function TabletClock({
               {feedback && (
                 <div className={cn(
                   "mt-3 flex min-h-10 items-center justify-center gap-3 rounded-2xl border px-3 text-xs font-bold shadow-sm",
-                  feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"
+                  feedback.type === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : feedback.type === "info"
+                      ? "border-amber-200 bg-amber-50 text-amber-900"
+                      : "border-red-200 bg-red-50 text-red-800"
                 )}>
                   {feedback.type === "success" ? <CheckCircle2 className="size-5" /> : <TriangleAlert className="size-5" />}
-                  <span>{feedback.text}</span>
+                  <span className="text-center leading-5">{feedback.text}</span>
                 </div>
               )}
 
@@ -2052,7 +2211,7 @@ export function TabletClock({
               
               <p className="mt-2 truncate text-center text-base font-semibold">{worker.name}</p>
 
-              <button
+              {!nfcSerial ? <button
                 className="mt-2 flex h-12 w-full items-center justify-between rounded-2xl bg-[color:var(--tablet-soft)] px-4 text-left shadow-sm transition-transform duration-200 active:scale-[0.98] border border-black/5"
                 onClick={goToDashboard}
                 disabled={loading !== null}
@@ -2065,13 +2224,16 @@ export function TabletClock({
                   </div>
                 </div>
                 <ChevronRight className="size-5 text-[color:var(--tablet-accent)]" />
-              </button>
+              </button> : <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-xs font-semibold text-emerald-800">Identificazione NFC · per aprire il profilo usa il PIN</div>}
 
               <button
                 className="mt-2 h-9 w-full rounded-xl border border-black/10 bg-white/60 text-sm font-semibold hover:bg-white active:scale-95 transition"
                 onClick={() => {
                   setWorker(null);
                   setPin("");
+                  setNfcSerial("");
+                  setPasskeyAttendanceToken("");
+                  setPasskeyLoginToken("");
                   setFeedback(null);
                   setMessage("Inserisci il tuo codice personale");
                 }}
@@ -2087,8 +2249,16 @@ export function TabletClock({
               <div className="kiosk-panel-enter kiosk-entry-panel mx-auto flex w-full max-w-[470px] flex-col py-2">
                 <div className="kiosk-pin-heading mb-4 text-center sm:mb-5">
                   <h1 className="text-2xl font-black tracking-normal text-[#171717] sm:text-3xl lg:text-4xl">Chi sta timbrando?</h1>
-                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">Inserisci il tuo PIN personale</p>
+                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">{!showPinFallback ? "Avvicina la tessera NFC" : "Inserisci il tuo PIN personale"}</p>
                 </div>
+                {!showPinFallback ? <>
+                  <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[28px] border-2 border-[color:var(--tablet-accent)]/30 bg-[color:var(--tablet-soft)]/25 p-6 text-center">
+                    <div className="grid size-24 place-items-center rounded-full bg-[color:var(--tablet-dark)] text-white shadow-lg"><Nfc className="size-12" /></div>
+                    <p className="mt-6 text-xl font-black">Avvicina la tessera</p>
+                    <p className="mt-2 max-w-xs text-sm text-black/55">Non devi premere nulla. Appoggia la carta NFC al retro del tablet.</p>
+                  </div>
+                  <button type="button" onClick={() => { setShowPinFallback(true); setFeedback(null); }} className="mt-2 h-11 text-sm font-semibold text-black/55 underline underline-offset-4">Usa il PIN invece</button>
+                </> : <>
                 <p className="kiosk-pin-label mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
                 <PinDots pin={pin} />
                 <div className="h-3" />
@@ -2117,16 +2287,17 @@ export function TabletClock({
                   <LogIn className="size-4 text-[color:var(--tablet-accent)]" />
                   <span>{identifying ? "Lettura..." : "Invia PIN"}</span>
                 </button>
+                </>}
                 <div className="kiosk-pin-status mt-3 flex h-8 items-center justify-center" aria-live="polite">
                   {feedback ? (
                     <div
                       className={cn(
                         "kiosk-feedback-enter flex max-w-full items-center justify-center gap-2 text-sm font-semibold",
-                        feedback.type === "error" ? "text-red-700" : "text-emerald-700"
+                        feedback.type === "error" ? "text-red-700" : feedback.type === "info" ? "text-amber-800" : "text-emerald-700"
                       )}
                     >
                       {feedback.type === "error" ? <TriangleAlert className="size-4 shrink-0" /> : <CheckCircle2 className="size-4 shrink-0" />}
-                      <span className="truncate">{feedback.text}</span>
+                      <span className="text-center leading-5">{feedback.text}</span>
                     </div>
                   ) : (
                     <p className="text-sm font-medium text-black/42">

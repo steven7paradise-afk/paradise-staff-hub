@@ -79,7 +79,7 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     label: "Metodo pagamento finale",
     type: "select",
     required: false,
-    options: ["Carta", "Shopify", "Contanti", "Cashmatic", "Misto", "Da verificare"],
+    options: ["Carta", "Shopify", "Contanti", "Misto", "Da verificare"],
     description: "Compilato automaticamente verificando il secondo ordine Shopify.",
   },
   {

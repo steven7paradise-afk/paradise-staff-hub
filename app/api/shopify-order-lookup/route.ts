@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getShopifyOrderDetails, isFuzzyNameMatch } from "@/lib/shopify";
+import { getShopifyOrderDetails, isFuzzyNameMatch, normalizeShopifyOrderReference } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
+import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 
 export async function GET(request: NextRequest) {
   const user = await getOperationalUser(request);
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() || "";
   const mode = searchParams.get("mode")?.trim() || "";
+  const strictOrderNumber = searchParams.get("strict") === "1";
 
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
 
         try {
           while (nextUrl && page < 4) {
-            const res = await fetch(nextUrl, {
+            const res: Response = await fetch(nextUrl, {
               headers: fetchHeaders,
               signal: AbortSignal.timeout(5000),
             });
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
             const data = await res.json();
             if (Array.isArray(data?.orders)) orders.push(...data.orders);
 
-            const nextMatch = res.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i);
+            const nextMatch: RegExpMatchArray | null = res.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i) ?? null;
             nextUrl = nextMatch?.[1] || null;
             page += 1;
           }
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
       if (emailParam) {
         fetchPromises.push(
           fetchAllPages(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,line_items,note,created_at`
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at`
           )
         );
       }
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
       if (phoneParam) {
         fetchPromises.push(
           fetchAllPages(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,line_items,note,created_at`
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at`
           )
         );
       }
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
       // The broad feed covers name-only matches when email/phone are unavailable.
       fetchPromises.push(
         fetchAllPages(
-          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,line_items,note,created_at`
+          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at`
         )
       );
 
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
 
       // Filter ONLY for this client's orders across all dates
       let filteredOrders = allFetchedOrders.filter((order: any) => {
-        const oEmail = (order.customer?.email || "").trim().toLowerCase();
+        const oEmail = (order.customer?.email || order.email || "").trim().toLowerCase();
         const oPhone = cleanPhone(order.customer?.phone || order.phone);
         const firstName = (order.customer?.first_name || "").trim().toLowerCase();
         const lastName = (order.customer?.last_name || "").trim().toLowerCase();
@@ -120,7 +122,7 @@ export async function GET(request: NextRequest) {
           return true;
         }
         // 2. Match Email
-        if (targetEmail && oEmail && targetEmail === oEmail) {
+        if (isLikelySameCustomerEmail(targetEmail, oEmail)) {
           return true;
         }
         // 3. Match Full Name (exact match or first + last name match)
@@ -173,6 +175,7 @@ export async function GET(request: NextRequest) {
           firstName,
           lastName,
           totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
+          financialStatus: order.financial_status || null,
           email: order.customer?.email || order.email || "",
           phone: order.customer?.phone || order.phone || address?.phone || "",
           addressLine,
@@ -189,46 +192,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ orders: ordersList });
     }
 
-    // A. If query is empty: fetch the absolute most recent order
+    // A. The invoice/order flows require an explicit order number. Never guess
+    // which order should be invoiced by silently selecting the latest one.
     if (!query) {
-      const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=1&status=any&fields=name`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        return NextResponse.json({ error: "Errore nel caricamento dell'ultimo ordine Shopify." }, { status: res.status });
-      }
-
-      const data = await res.json();
-      const latestOrder = data?.orders?.[0];
-      if (!latestOrder) {
-        return NextResponse.json({ error: "Nessun ordine trovato su Shopify." }, { status: 404 });
-      }
-
-      const details = await getShopifyOrderDetails(latestOrder.name);
-      if (!details) {
-        return NextResponse.json({ error: `Impossibile caricare i dettagli per l'ordine ${latestOrder.name}.` }, { status: 404 });
-      }
-
-      return NextResponse.json({
-        orderName: latestOrder.name,
-        ...details,
-      });
+      return NextResponse.json({ error: "Inserisci il numero dell'ordine Shopify." }, { status: 400 });
     }
 
     // B. If query is a specific order number (e.g. starts with # or is just numeric)
-    const isOrderNumber = query.startsWith("#") || /^\d+$/.test(query);
+    const normalizedOrderReference = normalizeShopifyOrderReference(query);
+    const isOrderNumber = Boolean(normalizedOrderReference);
+
+    if (strictOrderNumber && !isOrderNumber) {
+      return NextResponse.json({
+        error: "Inserisci un numero ordine Shopify valido, per esempio #26964.",
+      }, { status: 400 });
+    }
 
     if (isOrderNumber) {
-      const details = await getShopifyOrderDetails(query);
+      const details = await getShopifyOrderDetails(normalizedOrderReference!);
       if (!details) {
         return NextResponse.json({ error: `Ordine ${query} non trovato su Shopify.` }, { status: 404 });
       }
       return NextResponse.json({
-        orderName: query.startsWith("#") ? query : `#${query}`,
         ...details,
       });
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getOperationalUser } from "@/lib/operational-session";
+import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -60,6 +61,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     if (status) {
       dataToUpdate.status = status;
+      if (user.id !== "PC_CASSA") {
+        dataToUpdate.assigned_to_id = user.id;
+      }
 
       // Track status changes in the activity log field
       const currentLog = Array.isArray(response.activity_log) ? (response.activity_log as any[]) : [];
@@ -130,6 +134,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     });
 
+    const confirmedBy = status
+      ? user.id === "PC_CASSA"
+        ? { name: user.name || "Staff", photo_url: null }
+        : await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { id: true, name: true, photo_url: true },
+          })
+      : updatedResponse.assigned_to_id
+        ? await prisma.user.findUnique({
+            where: { id: updatedResponse.assigned_to_id },
+            select: { id: true, name: true, photo_url: true },
+          })
+        : null;
+
     // Automatically sync status change notes to the matching Shopify order
     if (status) {
       const title = String((updatedResponse.answers as any)?.order_title || "").trim();
@@ -177,11 +195,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         }
 
         // 2. Sync status, latest custom note, and collaborator as Shopify Metafields!
-        const collaboratorName = Array.isArray(answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff])
-          ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].join(", ")
+        const selectedStaffNames = Array.isArray(answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff])
+          ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].map((value: unknown) => String(value ?? "").trim()).filter(Boolean)
           : typeof answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] === "string"
-            ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]
-            : "";
+            ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].split(",").map((value: string) => value.trim()).filter(Boolean)
+            : [];
+        const activeStaffNames = await prisma.user.findMany({
+          where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+          select: { name: true },
+        });
+        const collaboratorName = formatShopifyStaffNames(
+          selectedStaffNames,
+          activeStaffNames.map((employee) => employee.name),
+        ).join(", ");
 
         await updateShopifyOrderMetafields(
           shopifyOrderName,
@@ -192,7 +218,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json(updatedResponse);
+    return NextResponse.json({ ...updatedResponse, confirmed_by: confirmedBy });
   } catch (error) {
     console.error("Failed to update form response:", error);
     return NextResponse.json({ error: "Errore durante l'aggiornamento della risposta" }, { status: 500 });
@@ -205,7 +231,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  if (user.role !== "ZERO") {
+  if (!["ZERO", "SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -213,11 +239,24 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const response = await prisma.serviceFormResponse.findUnique({
       where: { id },
-      select: { id: true, user_location_id: true },
+      select: {
+        id: true,
+        user_location_id: true,
+        form: { select: { name: true, category: true } },
+      },
     });
 
     if (!response) {
       return NextResponse.json({ error: "Risposta non trovata" }, { status: 404 });
+    }
+
+    // ZERO conserva il permesso storico sulle risposte. Admin e Super Admin
+    // ricevono invece il permesso aggiuntivo soltanto per i moduli ordine.
+    const formName = response.form?.name?.trim().toLowerCase() ?? "";
+    const formCategory = response.form?.category?.trim().toLowerCase() ?? "";
+    const isOrder = formName.includes("ordine") || formCategory.includes("ordini");
+    if (user.role !== "ZERO" && !isOrder) {
+      return NextResponse.json({ error: "Puoi eliminare soltanto gli ordini" }, { status: 403 });
     }
 
     await prisma.serviceFormResponse.delete({ where: { id } });

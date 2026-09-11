@@ -54,8 +54,10 @@ function approvedPaidHours(
   const planned = schedule ? plannedNetHours(schedule.category, plannedStart, plannedEnd) : 0;
   const fallbackDay = planned > 0 ? planned : 8;
 
-  if (flags.storeClosed) return { hours: fallbackDay, kind: "CHIUSURA_NEGOZIO", partial: false };
-  if (leave?.type === "FERIE" || flags.holiday) return { hours: fallbackDay, kind: "FERIE", partial: false };
+  // A salon closure must never add hours automatically to the monthly total.
+  if (flags.storeClosed) return { hours: 0, kind: "CHIUSURA_NEGOZIO", partial: false };
+  // In Controllo ore, holidays are labelled but do not add worked or due hours.
+  if (leave?.type === "FERIE" || flags.holiday) return { hours: 0, kind: "FERIE", partial: false };
   if (leave?.type === "PERMESSO" || flags.permission) {
     const permissionDuration = categoryDuration(leave?.start_time ?? null, leave?.end_time ?? null);
     return permissionDuration > 0
@@ -79,7 +81,9 @@ function isWorkCategory(category: { code: string; name: string }) {
     name.includes("permesso") ||
     name.includes("malattia") ||
     name.includes("assenza") ||
-    name.includes("non lavora")
+    name.includes("non lavora") ||
+    code === "CHIUSO" || code.startsWith("CHIUSO0") ||
+    name.includes("chiuso") || name.includes("chiusura salone")
   ) {
     return false;
   }
@@ -123,7 +127,7 @@ export async function GET(request: NextRequest) {
     prisma.workHourRecord.findMany({ where: { date: { gte: start, lt: end } } }),
     prisma.attendanceLog.findMany({
       where: { date: { gte: start, lt: end }, user: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } } },
-      select: { user_id: true, date: true, type: true, timestamp: true },
+      select: { user_id: true, date: true, type: true, timestamp: true, note: true },
       orderBy: { timestamp: "asc" },
     }),
     prisma.scheduleEntry.findMany({
@@ -214,7 +218,11 @@ export async function GET(request: NextRequest) {
       key,
       userId: key.split("-").slice(0, -3).join("-"),
       date: key.slice(-10),
-      hours: record?.manual_override ? record.hours : recognizedAutomaticHours,
+      hours: paidAbsence.kind === "CHIUSURA_NEGOZIO" || paidAbsence.kind === "FERIE"
+        ? 0
+        : record?.manual_override
+          ? record.hours
+          : recognizedAutomaticHours,
       workedHours: automaticHours,
       paidAbsenceHours: paidAbsence.hours,
       paidAbsenceKind: paidAbsence.kind,
@@ -265,7 +273,7 @@ export async function PUT(request: NextRequest) {
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
   const logs = await prisma.attendanceLog.findMany({
     where: { user_id: userId, date: { gte: dayStart, lt: dayEnd } },
-    select: { type: true, timestamp: true },
+    select: { type: true, timestamp: true, note: true },
     orderBy: { timestamp: "asc" },
   });
   const clock = calculateClockHours(logs);

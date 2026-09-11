@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, LockKeyhole, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Loader2, X } from "lucide-react";
 import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { RemoteControlBridge } from "@/components/remote-control-bridge";
+import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 
 type ActiveWorker = {
   id: string;
@@ -35,7 +38,8 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlug }) {
+export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string }) {
+  const router = useRouter();
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -82,14 +86,41 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
 
   function addPinDigit(digit: string) {
     if (!selectedWorkerId || selectingWorkerId) return;
-    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 6));
+    const nextPinPrefix = `${pinPrefix}${digit}`.replace(/\D/g, "").slice(0, 2);
+    setPinPrefix(nextPinPrefix);
     setError("");
+    if (nextPinPrefix.length === 2 && selectedWorker) {
+      // On a two-digit kiosk PIN there is no extra decision to make: submit as
+      // soon as the second digit is entered so the user cannot remain stuck on
+      // an apparently enabled "Continua" button.
+      setSelectingWorkerId(selectedWorker.id);
+      window.setTimeout(() => void enter(selectedWorker, nextPinPrefix), 120);
+    }
   }
 
-  async function enter(worker: ActiveWorker) {
-    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 6);
-    if (!/^\d{2,6}$/.test(cleanPinPrefix)) {
-      setError("Inserisci il tuo PIN personale.");
+  async function enter(worker: ActiveWorker, enteredPinPrefix = pinPrefix) {
+    if (remoteTarget) {
+      setSelectingWorkerId(worker.id);
+      setError("");
+      try {
+        const search = `?salone=${encodeURIComponent(salone)}&worker=${encodeURIComponent(worker.name)}&remoteTarget=${encodeURIComponent(remoteTarget)}`;
+        const response = await fetch("/api/remote-control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update", targetCode: remoteTarget, workerId: worker.id, pathname: "/appointments", search }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error || "Impossibile selezionare il profilo remoto.");
+        router.replace(`/appointments${search}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Impossibile selezionare il profilo remoto.");
+        setSelectingWorkerId("");
+      }
+      return;
+    }
+    const cleanPinPrefix = enteredPinPrefix.replace(/\D/g, "").slice(0, 2);
+    if (!/^\d{2}$/.test(cleanPinPrefix)) {
+      setError("Inserisci le prime 2 cifre del PIN.");
       return;
     }
     setSelectingWorkerId(worker.id);
@@ -102,7 +133,10 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
-      window.location.href = data?.appointmentUrl || appointmentSalonUrl(salone);
+      const destination = data?.appointmentUrl || appointmentSalonUrl(salone);
+      // Keep the root layout mounted so an active screen-share stream survives
+      // the transition from profile selection to the appointments board.
+      router.replace(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
       setSelectingWorkerId("");
@@ -110,20 +144,24 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
   }
 
   return (
-    <main className="relative h-dvh max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
+    <main className="relative min-h-dvh overflow-x-hidden bg-[#FFFBF6] text-neutral-900">
+      <RemoteControlBridge pcMode={!remoteTarget} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
-      <section className="relative flex h-full flex-col items-center px-5 py-8 md:px-10 lg:px-14">
+      <section className="relative flex min-h-dvh flex-col items-center px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-5 sm:py-8 md:px-10 lg:px-14">
         <div className="mx-auto max-w-4xl space-y-4 text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
-            <LockKeyhole className="size-7" strokeWidth={1.45} />
-          </div>
+          {remoteTarget ? null : <AppointmentsAdminUnlock salone={salone} />}
           <h1 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-6xl xl:text-7xl">
-            Chi vuole usare il gestionale?
+            Gestionale Paradise
           </h1>
           <p className="text-sm font-medium uppercase tracking-[0.36em] text-neutral-700 md:text-base">
             Seleziona il tuo profilo per continuare.
           </p>
+          {pcName ? (
+            <div className="mx-auto inline-flex items-center rounded-full border border-[#D8B7A7]/50 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-700 shadow-sm">
+              Dispositivo: {pcName}
+            </div>
+          ) : null}
         </div>
 
         {loading ? (
@@ -144,7 +182,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
               {error}
             </div>
           ) : null}
-          <div className="mt-12 grid w-full max-w-7xl grid-cols-2 justify-items-center gap-x-7 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="mt-8 grid w-full max-w-7xl grid-cols-2 justify-items-center gap-x-3 gap-y-6 sm:mt-12 sm:grid-cols-3 sm:gap-x-7 sm:gap-y-8 md:grid-cols-4 lg:grid-cols-6">
             {workers.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
@@ -155,15 +193,20 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                 <button
                   key={worker.id}
                   type="button"
+                  data-remote-worker-choice={remoteTarget ? "true" : undefined}
                   onClick={() => {
+                    if (remoteTarget) {
+                      void enter(worker);
+                      return;
+                    }
                     setSelectedWorkerId(worker.id);
                     setPinPrefix("");
                     setError("");
                   }}
                   disabled={Boolean(selectingWorkerId)}
-                  className="group flex w-36 min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70 2xl:w-40"
+                  className="group flex w-32 min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70 sm:w-36 2xl:w-40"
                 >
-                  <div className={`relative grid size-36 place-items-center rounded-full border p-2 shadow-[0_18px_42px_rgba(95,58,45,0.08)] transition 2xl:size-40 ${selected ? "border-[#C96F70] bg-[#F8E3DE] ring-4 ring-[#D98A88]/30" : "border-[#E6CEC4] bg-white/50 group-hover:border-[#D9A69A]"}`}>
+                  <div className={`relative grid size-28 place-items-center rounded-full border p-2 shadow-[0_18px_42px_rgba(95,58,45,0.08)] transition sm:size-36 2xl:size-40 ${selected ? "border-[#C96F70] bg-[#F8E3DE] ring-4 ring-[#D98A88]/30" : "border-[#E6CEC4] bg-white/50 group-hover:border-[#D9A69A]"}`}>
                     {photoUrl ? (
                       <span className="block size-full overflow-hidden rounded-full">
                         <img src={photoUrl} alt={worker.name} className="size-full scale-125 object-cover object-[50%_24%]" />
@@ -221,6 +264,11 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                 <h3 className="mt-2 font-serif text-3xl font-light text-neutral-950">
                   {selectedWorker.name.split(" ")[0] || selectedWorker.name}
                 </h3>
+                {error ? (
+                  <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold leading-5 text-red-800" role="alert" aria-live="polite">
+                    {error}
+                  </div>
+                ) : null}
                 <div className="mx-auto mt-5 grid h-14 w-32 grid-cols-2 items-center gap-3 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 px-4">
                   {[0, 1].map((index) => (
                     <span

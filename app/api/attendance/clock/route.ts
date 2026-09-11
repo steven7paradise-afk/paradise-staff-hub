@@ -7,6 +7,12 @@ import { applyExitRounding, applyParadiseEntranceRounding, clockRuleKey, localWe
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
 import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
+import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
+import { nfcBadgeHash } from "@/lib/nfc-badge";
+import { consumePasskeyGrant } from "@/lib/passkey";
+
+const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
 export async function POST(request: NextRequest) {
   const payload = await request.json();
@@ -14,11 +20,13 @@ export async function POST(request: NextRequest) {
   const deviceId = String(payload.deviceId ?? deviceHeader ?? "");
   const employeeId = String(payload.employeeId ?? "");
   const pin = String(payload.pin ?? "");
+  const nfcSerial = String(payload.nfcSerial ?? "");
+  const passkeyToken = String(payload.passkeyToken ?? "");
   const type = String(payload.type ?? "") as AttendanceType;
   const note = payload.note ? String(payload.note) : null;
   const ip = requestIp(request.headers);
 
-  if (!deviceId || !employeeId || !/^\d{2,6}$/.test(pin) || !Object.values(AttendanceType).includes(type)) {
+  if (!deviceId || !employeeId || (!/^\d{4,6}$/.test(pin) && !nfcSerial && !passkeyToken) || !Object.values(AttendanceType).includes(type)) {
     return NextResponse.json({ error: "Dati timbratura incompleti" }, { status: 400 });
   }
 
@@ -28,13 +36,21 @@ export async function POST(request: NextRequest) {
   }
 
   const user = await prisma.user.findUnique({ where: { id: employeeId }, include: { location: true } });
-  if (!user?.active || !user.pin_hash) {
+  if (!user?.active || user.employee_status === FORMER_EMPLOYEE_STATUS) {
     return NextResponse.json({ error: "Dipendente non abilitato alla timbratura" }, { status: 403 });
   }
 
-  const pinValid = await isPinValidForUser(user.id, pin, user.pin_hash, user.pin_lookup);
-  if (!pinValid) {
-    return NextResponse.json({ error: "PIN non valido" }, { status: 401 });
+  let credentialValid = false;
+  if (passkeyToken) {
+    credentialValid = Boolean(await consumePasskeyGrant(passkeyToken, "ATTENDANCE", user.id));
+  } else if (nfcSerial) {
+    try { credentialValid = user.nfc_badge_enabled && user.nfc_badge_hash === nfcBadgeHash(nfcSerial); }
+    catch { credentialValid = false; }
+  } else {
+    credentialValid = await isPinValidForUser(user.id, pin, user.pin_hash, user.pin_lookup);
+  }
+  if (!credentialValid) {
+    return NextResponse.json({ error: passkeyToken ? "Face ID scaduto o non valido" : nfcSerial ? "Tessera NFC non valida o sospesa" : "PIN non valido" }, { status: 401 });
   }
 
   const isOffice = device.location.name.toLowerCase().includes("ufficio");
@@ -70,8 +86,9 @@ export async function POST(request: NextRequest) {
     select: { type: true, timestamp: true },
   });
 
-  // Early morning (00:00 - 06:00): exits/breaks belong to yesterday if that shift is still open.
-  if (currentRomeHour < 6 && (type === "USCITA" || type === "PAUSA")) {
+  // Early morning (00:00 - 06:00): every continuation belongs to yesterday
+  // when that shift is still open, including a return from a break.
+  if (currentRomeHour < 6 && type !== "ENTRATA") {
     const yesterdayLogs = await prisma.attendanceLog.findMany({
       where: { user_id: user.id, date: { gte: yesterdayDateOnly, lt: actualDateOnly } },
       orderBy: { timestamp: "asc" },
@@ -145,6 +162,15 @@ export async function POST(request: NextRequest) {
     second: "2-digit",
     timeZone: "Europe/Rome",
   }).format(actualTimestamp);
+  let breakDurationMins: number | null = null;
+  let breakDelayMins = 0;
+  if (type === "RIENTRO" && currentState.activePause?.timestamp) {
+    const rawDurationMins = (actualTimestamp.getTime() - currentState.activePause.timestamp.getTime()) / (1000 * 60);
+    breakDurationMins = Math.ceil(rawDurationMins);
+    if (actualLocalDate >= PAUSE_LATENESS_START_KEY && rawDurationMins > rule.breakDurationMinutes) {
+      breakDelayMins = Math.ceil(rawDurationMins - rule.breakDurationMinutes);
+    }
+  }
   const roundedNote = type === "ENTRATA" && actualTime !== time
     ? `Ora rilevata ${actualTime}; arrotondamento entrata Paradise a ${time}${usedEntranceGrace ? "; tolleranza entrata usata" : ""}.`
     : type === "USCITA" && rule.entranceRoundingMinutes > 0 && actualTime !== time
@@ -152,7 +178,10 @@ export async function POST(request: NextRequest) {
     : null;
   const nightNote = shiftDateOnly !== actualDateOnly ? `Timbratura notturna associata al turno del ${new Intl.DateTimeFormat("it-IT").format(shiftDateOnly)}.` : null;
   const tabletNote = `Timbrato su: ${device.device_name} (${device.location.name})`;
-  const storedNote = [note, roundedNote, nightNote, tabletNote].filter(Boolean).join(" - ") || null;
+  const lateBreakNote = breakDelayMins > 0 && breakDurationMins !== null
+    ? `Rientro pausa in ritardo: durata ${breakDurationMins} min; limite ${rule.breakDurationMinutes} min; ritardo ${breakDelayMins} min.`
+    : null;
+  const storedNote = [note, roundedNote, nightNote, tabletNote, lateBreakNote].filter(Boolean).join(" - ") || null;
 
   const log = await prisma.attendanceLog.create({
     data: {
@@ -172,6 +201,25 @@ export async function POST(request: NextRequest) {
     where: { id: device.id },
     data: { last_used_at: actualTimestamp },
   });
+
+  let lateRequest: {
+    id: string;
+    minutesPastDeadline: number;
+    delayMinutes: number;
+    plannedStart: string;
+    entryTime: string;
+  } | null = null;
+  if (type === "ENTRATA") {
+    const lateResult = await ensureAutomaticLateRequests(dateOnly, actualTimestamp, {
+      userId: user.id,
+      actualEntryTimestamp: actualTimestamp,
+      notifyOnDetectedEntry: true,
+    }).catch((error) => {
+      console.error("Failed to create the late-entry approval request:", error);
+      return null;
+    });
+    lateRequest = lateResult?.lateRequests.find((request) => request.userId === user.id) || null;
+  }
 
   if (type === "ENTRATA" && usedEntranceGrace) {
     const { start, end } = localWeekRange(actualTimestamp);
@@ -202,32 +250,26 @@ export async function POST(request: NextRequest) {
   }
 
   // Check break limit on RIENTRO and notify admins/superadmins
-  if (type === "RIENTRO" && currentState.activePause?.timestamp) {
-    const breakDurationMs = actualTimestamp.getTime() - currentState.activePause.timestamp.getTime();
-    const breakDurationMins = breakDurationMs / (1000 * 60);
+  if (type === "RIENTRO" && breakDelayMins > 0 && breakDurationMins !== null) {
     const breakLimit = rule.breakDurationMinutes;
-    if (breakDurationMins > breakLimit) {
-      const admins = await prisma.user.findMany({
-        where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
-        select: { id: true },
-      });
-      await createNotifications(
-        admins.map((admin) => ({
-          user_id: admin.id,
-          title: "Superamento Limite Pausa",
-          message: `Il dipendente ${user.name} ha superato il limite di pausa di ${breakLimit} minuti (pausa effettuata: ${Math.round(breakDurationMins)} minuti).`,
-          type: "TIMBRATURA",
-          action_url: "/attendance",
-        }))
-      ).catch((err) => console.error("Failed to send break limit notifications:", err));
-    }
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
+      select: { id: true },
+    });
+    await createNotifications(
+      admins.map((admin) => ({
+        user_id: admin.id,
+        title: "Rientro pausa in ritardo",
+        message: `${user.name} è rientrato con ${breakDelayMins} minuti di ritardo. Pausa: ${breakDurationMins} minuti, limite: ${breakLimit} minuti.`,
+        type: "TIMBRATURA",
+        action_url: `/staff?employee=${encodeURIComponent(user.id)}`,
+      }))
+    ).catch((err) => console.error("Failed to send break limit notifications:", err));
   }
 
   if (type !== "PAUSA") {
     let finalNote = storedNote;
-    if (type === "RIENTRO" && currentState.activePause?.timestamp) {
-      const breakDurationMs = actualTimestamp.getTime() - currentState.activePause.timestamp.getTime();
-      const breakDurationMins = Math.round(breakDurationMs / (1000 * 60));
+    if (type === "RIENTRO" && breakDurationMins !== null) {
       const breakInfo = `Pausa durata: ${breakDurationMins} min`;
       finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;
     }
@@ -245,5 +287,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ id: log.id, type, time, timestamp: log.timestamp.toISOString(), adjusted: Boolean(roundedNote), actualTime });
+  return NextResponse.json({
+    id: log.id,
+    type,
+    time,
+    timestamp: log.timestamp.toISOString(),
+    adjusted: Boolean(roundedNote),
+    actualTime,
+    lateRequest: lateRequest
+      ? {
+          id: lateRequest.id,
+          minutes: lateRequest.minutesPastDeadline,
+          totalDelayMinutes: lateRequest.delayMinutes,
+          approvalRequired: true,
+          actionUrl: "/requests",
+        }
+      : null,
+  });
 }

@@ -3,7 +3,6 @@ import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
-import { getBrandingTheme } from "@/lib/branding";
 import { SidebarSettingsClient } from "./sidebar-settings-client";
 
 export const dynamic = "force-dynamic";
@@ -26,26 +25,35 @@ export default async function SidebarSettingsPage() {
     redirect("/dashboard");
   }
 
-  // Fetch current layout settings from DB
-  const layoutSetting = await prisma.setting.findUnique({
-    where: { key: "sidebar_configuration" }
-  });
+  const [layoutSetting, usersWithMansione, mansioniSetting] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: "sidebar_configuration" } }),
+    prisma.user.findMany({
+      where: { active: true, NOT: { mansione: null } },
+      select: { mansione: true },
+      orderBy: { mansione: "asc" },
+    }),
+    prisma.setting.findUnique({ where: { key: "mansioni_permissions" } }),
+  ]);
 
-  // Fetch current branding colors from DB
-  const branding = await getBrandingTheme();
+  const configuredMansioni = mansioniSetting?.value
+    && typeof mansioniSetting.value === "object"
+    && !Array.isArray(mansioniSetting.value)
+      ? Object.keys(mansioniSetting.value as Record<string, unknown>)
+      : [];
+  const mansioni = Array.from(new Set([
+    ...usersWithMansione.map((user) => String(user.mansione || "").trim()),
+    ...configuredMansioni,
+  ].filter(Boolean))).sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" }));
 
   return (
     <AppShell
-      title="Personalizza Barra Laterale"
-      subtitle="Modifica il colore di sfondo e cambia l'ordine di visualizzazione dei tasti della barra."
+      title="Organizza Barra Laterale"
+      subtitle="Scegli una mansione e organizza le sue pagine nelle aree Lavoro e Personale."
       role={role}
     >
       <SidebarSettingsClient
-        initialBranding={{
-          sidebar_color: branding.sidebar_color,
-          dark_sidebar_color: branding.dark_sidebar_color,
-        }}
         initialLayout={layoutSetting ? (layoutSetting.value as any) : null}
+        mansioni={mansioni}
       />
     </AppShell>
   );

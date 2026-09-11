@@ -7,9 +7,11 @@ import { Badge, Button, Card, Field, Select } from "@/components/ui";
 type Device = { id: string; deviceId: string; name: string; location: string; status: "ACTIVE" | "BLOCKED"; lastUsed: string | null; registeredIp: string | null; activatedAt: string | null };
 type Location = { id: string; name: string };
 type ClockRule = { entranceRoundingMinutes: number; breakDurationMinutes: number };
+type AuthorizedPC = { code: string; name: string; location: string; locationId: string; createdAt: string; activatedAt: string | null; archivedAt: string | null; registeredIp: string | null };
 
-export function DeviceManager({ initialDevices, locations, initialRules }: { initialDevices: Device[]; locations: Location[]; initialRules: Record<string, ClockRule> }) {
+export function DeviceManager({ initialDevices, locations, initialRules, initialPcs = [] }: { initialDevices: Device[]; locations: Location[]; initialRules: Record<string, ClockRule>; initialPcs?: AuthorizedPC[] }) {
   const [devices, setDevices] = useState(initialDevices);
+  const [pcs, setPcs] = useState(initialPcs.filter((pc) => !pc.archivedAt));
   const [rules, setRules] = useState(initialRules);
   const [draft, setDraft] = useState({ name: "", locationId: locations[0]?.id ?? "" });
   const [message, setMessage] = useState("");
@@ -92,6 +94,22 @@ export function DeviceManager({ initialDevices, locations, initialRules }: { ini
     setMessage("Regole timbratura e pausa salvate per il salone.");
   }
 
+  async function revokePc(pc: AuthorizedPC) {
+    if (!window.confirm(`Revocare l'accesso del PC ${pc.name}?`)) return;
+    const response = await fetch("/api/appointments/pc/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pc.code }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error ?? "PC non revocato.");
+      return;
+    }
+    setPcs((current) => current.filter((item) => item.code !== pc.code));
+    setMessage(`${pc.name} revocato.`);
+  }
+
   return (
     <>
       <Card className="mb-6">
@@ -138,6 +156,19 @@ export function DeviceManager({ initialDevices, locations, initialRules }: { ini
             </div>
           ))}
         </div>
+      </Card>
+      <Card className="mb-6 overflow-hidden p-0">
+        <div className="border-b border-black/5 p-5">
+          <h2 className="text-lg font-semibold">PC cassa autorizzati</h2>
+          <p className="mt-2 text-sm text-black/55">Dispositivi con accesso operativo agli appuntamenti e alla reception.</p>
+        </div>
+        {pcs.length === 0 ? <p className="p-5 text-sm text-black/45">Nessun PC autorizzato.</p> : pcs.map((pc) => (
+          <div key={pc.code} className="grid gap-3 border-b border-black/5 p-5 last:border-b-0 md:grid-cols-[1fr_1fr_auto] md:items-center">
+            <div><p className="font-semibold">{pc.name}</p><p className="text-sm text-black/45">{pc.location}</p></div>
+            <div className="text-sm text-black/55">{pc.registeredIp ? `IP: ${pc.registeredIp}` : "In attesa di attivazione"}</div>
+            <Button variant="soft" onClick={() => revokePc(pc)}><Trash2 className="size-4" /> Revoca</Button>
+          </div>
+        ))}
       </Card>
       <Card className="overflow-hidden p-0">
         {devices.map((device) => (

@@ -1,9 +1,11 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
+import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS, resolveEmployeeActive } from "@/lib/former-employee";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
@@ -48,18 +50,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const pin = data.pin ? String(data.pin) : "";
     const password = data.password ? String(data.password) : "";
-    const role = String(data.role ?? "DIPENDENTE") as UserRole;
+    const requestedRole = data.role !== undefined ? String(data.role) as UserRole : undefined;
     const birthDate = data.birthDate ? new Date(String(data.birthDate)) : null;
     const contractStart = data.contractStart ? new Date(String(data.contractStart)) : null;
     const contractEnd = data.contractEnd ? new Date(String(data.contractEnd)) : null;
 
-    if (pin && !/^\d{2,6}$/.test(pin)) {
+    if (pin && !/^\d{4,6}$/.test(pin)) {
       return apiError("Il PIN deve avere da 4 a 6 numeri.", 400);
     }
     if (password && password.length < 8) {
       return apiError("La password deve avere almeno 8 caratteri.", 400);
     }
-    if (!Object.values(UserRole).includes(role)) {
+    if (requestedRole !== undefined && !Object.values(UserRole).includes(requestedRole)) {
       return apiError("Ruolo non valido.", 400);
     }
     if (pin && await isPinAlreadyAssigned(pin, id)) {
@@ -70,10 +72,34 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!current) {
       return apiError("Utente non trovato.", 404);
     }
+    if (current.role === "ZERO" || requestedRole === "ZERO") {
+      return apiError("Il ruolo Zero non è modificabile da questo endpoint.", 403);
+    }
+    if (requestedRole !== undefined && requestedRole !== current.role && session.user.role !== "ZERO") {
+      return apiError("Solo Zero può modificare i ruoli di sistema.", 403);
+    }
+    const role = requestedRole ?? current.role;
+    const currentWorkforceData = asRecord(current.workforce_data);
+    const requestedEmployeeStatus = data.employeeStatus !== undefined ? String(data.employeeStatus) : current.employee_status;
+    const becomingFormerEmployee = requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS && current.employee_status !== FORMER_EMPLOYEE_STATUS;
+    const leavingFormerEmployee = requestedEmployeeStatus !== FORMER_EMPLOYEE_STATUS && current.employee_status === FORMER_EMPLOYEE_STATUS;
+    let nextWorkforceData = data.workforceData !== undefined
+      ? asRecord(data.workforceData)
+      : { ...currentWorkforceData };
+    if (data.contractType !== undefined) nextWorkforceData.contractType = String(data.contractType ?? "").trim();
+    if (data.contractRenewalStatus !== undefined) nextWorkforceData.contractRenewalStatus = String(data.contractRenewalStatus ?? "DA_VALUTARE");
+    if (becomingFormerEmployee) {
+      const since = new Date();
+      nextWorkforceData.exEmployeeSince = since.toISOString();
+      nextWorkforceData.exDocumentAccessUntil = addCalendarMonths(since, 3).toISOString();
+    } else if (leavingFormerEmployee) {
+      delete nextWorkforceData.exEmployeeSince;
+      delete nextWorkforceData.exDocumentAccessUntil;
+    }
 
     const nextSedeId = data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined;
     const baseUpdate = {
-      name: String(data.name ?? current.name).trim(),
+      name: formatPersonName(String(data.name ?? current.name)),
       email: String(data.email ?? current.email).trim().toLowerCase(),
       role,
       sede_id: nextSedeId,
@@ -85,14 +111,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       whatsapp_phone: data.whatsappPhone !== undefined ? (data.whatsappPhone ? String(data.whatsappPhone).trim() : null) : undefined,
       mansione: data.mansione !== undefined ? (data.mansione ? String(data.mansione).trim() : null) : undefined,
       iban: data.iban !== undefined ? (data.iban ? String(data.iban).trim().toUpperCase() : null) : undefined,
-      active: data.active !== undefined ? Boolean(data.active) : undefined,
-      employee_status: data.employeeStatus !== undefined ? String(data.employeeStatus) : undefined,
+      active: resolveEmployeeActive(data.active, requestedEmployeeStatus, current.active),
+      employee_status: data.employeeStatus !== undefined ? requestedEmployeeStatus : undefined,
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
-      access_list: data.accessList !== undefined ? data.accessList : undefined,
+      access_list: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? ["/documents"] : (data.accessList !== undefined ? data.accessList : undefined),
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
-      workforce_data: data.workforceData !== undefined
-        ? (data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData) ? data.workforceData : {})
-        : undefined,
+      workforce_data: nextWorkforceData as Prisma.InputJsonValue,
       google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
       google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : undefined,
       contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,

@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
-import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
+import { isAttendanceNotification, resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type NotificationItem = {
@@ -63,6 +63,30 @@ type Recipient = { id: string; name: string; photoUrl: string | null; locationId
 type LocationOption = { id: string; name: string };
 type Filter = "ALL" | "IMPORTANT" | "UNREAD" | "URGENT";
 type SectionTab = "BLOG" | "SENT" | "ATTENDANCE" | "ORDERS" | "ALL";
+
+function communicationDriveId(item: NotificationItem) {
+  const source = `${item.actionUrl ?? ""} ${item.message}`;
+  return source.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1]
+    || source.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1]
+    || null;
+}
+
+function communicationAttachmentName(item: NotificationItem) {
+  return item.message.match(/📄 ALLEGATO DRIVE: \[(.*?)\]\(.*?\)/i)?.[1]?.trim() || "";
+}
+
+function communicationAttachmentKind(item: NotificationItem): "image" | "pdf" | "link" {
+  const source = `${communicationAttachmentName(item)} ${item.actionUrl ?? ""}`.toLowerCase();
+  if (/\.pdf(?:$|[?#\s])/i.test(source)) return "pdf";
+  if (/\.(png|jpe?g|webp|gif)(?:$|[?#\s])/i.test(source)) return "image";
+  return "link";
+}
+
+function communicationAttachmentHref(item: NotificationItem) {
+  return communicationDriveId(item)
+    ? `/api/notifications/${encodeURIComponent(item.id)}/attachment`
+    : item.actionUrl || "#";
+}
 
 type CommunicationReader = { id: string; name: string; photoUrl: string | null };
 type CommunicationComment = {
@@ -135,8 +159,7 @@ function shortDateLabel(value: string) {
 }
 
 function isAttendanceAlert(item: NotificationItem) {
-  const text = `${item.title} ${item.message} ${item.type}`.toLowerCase();
-  return item.type === "TIMBRATURA" || /superamento limite pausa|pausa|uscit|timbram|timbratura/.test(text);
+  return isAttendanceNotification(item);
 }
 
 function isImportant(item: NotificationItem) {
@@ -171,6 +194,7 @@ export function NotificationManager({
   focusNotificationId = null,
   initialSection = "BLOG",
   openCommunicationDirectly = false,
+  internalEmailUnread = 0,
 }: {
   role: Role;
   notifications: NotificationItem[];
@@ -181,8 +205,10 @@ export function NotificationManager({
   focusNotificationId?: string | null;
   initialSection?: SectionTab;
   openCommunicationDirectly?: boolean;
+  internalEmailUnread?: number;
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  const canUseInternalEmail = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const showBlogView = false;
   const [sectionTab, setSectionTab] = useState<SectionTab>(initialSection);
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
@@ -318,6 +344,7 @@ export function NotificationManager({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: notification.id }),
+      keepalive: true,
     });
     router.refresh();
   }
@@ -374,8 +401,15 @@ export function NotificationManager({
 
   // Open operational notifications in their owning page; only communications use the reader.
   async function selectCommunication(item: NotificationItem) {
+    // Opening the reader must not wait for the read-receipt network request.
+    if (!item.read) void markRead(item);
+    if (isAttendanceNotification(item)) {
+      setActiveItem(item);
+      const pauseExceeded = /pausa.*superat|superamento.*pausa/i.test(`${item.title} ${item.message}`);
+      window.alert(`${pauseExceeded ? "Attenzione: pausa superata" : "Avviso timbratura"}\n\n${item.message}`);
+      return;
+    }
     const meta = parseNotificationMetadata(item, recipients, locations);
-    await markRead(item);
     window.location.assign(resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder }));
   }
 
@@ -389,17 +423,8 @@ export function NotificationManager({
     .replace(/\n\n📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
     .replace(/📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
     .trim() ?? "";
-  const focusedDriveId = activeItem
-    ? (activeItem.actionUrl || activeItem.message).match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1]
-      || (activeItem.actionUrl || activeItem.message).match(/id=([a-zA-Z0-9_-]+)/)?.[1]
-    : null;
-  const focusedHasImage = Boolean(
-    activeItem && (
-      /\.(png|jpg|jpeg|webp|gif)($|\?|\))/i.test(activeItem.actionUrl || activeItem.message)
-      || /\[.*?\.(png|jpg|jpeg|webp|gif)\]/i.test(activeItem.message)
-      || focusedDriveId
-    ),
-  );
+  const focusedDriveId = activeItem ? communicationDriveId(activeItem) : null;
+  const focusedHasImage = Boolean(activeItem && communicationAttachmentKind(activeItem) === "image");
   const focusedImageSrc = activeItem && focusedHasImage
     ? focusedDriveId
       ? `/api/drive-image?id=${focusedDriveId}`
@@ -446,7 +471,7 @@ export function NotificationManager({
                   </div>
                 </dl>
                 <div className="border-t border-black/10 px-5 py-5">
-                  <p className="line-clamp-5 whitespace-pre-line rounded-md bg-[#F7F4F8] p-4 text-sm font-medium leading-6 text-black/65">
+                  <p className="line-clamp-5 whitespace-pre-wrap break-words rounded-md bg-[#F7F4F8] p-4 text-sm font-medium leading-6 text-black/65">
                     {focusedMessage}
                   </p>
                 </div>
@@ -522,13 +547,13 @@ export function NotificationManager({
               <span>Direzione Paradise</span>
               <time>{dateLabel(activeItem.createdAt)}</time>
             </div>
-            <div className="mt-8 whitespace-pre-line text-base font-medium leading-7 text-black/75 sm:text-lg sm:leading-8">
+            <div className="mt-8 whitespace-pre-wrap break-words text-base font-medium leading-7 text-black/75 sm:text-lg sm:leading-8">
               {focusedMessage}
             </div>
 
             {activeItem.actionUrl && activeItem.actionUrl !== "/notifications" ? (
               <a
-                href={activeItem.actionUrl}
+                href={communicationAttachmentHref(activeItem)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-black/15 bg-white px-5 text-sm font-black hover:bg-black hover:text-white sm:w-auto"
@@ -628,6 +653,15 @@ export function NotificationManager({
                 <CheckCheck className="size-4" /> Segna tutte lette
               </button>
             ) : null}
+            {canUseInternalEmail ? (
+              <button
+                type="button"
+                onClick={() => router.push("/email")}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[0.08] px-5 text-xs font-black text-white transition hover:bg-white/[0.15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]"
+              >
+                <Mail className="size-4" /> Apri Email
+              </button>
+            ) : null}
             {canSend ? (
               <button
                 type="button"
@@ -694,7 +728,9 @@ export function NotificationManager({
             { label: "Comunicazioni da vedere", value: stats.blogUnread, icon: MessageSquareText, bg: "bg-pink-100 text-[#A74758]", action: () => { setSectionTab("BLOG"); setFilter("UNREAD"); } },
             { label: "Totale non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700", action: () => { setSectionTab("ALL"); setFilter("UNREAD"); } },
             { label: "Timbrature da vedere", value: stats.attendanceUnread, icon: BellRing, bg: "bg-rose-100 text-rose-700", action: () => { setSectionTab("ATTENDANCE"); setFilter("UNREAD"); } },
-            { label: "Urgenti da vedere", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700", action: () => { setSectionTab("ALL"); setFilter("URGENT"); } },
+            canUseInternalEmail
+              ? { label: "Email da leggere", value: internalEmailUnread, icon: Mail, bg: "bg-[#F8DCE9] text-[#A74770]", action: () => router.push("/email") }
+              : { label: "Urgenti da vedere", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700", action: () => { setSectionTab("ALL"); setFilter("URGENT"); } },
           ].map((metric) => {
             const Icon = metric.icon;
             return (
@@ -778,7 +814,7 @@ export function NotificationManager({
                   {/* Article Content Body */}
                   <div className="p-6 sm:p-8 space-y-6">
                     <div className="space-y-5 border-l-2 border-[#D3879D] bg-[#FFFDFC] p-5 sm:p-6">
-                      <p className="whitespace-pre-line text-base font-semibold leading-relaxed text-[#2C2C2C]">
+                      <p className="whitespace-pre-wrap break-words text-base font-semibold leading-relaxed text-[#2C2C2C]">
                         {activeItem.message
                           .replace(/\n\n📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
                           .replace(/📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
@@ -787,9 +823,8 @@ export function NotificationManager({
 
                       {/* Directly visible embedded image preview */}
                       {(() => {
-                        const targetUrl = activeItem.actionUrl || activeItem.message;
-                        const driveId = targetUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || targetUrl.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
-                        const isImg = /\.(png|jpg|jpeg|webp|gif)($|\?|\))/i.test(targetUrl) || /\[.*?\.(png|jpg|jpeg|webp|gif)\]/i.test(activeItem.message) || !!driveId;
+                        const driveId = communicationDriveId(activeItem);
+                        const isImg = communicationAttachmentKind(activeItem) === "image";
 
                         if (!isImg || (!activeItem.actionUrl && !driveId)) return null;
 
@@ -817,29 +852,29 @@ export function NotificationManager({
                     {activeItem.actionUrl && activeItem.actionUrl !== "/notifications" ? (
                       <div className="rounded-2xl border border-[#F4D3E2] bg-[#FFF5F9] p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          {activeItem.actionUrl.includes("drive.google.com") || activeItem.actionUrl.endsWith(".pdf") ? (
+                          {communicationAttachmentKind(activeItem) === "pdf" ? (
                             <FileText className="size-5 text-[#B83D7F]" />
                           ) : (
                             <LinkIcon className="size-5 text-[#B83D7F]" />
                           )}
                           <span className="text-xs font-bold text-[#1F1F1F]">
-                            {/\.(png|jpg|jpeg|webp|gif)($|\?)/i.test(activeItem.actionUrl) || activeItem.message.toLowerCase().includes(".png")
+                            {communicationAttachmentKind(activeItem) === "image"
                               ? "Allegato Immagine (Google Drive)"
-                              : activeItem.actionUrl.endsWith(".pdf")
+                              : communicationAttachmentKind(activeItem) === "pdf"
                               ? "Allegato Documento PDF (Google Drive)"
                               : "Risorsa / Link Esterno Collegato"}
                           </span>
                         </div>
                         <a
-                          href={activeItem.actionUrl}
+                          href={communicationAttachmentHref(activeItem)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-6 py-2.5 text-xs font-black text-white shadow-md hover:opacity-95 transition active:scale-95 w-full sm:w-auto"
                         >
                           <span>
-                            {/\.(png|jpg|jpeg|webp|gif)($|\?)/i.test(activeItem.actionUrl) || activeItem.message.toLowerCase().includes(".png")
+                            {communicationAttachmentKind(activeItem) === "image"
                               ? "Apri Immagine Originale ↗"
-                              : activeItem.actionUrl.endsWith(".pdf")
+                              : communicationAttachmentKind(activeItem) === "pdf"
                               ? "Visualizza PDF ↗"
                               : "Apri Risorsa ↗"}
                           </span>

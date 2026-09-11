@@ -16,13 +16,25 @@ export default async function NotificationsPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
-  const [notifications, locations, recipients] = await Promise.all([
+  const canUseInternalEmail = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+  const [notifications, locations, recipients, internalEmailUnread] = await Promise.all([
     prisma.notification.findMany({
       where: { user_id: session.user.id },
       orderBy: { created_at: "desc" },
     }),
     prisma.location.findMany({ where: role === "RESPONSABILE" ? { id: session.user.sedeId ?? undefined, active: true } : { active: true }, orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: role === "RESPONSABILE" ? { sede_id: session.user.sedeId ?? undefined, active: true } : { active: true }, include: { location: true }, orderBy: { name: "asc" } }),
+    canUseInternalEmail
+      ? prisma.internalEmailRecipient.count({
+          where: {
+            recipient_id: session.user.id,
+            read_at: null,
+            archived: false,
+            deleted: false,
+            email: { status: "SENT" },
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   return (
@@ -34,6 +46,7 @@ export default async function NotificationsPage({
         focusNotificationId={params.communication ?? null}
         initialSection={params.section === "sent" ? "SENT" : "BLOG"}
         openCommunicationDirectly={params.direct === "1"}
+        internalEmailUnread={internalEmailUnread}
         notifications={notifications.map((notification) => ({
           id: notification.id,
           title: notification.title,

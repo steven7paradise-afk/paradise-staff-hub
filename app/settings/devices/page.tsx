@@ -2,10 +2,17 @@ import { AppShell } from "@/components/app-shell";
 import { DeviceManager } from "@/components/device-manager";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Nfc } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function DeviceSettingsPage() {
+  const session = await auth();
+  if (!session?.user?.id || session.user.role !== "ZERO") redirect("/dashboard");
+
   const [devices, locations, settings, pcsSetting] = await Promise.all([
     prisma.device.findMany({
       where: { archived_at: null, NOT: { device_id: { startsWith: "ADMIN-MANUAL-" } } },
@@ -36,6 +43,10 @@ export default async function DeviceSettingsPage() {
 
   return (
     <AppShell title="Dispositivi" subtitle="Crea e gestisci i link sicuri per i tablet timbratrici e i PC cassa / reception.">
+      <Link href="/settings/nfc" className="mb-5 flex items-center justify-between rounded-[24px] border border-pink-200 bg-gradient-to-r from-white to-pink-50 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div><p className="font-semibold">Badge NFC per la timbratrice</p><p className="mt-1 text-sm text-black/55">Apri questa funzione dal tablet autorizzato per preparare le tessere personali.</p></div>
+        <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-black text-white"><Nfc className="size-6" /></div>
+      </Link>
       <DeviceManager
         initialDevices={devices.map((device) => ({
           id: device.id,

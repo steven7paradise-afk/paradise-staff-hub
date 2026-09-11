@@ -11,9 +11,11 @@ import { monthlyPersonalHours } from "@/lib/personal-hours";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
-import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/app/api/settings/dashboard/route";
+import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
+import { attendanceActualMinutes } from "@/lib/scheduled-attendance";
+import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,14 @@ export default async function ProfilePage() {
   const year = now.getFullYear();
   const monthStart = new Date(Date.UTC(year, month, 1));
   const monthEnd = new Date(Date.UTC(year, month + 1, 1));
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(now);
+  const [todayYear, todayMonth, todayDay] = todayKey.split("-").map(Number);
+  const todayCalendarDate = new Date(Date.UTC(todayYear, todayMonth - 1, todayDay));
+  const mondayOffset = todayCalendarDate.getUTCDay() === 0 ? -6 : 1 - todayCalendarDate.getUTCDay();
+  const currentWeekStart = new Date(todayCalendarDate);
+  currentWeekStart.setUTCDate(currentWeekStart.getUTCDate() + mondayOffset);
+  const twoWeekEnd = new Date(currentWeekStart);
+  twoWeekEnd.setUTCDate(twoWeekEnd.getUTCDate() + 14);
   
   const [
     schedules,
@@ -64,10 +74,12 @@ export default async function ProfilePage() {
     dashboardSettingRaw,
     clientControlForms,
     allEmployees,
-    fotoForm,
+    weeklySchedules,
+    weeklyAttendanceLogs,
+    holidayRequests,
   ] = await Promise.all([
     prisma.scheduleEntry.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, include: { category: true } }),
-    prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } }),
+    prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true, note: true }, orderBy: { timestamp: "asc" } }),
     prisma.workHourRecord.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } } }),
     prisma.leaveRequest.count({ where: { user_id: user.id, status: "PENDING" } }),
     prisma.document.findMany({ where: { user_id: user.id }, orderBy: { created_at: "desc" } }),
@@ -88,15 +100,33 @@ export default async function ProfilePage() {
     prisma.setting.findUnique({ where: { key: DASHBOARD_SETTINGS_KEY } }).catch(() => null),
     prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }).catch(() => []),
     prisma.user.findMany({ where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } }, select: { id: true, name: true } }).catch(() => []),
-    prisma.serviceForm.findFirst({
-      where: {
-        OR: [
-          { name: "Foto Ordini" },
-          { category: "Foto" },
-        ],
+    prisma.scheduleEntry.findMany({
+      where: { user_id: user.id, date: { gte: currentWeekStart, lt: twoWeekEnd } },
+      include: { category: true },
+      orderBy: { date: "asc" },
+    }),
+    prisma.attendanceLog.findMany({
+      where: { user_id: user.id, date: { gte: currentWeekStart, lt: twoWeekEnd } },
+      select: { date: true, type: true, time: true, timestamp: true, note: true },
+      orderBy: { timestamp: "asc" },
+    }),
+    prisma.leaveRequest.findMany({
+      where: { user_id: user.id, type: { in: ["FERIE", "PERMESSO", "MALATTIA"] } },
+      select: {
+        id: true,
+        type: true,
+        start_date: true,
+        end_date: true,
+        start_time: true,
+        end_time: true,
+        status: true,
+        reason: true,
+        admin_note: true,
+        medical_code: true,
+        created_at: true,
       },
-      orderBy: { created_at: "asc" },
-    }).catch(() => null),
+      orderBy: [{ start_date: "desc" }, { created_at: "desc" }],
+    }),
   ]);
   
   const hours = monthlyPersonalHours(year, month, schedules, logs, records);
@@ -168,47 +198,50 @@ export default async function ProfilePage() {
   const totalEarnedPoints = monthGoalPoints + manualBonusPoints;
   const availablePoints = Math.max(0, totalEarnedPoints - redeemedPoints);
 
-  // Fetch client photos uploaded by this worker
-  let clientPhotos: Array<{ id: string; orderNumber: string; url: string; date: string }> = [];
-  if (fotoForm) {
-    const photoResponses = await prisma.serviceFormResponse.findMany({
-      where: {
-        form_id: fotoForm.id,
-        user_id: user.id,
-      },
-      orderBy: { created_at: "desc" },
-    }).catch(() => []);
-
-    const ordersMap = new Map<string, { id: string; orderNumber: string; url: string; date: string; isFront: boolean }>();
-    for (const row of photoResponses) {
-      const answers = (row.answers as Record<string, any>) || {};
-      const orderNumber = answers.orderNumber ?? "";
-      const slot = Number(answers.slot ?? answers.photo?.slot ?? 0);
-      const url = answers.photo?.driveFileUrl ?? answers.photo?.webViewLink ?? "";
-
-      if (!orderNumber || !url) continue;
-
-      const isFrontPhoto = slot === 1 || slot === 3;
-      const existing = ordersMap.get(orderNumber);
-
-      if (!existing || (isFrontPhoto && !existing.isFront)) {
-        ordersMap.set(orderNumber, {
-          id: row.id,
-          orderNumber,
-          url,
-          date: row.created_at.toISOString(),
-          isFront: isFrontPhoto,
+  const shiftWeeks = Array.from({ length: 2 }, (_, weekIndex) => {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setUTCDate(weekStart.getUTCDate() + weekIndex * 7);
+    const days = Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = new Date(weekStart);
+      date.setUTCDate(date.getUTCDate() + dayIndex);
+      const dateKey = date.toISOString().slice(0, 10);
+      const schedule = weeklySchedules.find((entry) => entry.date.toISOString().slice(0, 10) === dateKey);
+      const startTime = schedule?.start_time || schedule?.category.start_time || null;
+      const endTime = schedule?.end_time || schedule?.category.end_time || null;
+      const attendance = weeklyAttendanceLogs
+        .filter((log) => log.date.toISOString().slice(0, 10) === dateKey)
+        .map((log) => {
+          const minutes = attendanceActualMinutes(log);
+          return {
+            type: log.type,
+            time: `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`,
+            timestamp: log.timestamp.toISOString(),
+            minutes,
+          };
         });
-      }
-    }
-
-    clientPhotos = Array.from(ordersMap.values()).map(({ id, orderNumber, url, date }) => ({
-      id,
-      orderNumber,
-      url,
-      date,
-    }));
-  }
+      return {
+        dateKey,
+        dayName: new Intl.DateTimeFormat("it-IT", { weekday: "short", timeZone: "UTC" }).format(date),
+        dayNumber: new Intl.DateTimeFormat("it-IT", { day: "2-digit", timeZone: "UTC" }).format(date),
+        monthName: new Intl.DateTimeFormat("it-IT", { month: "short", timeZone: "UTC" }).format(date),
+        fullDateLabel: new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date),
+        isToday: dateKey === todayKey,
+        shiftName: schedule?.category.name || "Nessun turno",
+        startTime,
+        endTime,
+        note: schedule?.note || null,
+        categoryColor: schedule?.category.color || null,
+        categoryTextColor: schedule?.category.text_color || null,
+        attendance,
+      };
+    });
+    return {
+      key: weekIndex === 0 ? "current" : "next",
+      label: weekIndex === 0 ? "Questa settimana" : "Settimana successiva",
+      rangeLabel: `${days[0].dayNumber} ${days[0].monthName} – ${days[6].dayNumber} ${days[6].monthName}`,
+      days,
+    };
+  });
 
   return (
     <AppShell title="Profilo" role={session.user.role as Role} hideHeader={true} transparentMobileHeader={true} edgeToEdgeMain>
@@ -255,7 +288,20 @@ export default async function ProfilePage() {
           totalEarnedPoints,
         }}
         unreadNotifications={unreadNotifications}
-        clientPhotos={clientPhotos}
+        shiftWeeks={shiftWeeks}
+        holidayRequests={holidayRequests.filter((request) => !isAutomaticLateReason(request.reason)).map((request) => ({
+          id: request.id,
+          type: request.type as "FERIE" | "PERMESSO" | "MALATTIA",
+          startDate: request.start_date.toISOString(),
+          endDate: request.end_date.toISOString(),
+          startTime: request.start_time,
+          endTime: request.end_time,
+          status: request.status,
+          reason: request.reason,
+          adminNote: request.admin_note,
+          medicalCode: request.medical_code,
+          createdAt: request.created_at.toISOString(),
+        }))}
         settingsNode={
           <ProfileSettings
             photoUrl={user.photo_url}

@@ -134,7 +134,7 @@ export function ResponseDetailView({
   const answerText = (field: any, answer: unknown) => {
     const value = Array.isArray(answer) ? answer.join(", ") : String(answer);
     if (String(field.id || "").includes("payment_method")) {
-      return ({ CARTA: "Carta", CONTANTI: "Contanti", CASHMATIC: "Cashmatic", MISTO: "Pagamento misto", SHOPIFY: "Shopify", DA_VERIFICARE: "Da verificare" } as Record<string, string>)[value.toUpperCase()] || value;
+      return ({ CARTA: "Carta", CONTANTI: "Contanti", CASHMATIC: "Contanti", MISTO: "Pagamento misto", SHOPIFY: "Shopify", DA_VERIFICARE: "Da verificare" } as Record<string, string>)[value.toUpperCase()] || value;
     }
     return value;
   };
@@ -222,12 +222,12 @@ export function ResponseDetailView({
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Pagamento rilevato</p>
               <div className="mt-3 space-y-2">
                 {shopifyOrder.paymentBreakdown.length ? shopifyOrder.paymentBreakdown.map((payment, index) => {
-                  const PaymentIcon = payment.method === "CONTANTI" ? Coins : CreditCard;
+                  const PaymentIcon = payment.method === "CONTANTI" || payment.method === "CASHMATIC" ? Coins : CreditCard;
                   return (
                     <div key={`${payment.gateway}-${index}`} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span className="grid size-9 place-items-center rounded-xl bg-white/10"><PaymentIcon className="size-4" /></span>
-                        <div><p className="text-sm font-black">{payment.method === "CONTANTI" ? "Contanti" : payment.method === "CASHMATIC" ? "Cashmatic" : "Carta"}</p><p className="text-[10px] font-bold text-white/35">{payment.gateway}</p></div>
+                        <div><p className="text-sm font-black">{payment.method === "CONTANTI" || payment.method === "CASHMATIC" ? "Contanti" : "Carta"}</p><p className="text-[10px] font-bold text-white/35">{payment.gateway}</p></div>
                       </div>
                       <p className="font-black">{payment.amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" })}</p>
                     </div>

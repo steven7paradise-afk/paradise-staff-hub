@@ -8,13 +8,13 @@ import { Card } from "@/components/ui";
 import { DownloadInvoicePdfButton } from "@/components/download-invoice-pdf-button";
 import { InvoiceStatusSelector } from "@/components/invoice-status-selector";
 import { BulkSendInvoicesButton } from "@/components/bulk-send-invoices-button";
+import { CreateSibillDraftButton } from "@/components/create-sibill-draft-button";
+import { SIBILL_ANSWER_KEYS } from "@/lib/sibill-invoice";
 import {
   CircleDollarSign,
   FileText,
   Building2,
   UserRound,
-  Calendar,
-  CreditCard,
   ChevronLeft,
   ChevronRight,
   ClipboardList
@@ -221,6 +221,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                   <th className="px-5 py-4 text-right">Importo</th>
                   <th className="px-5 py-4">Pagamento</th>
                   <th className="px-5 py-4 text-center">Stato</th>
+                  <th className="px-5 py-4 text-center">Bozza contabile</th>
                   <th className="px-5 py-4 text-center">Esporta</th>
                 </tr>
               </thead>
@@ -293,6 +294,17 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                         <InvoiceStatusSelector responseId={res.id} initialStatus={res.status} />
                       </td>
                       <td className="px-5 py-4 text-center">
+                        <CreateSibillDraftButton
+                          responseId={res.id}
+                          initialDraft={answer(res, SIBILL_ANSWER_KEYS.documentId) ? {
+                            id: String(answer(res, SIBILL_ANSWER_KEYS.documentId)),
+                            status: String(answer(res, SIBILL_ANSWER_KEYS.documentStatus) || "DRAFT"),
+                            number: String(answer(res, SIBILL_ANSWER_KEYS.documentNumber) || ""),
+                            paymentStatus: String(answer(res, SIBILL_ANSWER_KEYS.paymentStatus) || ""),
+                          } : null}
+                        />
+                      </td>
+                      <td className="px-5 py-4 text-center">
                         <DownloadInvoicePdfButton invoice={res as any} />
                       </td>
                     </tr>
@@ -301,7 +313,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
 
                 {responses.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-5 py-16 text-center text-sm font-semibold text-black/40 dark:text-white/30">
+                    <td colSpan={11} className="px-5 py-16 text-center text-sm font-semibold text-black/40 dark:text-white/30">
                       Nessuna richiesta di fattura registrata nel mese selezionato.
                     </td>
                   </tr>
@@ -384,7 +396,16 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                     </div>
                   </div>
 
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-4 flex flex-wrap items-start justify-end gap-2">
+                    <CreateSibillDraftButton
+                      responseId={res.id}
+                      initialDraft={answer(res, SIBILL_ANSWER_KEYS.documentId) ? {
+                        id: String(answer(res, SIBILL_ANSWER_KEYS.documentId)),
+                        status: String(answer(res, SIBILL_ANSWER_KEYS.documentStatus) || "DRAFT"),
+                        number: String(answer(res, SIBILL_ANSWER_KEYS.documentNumber) || ""),
+                        paymentStatus: String(answer(res, SIBILL_ANSWER_KEYS.paymentStatus) || ""),
+                      } : null}
+                    />
                     <DownloadInvoicePdfButton invoice={res as any} />
                   </div>
                 </div>

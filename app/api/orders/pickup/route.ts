@@ -70,13 +70,13 @@ function moneyFieldValue(order: any, includes: string[]) {
 }
 
 function orderNumber(order: any) {
-  const title = answerById(order, "order_title") || fieldValue(order, ["numero ordine", "ordine shopify", "nome ordine", "ordine", "titolo"]);
+  const title = answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["numero ordine", "ordine shopify", "nome ordine", "ordine", "titolo"]);
   if (title) return title;
   return `#${String(order.id).substring(0, 5).toUpperCase()}`;
 }
 
 function orderClientName(order: any) {
-  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  const clientName = answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
   if (clientName) return clientName;
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title && Number.isNaN(Number(String(title).replace("#", "").trim()))) return title;
@@ -84,7 +84,7 @@ function orderClientName(order: any) {
 }
 
 function orderPhone(order: any) {
-  return fieldValue(order, ["telefono", "phone", "numero di"]);
+  return answerById(order, "order_client_phone") || answerById(order, "field_1782212690129") || fieldValue(order, ["telefono", "phone", "numero di"]);
 }
 
 function orderPaymentSummary(order: any) {
@@ -171,7 +171,7 @@ function collectOrderAttachments(order: any) {
   const answers = order.answers && typeof order.answers === "object" ? order.answers : {};
   const fields = Array.isArray(order.form?.fields) ? order.form.fields : [];
   const labelById = new Map(fields.map((field: any) => [String(field.id ?? ""), String(field.label ?? field.id ?? "Allegato")]));
-  const attachments: Array<{ label: string; name: string; url: string; type: string; isImage: boolean; previewable: boolean }> = [];
+  const attachments: Array<{ label: string; name: string; url: string; previewUrl: string; type: string; isImage: boolean; previewable: boolean }> = [];
   const seen = new Set<string>();
 
   const addAttachment = (label: string, rawValue: any) => {
@@ -179,16 +179,18 @@ function collectOrderAttachments(order: any) {
     if (!url || seen.has(url)) return;
     const name = attachmentName(rawValue, label || "Allegato");
     const type = String(rawValue?.type || rawValue?.mimeType || rawValue?.contentType || "");
-    const imageSource = `${type} ${name} ${url}`;
-    const isImage = type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(imageSource);
-    const previewable = type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(imageSource);
+    const previewUrl = String(rawValue?.previewUrl || rawValue?.thumbnailLink || "").trim();
+    const imageName = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(name);
+    const browserImageName = /\.(png|jpe?g|webp|gif)$/i.test(name);
+    const isImage = type.startsWith("image/") || imageName || Boolean(previewUrl);
+    const previewable = type.startsWith("image/") || browserImageName || Boolean(previewUrl);
     seen.add(url);
-    attachments.push({ label, name, url, type, isImage, previewable });
+    attachments.push({ label, name, url, previewUrl: previewUrl || url, type, isImage, previewable });
   };
 
   Object.entries(answers).forEach(([key, value]) => {
     if (key === "__pickup") return;
-    const label = key === "__orderPhoto" ? "Foto ordine" : labelById.get(key) || key;
+    const label = String(key === "__orderPhoto" ? "Foto ordine" : labelById.get(key) || key);
     if (Array.isArray(value)) {
       value.forEach((item, index) => addAttachment(`${label} ${index + 1}`, item));
       return;

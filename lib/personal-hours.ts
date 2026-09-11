@@ -1,5 +1,6 @@
 import type { AttendanceType } from "@prisma/client";
 import { calculateClockHours } from "@/lib/work-hours";
+import { isClosedSchedule } from "@/lib/scheduled-attendance";
 
 type Category = {
   name: string;
@@ -12,7 +13,7 @@ type Category = {
 };
 
 type ScheduleRow = { date: Date; start_time?: string | null; end_time?: string | null; category: Category };
-type ClockLog = { date: Date; type: AttendanceType; timestamp: Date };
+type ClockLog = { date: Date; type: AttendanceType; timestamp: Date; note?: string | null };
 type StoredHours = { date: Date; hours: number; paid_break: boolean; manual_override: boolean; note: string | null };
 
 export type PersonalDayHours = {
@@ -82,12 +83,13 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
     const record = recordByDate.get(key);
     const clock = calculateClockHours(logGroups.get(key) ?? []);
     const automaticHours = record?.paid_break ? clock.grossHours : clock.netHours;
+    const storeClosed = isClosedSchedule(schedule?.category.name, schedule?.category.code);
     return {
       date,
       schedule,
       plannedGrossHours: plannedGrossHours(schedule),
       plannedHours: plannedHours(schedule),
-      workedHours: roundedHours(record?.manual_override ? record.hours : automaticHours),
+      workedHours: roundedHours(storeClosed ? 0 : record?.manual_override ? record.hours : automaticHours),
       grossHours: clock.grossHours,
       breakHours: clock.breakHours,
       paidBreak: Boolean(record?.paid_break),
@@ -95,7 +97,7 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
       firstPause: clock.firstPause,
       lastReturn: clock.lastReturn,
       lastExit: clock.lastExit,
-      note: record?.note ?? "",
+      note: record?.note ?? (storeClosed ? "Chiusura salone · ore pagate secondo il planning." : ""),
     };
   });
 }

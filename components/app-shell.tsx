@@ -1,9 +1,10 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
-import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
+import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, mergePermissionSets, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
 import { normalizeServicePage, servicePages } from "@/lib/service-pages";
 import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
 import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
@@ -19,7 +20,13 @@ import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
 import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { NotificationsPopover } from "@/components/notifications-popover";
+import { AdminAssistant } from "@/components/admin-assistant";
+import { RemoteControlBridge } from "@/components/remote-control-bridge";
 import pkg from "@/package.json";
+import { redirect } from "next/navigation";
+import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
+import { resolveSidebarLayout, type SidebarFolder } from "@/lib/sidebar-layout";
+import { WAREHOUSE_TEMPORARILY_DISABLED } from "@/lib/warehouse-availability";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -34,7 +41,10 @@ function getContrastYIQ(hexcolor: string) {
 const nav = [
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
+  { href: "/magazzino", label: "Magazzino", iconName: "Boxes", roles: WAREHOUSE_TEMPORARILY_DISABLED ? [] : routePermissions["/magazzino"], section: "Planning & Saloni" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/responsabile-di-turno", label: "Responsabile di turno", iconName: "UserRound", roles: routePermissions["/responsabile-di-turno"], section: "Generale" },
+  { href: "/programmazione-responsabile-di-turno", label: "Turni responsabili", iconName: "CalendarDays", roles: routePermissions["/programmazione-responsabile-di-turno"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 
@@ -43,15 +53,17 @@ const nav = [
   { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/foto", label: "Foto", iconName: "Camera", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/shopify-orders", label: "Ordini Shopify", iconName: "Store", roles: routePermissions["/shopify-orders"], section: "Planning & Saloni" },
+  { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: routePermissions["/shipping"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/cassa-live", label: "Terminale POS", iconName: "CashRegister", roles: routePermissions["/cassa-live"], section: "Planning & Saloni" },
   { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/fine-giornata", label: "Fine giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/points", label: "Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
@@ -79,48 +91,6 @@ const permissionMenuOverrides = [
   { href: "/service-forms", label: "Moduli operativi", iconName: "ReceiptText", section: "Planning & Saloni" },
 ] satisfies { href: string; label: string; iconName: string; section?: string }[];
 
-type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string> };
-
-function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown } => Boolean(folder) && typeof folder === "object")
-    .map((folder) => ({
-      id: typeof folder.id === "string" ? folder.id : "folder",
-      title: typeof folder.title === "string" ? folder.title : "Menu",
-      routes: Array.isArray(folder.routes) ? folder.routes.filter((route): route is string => typeof route === "string") : [],
-      labels: folder.labels && typeof folder.labels === "object" && !Array.isArray(folder.labels)
-        ? Object.fromEntries(
-            Object.entries(folder.labels as Record<string, unknown>)
-              .filter(([route, label]) => typeof route === "string" && typeof label === "string")
-          ) as Record<string, string>
-        : {},
-    }));
-}
-
-function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | null): SidebarFolder[] | null {
-  if (Array.isArray(value)) return normalizeSidebarFolders(value);
-
-  if (value && typeof value === "object") {
-    const raw = value as { default?: unknown; targets?: unknown };
-    const targets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
-      ? raw.targets as Record<string, unknown>
-      : {};
-    
-    // Ignore mansione layouts for system roles so they always get the full admin layout.
-    const isSystemAdmin = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
-    const cleanMansione = !isSystemAdmin && mansione?.trim().toLowerCase();
-    
-    const targetLayout = cleanMansione && targets[cleanMansione]
-      ? targets[cleanMansione]
-      : targets[role];
-    const folders = normalizeSidebarFolders(targetLayout || raw.default);
-    return folders.length > 0 ? folders : null;
-  }
-
-  return null;
-}
-
 function uniqueMenuItemsForAccess(role: Role) {
   const items = [
     ...nav.map((item) => ({ ...item, roles: [role] as Role[] })),
@@ -139,10 +109,11 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, edgeToEdgeMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; edgeToEdgeMain?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const isPcCassa = pcMode;
-  const pcProfileChooserHref = "/appointments/buenos-aires?choose=1";
+  if (!session?.user?.id && !isPcCassa) redirect("/login");
+  const pcProfileChooserHref = pcProfileChooserHrefOverride || "/appointments/buenos-aires?choose=1";
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
   const settingsKeys = [
@@ -178,6 +149,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           header_color: true,
           sidebar_color: true,
           mansione: true,
+          employee_status: true,
+          workforce_data: true,
+          last_edited_at: true,
           location: { select: { name: true } },
         },
       }).catch(() => null)
@@ -186,13 +160,41 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ? prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
     : Promise.resolve(0);
 
-  const [settingsList, formsAccessSettings, currentUser, unreadNotifications] = await Promise.all([
+  const requestScope: Prisma.LeaveRequestWhereInput = currentRole === "DIPENDENTE" && session?.user?.id
+    ? { user_id: session.user.id }
+    : currentRole === "RESPONSABILE" && session?.user?.sedeId
+      ? { user: { sede_id: session.user.sedeId } }
+      : {};
+  const requestActionsPromise = session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(currentRole)
+    ? prisma.leaveRequest.count({
+        where: {
+          ...requestScope,
+          NOT: { admin_note: { contains: "[ELIMINATA_DA_MALATTIE]" } },
+          OR: [
+            { status: "PENDING" },
+            { type: "MALATTIA", medical_code: null },
+            {
+              reason: { startsWith: "RITARDO AUTOMATICO — " },
+              employee_viewed_at: null,
+              employee_acknowledged_at: null,
+            },
+          ],
+        },
+      }).catch(() => 0)
+    : Promise.resolve(0);
+
+  const [settingsList, formsAccessSettings, currentUser, unreadNotifications, requestActions] = await Promise.all([
     settingsPromise,
     formsAccessPromise,
     currentUserPromise,
     unreadNotificationsPromise,
+    requestActionsPromise,
   ]);
-  const displayUser = isPcCassa && pcDisplayUser ? pcDisplayUser : currentUser;
+  const displayUser = pcDisplayUser ?? currentUser;
+  const isFormerEmployee = currentUser?.employee_status === FORMER_EMPLOYEE_STATUS;
+  if (isFormerEmployee && formerEmployeeAccessDates(currentUser.workforce_data, currentUser.last_edited_at).until.getTime() < Date.now()) {
+    redirect("/login?documentAccessExpired=1");
+  }
   const salonShiftModulesEnabled = isPcCassa || !currentUser || !isSalonCollaborator(currentUser)
     ? true
     : await canAccessSalonShiftModules(currentUser).catch(() => false);
@@ -265,9 +267,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const cleanMansione = currentUser?.mansione?.trim().toLowerCase();
   const effectivePermissionSet: PermissionSet | null = currentRole === "ZERO"
     ? null
-    : currentRole !== "ADMIN" && cleanMansione && mansionePermissionMap[cleanMansione]?.view.length > 0
-      ? mansionePermissionMap[cleanMansione]
-      : rolePermissionMap[currentRole];
+    : mergePermissionSets(rolePermissionMap[currentRole], cleanMansione ? mansionePermissionMap[cleanMansione] : null);
   const taskNavItem = { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: [currentRole] as Role[], section: "Generale" };
   const tablesNavItem = { href: "/tables", label: "Tabelle", iconName: "Table2", roles: [currentRole] as Role[], section: "Generale" };
   let baseItems = visibleForRole(nav, currentRole)
@@ -275,23 +275,33 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     .filter((item) => item.href !== "/tables" || userHasTablesAccess)
     .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
 
-  const isDarwin = session?.user?.id === "cmpms4o9h0003l809zof30mni" || !!session?.user?.email?.toLowerCase().includes("darwin");
-
-  if (isDarwin && !baseItems.some((item) => item.href === "/cash")) {
-    baseItems = [
-      ...baseItems,
-      { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: [currentRole] as Role[], section: "Planning & Saloni" }
-    ];
+  let sidebarConfig = resolveSidebarLayout(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
+  if (
+    (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) || effectivePermissionSet?.view.includes("/fine-giornata"))
+    && sidebarConfig
+    && !sidebarConfig.some((section) => section.routes.includes("/fine-giornata"))
+  ) {
+    const preferredSection = sidebarConfig.findIndex((section) =>
+      section.id === "planning"
+      || section.title.toLowerCase().includes("planning")
+      || section.routes.includes("/client-control")
+    );
+    const sectionIndex = preferredSection >= 0 ? preferredSection : 0;
+    sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
+      ? { ...section, routes: [...section.routes, "/fine-giornata"] }
+      : section);
   }
-
-  const sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
     return folder?.labels?.[href] || fallback;
   };
+  const getSidebarIcon = (href: string, fallback: string) => {
+    const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
+    return folder?.icons?.[href] || fallback;
+  };
 
   const getStructuredMenuItems = <T extends { href: string }>(flatList: T[]): T[] => {
-    if (!sidebarConfig || !Array.isArray(sidebarConfig) || sidebarConfig.length === 0) {
+    if (sidebarConfig === null) {
       return flatList;
     }
     const ordered: T[] = [];
@@ -307,12 +317,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           addedHrefs.add(item.href);
         }
       });
-    });
-
-    flatList.forEach(item => {
-      if (!addedHrefs.has(item.href)) {
-        ordered.push(item);
-      }
     });
 
     return ordered;
@@ -332,7 +336,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }
         ] : []),
         ...(userHasTablesAccess ? [tablesNavItem] : []),
-        ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
     : baseItems;
 
@@ -356,20 +359,31 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   let sidebarItems = getStructuredMenuItems(dedupeMenuItems(items)).map((item: any) => ({
     href: item.href,
     label: getSidebarLabel(item.href, item.label),
-    iconName: item.iconName,
+    iconName: getSidebarIcon(item.href, item.iconName),
     section: item.section,
+    badge: item.href === "/requests" ? requestActions : undefined,
   }));
+  let effectiveSidebarConfig = sidebarConfig;
+  if (isFormerEmployee) {
+    sidebarItems = sidebarItems.filter((item) => item.href === "/documents");
+    effectiveSidebarConfig = [{ id: "ex-dipendente", title: "Documenti disponibili", routes: ["/documents"] }];
+  }
   if (!salonShiftModulesEnabled) {
     sidebarItems = sidebarItems.filter(
       (item) => item.href !== "/appointments" && item.href !== "/service-forms",
     );
   }
-  let effectiveSidebarConfig = sidebarConfig;
   if (isPcCassa) {
-    sidebarItems = sidebarItems
-      .filter(item => item.href === "/appointments" || item.href === "/service-forms" || item.href === "/orders")
-      .map((item) => item.href === "/appointments" ? { ...item, href: "/appointments/buenos-aires", label: "Appuntamenti" } : item);
-    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms", "/orders"] }];
+    // Il PC Cassa deve avere sempre il proprio menu operativo. Non eredita il
+    // layout personalizzato dei dipendenti, che potrebbe non contenere queste
+    // pagine e lasciare quindi visibile una sidebar completamente vuota.
+    sidebarItems = [
+      { href: "/appointments/buenos-aires", label: "Appuntamenti", iconName: "CalendarDays", section: "", badge: undefined },
+      { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", section: "", badge: undefined },
+      { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "", badge: undefined },
+      { href: "/shopify-orders", label: "Ordini Shopify", iconName: "ShoppingCart", section: "", badge: undefined },
+    ];
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/client-control/giornata", "/service-forms", "/shopify-orders"] }];
   }
   const aside = (
       <aside className={cn(
@@ -387,7 +401,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             logoUrl={branding.logo_url}
             userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
             userPhoto={displayUser?.photo_url ? resolveDrivePhotoUrl(displayUser.photo_url) : null}
-            roleLabel={isPcCassa ? "PC Cassa" : currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            roleLabel={isPcCassa ? "PC Cassa" : currentUser?.mansione?.trim() || (currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole])}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
             sidebarConfig={effectiveSidebarConfig}
@@ -403,12 +417,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           />
 
           {/* Logo Center */}
-          <Link href="/dashboard" className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">
+          <Link href={isFormerEmployee ? "/documents" : "/dashboard"} className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">
             <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
           </Link>
 
           {/* Bell & Profile Photo Right */}
-          <div className="flex items-center gap-3.5">
+          {!isFormerEmployee ? <div className="flex items-center gap-3.5">
             <NotificationsPopover initialUnread={unreadNotifications} />
 
             <InstantLink href="/profile" className="relative active:scale-95 transition">
@@ -423,7 +437,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               </div>
               <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
             </InstantLink>
-          </div>
+          </div> : <div className="w-9" aria-hidden="true" />}
         </div>
       )}
 
@@ -433,7 +447,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             logoUrl={branding.logo_url}
             userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
             userPhoto={displayUser?.photo_url ?? null}
-            roleLabel={isPcCassa ? "PC Cassa" : currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            roleLabel={isPcCassa ? "PC Cassa" : currentUser?.mansione?.trim() || (currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole])}
             currentRole={currentRole}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
@@ -461,7 +475,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         transparentMobileHeader && !hideMobileHeader && "pt-[calc(env(safe-area-inset-top)+72px)] xl:pt-8",
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
-        <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
+        {!isFormerEmployee && !hideDesktopControls ? <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
           <TopControls
             unread={unreadNotifications}
             name={displayUser?.name ?? session?.user?.name ?? "Paradise"}
@@ -469,7 +483,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userId={isPcCassa ? "PC_CASSA" : session?.user?.id || ""}
             profileHref={isPcCassa ? "/appointments/buenos-aires?choose=1" : "/profile"}
           />
-        </div>
+        </div> : null}
         <div className="sr-only">
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
@@ -489,7 +503,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<>{main}<NotificationWatcher initialUnread={unreadNotifications} /></>}
+      main={<>{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),
@@ -497,9 +511,21 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         "--sidebar-icon": branding.sidebar_icon_color || (getContrastYIQ(branding.sidebar_color || "#FFFFFF") === "dark" ? "#1F1F1F" : "#FFFFFF"),
         "--dark-sidebar-text": branding.dark_sidebar_text_color || (getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF"),
         "--dark-sidebar-icon": branding.dark_sidebar_icon_color || (getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF"),
+        ...(compactDarkSidebar ? {
+          "--user-sidebar-color": "#211E20",
+          "--sidebar-gradient-from": "#292528",
+          "--sidebar-gradient-mid": "#1D1A1C",
+          "--sidebar-gradient-to": "#111011",
+          "--sidebar-text": "#FFFFFF",
+          "--sidebar-icon": "#FFFFFF",
+          "--sidebar-active-bg": "rgba(255,255,255,0.14)",
+          "--sidebar-active-text": "#FFFFFF",
+          "--sidebar-active-icon": "#F49BC4",
+        } : {}),
       } as React.CSSProperties}
       transparentMain={transparentMain}
-      forceCollapsed={isPcCassa}
+      forceCollapsed={isPcCassa || compactDarkSidebar}
+      hideDesktopSidebar={hideDesktopSidebar}
     />
   );
 }

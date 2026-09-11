@@ -8,7 +8,7 @@ export type WarehouseBarcodeEntry = {
   families: string[];
 };
 
-export const WAREHOUSE_BARCODES = [
+export const WAREHOUSE_BARCODES: readonly WarehouseBarcodeEntry[] = [
   {
     "label": "CAMY22",
     "productCode": "PRD00001",
@@ -10110,7 +10110,7 @@ export const WAREHOUSE_BARCODES = [
       "NOCCIOLA MESCIATO"
     ]
   }
-] as const satisfies readonly WarehouseBarcodeEntry[];
+];
 
 function normalizeBarcode(value: string) {
   return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");

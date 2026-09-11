@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarCheck,
@@ -25,10 +25,9 @@ import {
   MessageCircle,
   X,
   Loader2,
-  LockKeyhole,
   RefreshCw,
   Cloud,
-  AtSign,
+  Instagram,
   ChevronDown,
   Receipt,
   User,
@@ -41,12 +40,25 @@ import {
   Save,
   DollarSign,
   ExternalLink,
+  History,
+  GripVertical,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { initialAppointmentDateFilter } from "@/lib/appointment-date";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
+import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
+import {
+  allowsMissingFinalPaymentOrder,
+  CLIENT_CONTROL_SERVICE_OPTIONS,
+  type ClientControlService,
+} from "@/lib/client-control-service-rules";
 
 type ViewMode = "day" | "week" | "month";
 type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
@@ -71,6 +83,7 @@ type TeamOption = BookingTeammate;
 type ClientControlEmployee = {
   id: string;
   name: string;
+  photoUrl?: string | null;
   locationName?: string | null;
 };
 
@@ -91,6 +104,7 @@ type ShopifyClientOrder = {
   serviceTitle: string;
   note: string;
   createdAt: string;
+  financialStatus?: string | null;
 };
 
 type ClientControlAppointmentForm = {
@@ -113,6 +127,56 @@ type ClientControlAppointmentForm = {
   review: boolean;
   bookingId?: string | null;
 };
+
+function detectServiceDetails(serviceTitle?: string | null): string[] {
+  const title = normalizeSearchValue(serviceTitle);
+  const detected: string[] = [];
+  const add = (service: ClientControlService) => {
+    if (!detected.includes(service)) detected.push(service);
+  };
+
+  if (/riapplicazione|riapplica/.test(title)) add("Riapplicazione");
+  else if (/applicazione|applica/.test(title)) add("Applicazione");
+  if (/sistemazione\s+fasc(?:e|ia)/.test(title)) add("Sistemazione fasce");
+  if (/rimozione|rimuovi|rimuovere/.test(title)) add("Rimozione");
+  if (/piega|messa in piega/.test(title)) add("Piega");
+  if (/taglio|spuntata/.test(title)) add("Taglio");
+  if (/micro\s?cheratina/.test(title)) add("Microcheratina");
+  if (/nanoplastia|nano\s?plastia/.test(title)) add("Nanoplastia");
+  if (/colore|colorazione|tinta/.test(title)) add("Colore");
+  if (/consulenz(?:a|e)/.test(title)) add("Consulenza");
+
+  return detected;
+}
+function readStoredServiceDetails(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : String(value || "").split(/[,;|]+/);
+  return raw
+    .map((item) => String(item).trim())
+    .filter((item) => CLIENT_CONTROL_SERVICE_OPTIONS.some((option) => option === item));
+}
+
+function detectDetailsFromOfficeNote(serviceTitle?: string | null, officeNote?: string | null) {
+  const note = normalizeSearchValue(officeNote);
+  const services = detectServiceDetails(`${serviceTitle || ""} ${officeNote || ""}`);
+  if (/\bapp\.?\s*(?:\d|$)/.test(note) && !services.includes("Riapplicazione")) {
+    services.push("Applicazione");
+  }
+
+  const gramsMatch = note.match(/\b(\d{2,3})\s*(?:grammi?|gr|g)\b/);
+  const lengthMatch = note.match(/\b(\d{2,3})\s*cm\b/);
+  const bandsMatch = note.match(/\b(\d{1,2})\s*fasc(?:e|ia)\b/);
+  const attitude = ["Tranquilla", "Simpatica", "Esigente", "Pretenziosa"].find(
+    (value) => note.includes(value.toLowerCase()),
+  ) || "";
+
+  return {
+    services,
+    grams: gramsMatch ? `${gramsMatch[1]}g` : "",
+    length: lengthMatch ? `${lengthMatch[1]}cm` : "",
+    bands: bandsMatch ? bandsMatch[1] : "",
+    attitude,
+  };
+}
 
 type ManualPaymentMethod = "CARTA" | "SHOPIFY" | "CONTANTI";
 
@@ -164,6 +228,45 @@ export function formatOrderDate(dateStr?: string | null): string {
   }
 }
 
+function getOrderDayKey(dateStr?: string | null): string {
+  if (!dateStr) return "data-sconosciuta";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "data-sconosciuta";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function formatOrderDay(dateStr?: string | null): string {
+  if (!dateStr) return "Data non disponibile";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "Data non disponibile";
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatOrderTime(dateStr?: string | null): string {
+  if (!dateStr) return "--:--";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 type AppointmentRecord = {
   id: string;
   customerName: string;
@@ -172,6 +275,7 @@ type AppointmentRecord = {
   serviceTitle: string;
   serviceImageUrl?: string | null;
   bookingType?: string | null;
+  shopifyOrderId?: string | null;
   bookingStr?: string | null;
   startDate: string;
   endDate?: string | null;
@@ -187,6 +291,9 @@ type AppointmentRecord = {
   localStatus?: AppointmentStatusValue | string | null;
   statusUpdatedAt?: string | null;
   statusUpdatedBy?: string | null;
+  statusStartedAt?: string | null;
+  statusStoppedAt?: string | null;
+  statusElapsedSeconds?: number | null;
   sheetMatched?: boolean;
   sheetNote?: string | null;
   customerUpdate?: {
@@ -198,8 +305,29 @@ type AppointmentRecord = {
   createdAt?: string | null;
   updatedAt?: string | null;
   notesText?: string | null;
+  paradiseNote?: string | null;
   extraDetails?: Array<{ label: string; value: string }>;
 };
+
+type AppointmentComment = {
+  id: string;
+  order_name: string;
+  user_name: string;
+  user_role: string;
+  message: string;
+  created_at: string;
+};
+
+function isClientControlAuditComment(comment: AppointmentComment) {
+  const message = comment.message.trim().toUpperCase();
+  return (
+    message.startsWith("BOZZA CONTROLLO CLIENTE") ||
+    message.startsWith("MODIFICA CONTROLLO CLIENTE") ||
+    message.startsWith("CREAZIONE CONTROLLO CLIENTE") ||
+    message.startsWith("CONTROLLO CLIENTE MODIFICATO") ||
+    message.startsWith("CONTROLLO CLIENTE CREATO")
+  );
+}
 
 type CustomerArrivalUpdate = NonNullable<AppointmentRecord["customerUpdate"]>;
 
@@ -298,15 +426,20 @@ const appointmentStatusOptions: Array<{
 }> = [
   { value: "PRENOTATO", label: "Confermato" },
   { value: "NON_PRESENTATO", label: "Non presentato" },
-  { value: "INIZIATO", label: "Iniziato" },
-  { value: "IN_ATTESA", label: "In attesa" },
+  { value: "IN_ATTESA", label: "Arrivata" },
+  { value: "INIZIATO", label: "In lavorazione" },
   { value: "COMPLETATO", label: "Completato" },
-  { value: "ARRIVATO_IN_RITARDO", label: "Arrivato in ritardo" },
 ];
 
-const appointmentStatusLabels = Object.fromEntries(
-  appointmentStatusOptions.map((option) => [option.value, option.label]),
-) as Record<AppointmentStatusValue, string>;
+const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
+  PRENOTATO: "Confermato",
+  NON_PRESENTATO: "Non presentato",
+  INIZIATO: "In lavorazione",
+  IN_ATTESA: "Arrivata",
+  COMPLETATO: "Completato",
+  ARRIVATO_IN_RITARDO: "Arrivata",
+  PAGATO: "Confermato",
+};
 
 const appointmentStatusClasses: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "border-sky-100 bg-sky-50 text-sky-700",
@@ -398,16 +531,6 @@ function formatDuration(start?: string | null, end?: string | null) {
   return `${minutes} min`;
 }
 
-function formatWorkflowElapsed(start?: string | null, now = Date.now()) {
-  if (!start) return "0 min";
-  const startTime = new Date(start).getTime();
-  if (!Number.isFinite(startTime)) return "0 min";
-  const totalMinutes = Math.max(0, Math.floor((now - startTime) / 60_000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours ? `${hours} h ${minutes} min` : `${minutes} min`;
-}
-
 function formatMoney(amount?: number | null, currency?: string | null) {
   if (amount == null) return "-";
   return new Intl.NumberFormat("it-IT", {
@@ -425,15 +548,28 @@ function normalizeSearchValue(value?: string | null) {
     .trim();
 }
 
-function namesReferToSamePerson(left?: string | null, right?: string | null) {
-  const leftParts = normalizeSearchValue(left).split(" ").filter(Boolean);
-  const rightParts = normalizeSearchValue(right).split(" ").filter(Boolean);
-  if (!leftParts.length || !rightParts.length) return false;
+function staffNamesReferToSamePerson(
+  workerName?: string | null,
+  assignedName?: string | null,
+) {
+  const normalizedWorker = normalizeSearchValue(workerName);
+  const normalizedAssigned = normalizeSearchValue(assignedName);
+  // Cowlendar uses the public teammate name, while the internal app keeps the
+  // shorter staff profile name requested by the team.
+  if (normalizedWorker === "franci" && normalizedAssigned === "francesca paradise") return true;
+  const worker = normalizedWorker.split(" ").filter(Boolean);
+  const assigned = normalizedAssigned.split(" ").filter(Boolean);
+  if (!worker.length || !assigned.length) return false;
+  if (worker.join(" ") === assigned.join(" ")) return true;
+  if (worker[0] !== assigned[0] || assigned.length < 2 || worker.length < 2) {
+    return false;
+  }
 
-  return (
-    leftParts.every((part) => rightParts.includes(part)) ||
-    rightParts.every((part) => leftParts.includes(part))
-  );
+  const assignedSurname = assigned[assigned.length - 1];
+  const workerSurname = worker[worker.length - 1];
+  return assignedSurname.length === 1
+    ? workerSurname.startsWith(assignedSurname)
+    : workerSurname === assignedSurname;
 }
 
 function formatOrderCode(value?: string | null) {
@@ -507,16 +643,151 @@ function getCustomerContactLines(booking: AppointmentRecord) {
   };
 }
 
-function getBookingNotePreview(booking: AppointmentRecord) {
-  const cowlendarNote = compactValue(booking.notesText, 130);
-  if (cowlendarNote) return cowlendarNote;
+type AppointmentNotePreview = {
+  key: "shopify" | "office" | "booking" | "form";
+  label: string;
+  text: string;
+};
+
+function getBookingNotePreviews(
+  booking: AppointmentRecord,
+  officeNote?: string | null,
+  completed = false,
+  shopifyNote?: string | null,
+) {
+  const previews: AppointmentNotePreview[] = [];
+  const seen = new Set<string>();
+  const add = (key: AppointmentNotePreview["key"], label: string, value?: string | null) => {
+    const text = compactValue(value, 260);
+    const normalized = normalizeSearchValue(text);
+    if (!text || !normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    previews.push({ key, label, text });
+  };
+
+  // La nota Shopify contiene il riepilogo operativo finale: deve diventare
+  // visibile sulla board soltanto quando l'appuntamento è completato.
+  add("shopify", "Nota Shopify", completed ? shopifyNote : null);
+  add("office", completed ? "Nota completata" : "Nota ufficio", officeNote || booking.paradiseNote);
+  add("booking", "Nota prenotazione", booking.notesText);
   const formNote = getDetailValue(booking.extraDetails, [
     "note",
     "nota",
     "comment",
     "memo",
   ]);
-  return compactValue(formNote, 130);
+  add("form", "Nota modulo", formNote);
+  return previews;
+}
+
+function AppointmentNotePreviews({
+  notes,
+  compact = false,
+}: {
+  notes: AppointmentNotePreview[];
+  compact?: boolean;
+}) {
+  if (!notes.length) return null;
+  return (
+    <div className={compact ? "mt-2 space-y-1" : "mt-2 space-y-1.5"}>
+      {notes.map((note) => {
+        const isCompleted = note.label === "Nota completata";
+        const isShopify = note.key === "shopify";
+        return (
+        <div
+          key={note.key}
+          className={isShopify
+            ? compact
+              ? "rounded-lg border-2 border-[#E85A9B] bg-[#FFF0F7] px-2 py-2 text-[10px] font-bold leading-snug text-[#64183C] shadow-sm"
+              : "rounded-xl border-2 border-[#E85A9B] bg-[#FFF0F7] px-3 py-2.5 text-xs font-black leading-relaxed text-[#64183C] shadow-sm"
+            : isCompleted
+            ? compact
+              ? "rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[9px] font-semibold leading-snug text-emerald-900"
+              : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-900"
+            : compact
+              ? "rounded-lg bg-[#FFF7FA] px-2 py-1.5 text-[9px] font-semibold leading-snug text-[#7E4353]"
+              : "rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
+        >
+          <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${isShopify ? "text-[#C02F73]" : isCompleted ? "text-emerald-700" : "text-[#B9476D]"}`}>
+            {isCompleted ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
+          </span>
+          <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
+        </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AppointmentInstantSearch({
+  value,
+  onSearchChange,
+}: {
+  value: string;
+  onSearchChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  function updateSearch(nextValue: string) {
+    setDraft(nextValue);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onSearchChange(nextValue);
+      timerRef.current = null;
+    }, 60);
+  }
+
+  function clearSearch() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setDraft("");
+    onSearchChange("");
+  }
+
+  return (
+    <div className="relative min-h-14 rounded-[18px] border border-white bg-white/95 shadow-[0_8px_24px_rgba(81,43,60,0.08)] transition focus-within:border-[#D86B9B] focus-within:ring-4 focus-within:ring-[#F7D9E7]">
+      <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-14 place-items-center">
+        <span className="grid size-9 place-items-center rounded-xl bg-[#FFF0F7] text-[#B44D79]">
+          <Search className="size-5" strokeWidth={2.4} />
+        </span>
+      </span>
+      <label htmlFor="appointments-client-search" className="pointer-events-none absolute left-14 top-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#A93469]">
+        Cerca cliente
+      </label>
+      <input
+        id="appointments-client-search"
+        type="search"
+        value={draft}
+        onChange={(event) => updateSearch(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") clearSearch();
+        }}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="Nome, telefono, email o numero ordine…"
+        className="h-14 w-full appearance-none rounded-[18px] bg-transparent pb-1 pl-14 pr-12 pt-4 text-sm font-bold text-[#24171D] outline-none placeholder:text-black/35 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {draft ? (
+        <button
+          type="button"
+          onClick={clearSearch}
+          className="absolute right-2 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-xl bg-[#F5EAF0] text-[#8E536F] transition hover:bg-[#F0D7E3] active:scale-95"
+          aria-label="Cancella ricerca"
+        >
+          <X className="size-4" />
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function getOrderSearchVariants(value?: string | null) {
@@ -545,10 +816,15 @@ function normalizeAppointmentStatus(
 
   if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW")
     return "NON_PRESENTATO";
-  if (normalized === "ARRIVATO_IN_RITARDO" || normalized === "IN_RITARDO")
-    return "ARRIVATO_IN_RITARDO";
+  // I vecchi stati di ingresso confluiscono nello stato operativo "Arrivata".
+  if (
+    normalized === "ARRIVATO_IN_RITARDO" ||
+    normalized === "IN_RITARDO"
+  )
+    return "IN_ATTESA";
+  if (normalized === "INIZIATO" || normalized === "IN_LAVORAZIONE")
+    return "INIZIATO";
   if (normalized === "IN_ATTESA" || normalized === "ATTESA") return "IN_ATTESA";
-  if (normalized === "INIZIATO") return "INIZIATO";
   if (normalized === "COMPLETATO" || normalized === "COMPLETA")
     return "COMPLETATO";
   // Payment is not an operational appointment state. Legacy PAGATO/PAID
@@ -754,7 +1030,9 @@ type ActivePcWorker = {
   photo_url?: string | null;
   locationName: string;
   status: "IN" | "BREAK" | string;
+  clockedInAt?: string | null;
   breakStartedAt?: string | null;
+  externalIds?: string[];
 };
 
 function formatPcBreakTimer(startedAt: string, now: number) {
@@ -764,6 +1042,57 @@ function formatPcBreakTimer(startedAt: string, now: number) {
   const seconds = elapsedSeconds % 60;
   const parts = hours > 0 ? [hours, minutes, seconds] : [minutes, seconds];
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
+}
+
+function LivePcWorkerTimer({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [startedAt]);
+
+  return <>{formatPcBreakTimer(startedAt, now)}</>;
+}
+
+function formatAppointmentTimer(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function LiveAppointmentTimer({
+  startedAt,
+  elapsedSeconds = 0,
+}: {
+  startedAt?: string | null;
+  elapsedSeconds?: number;
+}) {
+  const calculateElapsed = () => {
+    const startedAtMs = startedAt ? new Date(startedAt).getTime() : Number.NaN;
+    return Number.isFinite(startedAtMs)
+      ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
+      : Math.max(0, Number(elapsedSeconds || 0));
+  };
+  const [currentElapsed, setCurrentElapsed] = useState(calculateElapsed);
+
+  useEffect(() => {
+    setCurrentElapsed(calculateElapsed());
+    if (!startedAt || !Number.isFinite(new Date(startedAt).getTime())) return;
+
+    const interval = window.setInterval(
+      () => setCurrentElapsed(calculateElapsed()),
+      1000,
+    );
+    return () => window.clearInterval(interval);
+  }, [startedAt, elapsedSeconds]);
+
+  return <>{formatAppointmentTimer(currentElapsed)}</>;
 }
 
 function PcStaffLockScreen({
@@ -867,11 +1196,9 @@ function PcStaffLockScreen({
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex h-full min-h-0 flex-col items-center px-5 py-5 md:px-10 lg:px-14">
         <div className="mx-auto max-w-4xl space-y-2 text-center">
-          <div className="mx-auto grid size-12 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
-            <LockKeyhole className="size-6" strokeWidth={1.45} />
-          </div>
+          <AppointmentsAdminUnlock salone={salon} compact />
           <h2 className="font-serif text-4xl font-light leading-tight tracking-normal text-neutral-950 md:text-5xl xl:text-6xl">
-            Chi vuole usare il gestionale?
+            Gestionale Paradise
           </h2>
           <p className="text-xs font-medium uppercase tracking-[0.32em] text-neutral-700 md:text-sm">
             Seleziona il tuo profilo per continuare.
@@ -1151,9 +1478,7 @@ export function AppointmentsBrowser({
   navigationBasePath,
   pageTitle = "Appuntamenti",
   pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
-  salonWorkflowMode,
-  initialWorkflowWorkerName = "",
-  initialWorkflowWorkerRole = "",
+  canManageParadiseNotes = false,
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
@@ -1170,9 +1495,7 @@ export function AppointmentsBrowser({
   navigationBasePath?: string;
   pageTitle?: string;
   pageSubtitle?: string;
-  salonWorkflowMode?: "reception" | "queue" | "station";
-  initialWorkflowWorkerName?: string;
-  initialWorkflowWorkerRole?: string;
+  canManageParadiseNotes?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1210,13 +1533,18 @@ export function AppointmentsBrowser({
           const payload = (await response.json()) as {
             updates?: Record<string, CustomerArrivalUpdate>;
           };
-          if (!stopped && payload.updates) setLiveCustomerUpdates(payload.updates);
+          if (!stopped && payload.updates) {
+            setLiveCustomerUpdates((current) => {
+              const next = payload.updates as Record<string, CustomerArrivalUpdate>;
+              return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+            });
+          }
         }
       } catch {
         // A temporary network error must not interrupt appointment management.
       } finally {
         requestInProgress = false;
-        if (!stopped) timer = setTimeout(synchronizeCustomerUpdates, 1000);
+        if (!stopped) timer = setTimeout(synchronizeCustomerUpdates, 5000);
       }
     };
 
@@ -1256,7 +1584,7 @@ export function AppointmentsBrowser({
     if (searchParams.get("refresh") === "true") {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("refresh");
-      const base = appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon);
+      const base = navigationBasePath || appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon);
       router.replace(params.size ? `${base}?${params.toString()}` : base, { scroll: false });
     }
     setIsRefreshing(false);
@@ -1279,6 +1607,42 @@ export function AppointmentsBrowser({
   }
 
   const [view, setView] = useState<ViewMode>(initialView);
+  const [layoutMode, setLayoutMode] = useState<"table" | "board">("board");
+  const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
+  const [boardStaffLoading, setBoardStaffLoading] = useState(false);
+  const [boardStaffError, setBoardStaffError] = useState("");
+  const [draggedBoardBookingId, setDraggedBoardBookingId] = useState<string | null>(null);
+  const [boardDropTargetId, setBoardDropTargetId] = useState<string | null>(null);
+  const [boardWorkerOrder, setBoardWorkerOrder] = useState<string[]>([]);
+  const [showEmptyBoardWorkers, setShowEmptyBoardWorkers] = useState(false);
+  const [draggedBoardWorkerId, setDraggedBoardWorkerId] = useState<string | null>(null);
+  const [boardWorkerDropTarget, setBoardWorkerDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
+  const [boardStatusMenu, setBoardStatusMenu] = useState<{
+    bookingId: string;
+    x: number;
+    y: number;
+    touch?: boolean;
+  } | null>(null);
+  const [quickNoteBookingId, setQuickNoteBookingId] = useState<string | null>(null);
+  const [quickNoteText, setQuickNoteText] = useState("");
+  const [paradiseNotes, setParadiseNotes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])),
+  );
+  const [shopifyNotesByBooking, setShopifyNotesByBooking] = useState<Record<string, string>>({});
+  const boardLongPressTimerRef = useRef<number | null>(null);
+  const boardScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const boardLongPressStartRef = useRef<{
+    bookingId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const boardLongPressTriggeredRef = useRef<string | null>(null);
+  const boardTouchPointersRef = useRef(
+    new Map<number, { bookingId: string; x: number; y: number }>(),
+  );
+  const [touchDraggedBoardBookingId, setTouchDraggedBoardBookingId] = useState<string | null>(null);
+  const touchDraggedBoardBookingIdRef = useRef<string | null>(null);
+  const touchBoardDropTargetIdRef = useRef<string | null>(null);
   const [salon, setSalon] = useState<SalonFilter>(initialSalon);
   const [anchorDate, setAnchorDate] = useState(
     () => dateFromLocalKey(initialAnchorDate) || new Date(),
@@ -1293,7 +1657,6 @@ export function AppointmentsBrowser({
   const [showCanceled, setShowCanceled] = useState(false);
   const [visibleCount, setVisibleCount] = useState(appointmentsPageSize);
   const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
-  const [workflowNow, setWorkflowNow] = useState(0);
   const [savingTeamId, setSavingTeamId] = useState<string | null>(null);
   const [teamByBooking, setTeamByBooking] = useState<
     Record<string, BookingTeammate[]>
@@ -1308,35 +1671,109 @@ export function AppointmentsBrowser({
   const [filterStaff, setFilterStaff] = useState<string>("all");
   const [filterPayment, setFilterPayment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState(() => {
-    const today = localDateKey(new Date());
-    if (initialScopeAll) {
-      return {
-        mode: "all" as AppointmentDateFilterMode,
-        from: initialRangeFrom || today,
-        to: initialRangeTo || today,
-      };
-    }
-    if (initialView !== "day" && initialRangeFrom && initialRangeTo) {
-      return {
-        mode: "custom" as AppointmentDateFilterMode,
-        from: initialRangeFrom,
-        to: initialRangeTo,
-      };
-    }
-    return {
-      mode: "today" as AppointmentDateFilterMode,
-      from: today,
-      to: today,
-    };
-  });
+  const [dateFilter, setDateFilter] = useState(() => initialAppointmentDateFilter({
+    initialRangeFrom,
+    initialRangeTo,
+    initialScopeAll,
+  }));
 
   useEffect(() => {
-    if (salonWorkflowMode !== "queue" && salonWorkflowMode !== "station") return;
-    setWorkflowNow(Date.now());
-    const interval = window.setInterval(() => setWorkflowNow(Date.now()), 30_000);
-    return () => window.clearInterval(interval);
-  }, [salonWorkflowMode]);
+    if (!initialBookings.length) return;
+    const bookingsWithShopifyOrder = initialBookings.filter((booking) => booking.shopifyOrderId);
+    const controller = new AbortController();
+
+    fetch("/api/appointments/shopify-notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderIds: bookingsWithShopifyOrder.map((booking) => booking.shopifyOrderId),
+        appointments: initialBookings.map((booking) => ({
+          bookingId: booking.id,
+          orderId: booking.shopifyOrderId,
+        })),
+      }),
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!payload?.notes || controller.signal.aborted) return;
+        const notesByOrderId = payload.notes as Record<string, string>;
+        const notesByBooking = (payload.notesByBooking || {}) as Record<string, string>;
+        setShopifyNotesByBooking(Object.fromEntries(
+          initialBookings
+            .map((booking) => [
+              booking.id,
+              notesByBooking[booking.id] || notesByOrderId[String(booking.shopifyOrderId)] || "",
+            ] as const)
+            .filter((entry) => Boolean(entry[1])),
+        ));
+      })
+      .catch(() => {
+        // Shopify notes are supplementary: the appointments page remains usable.
+      });
+
+    return () => controller.abort();
+  }, [initialBookings]);
+
+  useEffect(() => {
+    setView(initialView);
+    setAnchorDate(dateFromLocalKey(initialAnchorDate) || new Date());
+    setDateFilter(initialAppointmentDateFilter({
+      initialRangeFrom,
+      initialRangeTo,
+      initialScopeAll,
+    }));
+    setVisibleCount(appointmentsPageSize);
+  }, [initialAnchorDate, initialRangeFrom, initialRangeTo, initialScopeAll, initialView]);
+
+  useEffect(() => {
+    if (layoutMode !== "board") return;
+    let active = true;
+
+    async function loadBoardStaff() {
+      setBoardStaffLoading(true);
+      setBoardStaffError("");
+      try {
+        const response = await fetch("/api/appointments/pc/active-staff?salone=buenos-aires&scope=salon", {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error || "Impossibile recuperare il personale del salone.");
+        if (active) setBoardActiveStaff(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (active) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale del salone.");
+      } finally {
+        if (active) setBoardStaffLoading(false);
+      }
+    }
+
+    void loadBoardStaff();
+    const interval = window.setInterval(loadBoardStaff, 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [layoutMode]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("appointments_board_worker_order");
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) setBoardWorkerOrder(parsed.filter((id) => typeof id === "string"));
+    } catch {
+      setBoardWorkerOrder([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!boardWorkerOrder.length) return;
+    try {
+      window.localStorage.setItem("appointments_board_worker_order", JSON.stringify(boardWorkerOrder));
+    } catch {
+      // The board remains usable when local storage is unavailable.
+    }
+  }, [boardWorkerOrder]);
 
   function rangeForView(nextView: ViewMode, date: Date) {
     const start = new Date(date);
@@ -1369,9 +1806,14 @@ export function AppointmentsBrowser({
     const range = options?.from && options?.to
       ? { from: options.from, to: options.to }
       : rangeForView(nextView, nextAnchor);
+    const selectedDay = nextView === "day" && !options?.scopeAll && range.from === range.to
+      ? dateFromLocalKey(range.from)
+      : null;
+    const effectiveAnchor = selectedDay || nextAnchor;
+    setAnchorDate(effectiveAnchor);
     const params = new URLSearchParams();
     params.set("view", nextView);
-    params.set("focus", localDateKey(nextAnchor));
+    params.set("focus", localDateKey(effectiveAnchor));
     if (options?.scopeAll) {
       params.set("scope", "all");
     } else {
@@ -1383,10 +1825,63 @@ export function AppointmentsBrowser({
     if (options?.forceRefresh) params.set("refresh", "true");
 
     setIsRefreshing(true);
-    const target = `${appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon)}?${params.toString()}`;
+    if (navigationBasePath && targetSalon !== "tutti") {
+      params.set("salone", targetSalon);
+    }
+    const base = navigationBasePath || appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon);
+    const target = `${base}?${params.toString()}`;
     if (options?.replace) router.replace(target, { scroll: false });
     else router.push(target, { scroll: false });
   }
+
+  useEffect(() => {
+    if (!isPC) return;
+
+    let inactivityTimer: number | undefined;
+    const returnToFullDayView = () => {
+      const day = localDateKey(anchorDate);
+      setSearchTerm("");
+      setShowCanceled(false);
+      setFilterStaff("all");
+      setFilterPayment("all");
+      setFilterStatus("all");
+      setSelectedBookingId(null);
+      setIsFilterModalOpen(false);
+      setIsDatePickerOpen(false);
+      setLayoutMode("board");
+      setView("day");
+      setDateFilter({ mode: "custom", from: day, to: day });
+
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", "day");
+      params.set("focus", day);
+      params.set("from", day);
+      params.set("to", day);
+      params.delete("scope");
+      params.delete("booking");
+      params.delete("order");
+      params.delete("worker");
+      params.delete("choose");
+      params.delete("refresh");
+      const targetSalon = salon !== "tutti" ? salon : initialSalon !== "tutti" ? initialSalon : null;
+      const base = navigationBasePath || appointmentSalonUrl(targetSalon);
+      router.replace(`${base}?${params.toString()}`, { scroll: false });
+    };
+    const restartTimer = () => {
+      if (inactivityTimer !== undefined) window.clearTimeout(inactivityTimer);
+      inactivityTimer = window.setTimeout(returnToFullDayView, 60_000);
+    };
+
+    const activityEvents: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "wheel"];
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, restartTimer, { passive: true }));
+    restartTimer();
+
+    return () => {
+      if (inactivityTimer !== undefined) window.clearTimeout(inactivityTimer);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, restartTimer));
+    };
+  }, [anchorDate, initialSalon, isPC, navigationBasePath, router, salon, searchParams]);
+
   const [statusByBooking, setStatusByBooking] = useState<
     Record<string, AppointmentStatusValue>
   >(() =>
@@ -1404,7 +1899,24 @@ export function AppointmentsBrowser({
         ),
     ),
   );
-
+  const [statusTimingByBooking, setStatusTimingByBooking] = useState<
+    Record<string, {
+      startedAt?: string | null;
+      stoppedAt?: string | null;
+      elapsedSeconds?: number;
+    }>
+  >(() =>
+    Object.fromEntries(
+      initialBookings.map((booking) => [
+        booking.id,
+        {
+          startedAt: booking.statusStartedAt ?? null,
+          stoppedAt: booking.statusStoppedAt ?? null,
+          elapsedSeconds: Number(booking.statusElapsedSeconds || 0),
+        },
+      ]),
+    ),
+  );
   const normalizedSearch = normalizeSearchValue(searchTerm);
   function getBookingTeam(booking?: AppointmentRecord | null): BookingTeammate[] {
     if (!booking) return [];
@@ -1483,17 +1995,62 @@ export function AppointmentsBrowser({
     return compatible.length === 1 ? compatible[0].id : null;
   }
 
+  function matchEmployeeIdsForStoredStaff(
+    storedStaff: unknown,
+    employees: ClientControlEmployee[],
+  ) {
+    const names = (Array.isArray(storedStaff) ? storedStaff : [storedStaff])
+      .flatMap((value) =>
+        typeof value === "string" ? value.split(/[,;\n]+/) : [],
+      )
+      .map((name) => normalizeSearchValue(name))
+      .filter(Boolean);
+
+    return employees
+      .filter((employee) =>
+        names.includes(normalizeSearchValue(employee.name)),
+      )
+      .map((employee) => employee.id);
+  }
+
   const [clientControlOpen, setClientControlOpen] = useState(false);
   const [clientControlEmployees, setClientControlEmployees] = useState<
     ClientControlEmployee[]
   >([]);
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
+  const [clientControlLastSave, setClientControlLastSave] = useState<"draft" | "confirmed" | null>(null);
+  const [clientControlLastVisitAt, setClientControlLastVisitAt] = useState<string | null>(null);
+  const [clientControlHistoryLoaded, setClientControlHistoryLoaded] = useState(false);
+  const [serviceDetailsModalOpen, setServiceDetailsModalOpen] = useState(false);
+  const clientControlRequestRef = useRef<AbortController | null>(null);
+
+  function closeClientControl() {
+    clientControlRequestRef.current?.abort();
+    clientControlRequestRef.current = null;
+    setClientControlOpen(false);
+    setShowShopifyOrdersPanel(false);
+    setShowTodayOrdersDropdown(false);
+    setSelectedShopifyNoteOrder("");
+    setShopifyNoteFallbackToDeposit(false);
+    setIsStaffDropdownOpen(false);
+    setServiceDetailsModalOpen(false);
+  }
   const [clientControlPolishing, setClientControlPolishing] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [clientControlAppointmentComments, setClientControlAppointmentComments] =
+    useState<AppointmentComment[]>([]);
+  const clientControlChangeComments = useMemo(
+    () => clientControlAppointmentComments.filter(isClientControlAuditComment),
+    [clientControlAppointmentComments],
+  );
+  const clientControlProcessComments = useMemo(
+    () => clientControlAppointmentComments.filter((comment) => !isClientControlAuditComment(comment)),
+    [clientControlAppointmentComments],
+  );
   const [selectedGrammi, setSelectedGrammi] = useState("");
   const [customGrammiInput, setCustomGrammiInput] = useState("");
   const [selectedLunghezza, setSelectedLunghezza] = useState("");
@@ -1501,6 +2058,7 @@ export function AppointmentsBrowser({
   const [customFasceInput, setCustomFasceInput] = useState("");
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
+  const [selectedServiceDetails, setSelectedServiceDetails] = useState<string[]>([]);
   const [isDepositUnlockedManually, setIsDepositUnlockedManually] = useState(false);
   const [isSecondUnlockedManually, setIsSecondUnlockedManually] = useState(false);
 
@@ -1510,6 +2068,7 @@ export function AppointmentsBrowser({
     fasce?: string;
     atteggiamento?: string;
     extraNote?: string;
+    services?: string[];
   }) {
     const rawG = overrides?.grammi !== undefined ? overrides.grammi : selectedGrammi;
     const g = rawG === "custom" ? customGrammiInput : rawG;
@@ -1521,8 +2080,10 @@ export function AppointmentsBrowser({
 
     const a = overrides?.atteggiamento !== undefined ? overrides.atteggiamento : selectedAtteggiamento;
     const n = overrides?.extraNote !== undefined ? overrides.extraNote : extraNoteText;
+    const services = overrides?.services !== undefined ? overrides.services : selectedServiceDetails;
 
     const parts: string[] = [];
+    if (services.length) parts.push(`Servizi: ${services.join(", ")}`);
     if (g) parts.push(`Grammi: ${g}`);
     if (l) parts.push(`Lunghezza: ${l}`);
     if (f) parts.push(`Fasce: ${f}`);
@@ -1560,6 +2121,52 @@ export function AppointmentsBrowser({
       review: false,
       bookingId: null,
     });
+  const finalPaymentOptional = allowsMissingFinalPaymentOrder([
+    ...selectedServiceDetails,
+    clientControlForm.serviceTitle,
+  ]);
+  const clientControlFormRef = useRef(clientControlForm);
+  const clientControlAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clientControlAutoSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    clientControlFormRef.current = clientControlForm;
+  }, [clientControlForm]);
+
+  useEffect(() => {
+    if (!clientControlForm.bookingId || !clientControlEmployees.length) return;
+    const booking = initialBookings.find(
+      (item) => item.id === clientControlForm.bookingId,
+    );
+    if (!booking) return;
+    const bookingStaffIds = matchEmployeeIdsForBooking(
+      booking,
+      clientControlEmployees,
+    );
+    if (!bookingStaffIds.length) return;
+
+    setClientControlForm((current) => {
+      if (current.bookingId !== booking.id) return current;
+      const alreadySynchronized =
+        current.staffIds.length === bookingStaffIds.length &&
+        current.staffIds.every((id) => bookingStaffIds.includes(id));
+      if (alreadySynchronized) return current;
+      const synchronizedForm = { ...current, staffIds: bookingStaffIds };
+      clientControlFormRef.current = synchronizedForm;
+      return synchronizedForm;
+    });
+  }, [
+    clientControlEmployees,
+    clientControlForm.bookingId,
+    initialBookings,
+    teamByBooking,
+  ]);
+
+  useEffect(() => () => {
+    if (clientControlAutoSaveTimerRef.current) {
+      clearTimeout(clientControlAutoSaveTimerRef.current);
+    }
+  }, []);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<{
     id?: string;
@@ -1608,7 +2215,6 @@ export function AppointmentsBrowser({
     message: "",
     type: "success",
   });
-
   function showPushToast(title: string, message: string, type: "success" | "error" = "success") {
     setToastNotification({
       show: true,
@@ -1667,13 +2273,14 @@ export function AppointmentsBrowser({
           phone: data.phone || "",
           serviceTitle: Array.isArray(data.lineItems) ? data.lineItems.map((i: any) => i.title).join(", ") : "",
           note: data.note || "",
+          createdAt: data.createdAt || data.created_at || "",
         });
         setClientControlForm((prev) => {
           const newOrder = data.orderName ? data.orderName.replace(/^#/, "") : prev.shopifyOrder;
           const newDeposit = data.totalPrice != null ? String(data.totalPrice) : prev.depositPaid;
-          const newEmail = data.email || prev.email;
-          const newPhone = data.phone || prev.phone;
-          const newClientName = data.clientName || prev.clientName;
+          const newEmail = prev.email.trim() ? prev.email : (data.email || "");
+          const newPhone = prev.phone.trim() ? prev.phone : (data.phone || "");
+          const newClientName = prev.clientName.trim() ? prev.clientName : (data.clientName || "");
 
           return {
             ...prev,
@@ -1734,10 +2341,14 @@ export function AppointmentsBrowser({
   }
 
   const [showTodayOrdersDropdown, setShowTodayOrdersDropdown] = useState(false);
+  const [showShopifyOrdersPanel, setShowShopifyOrdersPanel] = useState(false);
   const [todayOrdersList, setTodayOrdersList] = useState<ShopifyClientOrder[]>([]);
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
+  const [selectedShopifyNoteOrder, setSelectedShopifyNoteOrder] = useState("");
+  const [shopifyNoteFallbackToDeposit, setShopifyNoteFallbackToDeposit] = useState(false);
+  const [showManualShopifyCorrection] = useState(false);
 
-  async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string }) {
+  async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string; shopifyOrder?: string }) {
     setLoadingTodayOrders(true);
     try {
       const params = new URLSearchParams({
@@ -1746,13 +2357,39 @@ export function AppointmentsBrowser({
         email: identity?.email ?? clientControlForm.email ?? "",
         phone: identity?.phone ?? clientControlForm.phone ?? "",
       });
-      const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`);
-      const data = await res.json().catch(() => null);
-      if (res.ok && Array.isArray(data?.orders)) {
-        setTodayOrdersList(data.orders);
+      let lastLookupError: unknown = null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`, { cache: "no-store" });
+          const data = await res.json().catch(() => null);
+          if (res.ok && Array.isArray(data?.orders) && data.orders.length > 0) {
+            setTodayOrdersList(data.orders);
+            setShopifyNoteFallbackToDeposit(false);
+            return;
+          }
+        } catch (error) {
+          lastLookupError = error;
+        }
+      }
+
+      if (lastLookupError) console.error("Failed to fetch client's Shopify orders:", lastLookupError);
+      setTodayOrdersList([]);
+      const depositOrder = String(
+        identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
+      ).trim().replace(/^#/, "");
+      if (depositOrder) {
+        setSelectedShopifyNoteOrder(depositOrder);
+        setShopifyNoteFallbackToDeposit(true);
       }
     } catch (err) {
-      console.error("Failed to fetch client's Shopify orders:", err);
+      console.error("Failed to prepare client's Shopify order search:", err);
+      const depositOrder = String(
+        identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
+      ).trim().replace(/^#/, "");
+      if (depositOrder) {
+        setSelectedShopifyNoteOrder(depositOrder);
+        setShopifyNoteFallbackToDeposit(true);
+      }
     } finally {
       setLoadingTodayOrders(false);
     }
@@ -1763,6 +2400,8 @@ export function AppointmentsBrowser({
     forceTarget?: "first" | "second"
   ) {
     const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
+    setSelectedShopifyNoteOrder(cleanName);
+    setShopifyNoteFallbackToDeposit(false);
     const isSecond = forceTarget
       ? forceTarget === "second"
       : Boolean(clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "");
@@ -1775,9 +2414,9 @@ export function AppointmentsBrowser({
           ...prev,
           secondShopifyOrder: cleanName,
           paid: orderPriceStr || prev.paid,
-          email: order.email || prev.email,
-          phone: order.phone || prev.phone,
-          clientName: order.clientName || prev.clientName,
+          email: prev.email.trim() ? prev.email : (order.email || ""),
+          phone: prev.phone.trim() ? prev.phone : (order.phone || ""),
+          clientName: prev.clientName.trim() ? prev.clientName : (order.clientName || ""),
         };
       });
       void handleSecondShopifyOrderLookup(cleanName);
@@ -1789,9 +2428,9 @@ export function AppointmentsBrowser({
           ...prev,
           shopifyOrder: cleanName,
           depositPaid: orderPriceStr || prev.depositPaid,
-          email: order.email || prev.email,
-          phone: order.phone || prev.phone,
-          clientName: order.clientName || prev.clientName,
+          email: prev.email.trim() ? prev.email : (order.email || ""),
+          phone: prev.phone.trim() ? prev.phone : (order.phone || ""),
+          clientName: prev.clientName.trim() ? prev.clientName : (order.clientName || ""),
         };
       });
     }
@@ -1834,8 +2473,8 @@ export function AppointmentsBrowser({
       const phoneMatchB = phoneDigits && bPhone && (phoneDigits === bPhone || phoneDigits.endsWith(bPhone) || bPhone.endsWith(phoneDigits));
 
       // Email match
-      const emailMatchA = emailClean && aEmail && emailClean === aEmail;
-      const emailMatchB = emailClean && bEmail && emailClean === bEmail;
+      const emailMatchA = isLikelySameCustomerEmail(emailClean, aEmail);
+      const emailMatchB = isLikelySameCustomerEmail(emailClean, bEmail);
 
       // Full Name match (both first and last)
       const nameMatchA = nameNorm && aName && (nameNorm === aName || (nameParts.length >= 2 && aName.includes(nameParts[0]) && aName.includes(nameParts[nameParts.length - 1])));
@@ -1876,7 +2515,7 @@ export function AppointmentsBrowser({
         return true;
       }
       // 2. Match Email
-      if (emailClean && oEmail && emailClean === oEmail) {
+      if (isLikelySameCustomerEmail(emailClean, oEmail)) {
         return true;
       }
       // 3. Match Full Name
@@ -1890,39 +2529,151 @@ export function AppointmentsBrowser({
     });
   }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, todayOrdersList]);
 
-  const clientOrderProfile = useMemo(() => {
-    const order = clientMatchingOrders[0] || sortedTodayOrdersList[0];
-    if (!order) return null;
-    const fullName = [order.firstName, order.lastName].filter(Boolean).join(" ") || order.clientName;
-    const locality = [order.postalCode, order.city, order.province].filter(Boolean).join(" ");
-    const address = [order.addressLine, locality, order.country].filter(Boolean).join(" · ");
-    return { fullName, email: order.email, phone: order.phone, address };
-  }, [clientMatchingOrders, sortedTodayOrdersList]);
+  const latestClientPaymentOrder = useMemo(() => {
+    return [...clientMatchingOrders]
+      .filter((order) => String(order.financialStatus || "").toLowerCase() === "paid")
+      .sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      })[0] || null;
+  }, [clientMatchingOrders]);
 
   // Suggested 1° Ordine (Acconto)
   const suggestedAccontoOrder = useMemo(() => {
     if (!clientMatchingOrders.length) return null;
     const isAccontoKey = (title?: string) => /acconto|booking|prenotazione|cowlendar|deposit/i.test(title || "");
-    const explicit = clientMatchingOrders.find((o) => isAccontoKey(o.serviceTitle));
+    const explicit = clientMatchingOrders.find(
+      (order) => order.totalPrice < 60 && isAccontoKey(order.serviceTitle),
+    );
     if (explicit) return explicit;
-    if (clientMatchingOrders.length > 1) {
-      return clientMatchingOrders[clientMatchingOrders.length - 1]; // oldest order
-    }
-    return clientMatchingOrders[0];
+    return clientMatchingOrders.find((order) => order.totalPrice < 60) || null;
   }, [clientMatchingOrders]);
 
   // Suggested 2° Ordine (Saldo Finale)
   const suggestedSaldoOrder = useMemo(() => {
     if (!clientMatchingOrders.length) return null;
     const isSaldoKey = (title?: string) => /saldo|salone|riapplicazione|pos|commissioni/i.test(title || "");
-    const explicit = clientMatchingOrders.find((o) => isSaldoKey(o.serviceTitle));
+    const isDifferentFromDeposit = (order: ShopifyClientOrder) =>
+      !suggestedAccontoOrder ||
+      (order.id !== suggestedAccontoOrder.id &&
+        order.orderName !== suggestedAccontoOrder.orderName);
+    const explicit = clientMatchingOrders.find(
+      (order) =>
+        order.totalPrice >= 60 &&
+        isDifferentFromDeposit(order) &&
+        isSaldoKey(order.serviceTitle),
+    );
     if (explicit) return explicit;
-    if (clientMatchingOrders.length > 1 && suggestedAccontoOrder) {
-      const nonAcconto = clientMatchingOrders.find((o) => o.id !== suggestedAccontoOrder.id && o.orderName !== suggestedAccontoOrder.orderName);
-      if (nonAcconto) return nonAcconto;
-    }
-    return clientMatchingOrders[0];
+    return (
+      clientMatchingOrders.find(
+        (order) => order.totalPrice >= 60 && isDifferentFromDeposit(order),
+      ) || null
+    );
   }, [clientMatchingOrders, suggestedAccontoOrder]);
+
+  const clientPaymentOrders = useMemo(() => {
+    const uniqueOrders = new Map<string, ShopifyClientOrder>();
+    [
+      ...clientMatchingOrders,
+      ...(selectedOrderDetails ? [selectedOrderDetails as ShopifyClientOrder] : []),
+      ...(secondOrderDetails ? [secondOrderDetails as ShopifyClientOrder] : []),
+    ].forEach((order) => {
+      if (!order) return;
+      uniqueOrders.set(String(order.id || order.orderName), order);
+    });
+    return Array.from(uniqueOrders.values()).sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [clientMatchingOrders, secondOrderDetails, selectedOrderDetails]);
+
+  const clientShopifyNoteHistory = useMemo(() => {
+    const uniqueOrders = new Map<string, ShopifyClientOrder>();
+    [
+      ...clientMatchingOrders,
+      ...(selectedOrderDetails ? [selectedOrderDetails as ShopifyClientOrder] : []),
+      ...(secondOrderDetails ? [secondOrderDetails as ShopifyClientOrder] : []),
+    ].forEach((order) => {
+      const note = String(order?.note || "").trim();
+      if (!order || !note) return;
+      const key = String(order.id || order.orderName || `${order.createdAt}-${order.serviceTitle}`);
+      uniqueOrders.set(key, { ...order, note });
+    });
+
+    return Array.from(uniqueOrders.values()).sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [clientMatchingOrders, secondOrderDetails, selectedOrderDetails]);
+
+  const clientShopifyNoteGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { dayKey: string; label: string; orders: ShopifyClientOrder[] }
+    >();
+
+    clientShopifyNoteHistory.slice(0, 8).forEach((order) => {
+      const dayKey = getOrderDayKey(order.createdAt);
+      const current = groups.get(dayKey);
+      if (current) {
+        current.orders.push(order);
+        return;
+      }
+      groups.set(dayKey, {
+        dayKey,
+        label: formatOrderDay(order.createdAt),
+        orders: [order],
+      });
+    });
+
+    return Array.from(groups.values());
+  }, [clientShopifyNoteHistory]);
+
+  useEffect(() => {
+    const currentSecondOrder = String(clientControlForm.secondShopifyOrder || "").trim().replace(/^#/, "");
+    const currentDepositOrder = String(clientControlForm.shopifyOrder || "").trim().replace(/^#/, "");
+    const hasDistinctFinalOrder = Boolean(
+      currentSecondOrder && currentSecondOrder !== currentDepositOrder,
+    );
+    if (
+      !clientControlOpen ||
+      !clientControlHistoryLoaded ||
+      !suggestedSaldoOrder ||
+      hasDistinctFinalOrder
+    ) {
+      return;
+    }
+
+    const cleanOrderName = suggestedSaldoOrder.orderName.replace(/^#/, "");
+    setSecondOrderDetails(suggestedSaldoOrder);
+    setSelectedShopifyNoteOrder(cleanOrderName);
+    setShopifyNoteFallbackToDeposit(false);
+    setClientControlForm((current) => {
+      const currentSecond = String(current.secondShopifyOrder || "").trim().replace(/^#/, "");
+      const currentDeposit = String(current.shopifyOrder || "").trim().replace(/^#/, "");
+      if (currentSecond && currentSecond !== currentDeposit) return current;
+      return {
+        ...current,
+        secondShopifyOrder: cleanOrderName,
+        paid:
+          suggestedSaldoOrder.totalPrice != null
+            ? String(suggestedSaldoOrder.totalPrice)
+            : current.paid,
+      };
+    });
+    void handleSecondShopifyOrderLookup(cleanOrderName);
+    // L'ordine suggerito cambia solo dopo il caricamento dello storico cliente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    clientControlForm.secondShopifyOrder,
+    clientControlForm.shopifyOrder,
+    clientControlHistoryLoaded,
+    clientControlOpen,
+    suggestedSaldoOrder,
+  ]);
 
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
@@ -1930,6 +2681,7 @@ export function AppointmentsBrowser({
       rawList.push({
         id: employee.id,
         name: employee.name,
+        photoUrl: employee.photoUrl,
         locationName: "Salone Buenos Aires",
       });
     });
@@ -2095,17 +2847,66 @@ export function AppointmentsBrowser({
   async function openClientControlForBooking(
     booking: AppointmentRecord,
     preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
+    openServiceDetails = false,
   ) {
+    clientControlRequestRef.current?.abort();
+    const requestController = new AbortController();
+    clientControlRequestRef.current = requestController;
     setClientControlMessage(null);
+    setClientControlLastSave(null);
+    setShowShopifyOrdersPanel(false);
+    setShowTodayOrdersDropdown(false);
+    setSelectedShopifyNoteOrder("");
+    setIsStaffDropdownOpen(false);
+    setClientControlLastVisitAt(null);
+    setClientControlHistoryLoaded(false);
+    setServiceDetailsModalOpen(openServiceDetails);
+    setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);
     setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
-    setSelectedGrammi("");
-    setCustomGrammiInput("");
-    setSelectedLunghezza("");
-    setSelectedFasce("");
-    setCustomFasceInput("");
-    setSelectedAtteggiamento("");
-    setExtraNoteText("");
+    const officeNote = booking.inferredSalon === "buenos-aires"
+      ? String(paradiseNotes[booking.id] || booking.paradiseNote || "").trim()
+      : "";
+    const inferredOfficeDetails = detectDetailsFromOfficeNote(
+      booking.serviceTitle,
+      officeNote,
+    );
+    const inferredGrammi = inferredOfficeDetails.grams;
+    const inferredFasce = inferredOfficeDetails.bands;
+
+    setSelectedGrammi(
+      inferredGrammi
+        ? ["100g", "150g", "200g"].includes(inferredGrammi)
+          ? inferredGrammi
+          : "custom"
+        : "",
+    );
+    setCustomGrammiInput(
+      inferredGrammi && !["100g", "150g", "200g"].includes(inferredGrammi)
+        ? inferredGrammi
+        : "",
+    );
+    setSelectedLunghezza(
+      ["50cm", "55cm", "65cm", "75cm"].includes(inferredOfficeDetails.length)
+        ? inferredOfficeDetails.length
+        : "",
+    );
+    setSelectedFasce(
+      inferredFasce
+        ? ["1", "2", "3", "4", "5"].includes(inferredFasce)
+          ? inferredFasce
+          : "custom"
+        : "",
+    );
+    setCustomFasceInput(
+      inferredFasce && !["1", "2", "3", "4", "5"].includes(inferredFasce)
+        ? inferredFasce
+        : "",
+    );
+    setSelectedAtteggiamento(inferredOfficeDetails.attitude);
+    setExtraNoteText(officeNote);
+    const detectedServiceDetails = inferredOfficeDetails.services;
+    setSelectedServiceDetails(detectedServiceDetails);
     setIsDepositUnlockedManually(false);
     setIsSecondUnlockedManually(false);
     try {
@@ -2139,8 +2940,15 @@ export function AppointmentsBrowser({
           ? booking.bookingStr.replace(/^#/, "")
           : "",
         instagramTag: "",
-        customNoteText: "",
-        notes: false,
+        customNoteText: [
+          detectedServiceDetails.length ? `Servizi: ${detectedServiceDetails.join(", ")}` : "",
+          inferredGrammi ? `Grammi: ${inferredGrammi}` : "",
+          inferredOfficeDetails.length ? `Lunghezza: ${inferredOfficeDetails.length}` : "",
+          inferredFasce ? `Fasce: ${inferredFasce}` : "",
+          inferredOfficeDetails.attitude ? `Cliente: ${inferredOfficeDetails.attitude}` : "",
+          officeNote ? `Note: ${officeNote}` : "",
+        ].filter(Boolean).join(" • "),
+        notes: Boolean(officeNote),
         beforeMedia: false,
         afterMedia: false,
         products: false,
@@ -2156,6 +2964,7 @@ export function AppointmentsBrowser({
         clientName: baseForm.clientName,
         email: baseForm.email,
         phone: baseForm.phone,
+        shopifyOrder: baseForm.shopifyOrder,
       });
       if (booking.bookingStr || booking.customerName) {
         void handleShopifyOrderLookup(booking.bookingStr || booking.customerName);
@@ -2181,27 +2990,64 @@ export function AppointmentsBrowser({
         return [] as ClientControlEmployee[];
       }),
       fetch(
-        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}`,
+        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}&appointmentDate=${encodeURIComponent(booking.startDate)}`,
+        { signal: requestController.signal },
       )
         .then((response) => (response.ok ? response.json() : null))
         .catch(() => null),
     ]);
 
+    if (requestController.signal.aborted || clientControlRequestRef.current !== requestController) return;
+
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
+    if (existingAnswers) {
+      setSelectedShopifyNoteOrder(
+        String(
+          existingAnswers.shopify_note_order ||
+            existingAnswers.second_shopify_order ||
+            existingAnswers.secondShopifyOrder ||
+            existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ||
+            "",
+        ).replace(/^#/, ""),
+      );
+    }
+    setClientControlLastVisitAt(
+      typeof bookingNotes?.lastVisitAt === "string" ? bookingNotes.lastVisitAt : null,
+    );
+    setClientControlAppointmentComments(
+      Array.isArray(bookingNotes?.comments) ? bookingNotes.comments : [],
+    );
     const preferredEmployeeId = preferredTeammate
       ? matchEmployeeIdForTeammate(preferredTeammate, employees)
       : null;
+    const storedStaffIds = existingAnswers
+      ? matchEmployeeIdsForStoredStaff(
+          existingAnswers[CLIENT_CONTROL_FIELD_IDS.serviceStaff],
+          employees,
+        )
+      : [];
+    const bookingStaffIds = matchEmployeeIdsForBooking(booking, employees);
 
     setClientControlForm((current) => {
       if (current.bookingId !== booking.id) return current;
       if (existingAnswers) {
+        const storedControlNote = String(
+          existingAnswers.client_control_notes_text || current.customNoteText || bookingNotes?.shopifyNote || "",
+        ).trim();
+        const synchronizedControlNote = officeNote && !storedControlNote.includes(officeNote)
+          ? `${storedControlNote}${storedControlNote ? "\n" : ""}Nota ufficio: ${officeNote}`
+          : storedControlNote;
         return {
           ...current,
           staffIds: preferredEmployeeId
             ? [preferredEmployeeId]
+            : bookingStaffIds.length
+            ? bookingStaffIds
+            : storedStaffIds.length
+            ? storedStaffIds
             : current.staffIds.length
             ? current.staffIds
-            : matchEmployeeIdsForBooking(booking, employees),
+            : [],
           secondShopifyOrder: String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || ""),
           paid: existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid] !== undefined && existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid] !== null
             ? String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid])
@@ -2211,8 +3057,8 @@ export function AppointmentsBrowser({
             : current.depositPaid,
           shopifyOrder: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || current.shopifyOrder || ""),
           instagramTag: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.instagramTag] || ""),
-          customNoteText: String(existingAnswers.client_control_notes_text || current.customNoteText || bookingNotes?.shopifyNote || ""),
-          notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]),
+          customNoteText: synchronizedControlNote,
+          notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]) || Boolean(officeNote),
           beforeMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
           afterMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.afterMedia]),
           products: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.products]),
@@ -2223,13 +3069,14 @@ export function AppointmentsBrowser({
         ...current,
         staffIds: preferredEmployeeId
           ? [preferredEmployeeId]
-          : current.staffIds.length
-          ? current.staffIds
-          : matchEmployeeIdsForBooking(booking, employees),
+          : bookingStaffIds.length
+          ? bookingStaffIds
+          : current.staffIds,
         customNoteText:
           current.customNoteText || bookingNotes?.shopifyNote || "",
       };
     });
+    setClientControlHistoryLoaded(true);
 
     if (preferredTeammate && !preferredEmployeeId) {
       setClientControlMessage({
@@ -2268,7 +3115,29 @@ export function AppointmentsBrowser({
         setSelectedAtteggiamento(String(existingAnswers.custom_atteggiamento));
       }
       if (existingAnswers.custom_extra_note) {
-        setExtraNoteText(String(existingAnswers.custom_extra_note));
+        const storedExtraNote = String(existingAnswers.custom_extra_note).trim();
+        setExtraNoteText(
+          officeNote && !storedExtraNote.includes(officeNote)
+            ? `${storedExtraNote}\n${officeNote}`.trim()
+            : storedExtraNote,
+        );
+      }
+      const storedServices = readStoredServiceDetails(existingAnswers.custom_services);
+      const detectedServices = inferredOfficeDetails.services;
+      const combinedServices = Array.from(new Set([...storedServices, ...detectedServices]));
+      setSelectedServiceDetails(combinedServices);
+      if (combinedServices.length) {
+        setClientControlForm((current) => {
+          if (/\bServizi\s*:/i.test(current.customNoteText)) return current;
+          const serviceLine = `Servizi: ${combinedServices.join(", ")}`;
+          return {
+            ...current,
+            customNoteText: current.customNoteText.trim()
+              ? `${serviceLine}\n${current.customNoteText.trim()}`
+              : serviceLine,
+            notes: true,
+          };
+        });
       }
     }
   }
@@ -2285,16 +3154,36 @@ export function AppointmentsBrowser({
     }
   }, [clientControlOpen, clientControlForm.secondShopifyOrder, secondOrderDetails]);
 
-  async function submitClientControlForm(manualPaymentMethodOverride?: ManualPaymentMethod) {
+  async function submitClientControlForm(
+    manualPaymentMethodOverride?: ManualPaymentMethod,
+    saveAsDraft = false,
+    formOverride?: ClientControlAppointmentForm,
+    keepOpen = false,
+  ) {
+    const formToSubmit = formOverride ?? clientControlForm;
+    if (!keepOpen) setClientControlLastSave(null);
+    if (!saveAsDraft && clientControlAutoSaveTimerRef.current) {
+      clearTimeout(clientControlAutoSaveTimerRef.current);
+      clientControlAutoSaveTimerRef.current = null;
+    }
     setClientControlMessage(null);
     if (
-      !clientControlForm.salon ||
-      !clientControlForm.clientName.trim() ||
-      clientControlForm.staffIds.length === 0
+      !saveAsDraft &&
+      !formToSubmit.clientName.trim()
     ) {
       setClientControlMessage({
         type: "error",
-        text: "Completa sede, nome cliente e collaboratrice.",
+        text: "Inserisci il nome cliente per confermare. Puoi comunque salvare in bozza.",
+      });
+      return;
+    }
+    if (
+      !saveAsDraft &&
+      (!formToSubmit.salon || formToSubmit.staffIds.length === 0)
+    ) {
+      setClientControlMessage({
+        type: "error",
+        text: "Per confermare completa sede e collaboratrice. Puoi comunque salvare in bozza.",
       });
       return;
     }
@@ -2305,14 +3194,17 @@ export function AppointmentsBrowser({
       const customFasceVal = selectedFasce === "custom" ? customFasceInput : selectedFasce;
 
       const payload = {
-        ...clientControlForm,
+        ...formToSubmit,
+        shopifyNoteOrder: selectedShopifyNoteOrder,
         manualPaymentMethod: manualPaymentMethodOverride ?? manualPaymentMethod ?? undefined,
-        secondShopifyOrder: clientControlForm.secondShopifyOrder || "",
+        secondShopifyOrder: formToSubmit.secondShopifyOrder || "",
         customGrammi: customGrammiVal || "",
         customLunghezza: selectedLunghezza || "",
         customFasce: customFasceVal || "",
         customAtteggiamento: selectedAtteggiamento || "",
         customExtraNote: extraNoteText || "",
+        customServices: selectedServiceDetails,
+        saveAsDraft,
       };
 
       const response = await fetch("/api/client-control/tablet-submit", {
@@ -2332,10 +3224,55 @@ export function AppointmentsBrowser({
       if (!response.ok)
         throw new Error(data?.error || "Errore durante il salvataggio.");
 
-      const clientName = clientControlForm.clientName || "Cliente";
-      const targetBookingId = clientControlForm.bookingId || selectedBooking?.id;
+      const savedOperation = data?.operation === "updated" ? "updated" : "created";
+      const clientName = formToSubmit.clientName || "Cliente";
+      const targetBookingId = formToSubmit.bookingId || selectedBooking?.id;
+      const targetBooking = targetBookingId
+        ? initialBookings.find((booking) => booking.id === targetBookingId)
+        : null;
+      const selectedStaff = clientControlEmployeeOptions
+        .filter((employee) => formToSubmit.staffIds.includes(employee.id))
+        .map((employee) => ({
+          id: employee.id,
+          name: employee.name,
+          photoUrl:
+            corsoTeamOptions.find((option) => option.id === employee.id)
+              ?.photoUrl || null,
+        }));
 
-      if (targetBookingId) {
+      let teamSyncWarning = "";
+      if (
+        !saveAsDraft &&
+        targetBookingId &&
+        selectedStaff.length > 0 &&
+        normalizeSalonName(formToSubmit.salon).includes("buenos aires")
+      ) {
+        const teamResponse = await fetch("/api/appointments/team", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookingId: targetBookingId,
+            orderName:
+              targetBooking?.bookingStr || formToSubmit.shopifyOrder,
+            teammateIds: selectedStaff.map((employee) => employee.id),
+            teammates: selectedStaff,
+          }),
+        });
+
+        if (teamResponse.ok) {
+          setTeamByBooking((current) => ({
+            ...current,
+            [targetBookingId]: selectedStaff,
+          }));
+        } else {
+          const teamError = await teamResponse.json().catch(() => null);
+          teamSyncWarning =
+            teamError?.error ||
+            "La scheda è salvata, ma la collaboratrice non è stata aggiornata nella lista appuntamenti.";
+        }
+      }
+
+      if (targetBookingId && !saveAsDraft) {
         setStatusByBooking((prev) => ({
           ...prev,
           [targetBookingId]: "COMPLETATO",
@@ -2343,20 +3280,56 @@ export function AppointmentsBrowser({
       }
 
       showPushToast(
-        "✓ Salvato con successo!",
-        `Scheda controllo per ${clientName} registrata. Stato cambiato in Completato.`
+        teamSyncWarning
+          ? "Scheda salvata con avviso"
+          : keepOpen
+            ? "Verifiche salvate"
+          : saveAsDraft
+            ? "Bozza salvata"
+            : "✓ Controllo completato!",
+        teamSyncWarning ||
+          (keepOpen
+            ? "Le spunte sono state salvate automaticamente."
+            : saveAsDraft
+            ? `Puoi riaprire ${clientName} e riprendere da dove hai lasciato.`
+            : `Scheda controllo per ${clientName} registrata. Collaboratrice e stato aggiornati.`),
+        teamSyncWarning ? "error" : undefined,
       );
       setClientControlMessage({
-        type: "success",
-        text: "✓ Scheda controllo salvata! Stato appuntamento: COMPLETATO",
+        type: teamSyncWarning ? "error" : "success",
+        text:
+          teamSyncWarning ||
+          (keepOpen
+            ? "Verifiche e controlli salvati automaticamente."
+            : saveAsDraft
+            ? "Bozza salvata. Puoi riprendere la compilazione in seguito."
+            : savedOperation === "updated"
+            ? "✓ Appuntamento modificato e salvato. Puoi continuare a fare altre modifiche."
+            : "✓ Appuntamento salvato. Puoi continuare a modificarlo."),
       });
+      if (!keepOpen) setClientControlLastSave(saveAsDraft ? "draft" : "confirmed");
       setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
 
-      router.refresh();
+      // Flusso cassa: dopo un salvataggio riuscito si torna subito alla lista.
+      // La schermata resta aperta soltanto quando c'e un avviso da leggere.
+      if (!teamSyncWarning && !keepOpen) {
+        window.setTimeout(closeClientControl, 900);
+        return;
+      }
 
-      setTimeout(() => {
-        setClientControlOpen(false);
-      }, 1000);
+      if (targetBookingId) {
+        const historyResponse = await fetch(
+          `/api/appointments/comments?bookingId=${encodeURIComponent(targetBookingId)}${targetBooking?.bookingStr ? `&orderName=${encodeURIComponent(targetBooking.bookingStr)}` : ""}${formToSubmit.clientName ? `&clientName=${encodeURIComponent(formToSubmit.clientName)}` : ""}`,
+          { cache: "no-store" },
+        ).catch(() => null);
+        if (historyResponse?.ok) {
+          const historyData = await historyResponse.json().catch(() => null);
+          setClientControlAppointmentComments(
+            Array.isArray(historyData?.comments) ? historyData.comments : [],
+          );
+        }
+      }
+
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Errore durante il salvataggio.";
       showPushToast("❌ Errore di salvataggio", errMsg, "error");
@@ -2367,6 +3340,32 @@ export function AppointmentsBrowser({
     } finally {
       setClientControlSubmitting(false);
     }
+  }
+
+  function scheduleClientControlDraft(nextForm = clientControlFormRef.current) {
+    if (!nextForm.bookingId || clientControlLoading || clientControlSubmitting) return;
+    if (clientControlAutoSaveTimerRef.current) {
+      clearTimeout(clientControlAutoSaveTimerRef.current);
+    }
+    clientControlAutoSaveTimerRef.current = setTimeout(() => {
+      clientControlAutoSaveQueueRef.current = clientControlAutoSaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => submitClientControlForm(undefined, true, nextForm, true));
+    }, 700);
+  }
+
+  function updateClientControlCheck(
+    fieldKey: "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
+    checked: boolean,
+  ) {
+    const nextForm = {
+      ...clientControlFormRef.current,
+      [fieldKey]: checked,
+    };
+    clientControlFormRef.current = nextForm;
+    setClientControlForm(nextForm);
+
+    scheduleClientControlDraft(nextForm);
   }
 
   const activeBookingsCount = initialBookings.filter(
@@ -2399,32 +3398,51 @@ export function AppointmentsBrowser({
     (filterPayment !== "all" ? 1 : 0) +
     (filterStatus !== "all" ? 1 : 0);
 
-  const filteredBookings = useMemo(() => {
-    const statusScoped = (initialBookings || []).filter((booking) =>
-      showCanceled ? booking.isCanceled : !booking.isCanceled,
-    );
-    const workflowScoped = statusScoped.filter((booking) => {
-      if (!salonWorkflowMode || salonWorkflowMode === "reception") return true;
-
-      const status = getBookingStatus(booking);
-      if (salonWorkflowMode === "queue") return status === "IN_ATTESA";
-      if (status !== "INIZIATO") return false;
-
-      const activeWorkerName = isPC
-        ? initialPcWorkerName
-        : initialWorkflowWorkerName;
-      const mustUsePersonalView =
-        isPC || initialWorkflowWorkerRole === "DIPENDENTE";
-      if (!mustUsePersonalView || !activeWorkerName) return true;
-
-      return getBookingTeam(booking).some(
-        (mate) => namesReferToSamePerson(mate.name, activeWorkerName),
+  const bookingSearchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    for (const booking of initialBookings || []) {
+      const orderVariants = getOrderSearchVariants(booking.bookingStr);
+      const liveOfficeNote = paradiseNotes[booking.id] || booking.paradiseNote;
+      const bookingTeam = teamByBooking[booking.id] || booking.teammates || [];
+      const searchableValues = [
+        booking.customerName,
+        booking.customerEmail,
+        booking.customerPhone,
+        booking.serviceTitle,
+        booking.bookingStr,
+        ...orderVariants,
+        booking.bookingType,
+        booking.dateKey,
+        ...getDateSearchValues(booking.startDate),
+        ...getDateSearchValues(booking.endDate),
+        booking.notesText,
+        shopifyNotesByBooking[booking.id],
+        liveOfficeNote,
+        booking.sheetNote,
+        ...bookingTeam.map((mate) => mate.name),
+        ...(booking.extraDetails ?? []).flatMap((item) => [item.label, item.value]),
+      ];
+      index.set(
+        booking.id,
+        searchableValues
+          .filter(Boolean)
+          .map((entry) => normalizeSearchValue(entry))
+          .join(" "),
       );
-    });
+    }
+    return index;
+  }, [initialBookings, paradiseNotes, shopifyNotesByBooking, teamByBooking]);
+
+  const filteredBookings = useMemo(() => {
+    const statusScoped = showCanceled
+      ? (initialBookings || []).filter((booking) => booking.isCanceled)
+      : filterStatus === "all"
+        ? (initialBookings || [])
+        : (initialBookings || []).filter((booking) => !booking.isCanceled);
     const base =
       salon === "tutti" || normalizedSearch
-        ? workflowScoped
-        : workflowScoped.filter((booking) => {
+        ? statusScoped
+        : statusScoped.filter((booking) => {
             if (booking.inferredSalon === salon) return true;
             // Also include if assigned teammate belongs to current salon
             const team = getBookingTeam(booking);
@@ -2481,55 +3499,36 @@ export function AppointmentsBrowser({
         ? paymentScoped
         : paymentScoped.filter((booking) => {
             const status = getBookingStatus(booking);
+            if (filterStatus === "ANNULLATO") return booking.isCanceled;
+            if (filterStatus === "ARRIVATA") {
+              return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
+            }
             return status === filterStatus;
           });
 
     const searched = normalizedSearch
-      ? appointmentStatusScoped.filter((booking) => {
-          const orderVariants = getOrderSearchVariants(booking.bookingStr);
-          const haystack = [
-            booking.customerName,
-            booking.customerEmail,
-            booking.customerPhone,
-            booking.serviceTitle,
-            booking.bookingStr,
-            ...orderVariants,
-            booking.bookingType,
-            booking.dateKey,
-            ...getDateSearchValues(booking.startDate),
-            ...getDateSearchValues(booking.endDate),
-            booking.notesText,
-            ...getBookingTeam(booking).map((mate) => mate.name),
-            ...(booking.extraDetails ?? []).flatMap((item) => [
-              item.label,
-              item.value,
-            ]),
-          ]
-            .filter(Boolean)
-            .map((entry) => normalizeSearchValue(entry))
-            .join(" ");
-
-          return haystack.includes(normalizedSearch);
-        })
+      ? appointmentStatusScoped.filter((booking) =>
+          (bookingSearchIndex.get(booking.id) || "").includes(normalizedSearch),
+        )
       : appointmentStatusScoped;
 
-    return [...searched].sort(
-      (a, b) =>
-        new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
-    );
+    return [...searched].sort((a, b) => {
+      const cancellationOrder = compareCanceledAppointmentsLast(a, b);
+      if (cancellationOrder !== 0) return cancellationOrder;
+      const aCompleted = getBookingStatus(a) === "COMPLETATO";
+      const bCompleted = getBookingStatus(b) === "COMPLETATO";
+      if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    });
   }, [
     dateFilter,
     filterStaff,
     filterPayment,
     filterStatus,
     initialBookings,
-    initialPcWorkerName,
-    isPC,
+    bookingSearchIndex,
     normalizedSearch,
-    initialWorkflowWorkerName,
-    initialWorkflowWorkerRole,
     salon,
-    salonWorkflowMode,
     showCanceled,
     statusByBooking,
     teamByBooking,
@@ -2550,8 +3549,11 @@ export function AppointmentsBrowser({
   useEffect(() => {
     const bookingFromUrl = searchParams.get("booking");
     const orderFromUrl = searchParams.get("order");
-    if (bookingFromUrl && initialBookings.some((booking) => booking.id === bookingFromUrl)) {
-      setSelectedBookingId(bookingFromUrl);
+    const booking = bookingFromUrl
+      ? initialBookings.find((item) => item.id === bookingFromUrl)
+      : null;
+    if (booking) {
+      void openClientControlForBooking(booking);
     } else if (orderFromUrl) {
       setSearchTerm(orderFromUrl);
     }
@@ -2569,15 +3571,6 @@ export function AppointmentsBrowser({
       setSelectedBookingId(null);
     }
   }, [filteredBookings, selectedBookingId]);
-
-  type AppointmentComment = {
-    id: string;
-    order_name: string;
-    user_name: string;
-    user_role: string;
-    message: string;
-    created_at: string;
-  };
 
   const [dbComments, setDbComments] = useState<AppointmentComment[]>([]);
   const [shopifyNote, setShopifyNote] = useState<string | null>(null);
@@ -2600,31 +3593,32 @@ export function AppointmentsBrowser({
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
 
   useEffect(() => {
-    if (!isPC) return;
+    if (!isPC || !pcActiveWorker) return;
 
     const lockScreen = () => {
       setPcScreenLocked(true);
       setPcActiveWorker(null);
     };
 
-    let timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
-    const resetTimer = () => {
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
-    };
-
-    const events = ["click", "keydown", "mousemove", "touchstart", "scroll"];
-    events.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
-
-    return () => {
-      window.clearTimeout(timeout);
-      events.forEach((event) => window.removeEventListener(event, resetTimer));
-    };
+    const timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
+    return () => window.clearTimeout(timeout);
   }, [isPC, pcActiveWorker?.id]);
 
   function handlePcUnlock(worker: ActivePcWorker) {
     setPcActiveWorker(worker);
     setPcScreenLocked(false);
+  }
+
+  function handleExpiredPcWorker(response: Response) {
+    if (!isPC || response.status !== 401) return false;
+    setPcActiveWorker(null);
+    setPcScreenLocked(true);
+    showPushToast(
+      "Scegli chi sta usando il PC",
+      "La sessione personale è scaduta. Seleziona Steven o Francesca per continuare.",
+      "error",
+    );
+    return true;
   }
 
   useEffect(() => {
@@ -2767,6 +3761,8 @@ export function AppointmentsBrowser({
         }),
       });
 
+      if (handleExpiredPcWorker(res)) return;
+
       if (res.ok) {
         const comment = await res.json();
         setDbComments((current) => [...current, comment]);
@@ -2779,12 +3775,65 @@ export function AppointmentsBrowser({
             ? `${current.trim()}\n\n${newBlock}`
             : newBlock;
         });
+        setShopifyNotesByBooking((current) => {
+          const author = comment.user_name ?? "Staff";
+          const msg = comment.message ?? "";
+          const newBlock = `Staff: ${author}\n${msg}`;
+          const previous = current[bookingId]?.trim();
+          return {
+            ...current,
+            [bookingId]: previous ? `${previous}\n\n${newBlock}` : newBlock,
+          };
+        });
+        showPushToast("Nota salvata", "La nota interna è stata aggiunta all’appuntamento.");
       } else {
-        alert("Errore durante l'aggiunta del commento.");
+        showPushToast("Nota non salvata", "Errore durante l'aggiunta del commento.", "error");
       }
     } catch (err) {
       console.error("Failed to post comment", err);
-      alert("Impossibile salvare il commento.");
+      showPushToast("Nota non salvata", "Impossibile salvare il commento.", "error");
+    } finally {
+      setSubmittingComment(false);
+    }
+  }
+
+  const quickNoteBooking = quickNoteBookingId
+    ? initialBookings.find((booking) => booking.id === quickNoteBookingId) || null
+    : null;
+
+  function openQuickNote(booking: AppointmentRecord) {
+    if (!canManageParadiseNotes) return;
+    setQuickNoteBookingId(booking.id);
+    setQuickNoteText(paradiseNotes[booking.id] || booking.paradiseNote || "");
+  }
+
+  async function saveQuickNote() {
+    if (!quickNoteBooking || !quickNoteText.trim() || submittingComment) return;
+    const savedText = quickNoteText.trim();
+    setSubmittingComment(true);
+    try {
+      const response = await fetch("/api/appointments/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: quickNoteBooking.id,
+          text: savedText,
+        }),
+      });
+      if (handleExpiredPcWorker(response)) return;
+      const note = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(note?.error || "Nota non salvata");
+      setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: note.text || savedText }));
+      setQuickNoteBookingId(null);
+      setQuickNoteText("");
+      showPushToast("Nota salvata", "La nota dell’ufficio è visibile sulla scheda.");
+    } catch (error) {
+      console.error("Failed to save quick appointment note", error);
+      showPushToast(
+        "Nota non salvata",
+        error instanceof Error ? error.message : "Impossibile salvare la nota dell’ufficio.",
+        "error",
+      );
     } finally {
       setSubmittingComment(false);
     }
@@ -2794,7 +3843,7 @@ export function AppointmentsBrowser({
     e.preventDefault();
     if (!selectedBooking || !newCommentText.trim() || submittingComment) return;
 
-    const orderName = selectedBooking.bookingStr;
+    const orderName = selectedBooking.bookingStr ?? null;
     const bookingId = selectedBooking.id;
     const messageText = newCommentText.trim();
 
@@ -2816,15 +3865,17 @@ export function AppointmentsBrowser({
       const res = await fetch(`/api/appointments/comments?id=${commentId}`, {
         method: "DELETE",
       });
+      if (handleExpiredPcWorker(res)) return;
       if (res.ok) {
         setDbComments((current) => current.filter((c) => c.id !== commentId));
+        showPushToast("Modifica salvata", "La nota è stata eliminata.");
       } else {
         const data = await res.json();
-        alert(data.error || "Impossibile eliminare il commento.");
+        showPushToast("Modifica non salvata", data.error || "Impossibile eliminare il commento.", "error");
       }
     } catch (err) {
       console.error("Failed to delete comment", err);
-      alert("Errore durante l'eliminazione.");
+      showPushToast("Modifica non salvata", "Errore durante l'eliminazione.", "error");
     }
   }
 
@@ -2839,8 +3890,80 @@ export function AppointmentsBrowser({
     nextStatus: AppointmentStatusValue,
     signedBy?: string,
   ) {
-    const previousStatus = statusByBooking[bookingId];
+    const booking = initialBookings.find((item) => item.id === bookingId);
+    if (nextStatus === "COMPLETATO" && booking) {
+      setSavingStatusId(bookingId);
+      try {
+        const controlResponse = await fetch(
+          `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`,
+          { cache: "no-store" },
+        );
+        const controlData = await controlResponse.json().catch(() => null);
+        const controlAnswers = (controlData?.existingControl?.answers || {}) as Record<string, unknown>;
+        const controlConfirmed = Boolean(
+          controlResponse.ok &&
+            controlData?.existingControl &&
+            controlAnswers.client_control_is_draft !== true &&
+            String(controlAnswers[CLIENT_CONTROL_FIELD_IDS.correctness] || "")
+              .trim()
+              .toLowerCase() === "controllato",
+        );
+
+        if (!controlConfirmed) {
+          showPushToast(
+            "Controllo Cliente richiesto",
+            "Conferma prima il Controllo Cliente; al termine l’appuntamento diventerà Completato.",
+            "error",
+          );
+          await openClientControlForBooking(booking);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to verify client control before completion:", error);
+        showPushToast(
+          "Verifica non riuscita",
+          "Non posso completare l’appuntamento finché il Controllo Cliente non è verificato.",
+          "error",
+        );
+        return;
+      } finally {
+        setSavingStatusId(null);
+      }
+    }
+    const previousStatus = booking
+      ? getBookingStatus(booking)
+      : statusByBooking[bookingId];
+    const previousTiming = statusTimingByBooking[bookingId] || {};
+    const transitionAt = new Date();
+    const optimisticTiming = { ...previousTiming };
+
+    if (
+      nextStatus === "INIZIATO" &&
+      (previousStatus !== "INIZIATO" || !optimisticTiming.startedAt)
+    ) {
+      optimisticTiming.startedAt = transitionAt.toISOString();
+      optimisticTiming.stoppedAt = null;
+      optimisticTiming.elapsedSeconds = 0;
+    } else if (
+      nextStatus !== "INIZIATO" &&
+      previousStatus === "INIZIATO" &&
+      optimisticTiming.startedAt
+    ) {
+      optimisticTiming.stoppedAt = transitionAt.toISOString();
+      optimisticTiming.elapsedSeconds = Math.max(
+        0,
+        Math.floor(
+          (transitionAt.getTime() - new Date(optimisticTiming.startedAt).getTime()) /
+            1000,
+        ),
+      );
+    }
+
     setStatusByBooking((current) => ({ ...current, [bookingId]: nextStatus }));
+    setStatusTimingByBooking((current) => ({
+      ...current,
+      [bookingId]: optimisticTiming,
+    }));
     setSavingStatusId(bookingId);
 
     try {
@@ -2850,16 +3973,37 @@ export function AppointmentsBrowser({
         body: JSON.stringify({ bookingId, status: nextStatus, signedBy }),
       });
 
+      if (handleExpiredPcWorker(response)) {
+        throw new Error("PC_WORKER_EXPIRED");
+      }
+
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare lo stato.");
       }
 
       const data = await response.json().catch(() => null);
+      if (data?.status) {
+        setStatusTimingByBooking((current) => ({
+          ...current,
+          [bookingId]: {
+            startedAt: data.status.startedAt ?? null,
+            stoppedAt: data.status.stoppedAt ?? null,
+            elapsedSeconds: Number(data.status.elapsedSeconds || 0),
+          },
+        }));
+      }
       if (data?.statusComment && selectedBooking?.id === bookingId) {
         setDbComments((current) => [...current, data.statusComment]);
       }
-      return true;
+      const elapsedMessage =
+        previousStatus === "INIZIATO" && nextStatus !== "INIZIATO"
+          ? ` Tempo trascorso: ${formatAppointmentTimer(Number(data?.status?.elapsedSeconds || optimisticTiming.elapsedSeconds || 0))}.`
+          : "";
+      showPushToast(
+        "Modifica salvata",
+        `Stato aggiornato: ${appointmentStatusLabels[nextStatus]}.${elapsedMessage}`,
+      );
     } catch (error) {
       console.error("Failed to save appointment status:", error);
       setStatusByBooking((current) => {
@@ -2868,36 +4012,22 @@ export function AppointmentsBrowser({
         else delete copy[bookingId];
         return copy;
       });
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Non sono riuscito a salvare lo stato. Riprova.",
-      );
-      return false;
+      setStatusTimingByBooking((current) => ({
+        ...current,
+        [bookingId]: previousTiming,
+      }));
+      if (!(error instanceof Error && error.message === "PC_WORKER_EXPIRED")) {
+        showPushToast(
+          "Modifica non salvata",
+          error instanceof Error
+            ? error.message
+            : "Non sono riuscito a salvare lo stato. Riprova.",
+          "error",
+        );
+      }
     } finally {
       setSavingStatusId(null);
     }
-  }
-
-  async function moveBookingToWorkflow(
-    booking: AppointmentRecord,
-    nextStatus: "IN_ATTESA" | "INIZIATO",
-  ) {
-    const saved = await executeStatusChange(
-      booking.id,
-      nextStatus,
-      isPC ? pcActiveWorker?.name : undefined,
-    );
-    if (!saved) return;
-
-    showPushToast(
-      nextStatus === "IN_ATTESA"
-        ? "Cliente in sala d’attesa"
-        : "Servizio iniziato",
-      nextStatus === "IN_ATTESA"
-        ? `${booking.customerName} è ora visibile nella coda.`
-        : `${booking.customerName} è ora visibile in La mia postazione.`,
-    );
   }
 
   function handleStatusChange(
@@ -2921,11 +4051,18 @@ export function AppointmentsBrowser({
     signedBy?: string,
   ) {
     const previousTeam = getBookingTeam(booking);
+    const previousClientControlStaffIds =
+      clientControlFormRef.current.bookingId === booking.id
+        ? [...clientControlFormRef.current.staffIds]
+        : null;
     const nextTeam = corsoTeamOptions.filter((option) =>
       teammateIds.includes(option.id),
     );
 
-    if (booking.inferredSalon !== "buenos-aires") {
+    if (
+      booking.inferredSalon !== "buenos-aires" &&
+      !nextTeam.some((teammate) => normalizeSearchValue(teammate.name) === "franci")
+    ) {
       alert(
         "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
       );
@@ -2938,18 +4075,50 @@ export function AppointmentsBrowser({
     }
 
     setTeamByBooking((current) => ({ ...current, [booking.id]: nextTeam }));
+    if (previousClientControlStaffIds) {
+      const nextClientControlForm = {
+        ...clientControlFormRef.current,
+        staffIds: nextTeam.map((teammate) => teammate.id),
+      };
+      clientControlFormRef.current = nextClientControlForm;
+      setClientControlForm(nextClientControlForm);
+    }
     setSavingTeamId(booking.id);
 
     try {
       const response = await fetch("/api/appointments/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking.id, teammateIds, signedBy }),
+        body: JSON.stringify({
+          bookingId: booking.id,
+          orderName: booking.bookingStr,
+          teammateIds,
+          teammates: nextTeam,
+          sourceTeammates: previousTeam,
+          signedBy,
+        }),
       });
+
+      if (handleExpiredPcWorker(response)) {
+        throw new Error("PC_WORKER_EXPIRED");
+      }
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare il team.");
+      }
+      const data = await response.json().catch(() => null);
+      if (booking.bookingStr && data?.shopifyNoteSaved === false) {
+        showPushToast(
+          "Collaboratrice salvata",
+          "Modifica salvata in Paradise; la nota Shopify non è stata aggiornata.",
+          "error",
+        );
+      } else {
+        showPushToast(
+          "Modifica salvata",
+          `Collaboratrice aggiornata: ${nextTeam.map((mate) => mate.name).join(", ")}.`,
+        );
       }
       return true;
     } catch (error) {
@@ -2958,11 +4127,26 @@ export function AppointmentsBrowser({
         ...current,
         [booking.id]: previousTeam,
       }));
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Non sono riuscito a salvare il team. Riprova.",
-      );
+      if (
+        previousClientControlStaffIds &&
+        clientControlFormRef.current.bookingId === booking.id
+      ) {
+        const restoredClientControlForm = {
+          ...clientControlFormRef.current,
+          staffIds: previousClientControlStaffIds,
+        };
+        clientControlFormRef.current = restoredClientControlForm;
+        setClientControlForm(restoredClientControlForm);
+      }
+      if (!(error instanceof Error && error.message === "PC_WORKER_EXPIRED")) {
+        showPushToast(
+          "Modifica non salvata",
+          error instanceof Error
+            ? error.message
+            : "Non sono riuscito a salvare il team. Riprova.",
+          "error",
+        );
+      }
       return false;
     } finally {
       setSavingTeamId(null);
@@ -2984,6 +4168,218 @@ export function AppointmentsBrowser({
     );
     if (!saved) return;
     await openClientControlForBooking(booking, teammate);
+  }
+
+  async function moveBoardBooking(bookingId: string, teammateId: string) {
+    if (!bookingId || !teammateId || teammateId === "unassigned") return;
+    const booking = initialBookings.find((item) => item.id === bookingId);
+    if (!booking) return;
+    if (isPC && !pcActiveWorker) {
+      setPcScreenLocked(true);
+      return;
+    }
+
+    await executeTeamChange(
+      booking,
+      [teammateId],
+      isPC ? pcActiveWorker?.name : undefined,
+    );
+  }
+
+  function reorderBoardWorker(workerId: string, targetId: string, position: "before" | "after") {
+    if (!workerId || !targetId || workerId === targetId || workerId === "unassigned" || targetId === "unassigned") return;
+    setBoardWorkerOrder((current) => {
+      const visibleIds = appointmentBoardColumns
+        .map((column) => column.id)
+        .filter((id) => id !== "unassigned");
+      const base = [...current.filter((id) => visibleIds.includes(id)), ...visibleIds.filter((id) => !current.includes(id))]
+        .filter((id, index, items) => items.indexOf(id) === index && id !== workerId);
+      const targetIndex = base.indexOf(targetId);
+      if (targetIndex < 0) return current;
+      base.splice(targetIndex + (position === "after" ? 1 : 0), 0, workerId);
+      return base;
+    });
+  }
+
+  function cancelBoardLongPress() {
+    if (boardLongPressTimerRef.current !== null) {
+      window.clearTimeout(boardLongPressTimerRef.current);
+      boardLongPressTimerRef.current = null;
+    }
+    boardLongPressStartRef.current = null;
+  }
+
+  function openBoardStatusMenu(
+    booking: AppointmentRecord,
+    status: AppointmentStatusValue,
+    x: number,
+    y: number,
+    touch = false,
+  ) {
+    if (booking.isCanceled) return;
+    setBoardStatusMenu({
+      bookingId: booking.id,
+      x: Math.min(x, window.innerWidth - 240),
+      y: Math.min(y, window.innerHeight - 390),
+      touch,
+    });
+  }
+
+  function startBoardLongPress(
+    event: React.PointerEvent<HTMLElement>,
+    booking: AppointmentRecord,
+    status: AppointmentStatusValue,
+  ) {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    if (booking.isCanceled) return;
+    cancelBoardLongPress();
+    boardLongPressTriggeredRef.current = null;
+    boardLongPressStartRef.current = {
+      bookingId: booking.id,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    boardLongPressTimerRef.current = window.setTimeout(() => {
+      boardLongPressTimerRef.current = null;
+      boardLongPressTriggeredRef.current = booking.id;
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.(30);
+      }
+      openBoardStatusMenu(booking, status, event.clientX, event.clientY, true);
+    }, 600);
+  }
+
+  function moveBoardLongPress(event: React.PointerEvent<HTMLElement>) {
+    const start = boardLongPressStartRef.current;
+    if (!start) return;
+    if (
+      Math.abs(event.clientX - start.x) > 10 ||
+      Math.abs(event.clientY - start.y) > 10
+    ) {
+      cancelBoardLongPress();
+    }
+  }
+
+  function startBoardTouchGesture(
+    event: React.PointerEvent<HTMLElement>,
+    booking: AppointmentRecord,
+    status: AppointmentStatusValue,
+  ) {
+    if (event.pointerType !== "touch") {
+      startBoardLongPress(event, booking, status);
+      return;
+    }
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    boardTouchPointersRef.current.set(event.pointerId, {
+      bookingId: booking.id,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    const bookingPointers = [...boardTouchPointersRef.current.values()].filter(
+      (pointer) => pointer.bookingId === booking.id,
+    );
+
+    if (bookingPointers.length >= 2) {
+      cancelBoardLongPress();
+      boardLongPressTriggeredRef.current = booking.id;
+      touchDraggedBoardBookingIdRef.current = booking.id;
+      touchBoardDropTargetIdRef.current = null;
+      setTouchDraggedBoardBookingId(booking.id);
+      setDraggedBoardBookingId(null);
+      setBoardStatusMenu(null);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.([30, 25, 30]);
+      }
+      return;
+    }
+
+    startBoardLongPress(event, booking, status);
+  }
+
+  function moveBoardTouchGesture(event: React.PointerEvent<HTMLElement>) {
+    const pointer = boardTouchPointersRef.current.get(event.pointerId);
+    if (pointer) {
+      boardTouchPointersRef.current.set(event.pointerId, {
+        ...pointer,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+
+    const draggedBookingId = touchDraggedBoardBookingIdRef.current;
+    if (!draggedBookingId) {
+      moveBoardLongPress(event);
+      return;
+    }
+
+    event.preventDefault();
+    const bookingPointers = [...boardTouchPointersRef.current.values()].filter(
+      (item) => item.bookingId === draggedBookingId,
+    );
+    if (!bookingPointers.length) return;
+    const centerX = bookingPointers.reduce((sum, item) => sum + item.x, 0) / bookingPointers.length;
+    const centerY = bookingPointers.reduce((sum, item) => sum + item.y, 0) / bookingPointers.length;
+    const target = document
+      .elementFromPoint(centerX, centerY)
+      ?.closest<HTMLElement>("[data-board-worker-id]");
+    const targetId = target?.dataset.boardWorkerId || null;
+    const allowedTargetId = targetId && targetId !== "unassigned" ? targetId : null;
+    touchBoardDropTargetIdRef.current = allowedTargetId;
+    setBoardDropTargetId(allowedTargetId);
+  }
+
+  function finishBoardTouchGesture(
+    event: React.PointerEvent<HTMLElement>,
+    canceled = false,
+  ) {
+    boardTouchPointersRef.current.delete(event.pointerId);
+    const draggedBookingId = touchDraggedBoardBookingIdRef.current;
+    if (!draggedBookingId) {
+      cancelBoardLongPress();
+      return;
+    }
+
+    const remainingPointers = [...boardTouchPointersRef.current.values()].filter(
+      (item) => item.bookingId === draggedBookingId,
+    );
+    if (remainingPointers.length >= 2) return;
+
+    const targetId = touchBoardDropTargetIdRef.current;
+    touchDraggedBoardBookingIdRef.current = null;
+    touchBoardDropTargetIdRef.current = null;
+    setTouchDraggedBoardBookingId(null);
+    setBoardDropTargetId(null);
+    cancelBoardLongPress();
+    if (!canceled && targetId) {
+      void moveBoardBooking(draggedBookingId, targetId);
+    }
+  }
+
+  function startBoardHandleDrag(
+    event: React.PointerEvent<HTMLButtonElement>,
+    bookingId: string,
+  ) {
+    event.stopPropagation();
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    event.preventDefault();
+    cancelBoardLongPress();
+    boardTouchPointersRef.current.clear();
+    boardTouchPointersRef.current.set(event.pointerId, {
+      bookingId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    boardLongPressTriggeredRef.current = bookingId;
+    touchDraggedBoardBookingIdRef.current = bookingId;
+    touchBoardDropTargetIdRef.current = null;
+    setTouchDraggedBoardBookingId(bookingId);
+    setDraggedBoardBookingId(null);
+    setBoardStatusMenu(null);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate?.(30);
+    }
   }
 
   useEffect(() => {
@@ -3064,14 +4460,176 @@ export function AppointmentsBrowser({
 
   const recentBookings = useMemo(
     () =>
-      [...filteredBookings].sort(
-        (a, b) =>
-          new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
-      ),
+      [...filteredBookings].sort((a, b) => {
+        const cancellationOrder = compareCanceledAppointmentsLast(a, b);
+        if (cancellationOrder !== 0) return cancellationOrder;
+        const aCompleted = getBookingStatus(a) === "COMPLETATO";
+        const bCompleted = getBookingStatus(b) === "COMPLETATO";
+        if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+        return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+      }),
     [filteredBookings],
   );
 
   const visibleRecentBookings = recentBookings.slice(0, visibleCount);
+
+  const appointmentBoardColumns = useMemo(() => {
+    // While searching, the board is hidden. Avoid rebuilding all worker columns
+    // so the compact results can appear without the cost of the full board.
+    if (normalizedSearch) return [];
+    const orderIndex = new Map(boardWorkerOrder.map((id, index) => [id, index]));
+    const workers = boardActiveStaff
+      .map((worker) => ({
+        id: worker.id,
+        name: worker.name,
+        photoUrl: worker.photo_url || null,
+        status: worker.status,
+        clockedInAt: worker.clockedInAt || null,
+        breakStartedAt: worker.breakStartedAt || null,
+        externalIds: Array.isArray(worker.externalIds) ? worker.externalIds : [],
+      }))
+      .sort((left, right) => {
+        const leftOrder = orderIndex.get(left.id);
+        const rightOrder = orderIndex.get(right.id);
+        if (leftOrder !== undefined || rightOrder !== undefined) {
+          if (leftOrder === undefined) return 1;
+          if (rightOrder === undefined) return -1;
+          return leftOrder - rightOrder;
+        }
+        return left.name.localeCompare(right.name, "it");
+      });
+    const workersById = new Map(workers.map((worker) => [worker.id, worker]));
+    const workersByExternalId = new Map(
+      workers.flatMap((worker) =>
+        worker.externalIds.map((externalId) => [externalId, worker] as const),
+      ),
+    );
+    const bookingsByWorker = new Map<string, AppointmentRecord[]>(
+      workers.map((worker) => [worker.id, []]),
+    );
+    const unassignedBookings: AppointmentRecord[] = [];
+
+    for (const booking of filteredBookings) {
+      const belongsToCorso = booking.inferredSalon === "buenos-aires";
+      const assignedWorkerIds = new Set<string>();
+
+      for (const teammate of getBookingTeam(booking)) {
+        const worker =
+          workersById.get(teammate.id) ||
+          workersByExternalId.get(teammate.id) ||
+          workers.find((candidate) =>
+            staffNamesReferToSamePerson(candidate.name, teammate.name),
+          );
+        if (!worker || assignedWorkerIds.has(worker.id)) continue;
+        assignedWorkerIds.add(worker.id);
+        bookingsByWorker.get(worker.id)?.push(booking);
+      }
+
+      if (assignedWorkerIds.size === 0 && belongsToCorso) unassignedBookings.push(booking);
+    }
+
+    const durationHours = (bookings: AppointmentRecord[]) => bookings.reduce((sum, booking) => {
+      const start = new Date(booking.startDate).getTime();
+      const end = new Date(booking.endDate || "").getTime();
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return sum;
+      return sum + Math.min(24, (end - start) / 3600000);
+    }, 0);
+    const sortBookings = (bookings: AppointmentRecord[]) => [...bookings].sort(
+      (left, right) => (
+        compareCanceledAppointmentsLast(left, right) ||
+        new Date(left.startDate).getTime() - new Date(right.startDate).getTime()
+      ),
+    );
+
+    const workerColumns = workers.map((worker) => {
+      const bookings = sortBookings(bookingsByWorker.get(worker.id) || []);
+      return {
+        ...worker,
+        bookings,
+        hours: durationHours(bookings),
+      };
+    });
+
+    const selectedWorkerColumn = initialPcWorkerName
+      ? workerColumns.find((column) => staffNamesReferToSamePerson(column.name, initialPcWorkerName)) || null
+      : null;
+    const bookedWorkerColumns = workerColumns.filter(
+      (column) => column.bookings.length > 0 && column.id !== selectedWorkerColumn?.id,
+    );
+    const emptyWorkerColumns = workerColumns.filter(
+      (column) => column.bookings.length === 0 && column.id !== selectedWorkerColumn?.id,
+    );
+    const unassignedColumn = unassignedBookings.length
+      ? (() => {
+          const bookings = sortBookings(unassignedBookings);
+          return {
+            id: "unassigned",
+            name: "Non assegnati",
+            photoUrl: null,
+            status: "IN",
+            clockedInAt: null,
+            breakStartedAt: null,
+            externalIds: [],
+            bookings,
+            hours: durationHours(bookings),
+          };
+        })()
+      : null;
+
+    // Sul PC del salone la persona selezionata resta sempre la prima colonna e
+    // gli appuntamenti da assegnare sono subito accanto. Le colonne vuote vanno
+    // in fondo e possono essere nascoste dalla board.
+    const columns = initialPcWorkerName
+      ? [
+          ...(selectedWorkerColumn ? [selectedWorkerColumn] : []),
+          ...(unassignedColumn ? [unassignedColumn] : []),
+          ...bookedWorkerColumns,
+          ...emptyWorkerColumns,
+        ]
+      : [
+          ...bookedWorkerColumns,
+          ...(unassignedColumn ? [unassignedColumn] : []),
+          ...emptyWorkerColumns,
+        ];
+
+    return columns;
+  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, initialPcWorkerName, normalizedSearch, teamByBooking]);
+  const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
+    (column) =>
+      column.id !== "unassigned" &&
+      column.bookings.length === 0 &&
+      column.status !== "IN" &&
+      column.status !== "BREAK" &&
+      !staffNamesReferToSamePerson(column.name, initialPcWorkerName),
+  ).length;
+  const visibleAppointmentBoardColumns = useMemo(() => {
+    if (showEmptyBoardWorkers) return appointmentBoardColumns;
+    const visibleColumns = appointmentBoardColumns.filter(
+      (column) =>
+        column.id === "unassigned" ||
+        column.bookings.length > 0 ||
+        column.status === "IN" ||
+        column.status === "BREAK" ||
+        staffNamesReferToSamePerson(column.name, initialPcWorkerName),
+    );
+    return visibleColumns.length ? visibleColumns : appointmentBoardColumns;
+  }, [appointmentBoardColumns, initialPcWorkerName, showEmptyBoardWorkers]);
+  const boardBookingCount = new Set(
+    visibleAppointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
+  ).size;
+  const boardCanceledBookingCount = new Set(
+    visibleAppointmentBoardColumns.flatMap((column) =>
+      column.bookings.filter((booking) => booking.isCanceled).map((booking) => booking.id),
+    ),
+  ).size;
+  const boardActiveBookingCount = boardBookingCount - boardCanceledBookingCount;
+
+  function scrollAppointmentBoard(direction: "left" | "right") {
+    boardScrollContainerRef.current?.scrollBy({
+      left: direction === "left" ? -580 : 580,
+      behavior: "smooth",
+    });
+  }
 
   const detailEntries = useMemo(() => {
     if (!selectedBooking?.extraDetails?.length) {
@@ -3110,13 +4668,10 @@ export function AppointmentsBrowser({
     return { formFields, otherFields };
   }, [selectedBooking]);
 
-  const StatusControl = ({
-    booking,
+  function renderStatusControl(
+    booking: AppointmentRecord,
     compact = false,
-  }: {
-    booking: AppointmentRecord;
-    compact?: boolean;
-  }) => {
+  ) {
     if (booking.isCanceled) {
       return (
         <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
@@ -3127,21 +4682,28 @@ export function AppointmentsBrowser({
 
     const status = getBookingStatus(booking);
     const customerUpdate = liveCustomerUpdates[booking.id] || booking.customerUpdate;
+    const timing = statusTimingByBooking[booking.id] || {};
+    const elapsedSeconds = Math.max(0, Number(timing.elapsedSeconds || 0));
 
     return (
       <div
         className="flex flex-col gap-1"
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
         <select
           value={status}
-          onChange={(event) =>
+          onChange={(event) => {
+            event.stopPropagation();
             handleStatusChange(
               booking.id,
               event.target.value as AppointmentStatusValue,
-            )
-          }
+            );
+          }}
           disabled={savingStatusId === booking.id}
           className={[
             "rounded-full border px-3 font-black outline-none transition focus:ring-2 focus:ring-[#FBE1EB]",
@@ -3159,6 +4721,30 @@ export function AppointmentsBrowser({
         {savingStatusId === booking.id ? (
           <span className="text-[10px] font-bold text-black/35">
             Salvataggio...
+          </span>
+        ) : null}
+        {status === "INIZIATO" ? (
+          <div className="mt-1 inline-flex w-fit items-center gap-2 rounded-[14px] border border-[#E5C1D4] bg-[linear-gradient(135deg,#211820,#38212F)] px-3 py-2 text-white shadow-[0_8px_20px_rgba(54,24,42,0.16)]">
+            <span className="grid size-7 place-items-center rounded-full bg-white/10 text-[#FFB9D8]">
+              <Clock3 className="size-4" />
+            </span>
+            <span>
+              <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-white/55">
+                Tempo trascorso
+              </span>
+              <span className="block font-mono text-sm font-black tabular-nums tracking-[0.08em]">
+                <LiveAppointmentTimer
+                  startedAt={timing.startedAt}
+                  elapsedSeconds={elapsedSeconds}
+                />
+              </span>
+            </span>
+          </div>
+        ) : null}
+        {status !== "INIZIATO" && elapsedSeconds > 0 ? (
+          <span className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-black/8 bg-white px-2.5 py-1 text-[10px] font-black text-black/55">
+            <Clock3 className="size-3.5 text-[#B83D7F]" />
+            Tempo trascorso {formatAppointmentTimer(elapsedSeconds)}
           </span>
         ) : null}
         {customerUpdate ? (
@@ -3190,7 +4776,7 @@ export function AppointmentsBrowser({
         ) : null}
       </div>
     );
-  };
+  }
 
   const ClientControlStaffPicker = ({ booking }: { booking: AppointmentRecord }) => {
     const assignedIds = new Set(getBookingTeam(booking).map((mate) => mate.id));
@@ -3214,7 +4800,7 @@ export function AppointmentsBrowser({
               Seleziona la collaboratrice
             </h4>
             <p className="mt-1 text-xs font-semibold leading-5 text-black/50">
-              La selezione aggiorna Cowlendar e apre il Controllo Cliente con la stessa collaboratrice già impostata.
+              La scelta viene salvata in Paradise Staff Hub, resta valida dopo ogni sincronizzazione e viene annotata sull’ordine Shopify.
             </p>
           </div>
         </div>
@@ -3237,7 +4823,7 @@ export function AppointmentsBrowser({
                   {mate.name}
                 </span>
                 <span className="mt-0.5 block text-[11px] font-bold text-black/40">
-                  {assignedIds.has(mate.id) ? "Attualmente su Cowlendar" : "Assegna e apri controllo"}
+                  {assignedIds.has(mate.id) ? "Assegnata in Paradise" : "Assegna e apri controllo"}
                 </span>
               </span>
               {savingTeamId === booking.id ? (
@@ -3281,16 +4867,20 @@ export function AppointmentsBrowser({
         : "Non trovato nel foglio conferme");
     if (!always && !booking.sheetNote) return null;
     const found = Boolean(booking.sheetMatched || booking.sheetNote);
+    const noteBlocks = message
+      .split(/\n\s*\n/g)
+      .map((block) => block.trim())
+      .filter(Boolean);
     return (
       <div
         className={[
-          "inline-flex max-w-full items-start gap-2 rounded-2xl border",
+          "group relative inline-flex max-w-full items-start gap-2 rounded-2xl border outline-none",
           found
             ? "border-emerald-100 bg-emerald-50 text-emerald-800"
             : "border-amber-100 bg-amber-50 text-amber-800",
           compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
         ].join(" ")}
-        title={message}
+        tabIndex={0}
       >
         <MessageCircle
           className={
@@ -3303,28 +4893,50 @@ export function AppointmentsBrowser({
             {compact ? compactValue(message, 42) : message}
           </span>
         </span>
+        {message ? (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-[80] hidden w-[min(380px,calc(100vw-2rem))] -translate-x-1/2 space-y-2 rounded-2xl border border-black/10 bg-white p-3 text-left text-xs text-[#302B2D] shadow-[0_18px_50px_rgba(48,25,37,0.22)] group-hover:block group-focus:block"
+          >
+            {noteBlocks.map((block, index) => {
+              const [firstLine, ...contentLines] = block.split("\n");
+              const hasAuthor = /^staff\s*:/i.test(firstLine || "");
+              return (
+                <span
+                  key={`${booking.id}-sheet-note-${index}`}
+                  className="block rounded-xl bg-[#FFF8FB] px-3 py-2.5"
+                >
+                  {hasAuthor ? (
+                    <span className="block font-black text-[#B83D7F]">
+                      {firstLine}
+                    </span>
+                  ) : null}
+                  <span className="mt-1 block whitespace-pre-wrap break-words font-semibold leading-5 text-[#4A4145]">
+                    {(hasAuthor ? contentLines.join("\n") : block) || "Nota senza testo"}
+                  </span>
+                </span>
+              );
+            })}
+          </span>
+        ) : null}
       </div>
     );
   };
 
   const tableBookings = filteredBookings.slice(0, visibleCount);
-  const prenotateCount = initialBookings.filter(
-    (booking) => !booking.isCanceled,
+  const confirmedBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled && getBookingStatus(booking) === "PRENOTATO",
   ).length;
-  const inArrivoCount = initialBookings.filter(
-    (booking) =>
-      !booking.isCanceled &&
-      new Date(booking.startDate).getTime() >= Date.now(),
+  const noShowBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled && getBookingStatus(booking) === "NON_PRESENTATO",
   ).length;
-  const prePaymentCount = initialBookings.filter(
-    (booking) =>
-      normalizeSearchValue(booking.financialStatus).includes("paid") ||
-      normalizeSearchValue(booking.serviceTitle).includes("acconto"),
-  ).length;
-  const waitListCount = initialBookings.filter(
-    (booking) =>
-      normalizeSearchValue(booking.bookingType).includes("wait") ||
-      normalizeSearchValue(booking.notesText).includes("lista d attesa"),
+  const arrivedBookingsCount = initialBookings.filter((booking) => {
+    if (booking.isCanceled) return false;
+    const status = getBookingStatus(booking);
+    return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
+  }).length;
+  const completedBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled && getBookingStatus(booking) === "COMPLETATO",
   ).length;
   const selectedStatus = selectedBooking
     ? getBookingStatus(selectedBooking)
@@ -3332,9 +4944,15 @@ export function AppointmentsBrowser({
   const selectedContacts = selectedBooking
     ? getCustomerContactLines(selectedBooking)
     : null;
-  const selectedNotePreview = selectedBooking
-    ? getBookingNotePreview(selectedBooking)
-    : "";
+  const clientControlBooking = clientControlForm.bookingId
+    ? initialBookings.find(
+        (booking) => booking.id === clientControlForm.bookingId,
+      ) || null
+    : null;
+  const clientControlBookingTeam = getBookingTeam(clientControlBooking);
+  const clientControlBookingStatus = clientControlBooking
+    ? getBookingStatus(clientControlBooking)
+    : null;
 
   return (
     <div className="relative min-h-screen bg-transparent text-[#1C1C1C]">
@@ -3366,126 +4984,363 @@ export function AppointmentsBrowser({
       )}
 
       {clientControlOpen ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-black/10 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-white/95 px-6 pt-7 pb-5 sm:px-8">
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
-                  Store manager
-                </span>
-                <h2 className="mt-2 text-3xl font-black tracking-tight text-[#1F1F1F] sm:text-4xl">
-                  {clientControlForm.clientName || "Sara Capelli Lisci"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setClientControlOpen(false);
-                  setIsStaffDropdownOpen(false);
-                }}
-                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-neutral-50 text-black/70 shadow-2xs transition hover:bg-neutral-100 active:scale-95"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
+        <div className="fixed inset-0 z-[120] isolate bg-white text-[#171717]">
+          <div
+            className="relative z-10 flex h-dvh w-full flex-col overflow-hidden bg-white"
+            onBlurCapture={() => scheduleClientControlDraft(clientControlFormRef.current)}
+          >
             {/* Scrollable Content */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 space-y-6">
-              {/* Info cliente da Card */}
-              <section className="rounded-[28px] border border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-5 shadow-2xs">
-                <div className="flex items-center gap-2 text-xs font-bold text-black/60">
-                  <User className="size-4 text-[#D96B94]" />
-                  <span className="uppercase tracking-wider font-black text-[11px] text-[#B83D7F]">Info cliente & Ordini Shopify</span>
-                </div>
-                <div className="mt-3.5 flex flex-wrap gap-2.5">
-                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
-                    <Receipt className="size-3.5 text-[#D96B94]" />
-                    <span>Codice Acconto: #{clientControlForm.shopifyOrder || "---"}</span>
-                    {clientControlForm.shopifyOrder && (
-                      <a
-                        href={getShopifyAdminOrderUrl(clientControlForm.shopifyOrder, selectedOrderDetails?.id)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="ml-1 text-[10px] text-[#B83D7F] underline font-extrabold hover:text-black"
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
+              <div className="mx-auto w-full max-w-[1480px] space-y-6 px-5 py-5 sm:px-8 lg:px-12">
+              {/* Riepilogo ordinato della card appuntamento */}
+              <section className="overflow-hidden rounded-[28px] border border-[#F0D4E2] bg-white shadow-[0_12px_34px_rgba(184,61,127,0.08)]">
+                <div className="flex flex-col gap-3 border-b border-[#F3E3EB] bg-[linear-gradient(100deg,#FFF4F9,#FCFAFF)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#B83D7F] text-white shadow-sm">
+                      <CalendarCheck className="size-5" />
+                    </span>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">Nome cliente</p>
+                      <h3 className="mt-1 text-lg font-black text-[#1F1F1F]">
+                        {clientControlForm.clientName || "Cliente non indicata"}
+                      </h3>
+                      <p className="mt-1 text-xs font-bold text-black/50">
+                        {clientControlLastVisitAt
+                          ? `Ultima visita: ${formatDate(clientControlLastVisitAt)}`
+                          : clientControlHistoryLoaded
+                            ? "Prima visita registrata"
+                            : "Controllo storico visite…"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    {clientControlBookingStatus ? (
+                      <span
+                        className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${appointmentStatusClasses[clientControlBookingStatus]}`}
                       >
-                        Vedi ↗
-                      </a>
-                    )}
-                  </span>
-                  {clientControlForm.secondShopifyOrder ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#D96B94] bg-[#FFF0F6] backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#B83D7F] shadow-2xs">
-                      <ShoppingBag className="size-3.5 text-[#D96B94]" />
-                      <span>Codice Ordine Finale: #{clientControlForm.secondShopifyOrder}</span>
-                      <a
-                        href={getShopifyAdminOrderUrl(clientControlForm.secondShopifyOrder, secondOrderDetails?.id)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="ml-1 text-[10px] text-[#B83D7F] underline font-extrabold hover:text-black"
-                      >
-                        Vedi ↗
-                      </a>
-                    </span>
-                  ) : null}
-                  {clientControlForm.email ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
-                      <Mail className="size-3.5 text-[#D96B94]" />
-                      <span className="truncate max-w-[200px]">{clientControlForm.email}</span>
-                    </span>
-                  ) : null}
-                  {clientControlForm.phone ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
-                      <Phone className="size-3.5 text-[#D96B94]" />
-                      <span>{clientControlForm.phone}</span>
-                    </span>
-                  ) : null}
-                  {clientControlForm.serviceTitle ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
-                      <CalendarDays className="size-3.5 text-[#D96B94]" />
-                      <span className="truncate max-w-[280px]">{clientControlForm.serviceTitle}</span>
-                    </span>
-                  ) : null}
-                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
-                    <AtSign className="size-3.5 text-[#D96B94]" />
-                    <input
-                      type="text"
-                      value={clientControlForm.instagramTag}
-                      onChange={(e) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          instagramTag: e.target.value,
-                        }))
-                      }
-                      placeholder="@cliente"
-                      className="bg-transparent outline-none w-24 text-xs font-black text-[#D96B94]"
-                    />
-                  </span>
+                        {appointmentStatusLabels[clientControlBookingStatus]}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={closeClientControl}
+                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#A82E6C] bg-[#B83D7F] px-4 text-white shadow-[0_8px_18px_rgba(184,61,127,0.24)] transition hover:bg-[#A83273] hover:shadow-[0_10px_22px_rgba(184,61,127,0.3)] active:scale-95"
+                      aria-label="Torna agli appuntamenti"
+                    >
+                      <X className="size-5" />
+                      <span className="text-xs font-black uppercase tracking-[0.14em]">Chiudi</span>
+                    </button>
+                  </div>
                 </div>
+
+                <div className="grid gap-px bg-[#F1E7EC] sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="bg-white p-5">
+                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
+                      <Clock3 className="size-4 text-[#D96B94]" />
+                      Data, ora e sede
+                    </p>
+                    <p className="mt-3 text-sm font-black text-[#1F1F1F]">
+                      {clientControlBooking
+                        ? formatDate(clientControlBooking.startDate)
+                        : "Data non disponibile"}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-black/60">
+                      {clientControlBooking
+                        ? `${formatTime(clientControlBooking.startDate)} – ${formatTime(clientControlBooking.endDate)} · ${formatDuration(clientControlBooking.startDate, clientControlBooking.endDate)}`
+                        : "Orario non disponibile"}
+                    </p>
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#8D5E49]">
+                      <MapPin className="size-3.5" />
+                      {clientControlBooking
+                        ? getSalonLabel(clientControlBooking.inferredSalon)
+                        : clientControlForm.salon}
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 bg-white p-5">
+                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
+                      <User className="size-4 text-[#D96B94]" />
+                      Cliente e contatti
+                    </p>
+                    <p className="mt-3 truncate text-sm font-black text-[#1F1F1F]">
+                      {clientControlForm.clientName || "Cliente non indicata"}
+                    </p>
+                    <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-bold text-black/55">
+                      <Phone className="size-3.5 shrink-0 text-[#D96B94]" />
+                      <span className="truncate">{clientControlForm.phone || "Telefono non disponibile"}</span>
+                    </p>
+                    <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-bold text-black/55">
+                      <Mail className="size-3.5 shrink-0 text-[#D96B94]" />
+                      <span className="truncate">{clientControlForm.email || "Email non disponibile"}</span>
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 bg-white p-5">
+                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
+                      <Sparkles className="size-4 text-[#D96B94]" />
+                      Servizio
+                    </p>
+                    <p className="mt-3 line-clamp-2 text-sm font-black uppercase leading-5 text-[#1F1F1F]">
+                      {clientControlForm.serviceTitle || "Servizio non indicato"}
+                    </p>
+                    <p className="mt-2 text-xs font-bold text-black/50">
+                      {clientControlBooking?.bookingType || "Prenotazione regolare"}
+                    </p>
+                    <p className="mt-2 text-sm font-black text-[#B83D7F]">
+                      {clientControlBooking
+                        ? formatMoney(
+                            clientControlBooking.priceAmount,
+                            clientControlBooking.priceCurrency,
+                          )
+                        : clientControlForm.depositPaid
+                          ? `€ ${clientControlForm.depositPaid}`
+                          : "Prezzo non disponibile"}
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 bg-white p-5">
+                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
+                      <UsersRound className="size-4 text-[#D96B94]" />
+                      Collaboratrice e ordine
+                    </p>
+                    <p className="mt-3 line-clamp-2 text-sm font-black text-[#1F1F1F]">
+                      {clientControlBookingTeam.map((mate) => mate.name).join(", ") ||
+                        filteredClientControlEmployees
+                          .filter((employee) => clientControlForm.staffIds.includes(employee.id))
+                          .map((employee) => employee.name)
+                          .join(", ") ||
+                        "Non assegnata"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-black/55">
+                      <Receipt className="size-3.5 shrink-0 text-[#D96B94]" />
+                      <span>
+                        {clientControlForm.shopifyOrder
+                          ? `Acconto #${clientControlForm.shopifyOrder}`
+                          : "Acconto da collegare"}
+                      </span>
+                      {clientControlForm.shopifyOrder ? (
+                        <a
+                          href={getShopifyAdminOrderUrl(
+                            clientControlForm.shopifyOrder,
+                            selectedOrderDetails?.id,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-black text-[#B83D7F] underline hover:text-black"
+                        >
+                          Vedi ↗
+                        </a>
+                      ) : null}
+                    </div>
+                    {clientControlForm.secondShopifyOrder ? (
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-[#B83D7F]">
+                        <ShoppingBag className="size-3.5 shrink-0" />
+                        Saldo #{clientControlForm.secondShopifyOrder}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
               </section>
 
               {/* 1° e 2° Ordine Shopify Card */}
-              <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
-                    <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (ACCONTO + ORDINE FINALE)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTodayOrdersDropdown((prev) => !prev);
-                      if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black text-white shadow-2xs hover:opacity-95 transition active:scale-95"
-                    title="Mostra tutto lo storico ordini Shopify della cliente"
-                  >
-                    <Sparkles className="size-3 text-white" />
-                    <span>{loadingTodayOrders ? "Carico..." : `TUTTI GLI ORDINI${todayOrdersList.length ? ` (${todayOrdersList.length})` : ""}`}</span>
-                  </button>
+              <div className="rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_30px_rgba(17,17,17,0.04)]">
+                <div className="p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F]">
+                      <ShoppingBag className="size-6" />
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
+                        Ultimo pagamento della cliente
+                      </p>
+                      {loadingTodayOrders && !latestClientPaymentOrder ? (
+                        <p className="mt-2 text-sm font-bold text-black/50">Cerco l’ultimo pagamento…</p>
+                      ) : latestClientPaymentOrder ? (
+                        <div className="mt-1 flex flex-wrap items-end gap-x-5 gap-y-1">
+                          <div>
+                            <p className="text-lg font-black text-[#1F1F1F]">
+                              {latestClientPaymentOrder.clientName || clientControlForm.clientName || "Cliente"}
+                            </p>
+                            <p className="text-sm font-bold text-black/45">
+                              #{latestClientPaymentOrder.orderName.replace(/^#/, "")} · {formatOrderDate(latestClientPaymentOrder.createdAt)}
+                            </p>
+                          </div>
+                          <p className="text-2xl font-black tracking-tight text-[#1F1F1F]">
+                            €{latestClientPaymentOrder.totalPrice.toFixed(2)}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-1">
+                          <p className="text-sm font-black text-[#1F1F1F]">Nessun pagamento trovato</p>
+                          <p className="mt-0.5 text-xs font-semibold text-black/45">Puoi cercare e collegare manualmente un ordine.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+                      {latestClientPaymentOrder ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectShopifyOrderFromList(latestClientPaymentOrder, "second");
+                            setShowShopifyOrdersPanel(true);
+                            setShowTodayOrdersDropdown(true);
+                          }}
+                          className={`inline-flex min-h-12 items-center justify-center rounded-2xl px-5 text-sm font-black transition active:scale-[0.98] ${
+                            selectedShopifyNoteOrder.replace(/^#/, "") === latestClientPaymentOrder.orderName.replace(/^#/, "")
+                              ? "bg-emerald-600 text-white shadow-[0_8px_22px_rgba(5,150,105,0.22)]"
+                              : "bg-[#B83D7F] text-white shadow-[0_8px_22px_rgba(184,61,127,0.24)] hover:bg-[#A93472]"
+                          }`}
+                        >
+                          {selectedShopifyNoteOrder.replace(/^#/, "") === latestClientPaymentOrder.orderName.replace(/^#/, "")
+                            ? "Selezionato ✓"
+                            : "Seleziona →"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowShopifyOrdersPanel((previous) => {
+                            const next = !previous;
+                            if (next) {
+                              setShowTodayOrdersDropdown(true);
+                              void fetchTodayShopifyOrders();
+                            }
+                            if (!next) setShowTodayOrdersDropdown(false);
+                            return next;
+                          });
+                        }}
+                        aria-expanded={showShopifyOrdersPanel}
+                        aria-controls="client-control-shopify-orders"
+                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 text-xs font-black text-black/60 transition hover:border-[#F6C6DE] hover:bg-[#FFF7FB] hover:text-[#B83D7F] active:scale-[0.98]"
+                      >
+                        {showShopifyOrdersPanel ? "Chiudi ricerca" : "Cerca altro ordine"}
+                        <ChevronDown className={`size-4 transition-transform ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedShopifyNoteOrder ? (
+                    <div className="mt-4 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black text-emerald-800">
+                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-emerald-600 text-[11px] text-white">✓</span>
+                      {shopifyNoteFallbackToDeposit
+                        ? `Dopo 2 tentativi senza risultato, la nota verrà salvata automaticamente nell’acconto #${selectedShopifyNoteOrder.replace(/^#/, "")}.`
+                        : `La nota Shopify verrà salvata solo nell’ordine #${selectedShopifyNoteOrder.replace(/^#/, "")}.`}
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {showShopifyOrdersPanel ? (
+                <div id="client-control-shopify-orders" className="space-y-4 border-t border-neutral-200 px-4 pb-5 pt-4 sm:px-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black text-[#1F1F1F]">Tutti i pagamenti della cliente</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-black/45">Seleziona l’ordine nel quale deve essere salvata la nota Shopify.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTodayOrdersDropdown(true);
+                        void fetchTodayShopifyOrders();
+                      }}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#F6C6DE] bg-[#FFF7FB] px-4 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition hover:bg-[#FCE5F3] active:scale-[0.98]"
+                    >
+                      <RefreshCw className={`size-3.5 ${loadingTodayOrders ? "animate-spin" : ""}`} />
+                      <span>{loadingTodayOrders ? "Aggiornamento..." : `Aggiorna (${clientPaymentOrders.length})`}</span>
+                    </button>
+                  </div>
+
+                {/* Elenco completo dei pagamenti della cliente */}
+                {showTodayOrdersDropdown && (
+                  <div
+                    id="client-control-shopify-order-history"
+                    className="rounded-2xl border border-[#F1D6E3] bg-[#FFFDFE] p-3.5 shadow-[0_12px_30px_rgba(184,61,127,0.08)]"
+                  >
+                    <div className="flex items-center justify-between border-b border-black/5 pb-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B83D7F]">
+                          Storico pagamenti
+                        </p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-black/45">
+                          Dal più recente al più vecchio
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[#FFF0F6] px-3 py-1.5 text-[10px] font-black text-[#B83D7F]">
+                        {clientPaymentOrders.length} {clientPaymentOrders.length === 1 ? "pagamento" : "pagamenti"}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-0.5">
+                      {loadingTodayOrders && clientPaymentOrders.length === 0 ? (
+                        <div className="flex items-center justify-center gap-2 p-5 text-xs font-bold text-black/45">
+                          <Loader2 className="size-4 animate-spin text-[#B83D7F]" />
+                          Caricamento pagamenti…
+                        </div>
+                      ) : clientPaymentOrders.length > 0 ? (
+                        clientPaymentOrders.map((order) => {
+                          const orderCode = order.orderName.replace(/^#/, "");
+                          const isSelected = selectedShopifyNoteOrder.replace(/^#/, "") === orderCode;
+                          const isPaid = String(order.financialStatus || "").toLowerCase() === "paid";
+                          return (
+                            <div
+                              key={order.id || order.orderName}
+                              className={`flex flex-col gap-3 rounded-2xl border p-3 transition sm:flex-row sm:items-center ${
+                                isSelected
+                                  ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200"
+                                  : "border-black/5 bg-white hover:border-[#EDB2CE]"
+                              }`}
+                            >
+                              <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                {isPaid ? <Check className="size-5 stroke-[3]" /> : <Receipt className="size-5" />}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-black text-[#1F1F1F]">#{orderCode}</span>
+                                  <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                    {isPaid ? "Pagato" : "Da verificare"}
+                                  </span>
+                                </div>
+                                <p className="mt-1 truncate text-[11px] font-semibold text-black/50">
+                                  {formatOrderDate(order.createdAt) || "Data non disponibile"}
+                                  {order.serviceTitle ? ` · ${order.serviceTitle}` : ""}
+                                </p>
+                              </div>
+                              <p className="shrink-0 text-lg font-black tabular-nums text-[#1F1F1F]">
+                                {formatMoney(order.totalPrice)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => selectShopifyOrderFromList(order, "second")}
+                                className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 text-xs font-black transition active:scale-[0.98] ${
+                                  isSelected
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-[#B83D7F] text-white hover:bg-[#A93472]"
+                                }`}
+                              >
+                                {isSelected ? "Selezionato ✓" : "Seleziona"}
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="p-5 text-center text-xs font-semibold text-black/40">
+                          Nessun pagamento trovato per questa cliente.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {showManualShopifyCorrection ? <details className="group rounded-2xl border border-neutral-200 bg-[#FAFAFA]">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-xs font-black text-black/55 marker:content-none">
+                    <span>Correzione manuale dei codici ordine</span>
+                    <ChevronDown className="size-4 text-[#B83D7F] transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="grid grid-cols-1 gap-3.5 border-t border-neutral-200 p-3 sm:grid-cols-2">
                   {/* Codice Ordine Acconto */}
-                  <div className="rounded-2xl border border-black/5 bg-white/80 p-3 shadow-2xs">
+                  <div className="rounded-2xl border border-neutral-200 bg-[#FAFAFA] p-3 shadow-2xs">
                     {(() => {
                       const isDepositLocked = Boolean(
                         (selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")) &&
@@ -3577,7 +5432,9 @@ export function AppointmentsBrowser({
                                 {isSecondLocked ? "🔒 Bloccato" : "🔓 Sbloccato (Clicca per bloccare)"}
                               </button>
                             ) : (
-                              <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">Principale</span>
+                              <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">
+                                {finalPaymentOptional ? "Non richiesto per questo servizio" : "Obbligatorio"}
+                              </span>
                             )}
                           </div>
                           <input
@@ -3602,7 +5459,7 @@ export function AppointmentsBrowser({
                                 ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
                                 : "border-[#D96B94]/50 bg-white text-[#1F1F1F] focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30"
                             }`}
-                            placeholder="N° Ordine Finale Salone (es. 25344)"
+                            placeholder={finalPaymentOptional ? "Non richiesto per questo servizio" : "N° Ordine Finale Salone (es. 25344)"}
                           />
                           {secondShopifyLookupLoading ? (
                             <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[#B83D7F]">Verifica pagamento Shopify in corso...</p>
@@ -3632,7 +5489,7 @@ export function AppointmentsBrowser({
                                 {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
                                   ? manualPaymentMethod
                                     ? `Metodo dichiarato · ${manualPaymentMethod === "CARTA" ? "Carta" : manualPaymentMethod === "SHOPIFY" ? "Shopify" : "Contanti"}`
-                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "MISTO" ? "Misto" : secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CONTANTI" ? "Contanti" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
+                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "MISTO" ? "Misto" : secondOrderDetails.paymentMethod === "CASHMATIC" ? "Contanti" : secondOrderDetails.paymentMethod === "CONTANTI" ? "Contanti" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
                                   : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
                                 {secondOrderDetails.paymentGateways?.length ? (
                                   <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>
@@ -3680,213 +5537,144 @@ export function AppointmentsBrowser({
                       );
                     })()}
                   </div>
-                </div>
-
-                {/* Dropdown list for today's orders */}
-                {showTodayOrdersDropdown && (
-                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[680px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between pb-2 border-b border-black/5">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
-                        STORICO COMPLETO ORDINI ({sortedTodayOrdersList.length})
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setShowTodayOrdersDropdown(false)}
-                        className="text-[10px] font-extrabold text-neutral-400 hover:text-black"
-                      >
-                        Chiudi ✕
-                      </button>
-                    </div>
-                    {clientOrderProfile ? (
-                      <div className="mt-3 rounded-2xl border border-[#F6C6DE] bg-[#FFF8FB] p-3.5">
-                        <div className="flex items-start gap-3">
-                          <div className="grid size-10 shrink-0 place-items-center rounded-full bg-[#D96B94] text-white">
-                            <UserRound className="size-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-black text-[#1F1F1F]">{clientOrderProfile.fullName}</p>
-                            <div className="mt-2 grid gap-1.5 text-[11px] font-bold text-black/55 sm:grid-cols-2">
-                              {clientOrderProfile.email ? (
-                                <p className="flex min-w-0 items-center gap-1.5">
-                                  <Mail className="size-3.5 shrink-0 text-[#D96B94]" />
-                                  <span className="truncate">{clientOrderProfile.email}</span>
-                                </p>
-                              ) : null}
-                              {clientOrderProfile.phone ? (
-                                <p className="flex items-center gap-1.5">
-                                  <Phone className="size-3.5 shrink-0 text-[#D96B94]" />
-                                  <span>{clientOrderProfile.phone}</span>
-                                </p>
-                              ) : null}
-                              {clientOrderProfile.address ? (
-                                <p className="flex items-start gap-1.5 sm:col-span-2">
-                                  <MapPin className="mt-0.5 size-3.5 shrink-0 text-[#D96B94]" />
-                                  <span>{clientOrderProfile.address}</span>
-                                </p>
-                              ) : (
-                                <p className="text-black/35 sm:col-span-2">Indirizzo non presente su Shopify</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                    <div className="max-h-80 overflow-y-auto mt-3 space-y-2 pr-0.5">
-                      {loadingTodayOrders ? (
-                        <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
-                          Caricamento ordini cliente...
-                        </p>
-                      ) : sortedTodayOrdersList.length > 0 ? (
-                        sortedTodayOrdersList.map((order) => {
-                          const isAccontoSuggested = Boolean(
-                            suggestedAccontoOrder &&
-                              (order.id === suggestedAccontoOrder.id || order.orderName === suggestedAccontoOrder.orderName)
-                          );
-                          const isSaldoSuggested = Boolean(
-                            suggestedSaldoOrder &&
-                              (order.id === suggestedSaldoOrder.id || order.orderName === suggestedSaldoOrder.orderName)
-                          );
-                          return (
-                            <div
-                              key={order.id}
-                              className={`w-full p-3 rounded-2xl border transition flex flex-col gap-2 ${
-                                isAccontoSuggested || isSaldoSuggested
-                                  ? "border-[#D96B94] bg-[#FFF0F6] shadow-sm"
-                                  : "border-black/5 bg-[#FFF8FB] hover:bg-[#FCE5F3]"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5 flex-wrap">
-                                  {order.clientName}
-                                  {isAccontoSuggested && (
-                                    <span className="rounded-md bg-[#D96B94] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
-                                      Suggerito Acconto
-                                    </span>
-                                  )}
-                                  {isSaldoSuggested && (
-                                    <span className="rounded-md bg-[#B83D7F] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
-                                      Suggerito Saldo
-                                    </span>
-                                  )}
-                                </span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {order.createdAt && (
-                                    <span className="text-[10px] font-extrabold text-[#B83D7F]/80 bg-white/90 px-2 py-0.5 rounded-md border border-[#F6C6DE]/60">
-                                      {formatOrderDate(order.createdAt)}
-                                    </span>
-                                  )}
-                                  <span className="text-xs font-black text-[#D96B94]">
-                                    #{order.orderName.replace(/^#/, "")}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between text-xs font-bold text-neutral-600 pt-1 border-t border-black/5">
-                                <span className="truncate max-w-[260px] text-black/80">{order.serviceTitle || "Servizio Shopify"}</span>
-                                <span className="text-sm font-black text-[#D96B94] shrink-0">
-                                  €{order.totalPrice.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="grid gap-1 text-[10px] font-semibold text-black/45 sm:grid-cols-2">
-                                {order.email ? (
-                                  <span className="flex min-w-0 items-center gap-1">
-                                    <Mail className="size-3 shrink-0" />
-                                    <span className="truncate">{order.email}</span>
-                                  </span>
-                                ) : null}
-                                {order.addressLine || order.city ? (
-                                  <span className="flex min-w-0 items-center gap-1">
-                                    <MapPin className="size-3 shrink-0" />
-                                    <span className="truncate">{[order.addressLine, order.city].filter(Boolean).join(" · ")}</span>
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="flex items-center justify-end gap-2 pt-1 border-t border-black/5">
-                                <button
-                                  type="button"
-                                  onClick={() => selectShopifyOrderFromList(order, "first")}
-                                  className="rounded-xl bg-white border border-[#F6C6DE] px-3 py-1.5 text-[10px] font-black text-[#D96B94] hover:bg-[#FFF0F6] active:scale-95 transition shadow-2xs"
-                                  title="Inserisci nel 1° Codice Ordine (Acconto)"
-                                >
-                                  + 1° Acconto
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => selectShopifyOrderFromList(order, "second")}
-                                  className="rounded-xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1.5 text-[10px] font-black text-white hover:opacity-95 active:scale-95 transition shadow-2xs"
-                                  title="Inserisci nel 2° Codice Ordine (Saldo Finale)"
-                                >
-                                  + 2° Saldo
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="p-3 text-center text-xs text-neutral-400 font-semibold">
-                          Nessun ordine recente trovato.
-                        </p>
-                      )}
-                    </div>
                   </div>
-                )}
+                </details> : null}
+
+                </div>
+                ) : null}
               </div>
 
-              {/* Acconto, Pagato & Collaboratrice - Griglia a 3 Colonne Perfettamente Bilanciata */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <label className="block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
-                    <Coins className="size-3.5 text-[#D96B94]" /> ACCONTO PAGATO (€)
-                  </span>
-                  <input
-                    type="text"
-                    value={clientControlForm.depositPaid}
-                    onChange={(event) =>
-                      setClientControlForm((prev) => ({
-                        ...prev,
-                        depositPaid: event.target.value,
-                      }))
-                    }
-                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
-                    placeholder="0.00"
-                  />
-                </label>
+              {/* Acconto e collaboratrice */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {(() => {
+                  const hasVerifiedDeposit = Boolean(
+                    clientControlForm.shopifyOrder && clientControlForm.depositPaid,
+                  );
+                  const rawDepositAmount = String(clientControlForm.depositPaid || "0")
+                    .replace(/[^\d,.-]/g, "");
+                  const depositAmount = Number(
+                    rawDepositAmount.includes(",")
+                      ? rawDepositAmount.replace(/\./g, "").replace(",", ".")
+                      : rawDepositAmount,
+                  );
 
-                <label className="block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
-                    <CreditCard className="size-3.5 text-[#D96B94]" /> PAGATO (€)
-                  </span>
-                  <input
-                    type="text"
-                    value={clientControlForm.paid}
-                    readOnly
-                    className="h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-xs font-black text-[#1F1F1F] outline-none shadow-2xs"
-                    placeholder="Importato dal 2° ordine"
-                  />
-                </label>
+                  return (
+                    <div
+                      className={`rounded-2xl border p-4 shadow-2xs ${
+                        hasVerifiedDeposit
+                          ? "border-emerald-200 bg-emerald-50/70"
+                          : "border-amber-200 bg-amber-50/70"
+                      }`}
+                      aria-label={hasVerifiedDeposit ? "Acconto verificato su Shopify" : "Acconto da verificare"}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={`grid size-10 shrink-0 place-items-center rounded-xl ${
+                              hasVerifiedDeposit
+                                ? "bg-emerald-600 text-white"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {hasVerifiedDeposit ? <Check className="size-5 stroke-[3]" /> : <Coins className="size-5" />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${hasVerifiedDeposit ? "text-emerald-800" : "text-amber-800"}`}>
+                              {hasVerifiedDeposit ? "Acconto verificato" : "Acconto da verificare"}
+                            </p>
+                            <p className="mt-0.5 text-2xl font-black tabular-nums tracking-tight text-[#1F1F1F]">
+                              {clientControlForm.depositPaid && Number.isFinite(depositAmount)
+                                ? formatMoney(depositAmount)
+                                : "Importo non disponibile"}
+                            </p>
+                          </div>
+                        </div>
+                        {hasVerifiedDeposit ? (
+                          <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                            Shopify ✓
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3 text-[11px] font-bold ${hasVerifiedDeposit ? "border-emerald-200 text-emerald-900/70" : "border-amber-200 text-amber-900/70"}`}>
+                        <span>
+                          {clientControlForm.shopifyOrder
+                            ? `Ordine #${clientControlForm.shopifyOrder.replace(/^#/, "")}`
+                            : "Nessun ordine collegato"}
+                        </span>
+                        <span aria-hidden="true">•</span>
+                        <span>
+                          {formatOrderDate(selectedOrderDetails?.createdAt || suggestedAccontoOrder?.createdAt) || "Data non disponibile"}
+                        </span>
+                        {hasVerifiedDeposit ? (
+                          <span className="basis-full text-[10px] font-semibold text-emerald-800/70">
+                            Importato automaticamente: non è un valore inserito a mano.
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="relative block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
+                  <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
                     <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
-                    className="flex h-12 w-full items-center justify-between rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] shadow-2xs"
+                    aria-expanded={isStaffDropdownOpen}
+                    className="flex min-h-[76px] w-full items-center justify-between gap-3 rounded-2xl border border-[#F4D3E2] bg-white px-3.5 py-2.5 text-left outline-none shadow-2xs transition hover:border-[#E99CBD] hover:bg-[#FFF9FC] focus-visible:border-[#D96B94] focus-visible:ring-2 focus-visible:ring-[#D96B94]/20"
                   >
-                    <span className="truncate">
-                      {clientControlForm.staffIds.length
-                        ? filteredClientControlEmployees
-                            .filter((e) => clientControlForm.staffIds.includes(e.id))
-                            .map((e) => e.name)
-                            .join(", ")
-                        : "Seleziona..."}
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex shrink-0 -space-x-2">
+                        {filteredClientControlEmployees
+                          .filter((employee) => clientControlForm.staffIds.includes(employee.id))
+                          .slice(0, 3)
+                          .map((employee) => (
+                            <span
+                              key={employee.id}
+                              className="grid size-11 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm"
+                            >
+                              {employee.photoUrl ? (
+                                <img
+                                  src={resolveDrivePhotoUrl(employee.photoUrl)}
+                                  alt={employee.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                getInitials(employee.name) || "?"
+                              )}
+                            </span>
+                          ))}
+                        {!clientControlForm.staffIds.length ? (
+                          <span className="grid size-11 place-items-center rounded-full bg-[#FFF0F6] text-[#B83D7F]">
+                            <User className="size-5" />
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-[#1F1F1F]">
+                          {clientControlForm.staffIds.length
+                            ? filteredClientControlEmployees
+                                .filter((employee) => clientControlForm.staffIds.includes(employee.id))
+                                .map((employee) => employee.name)
+                                .join(", ")
+                            : "Seleziona collaboratrice"}
+                        </span>
+                        <span className="mt-0.5 block text-[10px] font-bold text-black/45">
+                          {clientControlForm.staffIds.length
+                            ? `${clientControlForm.staffIds.length} ${clientControlForm.staffIds.length === 1 ? "persona selezionata" : "persone selezionate"}`
+                            : "Tocca per vedere le foto del personale"}
+                        </span>
+                      </span>
                     </span>
-                    <ChevronDown className={`size-4 text-black/50 transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {/* Dropdown Popover */}
                   {isStaffDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-18 z-50 max-h-56 overflow-y-auto rounded-2xl border border-black/10 bg-white p-2.5 shadow-2xl space-y-1">
+                    <div className="absolute left-0 right-0 top-[102px] z-50 max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-[#F0D4E2] bg-white p-2.5 shadow-[0_18px_50px_rgba(58,30,44,0.18)]">
                       {filteredClientControlEmployees.map((employee) => {
                         const selected = clientControlForm.staffIds.includes(employee.id);
                         return (
@@ -3902,21 +5690,39 @@ export function AppointmentsBrowser({
                               }))
                             }
                             className={[
-                              "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold transition",
+                              "flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition",
                               selected
-                                ? "bg-[#FCE5F3] text-[#B83D7F]"
-                                : "text-black/75 hover:bg-black/5",
+                                ? "bg-[#FCE5F3] text-[#8F315F] ring-1 ring-[#EDB2CE]"
+                                : "text-black/75 hover:bg-[#FFF9FC]",
                             ].join(" ")}
                           >
-                            <span className="truncate">{employee.name}</span>
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm">
+                                {employee.photoUrl ? (
+                                  <img
+                                    src={resolveDrivePhotoUrl(employee.photoUrl)}
+                                    alt={employee.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  getInitials(employee.name) || "?"
+                                )}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-black">{employee.name}</span>
+                                <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-black/40">
+                                  {employee.locationName || "Personale"}
+                                </span>
+                              </span>
+                            </span>
                             <span
-                              className={`grid size-4 shrink-0 place-items-center rounded-md border ${
+                              className={`grid size-6 shrink-0 place-items-center rounded-full border ${
                                 selected
                                   ? "border-[#B83D7F] bg-[#B83D7F] text-white"
                                   : "border-black/20 bg-white"
                               }`}
                             >
-                              {selected && <Check className="size-3" strokeWidth={3} />}
+                              {selected && <Check className="size-3.5" strokeWidth={3} />}
                             </span>
                           </button>
                         );
@@ -3927,7 +5733,7 @@ export function AppointmentsBrowser({
               </div>
 
               {/* Details for 1° Ordine (Acconto) if available */}
-              {selectedOrderDetails && (
+              {showManualShopifyCorrection && showShopifyOrdersPanel && selectedOrderDetails && (
                 <div className="rounded-[24px] border border-[#F6C6DE] bg-gradient-to-r from-[#FFF0F6] to-[#FFEBF4] p-4 sm:p-5 shadow-2xs space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -3966,7 +5772,7 @@ export function AppointmentsBrowser({
               )}
 
               {/* Details for 2° Ordine (Saldo Finale) if available */}
-              {secondOrderDetails && (
+              {showManualShopifyCorrection && showShopifyOrdersPanel && secondOrderDetails && (
                 <div className="rounded-[24px] border border-[#B83D7F] bg-gradient-to-r from-[#FFEBF4] to-[#FFF0F6] p-4 sm:p-5 shadow-sm space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -4005,26 +5811,217 @@ export function AppointmentsBrowser({
               )}
 
               {/* Nuova Sezione Dettagli Extension & Cliente */}
-              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5 space-y-4">
-                <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-2.5">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
-                    <Pencil className="size-3.5 text-[#D96B94]" /> DETTAGLI APPOINTMENT & CLIENTE
+              <section className="overflow-hidden rounded-[24px] border-2 border-[#D6A43B] bg-[#FFF9E7] shadow-[0_12px_32px_rgba(161,113,20,0.18)]">
+                <button
+                  type="button"
+                  onClick={() => setServiceDetailsModalOpen(true)}
+                  className="group flex min-h-20 w-full items-center justify-between gap-4 bg-[linear-gradient(100deg,#FFF3C4,#FFFCF1)] px-5 py-4 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-[#FFEDAE] active:scale-[0.995] sm:px-6"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="relative grid size-12 shrink-0 place-items-center">
+                      <span className="absolute inset-0 rounded-2xl bg-[#E4B84D]/35 motion-safe:animate-ping motion-reduce:animate-none" />
+                      <span className="relative grid size-12 place-items-center rounded-2xl bg-[#B7791F] text-white shadow-[0_8px_20px_rgba(183,121,31,0.28)]">
+                        <Pencil className="size-5" />
+                      </span>
+                    </span>
+                    <span>
+                      <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#B7791F] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-white shadow-sm motion-safe:animate-pulse motion-reduce:animate-none">
+                        <span className="size-1.5 rounded-full bg-white" /> Tocca qui
+                      </span>
+                      <span className="block text-base font-black text-[#5C4216]">
+                        2. Dettagli del servizio
+                      </span>
+                      <span className="mt-1 block text-xs font-bold text-[#7A6536]">
+                        Tocca qui per inserire grammi, lunghezza, fasce e note
+                      </span>
+                    </span>
                   </span>
+                  <span className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[#B7791F] bg-[#B7791F] px-4 py-3 text-xs font-black text-white shadow-[0_8px_20px_rgba(183,121,31,0.24)] transition group-hover:bg-[#96620E]">
+                    <span className="hidden sm:inline">Apri pop-up</span>
+                    <ChevronRight className="size-5 motion-safe:animate-pulse motion-reduce:animate-none" />
+                  </span>
+                </button>
+              </section>
+
+              <section className="overflow-hidden rounded-[24px] border border-[#EBC7D8] bg-white shadow-[0_8px_24px_rgba(83,44,63,0.05)]">
+                <div className="flex items-center justify-between gap-3 border-b border-[#F1DCE6] bg-[#FFF9FC] px-5 py-3.5 sm:px-6">
+                  <span className="inline-flex items-center gap-2 text-sm font-black text-[#1F1F1F]">
+                    <History className="size-4 text-[#D96B94]" />
+                    Cronologia note cliente
+                  </span>
+                  <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[10px] font-black text-[#A52E6B]">
+                    Shopify · {clientShopifyNoteHistory.length}
+                  </span>
+                </div>
+
+                {loadingTodayOrders ? (
+                  <div className="flex items-center gap-2 px-5 py-4 text-xs font-bold text-black/45 sm:px-6">
+                    <Loader2 className="size-4 animate-spin text-[#D96B94]" />
+                    Carico le note Shopify della cliente…
+                  </div>
+                ) : clientShopifyNoteHistory.length ? (
+                  <div className="divide-y-4 divide-[#F8EAF1]">
+                    {clientShopifyNoteGroups.map((group) => (
+                      <details key={`shopify-note-day-${group.dayKey}`} className="group/day">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-[#F1DCE6] bg-[#FFF3F8] px-5 py-3 marker:content-none transition hover:bg-[#FFEAF3] sm:px-6">
+                          <span className="text-[11px] font-black capitalize text-[#30252A]">
+                            {group.label}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black text-[#A52E6B] shadow-2xs">
+                            {group.orders.length} {group.orders.length === 1 ? "nota" : "note"}
+                            <ChevronDown className="size-3.5 transition-transform group-open/day:rotate-180" />
+                          </span>
+                        </summary>
+                        <div className="divide-y divide-[#F1E3EA]">
+                          {group.orders.map((order) => (
+                            <details key={`shopify-note-${order.id || order.orderName}`} className="group/note">
+                              <summary className="grid cursor-pointer list-none grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 text-left marker:content-none transition hover:bg-[#FFF9FC] sm:px-6">
+                                <span className="text-[11px] font-black tabular-nums text-[#655D61]">
+                                  {formatOrderTime(order.createdAt)}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[11px] font-bold text-[#30252A]">
+                                    {order.serviceTitle || "Servizio Shopify"}
+                                  </span>
+                                  <span className="mt-0.5 block text-[9px] font-black text-[#B83D7F]">
+                                    {order.orderName ? `Ordine ${order.orderName}` : "Ordine Shopify"}
+                                  </span>
+                                </span>
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#F0BFD4] bg-[#FFF0F6] px-3 py-2 text-[10px] font-black text-[#B83D7F]">
+                                  Vedi nota
+                                  <ChevronDown className="size-3.5 transition-transform group-open/note:rotate-180" />
+                                </span>
+                              </summary>
+                              <div className="border-t border-[#F2E2E9] bg-[#FFFCFD] px-5 py-4 sm:px-6">
+                                <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[#A52E6B]">
+                                  Nota presa da Shopify
+                                </p>
+                                <p className="mt-2 whitespace-pre-wrap text-xs font-semibold leading-relaxed text-[#44353C]">
+                                  {order.note}
+                                </p>
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-5 py-4 text-xs font-semibold text-black/40 sm:px-6">
+                    Nessuna nota Shopify trovata nello storico della cliente.
+                  </p>
+                )}
+              </section>
+
+              {serviceDetailsModalOpen ? (
+                <GlobalFullscreenLayer className="flex items-center justify-center overflow-hidden bg-[#21171D]/50 p-3 backdrop-blur-[3px] sm:p-6">
+                  <button
+                    type="button"
+                    onClick={() => setServiceDetailsModalOpen(false)}
+                    className="absolute inset-0 cursor-default"
+                    aria-label="Chiudi dettagli servizio"
+                  />
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="service-details-title"
+                    className="relative z-10 flex max-h-[calc(100dvh-24px)] w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-white/80 bg-[#FCF8FA] shadow-[0_32px_100px_rgba(55,26,42,0.32)] sm:max-h-[calc(100dvh-48px)] sm:rounded-[30px]"
+                  >
+                    <div className="flex items-start justify-between gap-4 border-b border-[#EEC9DA] bg-[linear-gradient(110deg,#FFF0F6_0%,#FFFFFF_72%)] px-5 py-4 sm:px-7 sm:py-5">
+                      <div className="flex min-w-0 items-center gap-3.5">
+                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#B7791F] text-white shadow-[0_8px_20px_rgba(183,121,31,0.28)] motion-safe:animate-pulse motion-reduce:animate-none">
+                          <Pencil className="size-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="inline-flex rounded-full bg-[#FFF1C2] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-[#8A5A0A]">
+                            Compilazione rapida · circa 1 minuto
+                          </p>
+                          <h3 id="service-details-title" className="mt-1 truncate text-xl font-black text-[#604415] sm:text-2xl">
+                            Dettagli del servizio
+                          </h3>
+                          <p className="mt-0.5 text-[11px] font-bold text-black/50 sm:text-xs">
+                            Tocca una risposta per ogni sezione. Il salvataggio è automatico.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={polishClientControlNote}
+                          disabled={!hasClientControlNoteContext() || clientControlPolishing}
+                          className="hidden min-h-10 items-center gap-1.5 rounded-xl border border-[#E7B6CD] bg-white px-3 text-[10px] font-black text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95 disabled:opacity-45 sm:inline-flex"
+                        >
+                          <Sparkles className="size-3.5" />
+                          {clientControlPolishing ? "Sistemo..." : "Sistema nota"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setServiceDetailsModalOpen(false)}
+                          className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#E7B6CD] bg-white text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95"
+                          aria-label="Chiudi pop-up dettagli servizio"
+                        >
+                          <X className="size-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <section className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-[#FCF8FA] p-4 sm:p-6 md:grid-cols-2">
+                <div className="flex items-center justify-end md:hidden">
                   <button
                     type="button"
                     onClick={polishClientControlNote}
                     disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#D96B94] px-4 py-1.5 text-[11px] font-bold text-white shadow-2xs transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#D96B94] px-4 text-[11px] font-black text-white shadow-sm transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
                   >
                     <Sparkles className="size-3.5" />
-                    {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
+                    {clientControlPolishing ? "Sistemo..." : "Sistema la nota"}
                   </button>
                 </div>
 
+                <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#B83D7F] text-[10px] text-white">1</span>
+                      Servizi eseguiti
+                    </span>
+                    <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[9px] font-black text-[#A52E6B]">
+                      Rilevati automaticamente dalla prenotazione
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {CLIENT_CONTROL_SERVICE_OPTIONS.map((service) => {
+                      const selected = selectedServiceDetails.includes(service);
+                      return (
+                        <button
+                          key={service}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => {
+                            const next = selected
+                              ? selectedServiceDetails.filter((item) => item !== service)
+                              : [...selectedServiceDetails, service];
+                            setSelectedServiceDetails(next);
+                            updateShopifyNote({ services: next });
+                          }}
+                          className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            selected
+                              ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
+                              : "border-[#E8C3D4] bg-white text-[#8F2E61] hover:border-[#D96B94] hover:bg-[#FFF6FA]"
+                          }`}
+                        >
+                          {selected ? <Check className="size-4" /> : null}
+                          {service}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* 1. Quanti grammi? */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    QUANTI GRAMMI?
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
+                    Quanti grammi?
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     {["100g", "150g", "200g"].map((gram) => {
@@ -4038,7 +6035,7 @@ export function AppointmentsBrowser({
                             setSelectedGrammi(next);
                             updateShopifyNote({ grammi: next });
                           }}
-                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                          className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4056,7 +6053,7 @@ export function AppointmentsBrowser({
                         setSelectedGrammi(next);
                         updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
                       }}
-                      className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                      className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                         selectedGrammi === "custom"
                           ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                           : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4074,16 +6071,17 @@ export function AppointmentsBrowser({
                           updateShopifyNote({ grammi: val });
                         }}
                         placeholder="es. 250g"
-                        className="h-8 w-24 rounded-full border border-[#D96B94] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                        className="h-11 w-28 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
                       />
                     )}
                   </div>
                 </div>
 
                 {/* 2. Lunghezza */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    LUNGHEZZA
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
+                    Lunghezza
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {["50cm", "55cm", "65cm", "75cm"].map((len) => {
@@ -4097,7 +6095,7 @@ export function AppointmentsBrowser({
                             setSelectedLunghezza(next);
                             updateShopifyNote({ lunghezza: next });
                           }}
-                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                          className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4111,9 +6109,10 @@ export function AppointmentsBrowser({
                 </div>
 
                 {/* 3. Quante fasce? */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    QUANTE FASCE?
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
+                    Quante fasce?
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {["1", "2", "3", "4", "5"].map((num) => {
@@ -4127,7 +6126,7 @@ export function AppointmentsBrowser({
                             setSelectedFasce(next);
                             updateShopifyNote({ fasce: next });
                           }}
-                          className={`size-9 rounded-xl text-xs font-black transition active:scale-95 border grid place-items-center ${
+                          className={`grid size-11 place-items-center rounded-xl border text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4145,7 +6144,7 @@ export function AppointmentsBrowser({
                         setSelectedFasce(next);
                         updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
                       }}
-                      className={`h-9 rounded-xl px-3 text-xs font-black transition active:scale-95 border grid place-items-center ${
+                      className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                         selectedFasce === "custom"
                           ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                           : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4163,16 +6162,17 @@ export function AppointmentsBrowser({
                           updateShopifyNote({ fasce: val });
                         }}
                         placeholder="es. 6"
-                        className="h-9 w-20 rounded-xl border border-[#D96B94] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                        className="h-11 w-24 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
                       />
                     )}
                   </div>
                 </div>
 
                 {/* 4. Come era la cliente? */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    COME ERA LA CLIENTE?
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">5</span>
+                    Come era la cliente?
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -4191,7 +6191,7 @@ export function AppointmentsBrowser({
                             setSelectedAtteggiamento(next);
                             updateShopifyNote({ atteggiamento: next });
                           }}
-                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border flex items-center gap-1.5 ${
+                          className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4205,86 +6205,250 @@ export function AppointmentsBrowser({
                   </div>
                 </div>
 
-                {/* 5. Note Extra (con limite di caratteri) */}
-                <div>
+                <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                  <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-end">
+                    <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-white px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:ring-2 focus-within:ring-[#D96B94]/25">
+                      <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                      <span className="min-w-0 flex-1">
+                        <input
+                          type="text"
+                          aria-label="Instagram cliente"
+                          value={clientControlForm.instagramTag}
+                          onChange={(event) =>
+                            setClientControlForm((prev) => ({
+                              ...prev,
+                              instagramTag: event.target.value,
+                            }))
+                          }
+                          placeholder="@usercliente"
+                          className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                        />
+                      </span>
+                    </label>
+
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
+                        Verifiche e controlli
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {[
+                          ["beforeMedia", "Prima foto/video"],
+                          ["afterMedia", "Dopo foto/video"],
+                          ["products", "Prodotti"],
+                          ["review", "Recensione"],
+                        ].map(([fieldKey, fieldLabel]) => {
+                          const checked = Boolean((clientControlForm as any)[fieldKey]);
+                          return (
+                            <label
+                              key={fieldKey}
+                              className={[
+                                "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
+                                checked
+                                  ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                                  : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
+                              ].join(" ")}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) =>
+                                  updateClientControlCheck(
+                                    fieldKey as "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
+                                    event.target.checked,
+                                  )
+                                }
+                                className="size-4 accent-[#D96B94]"
+                              />
+                              <span>{fieldLabel}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Note Extra */}
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-black/50">
-                      NOTE EXTRA (MAX 250 CARATTERI)
+                    <span className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      Note extra <span className="text-black/35">· facoltative</span>
                     </span>
                     <span className="text-[10px] font-extrabold text-black/40">
-                      {extraNoteText.length}/250
+                      {extraNoteText.length}/600
                     </span>
                   </div>
-                  <input
-                    type="text"
-                    maxLength={250}
+                  <textarea
+                    rows={3}
+                    maxLength={600}
                     value={extraNoteText}
                     onChange={(e) => {
                       const text = e.target.value;
                       setExtraNoteText(text);
                       updateShopifyNote({ extraNote: text });
                     }}
-                    className="h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3.5 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
+                    className="mt-2 min-h-24 w-full resize-y rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 py-3 text-sm font-bold leading-relaxed text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
                     placeholder="Scrivi qui eventuali note extra per la cliente..."
                   />
                 </div>
-              </section>
 
-              {/* NOTA SHOPIFY (Read-only) */}
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
-                  <FileText className="size-4 text-[#D96B94]" /> NOTA SHOPIFY COMPILATA
-                </span>
-                <textarea
-                  value={clientControlForm.customNoteText}
-                  readOnly={true}
-                  rows={3}
-                  className="mt-1.5 w-full rounded-2xl border border-[#F4D3E2] bg-neutral-50 p-4 text-xs font-bold text-[#1F1F1F] shadow-2xs outline-none cursor-not-allowed select-none"
-                  placeholder="La nota formattata per Shopify viene generata automaticamente dalle selezioni sopra..."
-                />
-              </div>
-
-              {/* Spunte di Verifica (I 5 Checkbox) */}
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
-                  VERIFICHE E CONTROLLI
-                </span>
-                <div className="mt-2.5 flex flex-wrap gap-2.5">
-                  {[
-                    ["notes", "Note Shopify"],
-                    ["beforeMedia", "Prima foto/video"],
-                    ["afterMedia", "Dopo foto/video"],
-                    ["products", "Prodotti"],
-                    ["review", "Recensione"],
-                  ].map(([fieldKey, fieldLabel]) => {
-                    const checked = Boolean((clientControlForm as any)[fieldKey]);
-                    return (
-                      <label
-                        key={fieldKey}
-                        className={[
-                          "flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-black transition active:scale-95 shadow-2xs",
-                          checked
-                            ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
-                            : "border-black/10 bg-white text-black/70 hover:bg-neutral-50",
-                        ].join(" ")}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) =>
-                            setClientControlForm((prev) => ({
-                              ...prev,
-                              [fieldKey]: event.target.checked,
-                            }))
-                          }
-                          className="size-4 accent-[#D96B94]"
-                        />
-                        <span>{fieldLabel}</span>
-                      </label>
-                    );
-                  })}
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                    <FileText className="size-4 text-[#D96B94]" /> Nota Shopify compilata
+                  </span>
+                  <textarea
+                    value={clientControlForm.customNoteText}
+                    readOnly={true}
+                    rows={3}
+                    className="mt-2 w-full cursor-not-allowed select-none rounded-xl border border-[#F4D3E2] bg-[#FFF9FC] p-4 text-xs font-bold text-[#1F1F1F] outline-none"
+                    placeholder="La nota per Shopify viene generata automaticamente dalle selezioni del servizio."
+                  />
                 </div>
-              </div>
+                    </section>
+                    <div className="flex items-center justify-between gap-4 border-t border-[#EEC9DA] bg-white px-4 py-3 sm:px-7">
+                      <span className="hidden items-center gap-2 text-[10px] font-black text-emerald-700 sm:inline-flex">
+                        <Check className="size-4" />
+                        Selezioni salvate automaticamente
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setServiceDetailsModalOpen(false)}
+                        className="h-12 w-full rounded-2xl bg-[#B83D7F] px-8 text-sm font-black text-white shadow-[0_8px_20px_rgba(184,61,127,0.22)] transition hover:bg-[#A93270] active:scale-[0.99] sm:w-auto sm:min-w-56"
+                      >
+                        Fatto · chiudi
+                      </button>
+                    </div>
+                  </div>
+                </GlobalFullscreenLayer>
+              ) : null}
+
+              <details className="rounded-[24px] border border-[#EBC7D8] bg-[#FFF9FC] shadow-sm">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-black text-[#1F1F1F] marker:content-none">
+                  <span className="inline-flex items-center gap-2">
+                    <History className="size-4 text-[#D96B94]" />
+                    Storico e modifiche
+                  </span>
+                  <span className="rounded-full bg-[#F6D7E6] px-2.5 py-1 text-[10px] text-[#B83D7F]">
+                    {clientControlProcessComments.length + clientControlChangeComments.length}
+                  </span>
+                </summary>
+              <section className="border-t border-neutral-200 p-5 sm:p-6">
+                <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-4">
+                  <div>
+                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                      <Clock3 className="size-4 text-[#D96B94]" />
+                      Timeline del processo
+                    </span>
+                    <p className="mt-1 text-[11px] font-semibold text-black/45">
+                      Stati, tempi, assegnazioni e modifiche in ordine cronologico.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.16em] text-black/45">
+                      Solo lettura
+                    </span>
+                    <span className="grid size-7 place-items-center rounded-full bg-[#FFF0F6] text-[10px] font-black text-[#B83D7F]">
+                      {clientControlProcessComments.length}
+                    </span>
+                  </div>
+                </div>
+                {clientControlProcessComments.length ? (
+                  <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-neutral-200">
+                    {[...clientControlProcessComments].reverse().map((comment, index) => (
+                      <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
+                        <span
+                          className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-white shadow-[0_0_0_1px_rgba(217,107,148,0.28)] ${
+                            index === 0 ? "bg-[#D96B94]" : "bg-[#E8DDE3]"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <div className={`rounded-2xl border px-4 py-3 ${index === 0 ? "border-[#F0C4D7] bg-[#FFF8FB]" : "border-neutral-200 bg-[#FAFAFA]"}`}>
+                          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                            <p className="min-w-0 text-[12px] font-bold leading-[1.55] text-[#332A2F]">
+                              {comment.message}
+                            </p>
+                            <time className="shrink-0 text-[9px] font-bold tabular-nums text-black/35">
+                              {formatDateTime(comment.created_at)}
+                            </time>
+                          </div>
+                          <p className="mt-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B607B]">
+                            {comment.user_name}
+                          </p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 py-5 text-[11px] font-semibold text-black/40">
+                    Nessuna modifica registrata per questo appuntamento.
+                  </p>
+                )}
+              </section>
+              <section className="border-t border-[#EBC7D8] p-5 sm:p-6">
+                <div className="flex items-center justify-between gap-3 border-b border-[#F0D6E2] pb-4">
+                  <div>
+                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                      <History className="size-4 text-[#D96B94]" />
+                      Cronologia modifiche
+                    </span>
+                    <p className="mt-1 text-[11px] font-semibold text-black/45">
+                      Variazioni salvate dopo la creazione del Controllo Cliente.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-[#EBC7D8] bg-white px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.16em] text-black/45">
+                      Solo lettura
+                    </span>
+                    <span className="grid size-7 place-items-center rounded-full bg-[#F6D7E6] text-[10px] font-black text-[#B83D7F]">
+                      {clientControlChangeComments.length}
+                    </span>
+                  </div>
+                </div>
+                {clientControlChangeComments.length ? (
+                  <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-[#E8C8D7]">
+                    {[...clientControlChangeComments].reverse().map((comment, index) => {
+                      const cleanMessage = comment.message
+                        .replace(/^BOZZA CONTROLLO CLIENTE SALVATA\s*[·:-]?\s*/i, "")
+                        .replace(/^MODIFICA CONTROLLO CLIENTE\s*[·:-]?\s*/i, "")
+                        .replace(/^CREAZIONE CONTROLLO CLIENTE\s*[·:-]?\s*/i, "")
+                        .replace(/^CONTROLLO CLIENTE (?:MODIFICATO|CREATO)(?: E SALVATO)?\.?\s*/i, "");
+                      const isDraftSave = /^BOZZA CONTROLLO CLIENTE/i.test(comment.message.trim());
+                      const isCreation = /^(CREAZIONE|CONTROLLO CLIENTE CREATO)/i.test(comment.message.trim());
+                      return (
+                        <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
+                          <span
+                            className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-[#FFF9FC] shadow-[0_0_0_1px_rgba(217,107,148,0.32)] ${
+                              index === 0 ? "bg-[#C83F82]" : "bg-[#DDB8CA]"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <div className={`rounded-2xl border px-4 py-3 ${index === 0 ? "border-[#E8B8CF] bg-white" : "border-[#EED5E1] bg-white/70"}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.13em] text-[#A52E6B]">
+                                {isDraftSave ? "Bozza salvata" : isCreation ? "Creazione" : "Modifica salvata"}
+                              </span>
+                              <time className="shrink-0 text-[9px] font-bold tabular-nums text-black/35">
+                                {formatDateTime(comment.created_at)}
+                              </time>
+                            </div>
+                            <p className="mt-2 text-[11px] font-bold leading-[1.65] text-[#332A2F]">
+                              {cleanMessage || (isDraftSave ? "Bozza salvata senza altre modifiche." : "Controllo Cliente salvato.")}
+                            </p>
+                            <p className="mt-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B607B]">
+                              {comment.user_name}
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-2xl border border-[#EED5E1] bg-white px-4 py-5 text-[11px] font-semibold text-black/40">
+                    Le modifiche successive al primo salvataggio compariranno qui.
+                  </p>
+                )}
+              </section>
+              </details>
 
               {clientControlMessage ? (
                 <p
@@ -4297,56 +6461,65 @@ export function AppointmentsBrowser({
                   {clientControlMessage.text}
                 </p>
               ) : null}
+              </div>
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between border-t border-black/5 bg-white/95 px-6 py-5 sm:px-8">
+            <div className="shrink-0 border-t border-neutral-200 bg-white px-5 py-4 shadow-[0_-8px_24px_rgba(17,17,17,0.04)] sm:px-8 lg:px-14">
+              <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4">
               <button
                 type="button"
-                onClick={() => {
-                  setClientControlOpen(false);
-                  setIsStaffDropdownOpen(false);
-                }}
+                onClick={closeClientControl}
                 className="rounded-2xl border border-black/10 bg-neutral-100 px-8 py-3.5 text-xs font-black text-black/70 transition hover:bg-neutral-200 active:scale-95"
               >
-                Annulla
+                Torna indietro
               </button>
-              <button
-                type="button"
-                onClick={() => void submitClientControlForm()}
-                disabled={clientControlSubmitting || clientControlLoading}
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60"
-              >
-                <Save className="size-4" />
-                <span>{clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void submitClientControlForm(undefined, true)}
+                  disabled={clientControlSubmitting || clientControlLoading}
+                  className={`inline-flex items-center gap-2 rounded-2xl border-2 px-5 py-3 text-xs font-black transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "draft" ? "border-emerald-600 bg-emerald-600 text-white" : "border-[#D96B94] bg-white text-[#B83D7F] hover:bg-[#FFF0F6]"}`}
+                >
+                  <Save className="size-4" />
+                  <span>{clientControlSubmitting ? "Salvataggio..." : clientControlLastSave === "draft" ? "Bozza salvata ✓" : "Salva bozza"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitClientControlForm()}
+                  disabled={clientControlSubmitting || clientControlLoading}
+                  className={`inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "bg-emerald-600 shadow-emerald-200" : "bg-gradient-to-r from-[#D96B94] to-[#B83D7F]"}`}
+                >
+                  <Check className="size-4" />
+                  <span>{clientControlSubmitting ? "Conferma..." : clientControlLastSave === "confirmed" ? "Salvato ✓" : "Conferma controllo"}</span>
+                </button>
+              </div>
+              </div>
             </div>
           </div>
         </div>
       ) : null}
-      <div className="w-full">
-        <main className="relative min-w-0 space-y-5 overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_5%_0%,rgba(255,197,226,0.34),transparent_30%),radial-gradient(circle_at_95%_8%,rgba(224,213,255,0.4),transparent_28%)] p-2 sm:p-3 lg:p-4">
-          <section className={`relative overflow-visible rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_22px_60px_rgba(88,45,66,0.10)] backdrop-blur-2xl sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
+      <div className="appointments-workspace w-full">
+        <main className="relative min-h-[calc(100dvh-4rem)] min-w-0 space-y-3 overflow-hidden rounded-[22px] border border-[#E7D9E0] bg-[#F6EEF2] p-1.5 sm:space-y-5 sm:rounded-[30px] sm:p-3 lg:p-4">
+          <section className={`relative overflow-visible rounded-[22px] border border-[#E7D9E0] bg-[#FBF7F9] p-3 shadow-[0_10px_30px_rgba(66,39,51,0.06)] sm:rounded-[28px] sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
             <div>
               <div>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-12 shrink-0 place-items-center rounded-[18px] border border-white bg-[linear-gradient(145deg,#FFD5E9,#F3E9FF)] text-[#B83D7F] shadow-[0_10px_28px_rgba(185,61,127,0.16)]">
-                      <CalendarCheck className="size-6" />
+                <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-4">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-white bg-[linear-gradient(145deg,#FFD5E9,#F3E9FF)] text-[#B83D7F] shadow-[0_8px_20px_rgba(185,61,127,0.14)] sm:size-12 sm:rounded-[18px]">
+                      <CalendarCheck className="size-5 sm:size-6" />
                     </span>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <h1 className="text-3xl font-black tracking-[-0.04em] text-[#171717] sm:text-4xl">
-                          Appuntamenti
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                        <h1 className="text-2xl font-black tracking-[-0.04em] text-[#171717] sm:text-4xl">
+                          {pageTitle}
                         </h1>
-                        <span className="rounded-full border border-[#F0C4D7] bg-[#FFF2F8] px-3 py-1 text-xs font-black tabular-nums text-[#A93469]">
-                          {salonWorkflowMode
-                            ? `${filteredBookings.length} ${salonWorkflowMode === "queue" ? "in attesa" : salonWorkflowMode === "station" ? "in lavorazione" : "attivi"}`
-                            : `${activeBookingsCount} attivi`}
+                        <span className="rounded-full border border-[#F0C4D7] bg-[#FFF2F8] px-2 py-0.5 text-[10px] font-black tabular-nums text-[#A93469] sm:px-3 sm:py-1 sm:text-xs">
+                          {activeBookingsCount} attivi
                         </span>
                       </div>
-                      <p className="mt-1 text-sm font-semibold text-black/48">
-                        Clienti, arrivi e servizi in un’unica vista operativa
+                      <p className="mt-0.5 line-clamp-1 text-[11px] font-semibold text-black/48 sm:mt-1 sm:text-sm">
+                        {pageSubtitle}
                       </p>
                     </div>
                     {isPC && pcActiveWorker ? (
@@ -4365,6 +6538,27 @@ export function AppointmentsBrowser({
                     ) : null}
                   </div>
 
+                  <div className="inline-flex rounded-xl border border-[#E7D9E0] bg-[#F1E8ED] p-1 shadow-inner" role="group" aria-label="Vista appuntamenti">
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode("board")}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition sm:px-4 ${
+                        layoutMode === "board" ? "bg-white text-[#9E3262] shadow-sm" : "text-black/45 hover:text-black/70"
+                      }`}
+                    >
+                      <LayoutGrid className="size-4" /> Board
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode("table")}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition sm:px-4 ${
+                        layoutMode === "table" ? "bg-white text-[#9E3262] shadow-sm" : "text-black/45 hover:text-black/70"
+                      }`}
+                    >
+                      <List className="size-4" /> Tabella
+                    </button>
+                  </div>
+
                   {!isPC && currentUser?.role && pcLinkManagerRoles.has(currentUser.role) && (
                     <button
                       type="button"
@@ -4376,7 +6570,7 @@ export function AppointmentsBrowser({
                         setCopiedLink(false);
                         setPcGenModalOpen(true);
                       }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#4E382C] hover:bg-[#FFF7F3] transition shadow-2xs hover:shadow-xs"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#E8D8CF] bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[#4E382C] transition shadow-2xs hover:bg-[#FFF7F3] hover:shadow-xs sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs"
                     >
                       <Sparkles size={13} className="text-[#A56A42]" />
                       <span>Genera Link PC Cassa</span>
@@ -4386,122 +6580,92 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
-            {salonWorkflowMode ? (
-              <nav
-                aria-label="Flusso operativo salone"
-                className="mt-7 overflow-x-auto rounded-[20px] border border-white/90 bg-[#F8F3F7]/85 p-1.5 shadow-inner"
-              >
-                <div className="flex min-w-max gap-1">
-                  {([
-                    ["reception", "Reception", "/salone/reception"],
-                    ["queue", "Sala d’attesa", "/salone/incoda"],
-                    ["station", "La mia postazione", "/salone/postazione"],
-                  ] as const).map(([mode, label, href]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => router.push(href)}
-                      className={[
-                        "inline-flex min-h-11 items-center gap-2 rounded-[15px] px-5 py-3 text-xs font-black transition",
-                        salonWorkflowMode === mode
-                          ? "border border-white bg-[#171419] text-white shadow-[0_8px_22px_rgba(23,20,25,0.18)]"
-                          : "border border-transparent text-black/55 hover:bg-white/75 hover:text-black",
-                      ].join(" ")}
-                    >
-                      <span
-                        className={[
-                          "size-2 rounded-full",
-                          mode === "reception"
-                            ? "bg-[#F286B9]"
-                            : mode === "queue"
-                              ? "bg-amber-400"
-                              : "bg-emerald-400",
-                        ].join(" ")}
-                      />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </nav>
-            ) : (
-            <div className="mt-7 overflow-x-auto rounded-[20px] border border-white/90 bg-[#F8F3F7]/85 p-1.5 shadow-inner">
+            <div className="mt-4 overflow-x-auto rounded-[16px] border border-[#E7D9E0] bg-[#F1E8ED] p-1 sm:mt-7 sm:rounded-[20px] sm:p-1.5">
               <div className="flex min-w-max gap-1">
                 {[
                   {
-                    label: "Tutte",
+                    value: "all",
+                    label: "Tutti",
                     count: initialBookings.length,
-                    active: !showCanceled,
-                    onClick: () => setShowCanceled(false),
                   },
                   {
-                    label: "Prenotate",
-                    count: prenotateCount,
-                    active: !showCanceled,
-                    onClick: () => setShowCanceled(false),
+                    value: "PRENOTATO",
+                    label: "Confermato",
+                    count: confirmedBookingsCount,
                   },
                   {
-                    label: "In arrivo",
-                    count: inArrivoCount,
-                    active: false,
-                    onClick: () => setShowCanceled(false),
+                    value: "NON_PRESENTATO",
+                    label: "Non presentato",
+                    count: noShowBookingsCount,
                   },
                   {
-                    label: "Annullate",
+                    value: "ANNULLATO",
+                    label: "Annullato",
                     count: canceledBookingsCount,
-                    active: showCanceled,
-                    onClick: () => setShowCanceled(true),
                   },
                   {
-                    label: "Pre-pagamento",
-                    count: prePaymentCount,
-                    active: false,
-                    onClick: () => setShowCanceled(false),
+                    value: "ARRIVATA",
+                    label: "Arrivata",
+                    count: arrivedBookingsCount,
                   },
                   {
-                    label: "Lista d'attesa",
-                    count: waitListCount,
-                    active: false,
-                    onClick: () => setShowCanceled(false),
+                    value: "COMPLETATO",
+                    label: "Completate",
+                    count: completedBookingsCount,
                   },
-                ].map((tab) => (
-                  <button
-                    key={tab.label}
-                    type="button"
-                    onClick={tab.onClick}
-                    className={[
-                      "inline-flex min-h-11 items-center gap-2.5 rounded-[15px] px-4 py-3 text-xs font-black transition",
-                      tab.active
-                        ? "border border-white bg-white text-[#9E3262] shadow-[0_6px_18px_rgba(89,45,65,0.10)]"
-                        : "border border-transparent text-black/55 hover:bg-white/70 hover:text-black/75",
-                    ].join(" ")}
-                  >
-                    {tab.label}
-                    <span className="min-w-6 rounded-full bg-[#F5D5E4] px-2 py-0.5 text-center text-[10px] text-[#8D2E59]">
-                      {tab.count}
-                    </span>
-                  </button>
-                ))}
+                ].map((tab) => {
+                  const isDangerTab = tab.value === "NON_PRESENTATO" || tab.value === "ANNULLATO";
+                  const isActive = filterStatus === tab.value;
+
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => {
+                        const isCanceledTab = tab.value === "ANNULLATO";
+                        const isAlreadyActive = filterStatus === tab.value;
+                        const nextValue = isAlreadyActive && tab.value !== "all" ? "all" : tab.value;
+                        setShowCanceled(nextValue === "ANNULLATO" && isCanceledTab);
+                        setFilterStatus(nextValue);
+                      }}
+                      aria-pressed={isActive}
+                      className={[
+                        "inline-flex min-h-9 items-center gap-1.5 rounded-[13px] border px-3 py-2 text-[11px] font-black transition sm:min-h-11 sm:gap-2.5 sm:rounded-[15px] sm:px-4 sm:py-3 sm:text-xs",
+                        isDangerTab
+                          ? isActive
+                            ? "border-red-600 bg-red-600 text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]"
+                            : "border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100"
+                          : isActive
+                            ? "border-white bg-white text-[#9E3262] shadow-[0_6px_18px_rgba(89,45,65,0.10)]"
+                            : "border-transparent text-black/55 hover:bg-white/70 hover:text-black/75",
+                      ].join(" ")}
+                    >
+                      {tab.label}
+                      <span
+                        className={[
+                          "min-w-6 rounded-full px-2 py-0.5 text-center text-[10px]",
+                          isDangerTab
+                            ? isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-red-200 text-red-800"
+                            : "bg-[#F5D5E4] text-[#8D2E59]",
+                        ].join(" ")}
+                      >
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            )}
 
-            <div className="mt-5 grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_210px_190px_120px_150px]">
-              <div className="relative h-[52px]">
-                <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-12 place-items-center text-[#B44D79]">
-                  <Search className="size-5" />
-                </span>
-                <input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Cerca per nome cliente, email o servizio..."
-                  className="h-[52px] w-full rounded-[17px] border border-white bg-white/90 pl-12 pr-4 text-sm font-semibold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none transition placeholder:text-black/35 focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
-                />
-              </div>
-              <div className="relative h-[52px]">
+            <div className="mt-3 grid items-stretch gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 xl:grid-cols-[minmax(430px,1.5fr)_210px_190px_120px_150px]">
+              <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} />
+              <div className="relative h-11 sm:h-[52px]">
                 <button
                   type="button"
                   onClick={() => setIsDatePickerOpen((current) => !current)}
-                  className="flex h-[52px] w-full items-center justify-between rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] transition hover:border-[#D86B9B]"
+                  className="flex h-11 w-full items-center justify-between rounded-[14px] border border-white bg-white/90 px-4 text-xs font-bold text-black shadow-[0_6px_18px_rgba(81,43,60,0.06)] transition hover:border-[#D86B9B] sm:h-[52px] sm:rounded-[17px] sm:text-sm"
                 >
                   <span className="inline-flex min-w-0 items-center gap-2">
                     <CalendarDays className="size-4 shrink-0 text-[#A56A42]" />
@@ -4610,7 +6774,7 @@ export function AppointmentsBrowser({
                 onChange={(event) =>
                   updateSalonFilter(event.target.value as SalonFilter)
                 }
-                className="h-[52px] rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
+                className="h-11 rounded-[14px] border border-white bg-white/90 px-4 text-xs font-bold text-black shadow-[0_6px_18px_rgba(81,43,60,0.06)] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7] sm:h-[52px] sm:rounded-[17px] sm:text-sm"
               >
                 {salonOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -4622,7 +6786,7 @@ export function AppointmentsBrowser({
                 <button
                   type="button"
                   onClick={() => setIsFilterModalOpen((current) => !current)}
-                  className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[17px] border px-4 text-sm font-black transition ${
+                  className={`flex h-11 w-full items-center justify-center gap-2 rounded-[14px] border px-4 text-xs font-black transition sm:h-[52px] sm:rounded-[17px] sm:text-sm ${
                     activeAdvancedFilterCount > 0
                       ? "border-[#D86B9B] bg-[#FFF0F7] text-[#A93469]"
                       : "border-white bg-white/90 text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] hover:border-[#D86B9B]"
@@ -4738,7 +6902,7 @@ export function AppointmentsBrowser({
                     forceRefresh: true,
                   });
                 }}
-                className="flex h-[52px] items-center justify-center gap-2 rounded-[17px] border border-[#1C1820] bg-[#1C1820] px-5 text-xs font-black text-white shadow-[0_10px_26px_rgba(28,24,32,0.20)] transition hover:-translate-y-0.5 hover:bg-[#A93469] disabled:opacity-50"
+                className="flex h-11 items-center justify-center gap-2 rounded-[14px] border border-[#1C1820] bg-[#1C1820] px-5 text-xs font-black text-white shadow-[0_8px_20px_rgba(28,24,32,0.18)] transition hover:-translate-y-0.5 hover:bg-[#A93469] disabled:opacity-50 sm:h-[52px] sm:rounded-[17px]"
               >
                 <RefreshCw className={`size-4 text-[#FFD8E9] ${isRefreshing ? "animate-spin" : ""}`} />
                 <span>{isRefreshing ? "Sincronizzo..." : "Sincronizza"}</span>
@@ -4746,8 +6910,496 @@ export function AppointmentsBrowser({
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white/76 shadow-[0_22px_60px_rgba(88,45,66,0.10)] backdrop-blur-2xl">
-            <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#EEDCE5] bg-[linear-gradient(90deg,#FFF4F9,#F7F2FF)] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#7D5266] xl:grid">
+          {normalizedSearch ? (
+            <section
+              className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]"
+              aria-live="polite"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E9DCE2] bg-[#FFF8FB] px-4 py-4 sm:px-6">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#A93469]">Risultato immediato</p>
+                  <h2 className="mt-1 text-lg font-black text-[#211A1E]">
+                    {filteredBookings.length === 1
+                      ? "1 appuntamento trovato"
+                      : `${filteredBookings.length} appuntamenti trovati`}
+                  </h2>
+                </div>
+                <span className="rounded-full border border-[#F0C4D7] bg-white px-3 py-1.5 text-[10px] font-black text-[#9E3262]">
+                  Ricerca: {searchTerm.trim()}
+                </span>
+              </div>
+
+              {filteredBookings.length ? (
+                <div className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
+                  {filteredBookings.slice(0, 30).map((booking) => {
+                    const status = getBookingStatus(booking);
+                    const officeNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
+                    const notePreviews = getBookingNotePreviews(
+                      booking,
+                      officeNote,
+                      status === "COMPLETATO",
+                      shopifyNotesByBooking[booking.id],
+                    );
+                    return (
+                      <button
+                        key={`instant-${booking.id}`}
+                        type="button"
+                        onClick={() => void openClientControlForBooking(booking)}
+                        className="rounded-2xl border border-[#E8DCE2] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#D86B9B] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F7D9E7]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-base font-black text-[#211A1E]">{booking.customerName}</p>
+                            <p className="mt-1 text-xs font-bold tabular-nums text-[#6F5662]">
+                              {formatDate(booking.startDate)} · {formatTime(booking.startDate)}–{formatTime(booking.endDate)}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                            {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                          </span>
+                        </div>
+                        <p className="mt-3 line-clamp-2 text-xs font-bold uppercase leading-relaxed text-[#493C43]">{booking.serviceTitle}</p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-[#806774]">
+                          <span>{getSalonLabel(booking.inferredSalon)}</span>
+                          {booking.bookingStr ? <span>Ordine {formatOrderCode(booking.bookingStr)}</span> : null}
+                          {booking.customerPhone ? <span>{booking.customerPhone}</span> : null}
+                        </div>
+                        <AppointmentNotePreviews notes={notePreviews} />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-8 text-center">
+                  <Search className="mx-auto size-7 text-[#CFA8BA]" />
+                  <p className="mt-3 text-sm font-black text-[#33252C]">Nessun appuntamento trovato</p>
+                  <p className="mt-1 text-xs font-semibold text-black/45">Prova con nome, telefono, email o numero ordine.</p>
+                </div>
+              )}
+
+              {filteredBookings.length > 30 ? (
+                <p className="border-t border-[#EEE2E8] px-5 py-3 text-center text-[10px] font-bold text-black/45">
+                  Mostro i primi 30 risultati. Aggiungi qualche lettera per restringere la ricerca.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {!normalizedSearch && layoutMode === "board" ? (
+            <section className="overflow-hidden rounded-[24px] border border-[#E7DDE2] bg-white shadow-[0_16px_45px_rgba(72,45,58,0.08)]">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EEE4E9] bg-[linear-gradient(110deg,#FFF7FB_0%,#FFFFFF_56%,#F8F5FA_100%)] px-4 py-5 sm:px-6">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · Salone Corso</p>
+                  <div>
+                    <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#261C22]">Agenda dello staff</h2>
+                    <p className="mt-1 text-[11px] font-semibold text-[#76656E]">Ogni colonna mostra la giornata di una lavoratrice. Gli annullati restano sempre in fondo.</p>
+                    <p className="mt-1 text-[10px] font-bold text-[#9E3262] lg:hidden">Un dito premuto: cambia stato · Due dita: sposta</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {hiddenEmptyBoardWorkerCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowEmptyBoardWorkers((current) => !current)}
+                      className="inline-flex min-h-10 items-center rounded-lg border border-[#DFE2E7] bg-white px-3 text-[10px] font-black text-[#505F79] transition hover:border-[#9E3262] hover:text-[#9E3262]"
+                    >
+                      {showEmptyBoardWorkers
+                        ? "Nascondi personale non in turno"
+                        : `Mostra personale non in turno (${hiddenEmptyBoardWorkerCount})`}
+                    </button>
+                  ) : null}
+                  <div className="hidden items-center -space-x-2 xl:flex">
+                    {visibleAppointmentBoardColumns.filter((column) => column.id !== "unassigned").slice(0, 5).map((column) => (
+                      <span key={column.id} className="rounded-full border-2 border-white bg-white">
+                        <Avatar name={column.name} photoUrl={column.photoUrl} size="size-7" />
+                      </span>
+                    ))}
+                    {visibleAppointmentBoardColumns.filter((column) => column.id !== "unassigned").length > 5 ? (
+                      <span className="grid size-7 place-items-center rounded-full border-2 border-white bg-[#E9ECF2] text-[9px] font-black text-[#505F79]">
+                        +{visibleAppointmentBoardColumns.filter((column) => column.id !== "unassigned").length - 5}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="hidden items-center gap-2 sm:flex" aria-label="Riepilogo appuntamenti">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CFE8D7] bg-[#EDF8F1] px-3 py-1.5 text-[10px] font-black text-[#237A45]">
+                      <span className="size-1.5 rounded-full bg-[#36A866]" /> {boardActiveBookingCount} attivi
+                    </span>
+                    {boardCanceledBookingCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F2CED2] bg-[#FFF1F2] px-3 py-1.5 text-[10px] font-black text-[#B83B49]">
+                        <span className="size-1.5 rounded-full bg-[#E05A67]" /> {boardCanceledBookingCount} annullati
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1" role="group" aria-label="Scorri la board">
+                    <button
+                      type="button"
+                      onClick={() => scrollAppointmentBoard("left")}
+                      className="grid size-10 place-items-center rounded-lg border border-[#DFE2E7] bg-white text-[#42526E] transition hover:border-[#9E3262] hover:text-[#9E3262]"
+                      aria-label="Scorri a sinistra"
+                    >
+                      <ChevronLeft className="size-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollAppointmentBoard("right")}
+                      className="grid size-10 place-items-center rounded-lg border border-[#DFE2E7] bg-white text-[#42526E] transition hover:border-[#9E3262] hover:text-[#9E3262]"
+                      aria-label="Scorri a destra"
+                    >
+                      <ChevronRight className="size-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {visibleAppointmentBoardColumns.length ? (
+                <div
+                  ref={boardScrollContainerRef}
+                  className="overflow-x-auto scroll-smooth bg-[#FBFAFB] p-3 sm:p-5"
+                  tabIndex={0}
+                  aria-label="Colonne degli appuntamenti"
+                >
+                  <div className="flex min-h-[520px] min-w-max items-stretch gap-4">
+                    {visibleAppointmentBoardColumns.map((column) => (
+                      <article
+                        key={column.id}
+                        data-board-worker-id={column.id}
+                        onDragOver={(event) => {
+                          if (draggedBoardWorkerId && column.id !== "unassigned" && draggedBoardWorkerId !== column.id) {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            const bounds = event.currentTarget.getBoundingClientRect();
+                            setBoardWorkerDropTarget({
+                              id: column.id,
+                              position: event.clientX >= bounds.left + bounds.width / 2 ? "after" : "before",
+                            });
+                            return;
+                          }
+                          if (column.id === "unassigned" || !draggedBoardBookingId) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setBoardDropTargetId(column.id);
+                        }}
+                        onDragLeave={(event) => {
+                          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                          setBoardDropTargetId((current) => current === column.id ? null : current);
+                          setBoardWorkerDropTarget((current) => current?.id === column.id ? null : current);
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          if (draggedBoardWorkerId && boardWorkerDropTarget?.id === column.id) {
+                            reorderBoardWorker(draggedBoardWorkerId, column.id, boardWorkerDropTarget.position);
+                            setDraggedBoardWorkerId(null);
+                            setBoardWorkerDropTarget(null);
+                            return;
+                          }
+                          const bookingId = event.dataTransfer.getData("text/plain") || draggedBoardBookingId || "";
+                          setBoardDropTargetId(null);
+                          setDraggedBoardBookingId(null);
+                          if (column.id !== "unassigned") void moveBoardBooking(bookingId, column.id);
+                        }}
+                        className={`flex w-[286px] shrink-0 flex-col rounded-[20px] border p-3 transition ${
+                          boardDropTargetId === column.id
+                            ? "border-[#7CB5F5] bg-[#EDF6FF] ring-2 ring-[#4C9AFF] ring-offset-2"
+                            : boardWorkerDropTarget?.id === column.id
+                              ? boardWorkerDropTarget.position === "before"
+                                ? "border-[#DDE1E7] bg-[#F5F6F8] shadow-[-5px_0_0_#4C9AFF]"
+                                : "border-[#DDE1E7] bg-[#F5F6F8] shadow-[5px_0_0_#4C9AFF]"
+                              : "border-[#E2E4E8] bg-[#F5F6F8] shadow-[0_6px_18px_rgba(35,43,54,0.05)]"
+                        }`}
+                      >
+                        <header
+                          draggable={column.id !== "unassigned"}
+                          onDragStart={(event) => {
+                            if (column.id === "unassigned") return;
+                            event.stopPropagation();
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("application/x-paradise-worker", column.id);
+                            setDraggedBoardWorkerId(column.id);
+                            setDraggedBoardBookingId(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedBoardWorkerId(null);
+                            setBoardWorkerDropTarget(null);
+                          }}
+                          className={`mb-3 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          title={column.id !== "unassigned" ? "Tieni premuto e trascina per riordinare" : undefined}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={column.name} photoUrl={column.photoUrl} size="size-10" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-[13px] font-black text-[#25202A]">{column.name}</p>
+                              </div>
+                              <p className={`mt-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
+                                <span className={`size-1.5 rounded-full ${column.status === "BREAK" ? "bg-amber-500" : column.status === "IN" ? "bg-emerald-500" : "bg-slate-400"}`} />
+                                {column.id === "unassigned"
+                                  ? "Da assegnare"
+                                  : column.status === "BREAK"
+                                    ? "In pausa"
+                                    : column.status === "IN"
+                                      ? "Attivo"
+                                      : column.clockedInAt
+                                        ? "Turno terminato"
+                                        : "Non timbrato"}
+                              </p>
+                              {column.id !== "unassigned" && (column.status === "BREAK" || column.status === "IN") && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
+                                <p className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B778C]">
+                                  Tempo trascorso <LivePcWorkerTimer startedAt={(column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) as string} />
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center gap-2 border-t border-[#F0EBEE] pt-2 text-[9px] font-black text-[#756A71]">
+                            <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
+                            <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.bookings.filter((booking) => !booking.isCanceled).length} attivi</span>
+                            {column.bookings.some((booking) => booking.isCanceled) ? (
+                              <span className="rounded-lg bg-[#FFF0F1] px-2 py-1 text-[#B83B49]">{column.bookings.filter((booking) => booking.isCanceled).length} ann.</span>
+                            ) : null}
+                          </div>
+                        </header>
+
+                        <div className="flex-1 space-y-2.5">
+                          {column.bookings.length ? column.bookings.map((booking, bookingIndex) => {
+                            const status = getBookingStatus(booking);
+                            const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
+                            const otherNotePreviews = getBookingNotePreviews(
+                              booking,
+                              paradiseNote,
+                              status === "COMPLETATO",
+                              shopifyNotesByBooking[booking.id],
+                            )
+                              .filter((note) => note.key !== "office");
+                            return (
+                              <div key={booking.id} className="space-y-2.5">
+                              {booking.isCanceled && (bookingIndex === 0 || !column.bookings[bookingIndex - 1]?.isCanceled) ? (
+                                <div className="flex items-center gap-2 px-1 pt-2" aria-label="Appuntamenti annullati">
+                                  <span className="h-px flex-1 bg-[#E9C7CC]" />
+                                  <span className="text-[8px] font-black uppercase tracking-[0.16em] text-[#B85561]">Annullati</span>
+                                  <span className="h-px flex-1 bg-[#E9C7CC]" />
+                                </div>
+                              ) : null}
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onPointerDown={(event) => startBoardTouchGesture(event, booking, status)}
+                                onPointerMove={moveBoardTouchGesture}
+                                onPointerUp={(event) => finishBoardTouchGesture(event)}
+                                onPointerCancel={(event) => finishBoardTouchGesture(event, true)}
+                                onPointerLeave={(event) => {
+                                  if (
+                                    (event.pointerType === "touch" || event.pointerType === "pen") &&
+                                    !touchDraggedBoardBookingIdRef.current
+                                  ) {
+                                    cancelBoardLongPress();
+                                  }
+                                }}
+                                onClick={(event) => {
+                                  if (boardLongPressTriggeredRef.current === booking.id) {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    boardLongPressTriggeredRef.current = null;
+                                    return;
+                                  }
+                                  void openClientControlForBooking(booking);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    void openClientControlForBooking(booking);
+                                  }
+                                }}
+                                onContextMenu={(event) => {
+                                  if (booking.isCanceled) return;
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  const isTouchPress =
+                                    boardLongPressStartRef.current?.bookingId === booking.id ||
+                                    boardLongPressTriggeredRef.current === booking.id;
+                                  if (isTouchPress) {
+                                    cancelBoardLongPress();
+                                    boardLongPressTriggeredRef.current = booking.id;
+                                  }
+                                  openBoardStatusMenu(
+                                    booking,
+                                    status,
+                                    event.clientX,
+                                    event.clientY,
+                                    isTouchPress,
+                                  );
+                                }}
+                                className={`w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)] ${
+                                  booking.isCanceled || status === "NON_PRESENTATO"
+                                    ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
+                                    : status === "COMPLETATO"
+                                    ? "border-[#B9DFC5] border-l-[#45A96A] bg-[#F1FAF4]"
+                                    : status === "IN_ATTESA"
+                                      ? "border-[#EBD58B] border-l-[#D6A52D] bg-[#FFF9E5]"
+                                    : "border-[#E1E3E7] border-l-[#D45B91] bg-white"
+                                } ${
+                                  draggedBoardBookingId === booking.id || touchDraggedBoardBookingId === booking.id
+                                    ? "scale-[0.98] opacity-45 ring-2 ring-[#4C9AFF]"
+                                    : ""
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#7B6872]">{formatDate(booking.startDate)}</p>
+                                    <p className="mt-1 text-sm font-black tabular-nums text-[#241D21]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
+                                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(booking.startDate, booking.endDate)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`rounded-full border px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
+                                      {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      draggable={savingTeamId !== booking.id}
+                                      onDragStart={(event) => {
+                                        event.stopPropagation();
+                                        cancelBoardLongPress();
+                                        event.dataTransfer.effectAllowed = "move";
+                                        event.dataTransfer.setData("text/plain", booking.id);
+                                        setDraggedBoardBookingId(booking.id);
+                                      }}
+                                      onDragEnd={(event) => {
+                                        event.stopPropagation();
+                                        setDraggedBoardBookingId(null);
+                                        setBoardDropTargetId(null);
+                                      }}
+                                      onPointerDown={(event) => startBoardHandleDrag(event, booking.id)}
+                                      onPointerMove={(event) => {
+                                        event.stopPropagation();
+                                        if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                          moveBoardTouchGesture(event);
+                                        }
+                                      }}
+                                      onPointerUp={(event) => {
+                                        event.stopPropagation();
+                                        if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                          finishBoardTouchGesture(event);
+                                        }
+                                      }}
+                                      onPointerCancel={(event) => {
+                                        event.stopPropagation();
+                                        if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                          finishBoardTouchGesture(event, true);
+                                        }
+                                      }}
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                      }}
+                                      className="grid size-10 shrink-0 touch-none cursor-grab place-items-center rounded-xl border border-[#DDD6DA] bg-white text-[#71666D] shadow-sm transition hover:border-[#B35680] hover:text-[#9E3262] active:cursor-grabbing active:scale-95"
+                                      aria-label={`Sposta appuntamento di ${booking.customerName}`}
+                                      title="Trascina per spostare"
+                                    >
+                                      <GripVertical className="size-5" strokeWidth={2.5} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="mt-3 truncate text-sm font-black text-[#241D21]">{booking.customerName}</p>
+                                <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#6F6269]">{booking.serviceTitle}</p>
+                                {paradiseNote || canManageParadiseNotes ? (
+                                  <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
+                                    {paradiseNote ? (
+                                      <div className="relative overflow-hidden rounded-lg bg-[#FFF7E6] transition hover:bg-[#FFF0C2]">
+                                        <button
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            void openClientControlForBooking(booking, undefined, true);
+                                          }}
+                                          className={`w-full p-2 text-left ${canManageParadiseNotes ? "pr-10" : ""}`}
+                                          aria-label={`Apri i dettagli del servizio di ${booking.customerName}`}
+                                        >
+                                          <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
+                                          <span className="inline-flex items-center gap-1">
+                                            {status === "COMPLETATO" ? <Check className="size-3" /> : <MessageSquare className="size-3" />}
+                                            {status === "COMPLETATO" ? "Nota completata" : "Nota ufficio"}
+                                          </span>
+                                            <span>Apri</span>
+                                          </span>
+                                          <span
+                                            className="mt-1 block max-h-[2.5em] overflow-hidden text-[9px] font-semibold leading-[1.25em] text-[#59451C]"
+                                            style={{
+                                              display: "-webkit-box",
+                                              WebkitBoxOrient: "vertical",
+                                              WebkitLineClamp: 2,
+                                            }}
+                                          >
+                                            {paradiseNote}
+                                          </span>
+                                        </button>
+                                        {canManageParadiseNotes ? (
+                                          <button
+                                            type="button"
+                                            onClick={(event) => {
+                                              event.preventDefault();
+                                              event.stopPropagation();
+                                              openQuickNote(booking);
+                                            }}
+                                            className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-lg bg-white text-[#8A5A00] shadow-sm transition hover:bg-[#FFE9AE] active:scale-95"
+                                            aria-label={`Modifica nota ufficio di ${booking.customerName}`}
+                                          >
+                                            <Pencil className="size-3.5" />
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        openQuickNote(booking);
+                                      }}
+                                      className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
+                                    >
+                                      <MessageSquare className="size-3" /> Aggiungi nota
+                                    </button>
+                                    )}
+                                  </div>
+                                ) : null}
+                                <AppointmentNotePreviews notes={otherNotePreviews} compact />
+                              </div>
+                              </div>
+                            );
+                          }) : (
+                            <div className="grid min-h-32 place-items-center rounded-[5px] border border-dashed border-[#C1C7D0] bg-white/40 px-4 text-center">
+                              <div>
+                                <CalendarDays className="mx-auto size-5 text-black/20" />
+                                <p className="mt-2 text-[10px] font-black uppercase tracking-wider text-black/35">Nessun appuntamento</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : boardStaffLoading ? (
+                <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
+                  <div>
+                    <Loader2 className="mx-auto size-7 animate-spin text-[#A93469]" />
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale del Salone Corso...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
+                  <div>
+                    <UsersRound className="mx-auto size-7 text-[#CDA7B9]" />
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente disponibile al Salone Corso</p>
+                    <p className="mt-1 text-xs font-semibold text-black/40">{boardStaffError || "Controlla che il personale sia attivo e assegnato al salone."}</p>
+                  </div>
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {!normalizedSearch && layoutMode === "table" ? (
+          <section className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]">
+            <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#E6D9DF] bg-[#F8F2F5] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#765866] xl:grid">
               <span>Appuntamento</span>
               <span>Cliente</span>
               <span>Servizio</span>
@@ -4759,7 +7411,7 @@ export function AppointmentsBrowser({
 
             <div className="divide-y divide-[#F0E4EA]">
               {tableBookings.length ? (
-                tableBookings.map((booking, index) => {
+                tableBookings.map((booking) => {
                   const status = getBookingStatus(booking);
                   const contacts = getCustomerContactLines(booking);
                   const isSelected = selectedBooking?.id === booking.id;
@@ -4770,83 +7422,63 @@ export function AppointmentsBrowser({
                       key={booking.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => {
-                        if (salonWorkflowMode) {
-                          void openClientControlForBooking(booking);
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement;
+                        if (
+                          target.closest(
+                            "button, select, option, input, textarea, a, [role='menu'], [role='listbox']",
+                          )
+                        ) {
                           return;
                         }
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                       }}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
-                        if (salonWorkflowMode) {
-                          void openClientControlForBooking(booking);
-                          return;
-                        }
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                       }}
                       className={[
-                        "group grid w-full cursor-pointer gap-5 px-5 py-5 text-left transition duration-200 xl:grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] xl:items-center",
+                        "group grid w-full cursor-pointer grid-cols-2 gap-x-3 gap-y-2.5 px-3 py-3 text-left transition duration-200 sm:px-4 sm:py-4 xl:grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] xl:items-center xl:gap-5 xl:px-5 xl:py-5",
                         isSelected
                           ? "bg-[linear-gradient(90deg,#FFF0F7,#FBF8FF)] shadow-[inset_4px_0_0_#D93B8F]"
-                          : "bg-white/82 hover:bg-[#FFFAFC] hover:shadow-[inset_4px_0_0_#F2B6D1]",
+                          : "bg-white hover:bg-[#FCF7F9] hover:shadow-[inset_4px_0_0_#E9A9C7]",
                       ].join(" ")}
                     >
-                      <div className="flex gap-3">
-                        <span className="grid size-12 shrink-0 place-items-center rounded-[17px] border border-white bg-[linear-gradient(145deg,#FFE1EF,#F1E9FF)] text-[#A93469] shadow-sm">
-                          <CalendarDays className="size-5" />
+                      <div className="flex min-w-0 gap-2 xl:gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-[12px] border border-white bg-[linear-gradient(145deg,#FFE1EF,#F1E9FF)] text-[#A93469] shadow-sm xl:size-12 xl:rounded-[17px]">
+                          <CalendarDays className="size-4 xl:size-5" />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-sm font-black text-[#211A1E]">
+                          <p className="truncate text-[11px] font-black text-[#211A1E] xl:text-sm">
                             {formatDate(booking.startDate)}
                           </p>
-                          <p className="mt-1 text-sm font-black tabular-nums text-[#211A1E]">
+                          <p className="mt-0.5 text-xs font-black tabular-nums text-[#211A1E] xl:mt-1 xl:text-sm">
                             {formatTime(booking.startDate)} -{" "}
                             {formatTime(booking.endDate)}
                           </p>
-                          <p className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase text-[#7A5B4B]">
+                          <p className="mt-0.5 flex items-center gap-1 truncate text-[9px] font-semibold uppercase text-[#7A5B4B] xl:mt-1 xl:text-xs">
                             <MapPin className="size-3.5" />
                             {getSalonLabel(booking.inferredSalon)}
                           </p>
-                          {salonWorkflowMode === "queue" ||
-                          salonWorkflowMode === "station" ? (
-                            <p
-                              className={[
-                                "mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em]",
-                                salonWorkflowMode === "queue"
-                                  ? "bg-amber-50 text-amber-700"
-                                  : "bg-emerald-50 text-emerald-700",
-                              ].join(" ")}
-                            >
-                              <Clock3 className="size-3.5" />
-                              {salonWorkflowMode === "queue"
-                                ? "In attesa da"
-                                : "In lavorazione da"}{" "}
-                              {formatWorkflowElapsed(
-                                booking.statusUpdatedAt || booking.startDate,
-                                workflowNow,
-                              )}
-                            </p>
-                          ) : null}
                         </div>
                       </div>
 
-                      <div className="min-w-0 space-y-1">
-                        <p className="truncate text-sm font-semibold text-[#1F1F1F]">
+                      <div className="min-w-0 space-y-0.5 xl:space-y-1">
+                        <p className="truncate text-xs font-black text-[#1F1F1F] xl:text-sm xl:font-semibold">
                           {booking.customerName}
                         </p>
-                        <p className="flex items-center gap-1 truncate text-xs font-medium text-[#6F625C]">
+                        <p className="flex items-center gap-1 truncate text-[10px] font-medium text-[#6F625C] xl:text-xs">
                           <Phone className="size-3.5 text-[#A56A42]" />
                           {contacts.phone || "Nessun telefono"}
                         </p>
-                        <p className="flex items-center gap-1 truncate text-xs font-medium text-[#6F625C]">
+                        <p className="flex items-center gap-1 truncate text-[10px] font-medium text-[#6F625C] xl:text-xs">
                           <Mail className="size-3.5 text-[#A56A42]" />
                           {contacts.email || "Email non disponibile"}
                         </p>
                       </div>
 
-                      <div className="min-w-0">
+                      <div className="col-span-2 min-w-0 rounded-xl bg-white/70 p-2 xl:col-auto xl:bg-transparent xl:p-0">
                         <div className="flex items-center gap-3">
                           <ServiceImage
                             title={booking.serviceTitle}
@@ -4868,53 +7500,73 @@ export function AppointmentsBrowser({
                             </span>
                           </div>
                         </div>
+                        <AppointmentNotePreviews
+                          notes={getBookingNotePreviews(
+                            booking,
+                            paradiseNotes[booking.id] || booking.paradiseNote,
+                            status === "COMPLETATO",
+                            shopifyNotesByBooking[booking.id],
+                          )}
+                          compact
+                        />
                       </div>
 
-                      <div className="min-w-0 rounded-[18px] border border-[#F3E8ED] bg-[#FFFBFD] p-3 xl:border-transparent xl:bg-transparent xl:p-0">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openClientControlForBooking(booking);
+                        }}
+                        className="group/staff col-span-2 min-w-0 rounded-[14px] border border-[#F3E8ED] bg-[#FFFBFD] p-2 text-left transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] xl:col-auto xl:rounded-[18px] xl:border-transparent xl:bg-transparent xl:p-2"
+                        title="Cambia collaboratrice"
+                      >
                         <div className="flex min-w-0 items-center gap-2">
                           {assignedTeam.slice(0, 2).map((mate) => (
                             <Avatar
                               key={mate.id}
                               name={mate.name}
                               photoUrl={mate.photoUrl}
-                              size="size-8"
+                              size="size-7 xl:size-8"
                             />
                           ))}
                           {!assignedTeam.length ? (
                             <UsersRound className="size-4 shrink-0 text-[#C95B75]" />
                           ) : null}
-                          <span className="truncate text-sm font-semibold text-[#1F1F1F]">
+                          <span className="truncate text-xs font-semibold text-[#1F1F1F] xl:text-sm">
                             {assignedTeam.map((mate) => mate.name).join(", ") ||
                               "Non assegnato"}
                           </span>
+                          <span className="ml-auto shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#B83D7F] opacity-0 transition group-hover/staff:opacity-100">
+                            Cambia
+                          </span>
                         </div>
-                        <p className="mt-1 truncate text-xs font-medium text-[#7A5B4B]">
+                        <p className="mt-0.5 truncate text-[10px] font-medium text-[#7A5B4B] xl:mt-1 xl:text-xs">
                           {getSalonLabel(booking.inferredSalon)}
                         </p>
-                      </div>
+                      </button>
 
-                      <div>
-                        <p className="text-sm font-semibold text-[#1F1F1F]">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-[#1F1F1F] xl:text-sm xl:font-semibold">
                           {formatMoney(
                             booking.priceAmount,
                             booking.priceCurrency,
                           )}
                         </p>
-                        <p className="mt-1 text-xs font-medium text-[#6F625C]">
+                        <p className="mt-0.5 text-[10px] font-medium text-[#6F625C] xl:mt-1 xl:text-xs">
                           Qta: {getQuantityLabel(booking)}
                         </p>
                         {getPaymentLabel(booking) ? (
-                          <span className="mt-2 inline-flex rounded-full border border-[#F1A7C3] bg-[#FFF1F6] px-2.5 py-1 text-[10px] font-black text-[#B9476D]">
+                          <span className="mt-1 inline-flex rounded-full border border-[#F1A7C3] bg-[#FFF1F6] px-2 py-0.5 text-[9px] font-black text-[#B9476D] xl:mt-2 xl:px-2.5 xl:py-1 xl:text-[10px]">
                             {getPaymentLabel(booking)}
                           </span>
                         ) : null}
                       </div>
 
                       <div
-                        className="space-y-1.5"
+                        className="min-w-0 space-y-1 xl:space-y-1.5"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        <StatusControl booking={booking} compact />
+                        {renderStatusControl(booking, true)}
                         {booking.isCanceled ? (
                           <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Annullato
@@ -4925,33 +7577,15 @@ export function AppointmentsBrowser({
 
                       <button
                         type="button"
-                        disabled={savingStatusId === booking.id}
-                        onClick={(event) => {
+                        onPointerDown={(event) => {
                           event.stopPropagation();
-                          if (salonWorkflowMode === "reception") {
-                            void moveBookingToWorkflow(booking, "IN_ATTESA");
-                            return;
-                          }
-                          if (salonWorkflowMode === "queue") {
-                            void moveBookingToWorkflow(booking, "INIZIATO");
-                            return;
-                          }
                           void openClientControlForBooking(booking);
                         }}
-                        className="grid size-11 place-items-center rounded-[15px] border border-[#EAD8E1] bg-white text-[#A14770] shadow-sm transition group-hover:border-[#E88AC5] group-hover:bg-[#FFF1F8] hover:scale-105"
-                        title={
-                          salonWorkflowMode === "reception"
-                            ? "Invia in sala d’attesa"
-                            : salonWorkflowMode === "queue"
-                              ? "Inizia servizio"
-                              : "Compila controllo cliente"
-                        }
+                        onClick={(event) => event.stopPropagation()}
+                        className="hidden size-11 place-items-center rounded-[15px] border border-[#EAD8E1] bg-white text-[#A14770] shadow-sm transition group-hover:border-[#E88AC5] group-hover:bg-[#FFF1F8] hover:scale-105 xl:grid"
+                        title="Compila controllo cliente"
                       >
-                        {savingStatusId === booking.id ? (
-                          <Loader2 className="size-5 animate-spin" />
-                        ) : (
-                          <ChevronRight className="size-5" />
-                        )}
+                        <ChevronRight className="size-5" />
                       </button>
                     </div>
                   );
@@ -4984,9 +7618,150 @@ export function AppointmentsBrowser({
               </div>
             ) : null}
           </section>
+          ) : null}
         </main>
 
-        {selectedBooking && !salonWorkflowMode ? (
+        {boardStatusMenu ? (
+          <div
+            className="fixed inset-0 z-[190]"
+            onClick={() => setBoardStatusMenu(null)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setBoardStatusMenu(null);
+            }}
+          >
+            <div
+              className={boardStatusMenu.touch
+                ? "fixed inset-x-3 bottom-3 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[28px] border border-[#E3D9DE] bg-white p-3 shadow-[0_20px_55px_rgba(52,35,43,0.28)] sm:inset-x-auto sm:left-1/2 sm:w-[420px] sm:-translate-x-1/2"
+                : "fixed w-56 overflow-hidden rounded-2xl border border-[#E3D9DE] bg-white p-2 shadow-[0_20px_55px_rgba(52,35,43,0.24)]"
+              }
+              style={boardStatusMenu.touch ? undefined : {
+                left: Math.max(8, boardStatusMenu.x),
+                top: Math.max(8, boardStatusMenu.y),
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-3 pb-2 pt-1">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Cambia stato</p>
+                  {boardStatusMenu.touch ? <p className="mt-1 text-xs font-bold text-black/60">Seleziona il nuovo stato dell’appuntamento</p> : null}
+                </div>
+                {boardStatusMenu.touch ? (
+                  <button
+                    type="button"
+                    onClick={() => setBoardStatusMenu(null)}
+                    className="grid size-11 place-items-center rounded-full bg-black/5 text-black/55 active:scale-95"
+                    aria-label="Chiudi cambio stato"
+                  >
+                    <X className="size-5" />
+                  </button>
+                ) : null}
+              </div>
+              <div className="space-y-1">
+                {appointmentStatusOptions.map((option) => {
+                  const booking = initialBookings.find(
+                    (item) => item.id === boardStatusMenu.bookingId,
+                  );
+                  const selected = booking
+                    ? getBookingStatus(booking) === option.value
+                    : false;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        handleStatusChange(boardStatusMenu.bookingId, option.value);
+                        setBoardStatusMenu(null);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 text-left font-black transition hover:brightness-[0.98] active:scale-[0.99] ${boardStatusMenu.touch ? "min-h-14 text-sm" : "py-2 text-xs"} ${appointmentStatusClasses[option.value]}`}
+                    >
+                      <span>{option.label}</span>
+                      {selected ? <Check className="size-4" strokeWidth={3} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {quickNoteBooking ? (
+          <div className="fixed inset-0 z-[210] grid place-items-center bg-black/45 p-4 backdrop-blur-sm">
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              onClick={() => {
+                if (submittingComment) return;
+                setQuickNoteBookingId(null);
+                setQuickNoteText("");
+              }}
+              aria-label="Chiudi nota"
+            />
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveQuickNote();
+              }}
+              className="relative w-full max-w-lg overflow-hidden rounded-[26px] border border-[#E8D8CF] bg-white shadow-[0_28px_90px_rgba(35,25,29,0.28)]"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-[#FFF9EB] px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9A6700]">Nota ufficio</p>
+                  <h3 className="mt-1 truncate text-xl font-black text-[#172B4D]">{quickNoteBooking.customerName}</h3>
+                  <p className="mt-1 text-xs font-semibold text-[#6B778C]">{formatTime(quickNoteBooking.startDate)} – {formatTime(quickNoteBooking.endDate)}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={submittingComment}
+                  onClick={() => {
+                    setQuickNoteBookingId(null);
+                    setQuickNoteText("");
+                  }}
+                  className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-black/50 shadow-sm transition hover:text-black disabled:opacity-50"
+                  aria-label="Chiudi"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="p-5">
+                <label className="text-[10px] font-black uppercase tracking-[0.14em] text-black/45" htmlFor="quick-appointment-note">Testo della nota</label>
+                <textarea
+                  id="quick-appointment-note"
+                  autoFocus
+                  rows={5}
+                  maxLength={1000}
+                  value={quickNoteText}
+                  onChange={(event) => setQuickNoteText(event.target.value)}
+                  placeholder="Esempio: 100 g, 2 fasce, preparare colore..."
+                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-[#FCFBFC] p-4 text-sm font-semibold leading-6 text-[#172B4D] outline-none transition focus:border-[#D6A535] focus:ring-4 focus:ring-[#F4C95D]/15"
+                />
+                <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={submittingComment}
+                    onClick={() => {
+                      setQuickNoteBookingId(null);
+                      setQuickNoteText("");
+                    }}
+                    className="min-h-11 rounded-xl border border-black/10 px-5 text-xs font-black text-black/55 transition hover:bg-black/5 disabled:opacity-50"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingComment || !quickNoteText.trim()}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#172B4D] px-5 text-xs font-black text-white transition hover:bg-[#0E1E35] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {submittingComment ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Salva nota
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        ) : null}
+
+        {selectedBooking ? (
           <div className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
             <div
               className="fixed inset-0"
@@ -5145,7 +7920,7 @@ export function AppointmentsBrowser({
                     Stato
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <StatusControl booking={selectedBooking} />
+                    {renderStatusControl(selectedBooking!)}
                     <WhatsAppSheetNote booking={selectedBooking} />
                   </div>
                   {selectedBooking.statusUpdatedBy ? (
@@ -5230,6 +8005,9 @@ export function AppointmentsBrowser({
       </div>
     </div>
   );
+
+  const selectedBookingForView = selectedBooking as AppointmentRecord;
+  const clientControlMessageForView = clientControlMessage as NonNullable<typeof clientControlMessage>;
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -5417,7 +8195,7 @@ export function AppointmentsBrowser({
                           <button
                             key={booking.id}
                             type="button"
-                            onClick={() => setSelectedBookingId(booking.id)}
+                            onClick={() => void openClientControlForBooking(booking)}
                             className="w-full rounded-[16px] border border-[#F0DCE3] bg-[#FFF9FB] px-2.5 py-2 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF1F6]"
                             title={`${booking.customerName}${booking.bookingStr ? ` - Ordine ${formatOrderCode(booking.bookingStr)}` : ""}`}
                           >
@@ -5430,6 +8208,15 @@ export function AppointmentsBrowser({
                                 Ordine {formatOrderCode(booking.bookingStr)}
                               </p>
                             ) : null}
+                            <AppointmentNotePreviews
+                              notes={getBookingNotePreviews(
+                                booking,
+                                paradiseNotes[booking.id] || booking.paradiseNote,
+                                getBookingStatus(booking) === "COMPLETATO",
+                                shopifyNotesByBooking[booking.id],
+                              )}
+                              compact
+                            />
                           </button>
                         ))}
                         {items.length > 4 ? (
@@ -5477,13 +8264,22 @@ export function AppointmentsBrowser({
                         <button
                           key={booking.id}
                           type="button"
-                          onClick={() => setSelectedBookingId(booking.id)}
+                          onClick={() => void openClientControlForBooking(booking)}
                           className="w-full rounded-[16px] border border-[#F0DCE3] bg-white px-3 py-2 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF8FB]"
                         >
                           <p className="truncate text-xs font-black text-[#171717]">
                             {formatTime(booking.startDate)} ·{" "}
                             {booking.customerName}
                           </p>
+                          <AppointmentNotePreviews
+                            notes={getBookingNotePreviews(
+                              booking,
+                              paradiseNotes[booking.id] || booking.paradiseNote,
+                              getBookingStatus(booking) === "COMPLETATO",
+                              shopifyNotesByBooking[booking.id],
+                            )}
+                            compact
+                          />
                         </button>
                       ))
                     ) : (
@@ -5515,18 +8311,23 @@ export function AppointmentsBrowser({
                 : recentBookings.slice(0, appointmentsPageSize)
               ).map((booking) => {
                 const customerLines = getCustomerContactLines(booking);
-                const notePreview = getBookingNotePreview(booking);
                 const status = getBookingStatus(booking);
+                const notePreviews = getBookingNotePreviews(
+                  booking,
+                  paradiseNotes[booking.id] || booking.paradiseNote,
+                  status === "COMPLETATO",
+                  shopifyNotesByBooking[booking.id],
+                );
 
                 return (
                   <div
                     key={booking.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedBookingId(booking.id)}
+                    onClick={() => void openClientControlForBooking(booking)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ")
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                     }}
                     className="grid w-full gap-4 rounded-[22px] border border-black/5 bg-[#FFFDFD] px-4 py-4 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF8FB] lg:grid-cols-[2fr_0.75fr_1.35fr_1.15fr_0.95fr] lg:items-center"
                   >
@@ -5560,12 +8361,7 @@ export function AppointmentsBrowser({
                             {booking.bookingType || "Regular booking"}
                           </span>
                         </div>
-                        {notePreview ? (
-                          <p className="mt-2 line-clamp-2 rounded-xl bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#9C4F62]">
-                            <MessageSquare className="mr-1 inline size-3.5 align-[-2px]" />
-                            {notePreview}
-                          </p>
-                        ) : null}
+                        <AppointmentNotePreviews notes={notePreviews} />
                       </div>
                     </div>
 
@@ -5623,7 +8419,7 @@ export function AppointmentsBrowser({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                      <StatusControl booking={booking} compact />
+                      {renderStatusControl(booking, true)}
                       {!booking.isCanceled ? (
                         <span
                           className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}
@@ -5680,16 +8476,21 @@ export function AppointmentsBrowser({
               {visibleRecentBookings.map((booking) => {
                 const status = getBookingStatus(booking);
                 const customerLines = getCustomerContactLines(booking);
-                const notePreview = getBookingNotePreview(booking);
+                const notePreviews = getBookingNotePreviews(
+                  booking,
+                  paradiseNotes[booking.id] || booking.paradiseNote,
+                  status === "COMPLETATO",
+                  shopifyNotesByBooking[booking.id],
+                );
                 return (
                   <div
                     key={booking.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedBookingId(booking.id)}
+                    onClick={() => void openClientControlForBooking(booking)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ")
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                     }}
                     className="grid w-full gap-4 px-5 py-5 text-left transition hover:bg-[#FFF8FB] lg:grid-cols-[2.1fr_0.8fr_1.35fr_1.25fr_1fr_40px] lg:items-center"
                   >
@@ -5719,12 +8520,7 @@ export function AppointmentsBrowser({
                             </span>
                           ) : null}
                         </div>
-                        {notePreview ? (
-                          <p className="mt-2 line-clamp-2 rounded-xl bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#9C4F62]">
-                            <MessageSquare className="mr-1 inline size-3.5 align-[-2px]" />
-                            {notePreview}
-                          </p>
-                        ) : null}
+                        <AppointmentNotePreviews notes={notePreviews} />
                       </div>
                     </div>
 
@@ -5798,7 +8594,7 @@ export function AppointmentsBrowser({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <StatusControl booking={booking} compact />
+                      {renderStatusControl(booking, true)}
                       {!booking.isCanceled ? (
                         <span
                           className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}
@@ -5812,10 +8608,10 @@ export function AppointmentsBrowser({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                       }}
                       className="grid size-10 place-items-center rounded-full border border-black/5 bg-white text-black/45 transition hover:border-[#F1A7C3] hover:text-[#C66170]"
-                      aria-label="Apri dettaglio prenotazione"
+                      aria-label="Apri controllo cliente"
                     >
                       <MoreVertical className="size-5" />
                     </button>
@@ -5876,7 +8672,7 @@ export function AppointmentsBrowser({
               </div>
               <button
                 type="button"
-                onClick={() => setClientControlOpen(false)}
+                onClick={closeClientControl}
                 className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:bg-black/[0.02] active:scale-95"
               >
                 <X className="size-5" />
@@ -5997,14 +8793,11 @@ export function AppointmentsBrowser({
                     <input
                       inputMode="decimal"
                       value={clientControlForm.depositPaid}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          depositPaid: event.target.value,
-                        }))
-                      }
-                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
-                      placeholder="0.00"
+                      readOnly
+                      aria-readonly="true"
+                      title="Importo acquisito automaticamente dall'ordine acconto"
+                      className="mt-1 h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black outline-none"
+                      placeholder="Importato dall'ordine acconto"
                     />
                   </label>
                   <label className="block">
@@ -6019,21 +8812,22 @@ export function AppointmentsBrowser({
                       placeholder="Importato dal 2° ordine"
                     />
                   </label>
-                  <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      IG tag
+                  <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF0F6] px-4 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#D96B94]/25">
+                    <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                    <span className="min-w-0 flex-1">
+                      <input
+                        aria-label="Instagram cliente"
+                        value={clientControlForm.instagramTag}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            instagramTag: event.target.value,
+                          }))
+                        }
+                        className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                        placeholder="@usercliente"
+                      />
                     </span>
-                    <input
-                      value={clientControlForm.instagramTag}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          instagramTag: event.target.value,
-                        }))
-                      }
-                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
-                      placeholder="@cliente"
-                    />
                   </label>
                   <label className="block md:col-span-2">
                     <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
@@ -6098,7 +8892,6 @@ export function AppointmentsBrowser({
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {[
-                    ["notes", "Note Shopify"],
                     ["beforeMedia", "Prima foto/video"],
                     ["afterMedia", "Dopo foto/video"],
                     ["products", "Prodotti"],
@@ -6124,11 +8917,11 @@ export function AppointmentsBrowser({
                   ))}
                 </div>
 
-                {clientControlMessage ? (
+                {clientControlMessageForView ? (
                   <p
-                    className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                    className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessageForView.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
                   >
-                    {clientControlMessage.text}
+                    {clientControlMessageForView.text}
                   </p>
                 ) : null}
 
@@ -6136,11 +8929,13 @@ export function AppointmentsBrowser({
                   type="button"
                   onClick={() => void submitClientControlForm()}
                   disabled={clientControlSubmitting || clientControlLoading}
-                  className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
+                  className={`mt-5 h-13 w-full rounded-2xl px-5 py-4 text-sm font-black text-white shadow-lg transition active:scale-[0.99] disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "bg-emerald-600 shadow-emerald-200" : "bg-[#E88AC5] shadow-pink-200"}`}
                 >
                   {clientControlSubmitting
                     ? "Salvataggio..."
-                    : "Salva appuntamento"}
+                    : clientControlLastSave === "confirmed"
+                      ? "Salvato ✓"
+                      : "Salva appuntamento"}
                 </button>
               </div>
             </div>
@@ -6224,7 +9019,7 @@ export function AppointmentsBrowser({
         </div>
       ) : null}
 
-      {selectedBooking ? (
+      {selectedBookingForView ? (
         <div className="fixed inset-0 z-[90] bg-black/45 p-4 backdrop-blur-sm">
           <div className="mx-auto flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-black/5 px-5 py-5">
@@ -6233,17 +9028,17 @@ export function AppointmentsBrowser({
                   Dettaglio appuntamento
                 </p>
                 <h3 className="mt-2 text-3xl font-black text-[#171717]">
-                  {selectedBooking.customerName}
+                  {selectedBookingForView.customerName}
                 </h3>
                 <p className="mt-2 text-sm text-black/55">
-                  {selectedBooking.serviceTitle}
+                  {selectedBookingForView.serviceTitle}
                 </p>
                 <div className="mt-3">
-                  <WhatsAppSheetNote booking={selectedBooking} always />
+                  <WhatsAppSheetNote booking={selectedBookingForView} always />
                 </div>
-                {selectedBooking.bookingStr ? (
+                {selectedBookingForView.bookingStr ? (
                   <p className="mt-3 inline-flex rounded-full bg-[#FFF1F5] px-3 py-1 text-xs font-black text-[#C66170]">
-                    Ordine Shopify {formatOrderCode(selectedBooking.bookingStr)}
+                    Ordine Shopify {formatOrderCode(selectedBookingForView.bookingStr)}
                   </p>
                 ) : null}
               </div>
@@ -6259,8 +9054,8 @@ export function AppointmentsBrowser({
             <div className="grid flex-1 gap-6 overflow-auto p-5 lg:grid-cols-[1.15fr_0.85fr] min-h-0">
               <div className="space-y-5">
                 <ServiceImage
-                  title={selectedBooking.serviceTitle}
-                  imageUrl={selectedBooking.serviceImageUrl}
+                  title={selectedBookingForView.serviceTitle}
+                  imageUrl={selectedBookingForView.serviceImageUrl}
                 />
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -6269,7 +9064,7 @@ export function AppointmentsBrowser({
                       Note Cowlendar
                     </p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#5D4A42]">
-                      {selectedBooking!.notesText?.trim() ||
+                      {selectedBookingForView!.notesText?.trim() ||
                         cowlendarOrderNote?.trim() ||
                         "Nessuna nota presente in questo appuntamento."}
                     </p>
@@ -6279,7 +9074,7 @@ export function AppointmentsBrowser({
                       Note Shopify
                     </p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#7C3E14]">
-                      {selectedBooking!.bookingStr
+                      {selectedBookingForView!.bookingStr
                         ? shopifyNote?.trim() ||
                           "Nessuna nota presente su Shopify."
                         : "Nessun ordine Shopify collegato."}
@@ -6293,10 +9088,10 @@ export function AppointmentsBrowser({
                       Data e ora
                     </p>
                     <p className="mt-2 text-lg font-black text-[#171717]">
-                      {formatDateTime(selectedBooking.startDate)}
+                      {formatDateTime(selectedBookingForView.startDate)}
                     </p>
                     <p className="mt-1 text-sm text-black/55">
-                      Fine: {formatDateTime(selectedBooking.endDate)}
+                      Fine: {formatDateTime(selectedBookingForView.endDate)}
                     </p>
                   </div>
                   <div className="rounded-[24px] border border-black/5 bg-[#FFFCFD] p-4">
@@ -6304,29 +9099,29 @@ export function AppointmentsBrowser({
                       Salone / stato
                     </p>
                     <p className="mt-2 text-lg font-black text-[#171717]">
-                      {getSalonLabel(selectedBooking.inferredSalon)}
+                      {getSalonLabel(selectedBookingForView.inferredSalon)}
                     </p>
                     <div className="mt-3">
-                      <StatusControl booking={selectedBooking} />
+                      {renderStatusControl(selectedBookingForView!)}
                     </div>
                     <div className="mt-3">
-                      <WhatsAppSheetNote booking={selectedBooking} />
+                      <WhatsAppSheetNote booking={selectedBookingForView} />
                     </div>
-                    {selectedBooking.statusUpdatedBy ? (
+                    {selectedBookingForView.statusUpdatedBy ? (
                       <p className="mt-2 text-xs font-bold text-black/40">
-                        Ultima modifica: {selectedBooking.statusUpdatedBy}
-                        {selectedBooking.statusUpdatedAt
-                          ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}`
+                        Ultima modifica: {selectedBookingForView.statusUpdatedBy}
+                        {selectedBookingForView.statusUpdatedAt
+                          ? ` · ${formatDateTime(selectedBookingForView.statusUpdatedAt)}`
                           : ""}
                       </p>
                     ) : null}
-                    {selectedBooking.sheetNote ? (
+                    {selectedBookingForView.sheetNote ? (
                       <div className="mt-3 rounded-2xl border border-black/5 bg-[#FFF6F7] p-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">
                           Nota conferma
                         </p>
                         <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#5D4A42]">
-                          {selectedBooking.sheetNote}
+                          {selectedBookingForView.sheetNote}
                         </p>
                       </div>
                     ) : null}
@@ -6343,7 +9138,7 @@ export function AppointmentsBrowser({
                         Nome
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.customerName}
+                        {selectedBookingForView.customerName}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6351,7 +9146,7 @@ export function AppointmentsBrowser({
                         Telefono
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.customerPhone || "-"}
+                        {selectedBookingForView.customerPhone || "-"}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 sm:col-span-2">
@@ -6359,7 +9154,7 @@ export function AppointmentsBrowser({
                         Email
                       </p>
                       <p className="mt-2 break-all text-sm font-bold text-[#171717]">
-                        {selectedBooking.customerEmail || "-"}
+                        {selectedBookingForView.customerEmail || "-"}
                       </p>
                     </div>
                   </div>
@@ -6375,7 +9170,7 @@ export function AppointmentsBrowser({
                         Servizio
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.serviceTitle}
+                        {selectedBookingForView.serviceTitle}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6384,8 +9179,8 @@ export function AppointmentsBrowser({
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
                         {formatMoney(
-                          selectedBooking.priceAmount,
-                          selectedBooking.priceCurrency,
+                          selectedBookingForView.priceAmount,
+                          selectedBookingForView.priceCurrency,
                         )}
                       </p>
                     </div>
@@ -6394,7 +9189,7 @@ export function AppointmentsBrowser({
                         Tipo booking
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.bookingType || "-"}
+                        {selectedBookingForView.bookingType || "-"}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6402,7 +9197,7 @@ export function AppointmentsBrowser({
                         Ordine Shopify
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {formatOrderCode(selectedBooking.bookingStr)}
+                        {formatOrderCode(selectedBookingForView.bookingStr)}
                       </p>
                     </div>
                   </div>
@@ -6530,7 +9325,7 @@ export function AppointmentsBrowser({
                   </div>
                 </div>
 
-                {selectedBooking.extraDetails?.length ? (
+                {selectedBookingForView.extraDetails?.length ? (
                   <div className="rounded-[24px] border border-black/5 bg-white p-4">
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
                       Dati modulo Cowlendar
@@ -6597,8 +9392,8 @@ export function AppointmentsBrowser({
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
-                    {getBookingTeam(selectedBooking!).length ? (
-                      getBookingTeam(selectedBooking!).map((mate) => (
+                    {getBookingTeam(selectedBookingForView!).length ? (
+                      getBookingTeam(selectedBookingForView!).map((mate) => (
                         <div
                           key={mate.id}
                           className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3"
@@ -6613,7 +9408,7 @@ export function AppointmentsBrowser({
                               {mate.name}
                             </p>
                             <p className="text-xs text-black/45">
-                              {getSalonLabel(selectedBooking!.inferredSalon)}
+                              {getSalonLabel(selectedBookingForView!.inferredSalon)}
                             </p>
                           </div>
                         </div>
@@ -6625,7 +9420,7 @@ export function AppointmentsBrowser({
                     )}
                   </div>
                   <div className="mt-4">
-                    <ClientControlStaffPicker booking={selectedBooking!} />
+                    <ClientControlStaffPicker booking={selectedBookingForView!} />
                   </div>
                 </div>
 
@@ -6649,7 +9444,7 @@ export function AppointmentsBrowser({
                         Creato
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {formatDateTime(selectedBooking.createdAt)}
+                        {formatDateTime(selectedBookingForView.createdAt)}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6657,7 +9452,7 @@ export function AppointmentsBrowser({
                         Aggiornato
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {formatDateTime(selectedBooking.updatedAt)}
+                        {formatDateTime(selectedBookingForView.updatedAt)}
                       </p>
                     </div>
                   </div>
@@ -6681,14 +9476,14 @@ export function AppointmentsBrowser({
                     <div className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3 text-sm text-[#171717]">
                       <Mail className="size-4 text-[#C66170]" />
                       <span className="break-all">
-                        {selectedBooking.customerEmail ||
+                        {selectedBookingForView.customerEmail ||
                           "Email non disponibile"}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3 text-sm text-[#171717]">
                       <Phone className="size-4 text-[#C66170]" />
                       <span>
-                        {selectedBooking.customerPhone ||
+                        {selectedBookingForView.customerPhone ||
                           "Telefono non disponibile"}
                       </span>
                     </div>
