@@ -145,7 +145,7 @@ export function MobileMenuDrawer({
       <div
         className={cn(
           "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(82vw,320px)] flex-col justify-between overflow-hidden border-r border-black/10 p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out will-change-transform",
-          isOpen ? "translate-x-0 shadow-[10px_0_28px_rgba(0,0,0,0.30)]" : "-translate-x-full shadow-none",
+          isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col">

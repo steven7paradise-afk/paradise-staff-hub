@@ -1392,7 +1392,7 @@ textarea {
   color: var(--light-sidebar-text, #1f1f1f);
   background: var(--user-sidebar-color, var(--light-sidebar, #ffffff));
   background-clip: padding-box;
-  box-shadow: 10px 0 28px rgba(20, 16, 18, 0.14);
+  box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
