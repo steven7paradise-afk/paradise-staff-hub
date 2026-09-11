@@ -108,9 +108,9 @@ export function MobileMenuDrawer({
 
   return (
     <div className="xl:hidden">
-      <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+10px)] z-40 flex min-h-14 items-center gap-2 rounded-[22px] border border-black/[0.08] bg-white px-3 py-2 dark:border-white/10 dark:bg-[#1d1d22]">
-        <Link href={homeHref} className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl" aria-label="Vai alla dashboard">
-          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-9 w-auto object-contain dark:invert" />
+      <div className="fixed inset-x-0 top-0 z-40 flex min-h-[calc(env(safe-area-inset-top)+68px)] items-end gap-2 rounded-b-[28px] border-b border-black/[0.08] bg-white px-4 pb-3 pt-[calc(env(safe-area-inset-top)+8px)] dark:border-white/10 dark:bg-[#1d1d22]">
+        <Link href={homeHref} className="flex h-11 w-28 shrink-0 items-center overflow-hidden" aria-label="Vai alla dashboard">
+          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-11 w-full object-contain object-left dark:invert" />
         </Link>
         <span className="min-w-0 flex-1" aria-hidden="true" />
         <Link href={profileHref} className="relative size-10 shrink-0 overflow-hidden rounded-full border border-black/10 bg-[#f8edf2] shadow-sm dark:border-white/15" aria-label={`Apri il profilo di ${userName}`}>
