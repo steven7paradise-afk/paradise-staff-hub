@@ -118,13 +118,16 @@ export function DesktopSidebarNav({
 
   return (
     <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
-      <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-black/[0.07] px-2 pb-5 pt-2">
-        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/[0.07] bg-black/[0.025]">
-          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
+      <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-black/[0.07] px-1 pb-5 pt-2">
+        <div className="sidebar-brand-logo flex h-12 w-24 shrink-0 items-center justify-start overflow-hidden">
+          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-12 w-full object-contain object-left dark:invert select-none pointer-events-none" />
+        </div>
+        <div className="sidebar-brand-icon hidden size-11 shrink-0 place-items-center overflow-hidden rounded-2xl">
+          <img src="/favicon.png" alt="" className="size-11 object-cover select-none pointer-events-none" aria-hidden="true" />
         </div>
         <div className="sidebar-label text-left min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)]">Paradise</p>
-          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">Staff Hub</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]">Staff Hub</p>
+          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">Area operativa</p>
         </div>
       </div>
 
