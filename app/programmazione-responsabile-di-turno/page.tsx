@@ -44,7 +44,7 @@ export default async function ControlloRisposteTurnoPage({ searchParams }: { sea
 
   return (
     <AppShell title="Controllo risposte turno" role={session.user.role as Role} edgeToEdgeMain transparentMain>
-      <main className="shift-responsible-programming-page min-h-screen bg-[color:var(--card)] pt-14 xl:pt-16">
+      <main className="shift-responsible-programming-page min-h-screen bg-transparent">
           <ShiftResponsibleResponseDashboard
             questions={normalizeShiftResponsibleQuestions(questionsSetting?.value)}
             answers={normalizeShiftResponsibleAnswers(answersSetting?.value)}
