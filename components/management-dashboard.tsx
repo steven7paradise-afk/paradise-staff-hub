@@ -124,7 +124,7 @@ function Avatar({ name, photoUrl, size = 44 }: { name: string; photoUrl: string 
   );
 }
 
-const revenueLineColors = ["#F080B7", "#62D4FF", "#72E0B1"];
+const revenueLineColors = ["#B62F69", "#E36C9F", "#F3A0C8"];
 
 function ThreeMonthControlsChart({ months, selectedDay, onSelectDay, subjectLabel }: {
   months: AnalyticsMonth[];
@@ -165,18 +165,19 @@ function ThreeMonthControlsChart({ months, selectedDay, onSelectDay, subjectLabe
           </div>
         </div>
       </div>
-      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-3 text-2xl font-black tabular-nums text-white">{day?.controls || 0}</p><p className="text-[10px] font-bold uppercase tracking-wider text-white/45">schede completate</p><p className="mt-3 border-t border-white/10 pt-3 text-xs font-black text-emerald-300">{money.format(day?.revenue || 0)} attribuiti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare il totale delle schede nei tre mesi.</p>}
+      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-3 text-2xl font-black tabular-nums text-white">{day?.controls || 0}</p><p className="text-[10px] font-bold uppercase tracking-wider text-white/45">schede completate</p><p className="mt-3 border-t border-white/10 pt-3 text-xs font-black text-[#f3a0c8]">{money.format(day?.revenue || 0)} attribuiti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare il totale delle schede nei tre mesi.</p>}
     </div>
   );
 }
 
-function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, controls, onClick }: {
+function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, featured = false, controls, onClick }: {
   label: string;
   value: string;
   note: string;
   icon: typeof Users;
   tone?: "pink" | "green" | "gold" | "red";
   active?: boolean;
+  featured?: boolean;
   controls: string;
   onClick: () => void;
 }) {
@@ -193,14 +194,14 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       aria-pressed={active}
       aria-expanded={active}
       aria-controls={controls}
-      className={`group min-h-36 min-w-0 rounded-[22px] border border-black/[0.07] bg-[#edf3f5] px-5 py-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none dark:border-white/10 dark:bg-[#292a30] dark:hover:border-white/20 ${active ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
+      className={`group min-h-36 min-w-0 rounded-[22px] border px-5 py-4 text-left transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none ${featured ? "border-[#d85991] bg-[linear-gradient(145deg,#b62f69_0%,#d95d95_55%,#f08bb8_100%)] text-white shadow-[0_18px_35px_rgba(183,47,105,0.22)] hover:border-[#b62f69]" : "border-black/[0.07] bg-white text-[#171719] shadow-[0_8px_24px_rgba(20,16,18,0.045)] hover:border-black/15 dark:border-white/10 dark:bg-[#292a30] dark:text-white dark:hover:border-white/20"} ${active && !featured ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
     >
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/60">
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${colors}`}><Icon size={16} aria-hidden="true" /></span>
+      <div className={`mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] ${featured ? "text-white/75" : "text-black/50 dark:text-white/60"}`}>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${featured ? "bg-white text-[#b62f69]" : colors}`}><Icon size={16} aria-hidden="true" /></span>
         {label}
       </div>
-      <p className="text-3xl font-black text-[#171719] dark:text-white">{value}</p>
-      <p className="mt-1 flex items-center gap-1 text-xs leading-5 text-black/55 dark:text-white/55">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
+      <p className={`text-3xl font-black ${featured ? "text-white" : "text-[#171719] dark:text-white"}`}>{value}</p>
+      <p className={`mt-1 flex items-center gap-1 text-xs leading-5 ${featured ? "text-white/75" : "text-black/55 dark:text-white/55"}`}>{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
     </button>
   );
 }
@@ -289,7 +290,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       : data.leaves;
   const financialItems = [
     { label: "Disponibilità", value: data.availableCash, color: "#d75489", soft: "bg-[#fff0f6]", text: "text-[#a92f63]" },
-    { label: "Versamenti", value: data.monthDeposits, color: "#28a37a", soft: "bg-emerald-50", text: "text-emerald-700" },
+    { label: "Versamenti", value: data.monthDeposits, color: "#e174a5", soft: "bg-[#fff0f6]", text: "text-[#a92f63]" },
     { label: "Prelievi", value: data.monthWithdrawals, color: "#d69a32", soft: "bg-amber-50", text: "text-amber-700" },
     { label: "Spese", value: data.monthExpenses, color: "#e05b62", soft: "bg-red-50", text: "text-red-700" },
   ];
@@ -311,20 +312,20 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   }
 
   return (
-    <div className="management-dashboard-liquid w-full max-w-none space-y-5 p-4 pb-12 font-sans antialiased sm:p-6 lg:p-8">
-      <section className="rounded-[28px] border border-black/[0.06] bg-white p-4 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-5">
-        <div className="flex flex-col gap-5 px-1 pb-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-[34px] bg-[#f5f5f5] p-4 pb-12 font-sans antialiased dark:bg-[#151518] sm:p-6 lg:p-8">
+      <section className="order-1 rounded-[28px] border border-black/[0.05] bg-[#fafafa] p-4 shadow-[0_14px_40px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-6">
+        <div className="flex flex-col gap-5 px-1 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b83f70]">Direzione operativa</p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-[#171719] dark:text-white sm:text-4xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
-            <p className="mt-1 text-sm text-black/50 dark:text-white/55">Stato in tempo reale · {data.scopeLabel}</p>
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.045em] text-[#171719] dark:text-white sm:text-5xl">Dashboard</h1>
+            <p className="mt-2 text-sm text-black/50 dark:text-white/55">Buongiorno, {data.viewerName.split(" ")[0]} · Stato in tempo reale · {data.scopeLabel}</p>
           </div>
-          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="dashboard-night-action inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 px-5 text-xs font-bold uppercase transition hover:border-black/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
+          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#b62f69] bg-[#b62f69] px-6 text-xs font-black uppercase text-white shadow-[0_12px_25px_rgba(182,47,105,0.20)] transition hover:bg-[#9f285b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-          <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
+          <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="pink" featured active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
           <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
           <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
           <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
@@ -332,21 +333,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      {data.missingPayslips.length > 0 && (
-        <section className="flex flex-col gap-4 rounded-[20px] border border-[#efb2ca] bg-white/75 p-4 shadow-sm backdrop-blur-xl dark:border-[#f080b7]/30 dark:bg-[#1d1d22] sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <FileWarning className="mt-0.5 shrink-0 text-[#b92f68]" size={22} />
-            <div>
-              <p className="font-black text-[#341522] dark:text-white">Buste paga da inviare: {data.missingPayslips.length}</p>
-              <p className="mt-1 text-sm text-[#775563] dark:text-white/60">Mancano i documenti di {data.payrollMonthLabel}: {data.missingPayslips.slice(0, 4).map((item) => item.name).join(", ")}{data.missingPayslips.length > 4 ? "…" : ""}</p>
-            </div>
-          </div>
-          <Link href="/cedolini" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#17131a] px-5 text-xs font-black uppercase text-white transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:bg-white dark:text-[#171719] dark:hover:bg-[#f3edf0]">Apri cedolini</Link>
-        </section>
-      )}
-
       {personnelView === "PRESENT" || personnelView === "ABSENT" || personnelView === "LATE" ? (
-        <section id="personale-oggi" className="scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
+        <section id="personale-oggi" className="order-3 scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
@@ -386,7 +374,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       ) : null}
 
       {personnelView === "HOLIDAYS" || personnelView === "SICKNESS" ? (
-        <section id="assenze-attive" className="scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
+        <section id="assenze-attive" className="order-3 scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
@@ -411,7 +399,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] lg:p-7">
+      <div className="order-4 grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.7fr)]">
+      <section className="min-w-0 overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] lg:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
@@ -432,7 +421,49 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-black/10 bg-[#0f1720] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
+      <aside className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
+        <section className="rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#b83f70]">Priorità</p>
+              <h2 className="mt-1 text-xl font-black text-[#171719] dark:text-white">Da gestire</h2>
+            </div>
+            <span className="grid size-10 place-items-center rounded-full bg-[#fff0f6] text-[#b62f69]"><AlertTriangle className="size-4" aria-hidden="true" /></span>
+          </div>
+          <div className="mt-5 divide-y divide-black/[0.06] dark:divide-white/10">
+            <button type="button" onClick={() => showPersonnelSection("ABSENT")} className="flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-red-50 text-red-600"><AlertTriangle className="size-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm text-[#171719] dark:text-white">Assenze da verificare</strong><span className="text-xs text-black/45 dark:text-white/45">Situazione odierna</span></span>
+              <strong className="text-lg tabular-nums text-[#b62f69]">{data.absentToday.length}</strong>
+            </button>
+            <button type="button" onClick={() => showPersonnelSection("LATE")} className="flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-700"><Clock3 className="size-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm text-[#171719] dark:text-white">Ritardi</strong><span className="text-xs text-black/45 dark:text-white/45">Da prendere in visione</span></span>
+              <strong className="text-lg tabular-nums text-[#b62f69]">{data.lateStaff.length}</strong>
+            </button>
+            <Link href="/cedolini" className="flex min-h-16 items-center gap-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#fff0f6] text-[#b62f69]"><FileWarning className="size-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm text-[#171719] dark:text-white">Buste paga</strong><span className="block truncate text-xs text-black/45 dark:text-white/45">{data.payrollMonthLabel}</span></span>
+              <strong className="text-lg tabular-nums text-[#b62f69]">{data.missingPayslips.length}</strong>
+            </Link>
+          </div>
+        </section>
+
+        <Link href="/cash" className="group flex min-h-56 flex-col justify-between overflow-hidden rounded-[28px] border border-[#b62f69] bg-[linear-gradient(145deg,#42162c_0%,#8f2857_52%,#d95d95_100%)] p-6 text-white shadow-[0_18px_40px_rgba(117,30,70,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3]">
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/65">Controllo economico</p><h2 className="mt-1 text-xl font-black">Cassa disponibile</h2></div>
+            <span className="grid size-11 place-items-center rounded-full bg-white text-[#a72d61]"><WalletCards className="size-5" /></span>
+          </div>
+          <div>
+            <strong className="block text-3xl font-black tabular-nums">{money.format(data.availableCash)}</strong>
+            <div className="mt-4 flex items-center justify-between border-t border-white/15 pt-4 text-xs text-white/70"><span>Ricavi del mese</span><strong className="text-white">{money.format(data.monthRevenue)}</strong></div>
+            <div className="mt-4 inline-flex items-center gap-2 text-xs font-black uppercase">Apri cassa <ChevronRight className="size-4 transition group-hover:translate-x-1" /></div>
+          </div>
+        </Link>
+      </aside>
+      </div>
+
+      <section className="order-5 overflow-hidden rounded-[28px] border border-black/10 bg-[#0f1720] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
         <div className="flex flex-col gap-4 border-b border-white/10 p-6 sm:flex-row sm:items-end sm:justify-between lg:p-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f080b7]">Performance Buenos Aires</p>
@@ -472,10 +503,10 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                   <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
                   <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-1">
                     <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Clienti svolti</p><strong className="mt-1 block text-2xl tabular-nums">{selectedWorker.controls}</strong></div>
-                    <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Media per cliente</p><strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedWorker.averageRevenue)}</strong></div>
+                    <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Media per cliente</p><strong className="mt-1 block text-xl tabular-nums text-[#f3a0c8]">{money.format(selectedWorker.averageRevenue)}</strong></div>
                     <div className="col-span-2 rounded-2xl border border-white/10 bg-white/[0.07] p-4 xl:col-span-1">
                       <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/55">{selectedDayDetails ? "Fatturazione del giorno" : "Fatturazione attribuita"}</p>
-                      <strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedDayDetails?.revenue ?? selectedWorker.revenue)}</strong>
+                      <strong className="mt-1 block text-xl tabular-nums text-[#f3a0c8]">{money.format(selectedDayDetails?.revenue ?? selectedWorker.revenue)}</strong>
                       <p className="mt-2 text-[10px] font-semibold leading-4 text-white/50">{selectedDayDetails && selectedDayMonth ? `${selectedDayDetails.day} ${selectedDayMonth.label} · ${selectedDayDetails.controls} clienti` : attributionPeriod}</p>
                       {selectedDayDetails ? <button type="button" onClick={() => setSelectedAnalyticsDay(null)} className="mt-3 min-h-11 rounded-xl border border-white/15 px-3 text-[10px] font-black uppercase text-white/70 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7]">Mostra totale periodo</button> : <p className="mt-2 text-[10px] font-semibold text-[#f3a0c8]">Tocca un giorno per vedere il ricavo</p>}
                     </div>
@@ -535,12 +566,12 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                 </div>
               </div>
             ) : null}
-            {dayTooltip ? <div className="pointer-events-none fixed z-[200] w-72 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/15 bg-[#101725]/[0.98] p-4 text-left text-white shadow-[0_20px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl" style={{ left: dayTooltip.x, top: dayTooltip.y }}><div className="flex justify-between gap-3"><strong className="text-xs capitalize">{dayTooltip.day.day} {dayTooltip.month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{dayTooltip.day.controls} schede</span></div><p className="mt-1 text-sm font-black text-emerald-300">{money.format(dayTooltip.day.revenue)} attribuiti</p><div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">{dayTooltip.day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/75"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
+            {dayTooltip ? <div className="pointer-events-none fixed z-[200] w-72 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/15 bg-[#101725]/[0.98] p-4 text-left text-white shadow-[0_20px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl" style={{ left: dayTooltip.x, top: dayTooltip.y }}><div className="flex justify-between gap-3"><strong className="text-xs capitalize">{dayTooltip.day.day} {dayTooltip.month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{dayTooltip.day.controls} schede</span></div><p className="mt-1 text-sm font-black text-[#f3a0c8]">{money.format(dayTooltip.day.revenue)} attribuiti</p><div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">{dayTooltip.day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/75"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
           </div>
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-black/10 bg-[#171719] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
+      <section className="order-2 overflow-hidden rounded-[28px] border border-black/10 bg-[#171719] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
         <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>
@@ -554,7 +585,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <Link href="/cash" aria-label={`Apri cassa. Disponibilità attuale ${money.format(data.availableCash)}`} className="group relative flex min-h-72 flex-col items-center justify-center overflow-hidden rounded-[22px] border border-white/15 bg-white/[0.055] p-6 transition duration-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <div
               className="relative grid size-48 place-items-center rounded-full p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]"
-              style={{ background: movementSum > 0 ? `conic-gradient(#28a37a 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}
+              style={{ background: movementSum > 0 ? `conic-gradient(#d95d95 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}
             >
               <div className="grid size-full place-items-center rounded-full border border-white/10 bg-[#17151e] text-center shadow-inner">
                 <div>
@@ -566,7 +597,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             </div>
             <div className="relative mt-5 flex items-center gap-2 text-xs font-bold text-white/70">
               Totale ricavato nel mese
-              <span className="rounded-full bg-emerald-400/15 px-2 py-1 font-black text-emerald-300">{money.format(data.monthRevenue)}</span>
+              <span className="rounded-full bg-[#f080b7]/15 px-2 py-1 font-black text-[#f3a0c8]">{money.format(data.monthRevenue)}</span>
             </div>
           </Link>
 
@@ -598,7 +629,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <p className="flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b] dark:text-white/55"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
+      <p className="order-6 flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b] dark:text-white/55"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
     </div>
   );
 }
