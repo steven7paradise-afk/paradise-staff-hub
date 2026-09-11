@@ -182,10 +182,10 @@ export function WeeklyShiftResponsiblePlanner({
                       setPickerOpen(false);
                       saveAssignments(nextAssignments);
                     }}
-                    className={`relative flex min-h-40 flex-col items-center justify-center rounded-[22px] border p-3 text-center transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 ${selected ? "border-[#14c800] bg-[#f3fff1] shadow-[0_10px_30px_rgba(20,200,0,0.1)]" : "border-black/8 bg-[#fafafa] hover:border-black/15 hover:bg-white"}`}
+                    className={`relative flex min-h-40 flex-col items-center justify-center rounded-[22px] border p-3 text-center transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 ${selected ? "border-[#D94C88] bg-[#fff1f7] shadow-[0_10px_30px_rgba(217,76,136,0.14)]" : "border-black/8 bg-[#fafafa] hover:border-black/15 hover:bg-white"}`}
                   >
-                    {selected ? <span className="absolute right-2.5 top-2.5 grid size-5 place-items-center rounded-full bg-[#14c800] text-white"><Check className="size-3" /></span> : null}
-                    <span className={`grid size-16 place-items-center overflow-hidden rounded-full border-[3px] bg-[#eeeeee] text-sm font-black text-black/45 sm:size-20 ${selected ? "border-[#14c800]" : "border-[#b8b8b8]"}`}>
+                    {selected ? <span className="absolute right-2.5 top-2.5 grid size-5 place-items-center rounded-full bg-[#D94C88] text-white"><Check className="size-3" /></span> : null}
+                    <span className={`grid size-16 place-items-center overflow-hidden rounded-full border-[3px] bg-[#eeeeee] text-sm font-black text-black/45 sm:size-20 ${selected ? "border-[#D94C88]" : "border-[#b8b8b8]"}`}>
                       {candidate.photoUrl ? <img src={resolveDrivePhotoUrl(candidate.photoUrl)} alt={`Foto di ${candidate.name}`} className="size-full object-cover" /> : initials(candidate.name)}
                     </span>
                     <span className="mt-2 line-clamp-2 text-[9px] font-black uppercase leading-tight text-black/80 sm:text-[10px]">{candidate.name}</span>
