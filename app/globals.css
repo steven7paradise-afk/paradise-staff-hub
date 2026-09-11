@@ -105,6 +105,13 @@
   background-color: var(--background);
 }
 
+/* Il tema giorno usa un canvas neutro: anche le aree che affiorano dietro
+   agli angoli arrotondati della navigazione devono restare bianche. */
+html:not(.dark) .paradise-theme-root {
+  --background: #ffffff !important;
+  --user-background-color: #ffffff !important;
+}
+
 .dark {
   --background: var(--dark-background);
   --sidebar: var(--dark-sidebar);
