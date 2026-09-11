@@ -108,31 +108,33 @@ export function MobileMenuDrawer({
 
   return (
     <div className="xl:hidden">
-      <div className="fixed inset-x-0 top-0 z-40 flex min-h-[calc(env(safe-area-inset-top)+80px)] items-end gap-3 rounded-b-[34px] border-b border-black/[0.08] bg-white px-6 pb-4 pt-[calc(env(safe-area-inset-top)+12px)] dark:border-white/10 dark:bg-[#1d1d22]">
-        <Link href={homeHref} className="flex h-12 w-36 shrink-0 items-center overflow-hidden" aria-label="Vai alla dashboard">
-          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-12 w-full object-contain object-left dark:invert" />
-        </Link>
-        <span className="min-w-0 flex-1" aria-hidden="true" />
-        <div className="relative size-11 shrink-0">
-          <Link href={profileHref} className="block size-11 overflow-hidden rounded-full border border-black/10 bg-[#f8edf2] dark:border-white/15" aria-label={`Apri il profilo di ${userName}`}>
-            {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" /> : <span className="grid size-full place-items-center text-xs font-black text-[#8c3f60]">{userName.slice(0, 2).toUpperCase()}</span>}
+      <div className="fixed inset-x-0 top-0 z-40 bg-[color:var(--user-background-color,var(--background))]">
+        <div className="flex min-h-[calc(env(safe-area-inset-top)+80px)] items-end gap-3 rounded-b-[34px] border-b border-black/[0.08] bg-white px-6 pb-4 pt-[calc(env(safe-area-inset-top)+12px)] dark:border-white/10 dark:bg-[#1d1d22]">
+          <Link href={homeHref} className="flex h-12 w-36 shrink-0 items-center overflow-hidden" aria-label="Vai alla dashboard">
+            <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-12 w-full object-contain object-left dark:invert" />
           </Link>
-          <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-[#1d1d22]" aria-hidden="true" />
+          <span className="min-w-0 flex-1" aria-hidden="true" />
+          <div className="relative size-11 shrink-0">
+            <Link href={profileHref} className="block size-11 overflow-hidden rounded-full border border-black/10 bg-[#f8edf2] dark:border-white/15" aria-label={`Apri il profilo di ${userName}`}>
+              {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" /> : <span className="grid size-full place-items-center text-xs font-black text-[#8c3f60]">{userName.slice(0, 2).toUpperCase()}</span>}
+            </Link>
+            <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-[#1d1d22]" aria-hidden="true" />
+          </div>
+          <button
+            type="button"
+            onClick={openDrawer}
+            className="relative grid size-11 shrink-0 place-items-center rounded-2xl text-black transition hover:bg-black/[0.05] active:scale-95 dark:text-white dark:hover:bg-white/10"
+            aria-label="Apri menu"
+          >
+            <Menu className="size-5" />
+            {unreadNotifications > 0 ? (
+              <span className="absolute -right-1.5 -top-1.5 flex size-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#C66170] opacity-75" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-[#C66170]" />
+              </span>
+            ) : null}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={openDrawer}
-          className="relative grid size-11 shrink-0 place-items-center rounded-2xl text-black transition hover:bg-black/[0.05] active:scale-95 dark:text-white dark:hover:bg-white/10"
-          aria-label="Apri menu"
-        >
-          <Menu className="size-5" />
-          {unreadNotifications > 0 ? (
-            <span className="absolute -right-1.5 -top-1.5 flex size-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#C66170] opacity-75" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-[#C66170]" />
-            </span>
-          ) : null}
-        </button>
       </div>
 
       {/* Overlay backdrop */}
