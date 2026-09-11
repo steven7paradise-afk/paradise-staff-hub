@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { Check, Clock3, LockKeyhole, RefreshCw, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { ShiftResponsibleQuestions } from "@/components/shift-responsible-questions";
+import { ShiftResponsibleComments } from "@/components/shift-responsible-comments";
 import type { ShiftResponsibleAccessDay } from "@/lib/shift-responsible-access";
 import type { ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 import type { ShiftAppointmentClient } from "@/lib/shift-responsible-appointments";
@@ -176,6 +177,10 @@ export function ShiftResponsibleWorkspace({ day, currentUserId, currentUserName,
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div className="mx-auto mt-6 max-w-4xl">
+        <ShiftResponsibleComments day={day} initialComments={access.comments} />
       </div>
 
     </section>

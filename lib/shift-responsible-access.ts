@@ -2,16 +2,25 @@ export const SHIFT_RESPONSIBLE_ACCESS_KEY = "shift_responsible_access";
 
 export type ShiftAccessStatus = "PENDING" | "APPROVED" | "DENIED";
 
+export type ShiftResponsibleComment = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  at: string;
+};
+
 export type ShiftResponsibleAccessDay = {
   acknowledgements: Record<string, { at: string; clockIn: string | null; shiftStatus: string }>;
   permissions: Record<string, { status: ShiftAccessStatus; requestedAt: string; decidedAt?: string; decidedBy?: string }>;
   audit: Array<{ id: string; questionId: string; actorId: string; actorName: string; at: string; action: "ANSWER"; previousValue?: string; nextValue?: string }>;
+  comments: ShiftResponsibleComment[];
 };
 
 export type ShiftResponsibleAccess = Record<string, ShiftResponsibleAccessDay>;
 
 export function emptyShiftAccessDay(): ShiftResponsibleAccessDay {
-  return { acknowledgements: {}, permissions: {}, audit: [] };
+  return { acknowledgements: {}, permissions: {}, audit: [], comments: [] };
 }
 
 export function normalizeShiftResponsibleAccess(value: unknown): ShiftResponsibleAccess {
@@ -48,7 +57,14 @@ export function normalizeShiftResponsibleAccess(value: unknown): ShiftResponsibl
         nextValue: typeof entry.nextValue === "string" ? entry.nextValue.slice(0, 12000) : undefined,
       }];
     }).slice(-300) : [];
-    return [[day, { acknowledgements, permissions, audit }]];
+    const comments = Array.isArray(raw.comments) ? raw.comments.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const entry = item as Record<string, unknown>;
+      const text = typeof entry.text === "string" ? entry.text.trim().slice(0, 2000) : "";
+      if (!entry.id || !entry.authorId || !entry.at || !text) return [];
+      return [{ id: String(entry.id), authorId: String(entry.authorId), authorName: String(entry.authorName ?? "Utente"), text, at: String(entry.at) }];
+    }).slice(-200) : [];
+    return [[day, { acknowledgements, permissions, audit, comments }]];
   }));
 }
 

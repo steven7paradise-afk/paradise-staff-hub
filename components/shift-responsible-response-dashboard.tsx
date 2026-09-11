@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, CalendarRange, CheckCircle2, ChevronDown, Download, FilePenLine, FileSignature, FileText, LoaderCircle, Printer, Search, UserRound } from "lucide-react";
+import { ArrowRight, CalendarDays, CalendarRange, CheckCircle2, ChevronDown, Download, FilePenLine, FileText, LoaderCircle, Printer, Search, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { ShiftResponsibleComments } from "@/components/shift-responsible-comments";
 import type { ShiftResponsibleAccess } from "@/lib/shift-responsible-access";
 import { activeShiftFollowUps, type ShiftResponsibleAnswers, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 
@@ -93,8 +94,14 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
   const [selectedDay, setSelectedDay] = useState(rows[0]?.day ?? "");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const detailRef = useRef<HTMLDivElement>(null);
   const selected = filteredRows.find((row) => row.day === selectedDay) ?? filteredRows[0];
   const average = rows.length ? Math.round(rows.reduce((sum, row) => sum + row.progress.percent, 0) / rows.length) : 0;
+
+  function openDay(day: string) {
+    setSelectedDay(day);
+    window.requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   function exportCsv() {
     const header = ["Data", "Responsabile", "Compilato da", ...questions.map((question) => question.title)];
@@ -375,7 +382,7 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
               {filteredRows.length ? <nav className="flex snap-x gap-3 overflow-x-auto pb-3" aria-label="Giornate compilate">
                 {filteredRows.map((row) => {
                   const isSelected = selected?.day === row.day;
-                  return <button key={row.day} type="button" onClick={() => setSelectedDay(row.day)} aria-pressed={isSelected} className={`min-w-[220px] snap-start rounded-[18px] border p-4 text-left transition sm:min-w-[240px] ${isSelected ? "border-[#d94c88] bg-[#fff1f7] shadow-[0_8px_24px_rgba(190,59,112,0.12)]" : "border-black/[0.07] bg-white hover:border-[#e6a4c1] hover:bg-[#fffafb]"}`}>
+                  return <button key={row.day} type="button" onClick={() => openDay(row.day)} aria-pressed={isSelected} className={`min-w-[220px] snap-start rounded-[18px] border p-4 text-left transition sm:min-w-[240px] ${isSelected ? "border-[#d94c88] bg-[#fff1f7] shadow-[0_8px_24px_rgba(190,59,112,0.12)]" : "border-black/[0.07] bg-white hover:border-[#e6a4c1] hover:bg-[#fffafb]"}`}>
                     <span className="flex items-start justify-between gap-3"><span className="flex items-center gap-2 text-[11px] font-black capitalize text-[#282426]"><CalendarDays className={`size-4 ${isSelected ? "text-[#c43f78]" : "text-black/30"}`} />{formatDay(row.day, true)}</span><span className={`shrink-0 rounded-full px-2 py-1 text-[8px] font-black ${row.progress.percent === 100 ? "bg-[#e8f7e9] text-[#2f7a36]" : "bg-[#fff3dc] text-[#976100]"}`}>{row.progress.percent === 100 ? "Completa" : `${row.progress.percent}%`}</span></span>
                     <span className="mt-4 flex items-center gap-2.5"><Avatar person={row.assigned} /><span className="min-w-0"><span className="block truncate text-[10px] font-black text-[#202124]">{row.assigned?.name || "Non assegnato"}</span><span className="mt-0.5 block truncate text-[8px] text-black/40">Firmata da {row.actorName}</span></span></span>
                     <span className="mt-4 block h-1.5 overflow-hidden rounded-full bg-black/[0.06]"><span className={`block h-full rounded-full ${row.progress.percent === 100 ? "bg-[#42a957]" : "bg-[#d94c88]"}`} style={{ width: `${row.progress.percent}%` }} /></span>
@@ -384,7 +391,7 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
                 })}
               </nav> : <p className="rounded-2xl border border-dashed border-black/10 px-4 py-10 text-center text-xs font-semibold text-black/40">Nessun risultato trovato.</p>}
 
-              {selected ? <div className="mt-2"><ResponseDetail row={selected} questions={questions} /></div> : null}
+              {selected ? <div ref={detailRef} className="mt-2 scroll-mt-24 space-y-4"><ResponseDetail row={selected} questions={questions} /><ShiftResponsibleComments key={selected.day} day={selected.day} initialComments={access[selected.day]?.comments ?? []} /></div> : null}
             </div>
             {selected ? <AuditTrail entries={access[selected.day]?.audit ?? []} questions={questions} /> : null}</>
           ) : <div className="border-t border-black/[0.06] px-5 py-16 text-center text-[#303833]"><span className="mx-auto grid size-14 place-items-center rounded-full bg-[#fff1f7]"><FileText className="size-6 text-[#c43f78]" /></span><p className="mt-4 text-sm font-black">Ancora nessuna risposta</p><p className="mt-1 text-[10px] text-black/40">Le giornate compilate compariranno qui automaticamente.</p></div>}
