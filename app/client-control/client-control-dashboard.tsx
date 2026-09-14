@@ -6,7 +6,7 @@ import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, St
 import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { downloadTeamBonusReportPdf } from "@/lib/client-control-bonus-pdf";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
-import { previousPayrollMonth, type TeamBonusReport } from "@/lib/team-bonus-report";
+import type { TeamBonusReport } from "@/lib/team-bonus-report";
 import { cn } from "@/lib/utils";
 
 type Field = {
@@ -67,9 +67,19 @@ function countsInAnalytics(answers: Record<string, any>) {
 }
 
 const discoveryColors: Record<(typeof CLIENT_CONTROL_DISCOVERY_OPTIONS)[number], string> = {
+  Instagram: "#E1306C",
   TikTok: "#1F1F1F",
-  ChatGPT: "#10A37F",
+  Facebook: "#1877F2",
+  YouTube: "#FF0000",
+  Pinterest: "#BD081C",
+  Snapchat: "#E8C900",
+  Threads: "#4A4A4A",
+  "X (Twitter)": "#657786",
+  LinkedIn: "#0A66C2",
+  WhatsApp: "#25D366",
+  Telegram: "#229ED9",
   Google: "#4285F4",
+  ChatGPT: "#10A37F",
   Altro: "#E88AC5",
 };
 
@@ -155,9 +165,9 @@ export function ClientControlDashboard({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
-  const defaultReportPeriod = previousPayrollMonth(new Date());
-  const [selectedMonth, setSelectedMonth] = useState(defaultReportPeriod.monthIndex);
-  const [selectedYear, setSelectedYear] = useState(defaultReportPeriod.year);
+  const currentPeriod = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentPeriod.getMonth());
+  const [selectedYear, setSelectedYear] = useState(currentPeriod.getFullYear());
   const [downloadingReport, setDownloadingReport] = useState(false);
 
   const monthsList = [
@@ -230,13 +240,17 @@ export function ClientControlDashboard({
 
       const rawSource = String(answers[CLIENT_CONTROL_FIELD_IDS.discoverySource] || "").trim();
       if (!rawSource) return;
-      const source = CLIENT_CONTROL_DISCOVERY_OPTIONS.find(
+      const rawOther = String(answers[CLIENT_CONTROL_FIELD_IDS.discoveryOther] || "").trim();
+      const matchedSource = CLIENT_CONTROL_DISCOVERY_OPTIONS.find(
         (option) => option.toLowerCase() === rawSource.toLowerCase(),
       ) ?? "Altro";
+      const source = matchedSource === "Altro" && /^(instagram|ig)$/i.test(rawOther)
+        ? "Instagram"
+        : matchedSource;
       counts.set(source, (counts.get(source) ?? 0) + 1);
 
       if (source === "Altro") {
-        const detail = String(answers[CLIENT_CONTROL_FIELD_IDS.discoveryOther] || rawSource).trim();
+        const detail = rawOther || rawSource;
         if (detail && detail.toLowerCase() !== "altro") {
           otherDetails.set(detail, (otherDetails.get(detail) ?? 0) + 1);
         }
@@ -739,7 +753,7 @@ export function ClientControlDashboard({
 
           <div>
             <div className="grid gap-2 sm:grid-cols-2">
-              {discoveryAnalytics.slices.map((slice) => (
+              {discoveryAnalytics.slices.filter((slice) => slice.count > 0).map((slice) => (
                 <div key={slice.label} className="flex items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-[#FCFAFB] p-3.5">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />

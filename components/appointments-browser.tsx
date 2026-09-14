@@ -6241,27 +6241,17 @@ export function AppointmentsBrowser({
                     <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">6</span>
                     Come ci hai conosciuti?
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {CLIENT_CONTROL_DISCOVERY_OPTIONS.map((source) => {
-                      const selected = clientControlForm.discoverySource === source;
-                      return (
-                        <button
-                          key={source}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => updateClientControlDiscovery(selected ? "" : source)}
-                          className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                            selected
-                              ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
-                              : "border-[#F3B5D4] bg-white text-[#B83D7F] hover:bg-[#FCE5F3]"
-                          }`}
-                        >
-                          {selected ? <Check className="size-4" /> : null}
-                          {source}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <select
+                    value={clientControlForm.discoverySource}
+                    onChange={(event) => updateClientControlDiscovery(event.target.value)}
+                    className="h-12 w-full rounded-xl border-2 border-[#E8C3D4] bg-white px-4 text-sm font-black text-[#7D2154] outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
+                    aria-label="Come ci hai conosciuti"
+                  >
+                    <option value="">Seleziona un canale</option>
+                    {CLIENT_CONTROL_DISCOVERY_OPTIONS.map((source) => (
+                      <option key={source} value={source}>{source}</option>
+                    ))}
+                  </select>
                   {clientControlForm.discoverySource === "Altro" ? (
                     <label className="mt-3 block">
                       <span className="sr-only">Scrivi come ci hai conosciuti</span>
