@@ -2338,6 +2338,33 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   opacity: 1 !important;
 }
 
+/* Il registro notifiche resta una superficie chiara anche nel tema notte. */
+html.dark .app-content-surface .notification-register,
+html.dark .app-content-surface .notification-register-header,
+html.dark .app-content-surface .notification-register-item {
+  background-color: #ffffff !important;
+  color: #1f1f1f !important;
+}
+
+html.dark .app-content-surface .notification-register-list {
+  background-color: #f8f6f7 !important;
+}
+
+html.dark .app-content-surface .notification-register-item[data-notification-unread="true"] {
+  background-color: #fff9fc !important;
+}
+
+html.dark .app-content-surface .notification-register :is(
+  [class~="text-black"],
+  [class*="text-black/"],
+  [class*="text-[#1F1"],
+  [class*="text-[#1f1"],
+  [class*="text-[#171"]
+) {
+  color: #1f1f1f !important;
+  -webkit-text-fill-color: currentColor;
+}
+
 .mobile-liquid-sidebar::before {
   content: none;
 }

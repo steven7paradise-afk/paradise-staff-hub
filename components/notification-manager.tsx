@@ -1228,8 +1228,8 @@ export function NotificationManager({
           </div>
         ) : (
           /* TRADITIONAL LIST VIEW */
-          <Card className="overflow-hidden rounded-[24px] border border-black/[0.07] bg-white p-0 shadow-[0_16px_45px_rgba(45,25,35,0.07)]">
-            <div className="flex flex-col gap-4 border-b border-black/[0.06] bg-white p-5 lg:flex-row lg:items-center lg:justify-between sm:p-6">
+          <Card className="notification-register overflow-hidden rounded-[24px] border border-black/[0.07] bg-white p-0 shadow-[0_16px_45px_rgba(45,25,35,0.07)]">
+            <div className="notification-register-header flex flex-col gap-4 border-b border-black/[0.06] bg-white p-5 lg:flex-row lg:items-center lg:justify-between sm:p-6">
               <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a74758]">Registro notifiche</p><h3 className="mt-1 text-xl font-black text-[#1F1F1F]">
                 {sectionTab === "ORDERS"
                   ? "Notifiche ordini"
@@ -1256,7 +1256,7 @@ export function NotificationManager({
               </div>
             </div>
 
-            <div className="space-y-2 bg-[#f8f6f7] p-3 sm:p-4">
+            <div className="notification-register-list space-y-2 bg-[#f8f6f7] p-3 sm:p-4">
               {filteredItems.length === 0 ? (
                 <div className="p-6 text-sm font-semibold text-black/50">Nessuna comunicazione trovata.</div>
               ) : (
@@ -1267,8 +1267,9 @@ export function NotificationManager({
                   return (
                     <button
                       key={notification.id}
+                      data-notification-unread={!notification.read ? "true" : "false"}
                       className={cn(
-                        "relative grid min-h-28 w-full gap-4 rounded-2xl border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-[#d96b94]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74758] md:grid-cols-[56px_1fr_auto] md:items-center sm:p-5",
+                        "notification-register-item relative grid min-h-28 w-full gap-4 rounded-2xl border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-[#d96b94]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74758] md:grid-cols-[56px_1fr_auto] md:items-center sm:p-5",
                         !notification.read && "bg-[#fff9fc] ring-1 ring-[#f3ccdc]",
                         meta.category.borderLeft
                       )}
