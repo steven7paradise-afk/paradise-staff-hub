@@ -51,7 +51,7 @@ import { initialAppointmentDateFilter } from "@/lib/appointment-date";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
-import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
 import {
@@ -112,6 +112,8 @@ type ClientControlAppointmentForm = {
   clientName: string;
   email: string;
   phone: string;
+  discoverySource: string;
+  discoveryOther: string;
   serviceTitle: string;
   depositPaid: string;
   paid: string;
@@ -2107,6 +2109,8 @@ export function AppointmentsBrowser({
       clientName: "",
       email: "",
       phone: "",
+      discoverySource: "",
+      discoveryOther: "",
       serviceTitle: "",
       depositPaid: "",
       paid: "",
@@ -2926,6 +2930,8 @@ export function AppointmentsBrowser({
             "phone",
           ]) ||
           "",
+        discoverySource: "",
+        discoveryOther: "",
         serviceTitle: booking.serviceTitle || "",
         depositPaid:
           booking.bookingStr && booking.priceAmount != null
@@ -3058,6 +3064,8 @@ export function AppointmentsBrowser({
             : current.depositPaid,
           shopifyOrder: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || current.shopifyOrder || ""),
           instagramTag: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.instagramTag] || ""),
+          discoverySource: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.discoverySource] || ""),
+          discoveryOther: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.discoveryOther] || ""),
           customNoteText: synchronizedControlNote,
           notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]) || Boolean(officeNote),
           beforeMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
@@ -3185,6 +3193,17 @@ export function AppointmentsBrowser({
       setClientControlMessage({
         type: "error",
         text: "Per confermare completa sede e collaboratrice. Puoi comunque salvare in bozza.",
+      });
+      return;
+    }
+    if (
+      !saveAsDraft &&
+      formToSubmit.discoverySource === "Altro" &&
+      !formToSubmit.discoveryOther.trim()
+    ) {
+      setClientControlMessage({
+        type: "error",
+        text: "Scrivi come ci ha conosciuti la cliente oppure scegli un altro canale.",
       });
       return;
     }
@@ -3366,6 +3385,17 @@ export function AppointmentsBrowser({
     clientControlFormRef.current = nextForm;
     setClientControlForm(nextForm);
 
+    scheduleClientControlDraft(nextForm);
+  }
+
+  function updateClientControlDiscovery(source: string, other?: string) {
+    const nextForm = {
+      ...clientControlFormRef.current,
+      discoverySource: source,
+      discoveryOther: source === "Altro" ? (other ?? clientControlFormRef.current.discoveryOther) : "",
+    };
+    clientControlFormRef.current = nextForm;
+    setClientControlForm(nextForm);
     scheduleClientControlDraft(nextForm);
   }
 
@@ -6204,6 +6234,46 @@ export function AppointmentsBrowser({
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">6</span>
+                    Come ci hai conosciuti?
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {CLIENT_CONTROL_DISCOVERY_OPTIONS.map((source) => {
+                      const selected = clientControlForm.discoverySource === source;
+                      return (
+                        <button
+                          key={source}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => updateClientControlDiscovery(selected ? "" : source)}
+                          className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            selected
+                              ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
+                              : "border-[#F3B5D4] bg-white text-[#B83D7F] hover:bg-[#FCE5F3]"
+                          }`}
+                        >
+                          {selected ? <Check className="size-4" /> : null}
+                          {source}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {clientControlForm.discoverySource === "Altro" ? (
+                    <label className="mt-3 block">
+                      <span className="sr-only">Scrivi come ci hai conosciuti</span>
+                      <input
+                        type="text"
+                        value={clientControlForm.discoveryOther}
+                        onChange={(event) => updateClientControlDiscovery("Altro", event.target.value)}
+                        placeholder="Scrivi qui, per esempio Instagram o passaparola"
+                        className="h-11 w-full rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:ring-2 focus:ring-[#D96B94]/20"
+                      />
+                    </label>
+                  ) : null}
                 </div>
 
                 <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">

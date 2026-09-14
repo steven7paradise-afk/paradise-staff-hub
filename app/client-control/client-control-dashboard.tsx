@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save, Loader2, RotateCcw, ShieldCheck, ClipboardCheck, Users } from "lucide-react";
-import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save, Loader2, RotateCcw, ShieldCheck, ClipboardCheck, Users, PieChart } from "lucide-react";
+import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { downloadTeamBonusReportPdf } from "@/lib/client-control-bonus-pdf";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { previousPayrollMonth, type TeamBonusReport } from "@/lib/team-bonus-report";
@@ -65,6 +65,13 @@ function controlStatus(answers: Record<string, any>) {
 function countsInAnalytics(answers: Record<string, any>) {
   return controlStatus(answers).toLowerCase() !== "errore";
 }
+
+const discoveryColors: Record<(typeof CLIENT_CONTROL_DISCOVERY_OPTIONS)[number], string> = {
+  TikTok: "#1F1F1F",
+  ChatGPT: "#10A37F",
+  Google: "#4285F4",
+  Altro: "#E88AC5",
+};
 
 function buildAnalytics(responses: ResponseItem[], employeeNames: string[]) {
   const salonMap = new Map<string, {
@@ -211,6 +218,52 @@ export function ClientControlDashboard({
   const selectedSalon = activeSalon === "Tutti"
     ? { salon: "Tutti i saloni", responses: analyticsResponses.length, paid: salons.reduce((sum, item) => sum + item.paid, 0), staff: allStaff }
     : salons.find((item) => item.salon === activeSalon) ?? { salon: activeSalon, responses: 0, paid: 0, staff: [] };
+
+  const discoveryAnalytics = useMemo(() => {
+    const counts = new Map<string, number>();
+    const otherDetails = new Map<string, number>();
+
+    dashboardFilteredResponses.forEach((response) => {
+      const answers = response.answers ?? {};
+      const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
+      if (activeSalon !== "Tutti" && salon !== activeSalon) return;
+
+      const rawSource = String(answers[CLIENT_CONTROL_FIELD_IDS.discoverySource] || "").trim();
+      if (!rawSource) return;
+      const source = CLIENT_CONTROL_DISCOVERY_OPTIONS.find(
+        (option) => option.toLowerCase() === rawSource.toLowerCase(),
+      ) ?? "Altro";
+      counts.set(source, (counts.get(source) ?? 0) + 1);
+
+      if (source === "Altro") {
+        const detail = String(answers[CLIENT_CONTROL_FIELD_IDS.discoveryOther] || rawSource).trim();
+        if (detail && detail.toLowerCase() !== "altro") {
+          otherDetails.set(detail, (otherDetails.get(detail) ?? 0) + 1);
+        }
+      }
+    });
+
+    const total = Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+    let cursor = 0;
+    const slices = CLIENT_CONTROL_DISCOVERY_OPTIONS.map((label) => {
+      const count = counts.get(label) ?? 0;
+      const percentage = total ? (count / total) * 100 : 0;
+      const start = cursor;
+      cursor += percentage;
+      return { label, count, percentage, start, end: cursor, color: discoveryColors[label] };
+    });
+
+    return {
+      total,
+      slices,
+      gradient: total
+        ? `conic-gradient(${slices.filter((slice) => slice.count > 0).map((slice) => `${slice.color} ${slice.start}% ${slice.end}%`).join(", ")})`
+        : "conic-gradient(#EEE8EC 0 100%)",
+      otherDetails: Array.from(otherDetails.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
+    };
+  }, [activeSalon, dashboardFilteredResponses]);
 
   const handleDownloadStatement = async () => {
     setDownloadingReport(true);
@@ -661,6 +714,62 @@ export function ClientControlDashboard({
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className="rounded-[28px] border border-black/10 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Provenienza clienti</p>
+            <h2 className="mt-1 text-2xl font-black">Come ci hanno conosciuti</h2>
+            <p className="mt-1 text-xs font-semibold text-black/45">Risposte del periodo e del salone selezionati.</p>
+          </div>
+          <PieChart className="size-6 shrink-0 text-[#E88AC5]" />
+        </div>
+
+        <div className="mt-6 grid gap-6 md:grid-cols-[220px_1fr] md:items-center">
+          <div className="mx-auto grid size-48 place-items-center rounded-full p-5 shadow-[0_12px_35px_rgba(38,28,33,0.10)]" style={{ background: discoveryAnalytics.gradient }} aria-label={`Grafico provenienza clienti: ${discoveryAnalytics.total} risposte`}>
+            <div className="grid size-full place-items-center rounded-full bg-white text-center shadow-inner">
+              <div>
+                <p className="text-3xl font-black text-[#1F1F1F]">{discoveryAnalytics.total}</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Risposte</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {discoveryAnalytics.slices.map((slice) => (
+                <div key={slice.label} className="flex items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-[#FCFAFB] p-3.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                    <span className="truncate text-sm font-black text-[#2B2529]">{slice.label}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-[#1F1F1F]">{slice.count}</p>
+                    <p className="text-[10px] font-bold text-black/40">{slice.percentage.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {discoveryAnalytics.otherDetails.length ? (
+              <div className="mt-4 rounded-2xl border border-[#F1D7E4] bg-[#FFF7FB] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B94778]">Dettaglio Altro</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {discoveryAnalytics.otherDetails.map((item) => (
+                    <span key={item.label} className="rounded-full border border-[#EDC3D7] bg-white px-3 py-1.5 text-xs font-bold text-[#6E3650]">
+                      {item.label} · {item.count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {!discoveryAnalytics.total ? (
+              <p className="mt-4 rounded-2xl bg-black/[0.03] p-4 text-sm font-bold text-black/40">Nessuna provenienza registrata nel periodo selezionato.</p>
+            ) : null}
+          </div>
         </div>
       </section>
 
