@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { contractActiveInPayrollMonth, workedInPayrollMonth } from "@/lib/payroll-status";
 
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
@@ -364,7 +365,7 @@ export function DocumentsViewer({
 }: {
   documents: DocumentRecord[];
   employeeView: boolean;
-  workers?: { id: string; name: string; role?: string; mansione?: string | null; photo_url?: string | null; email?: string | null }[];
+  workers?: { id: string; name: string; role?: string; mansione?: string | null; photo_url?: string | null; email?: string | null; contractStart?: string | null; contractEnd?: string | null; workedMonths?: string[] }[];
   initialWorkerId?: string;
   initialType?: string;
 }) {
@@ -433,7 +434,10 @@ export function DocumentsViewer({
       }
     });
     
-    return workers.map((w) => {
+    return workers.filter((worker) => (
+      workedInPayrollMonth(worker.workedMonths, statusMonth, statusYear)
+      && contractActiveInPayrollMonth(worker.contractStart, worker.contractEnd, statusMonth, statusYear)
+    )).map((w) => {
       const statusInfo = statusMap.get(w.id);
       return {
         ...w,
