@@ -1604,14 +1604,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
       {view === "HOME" ? (
         <>
           {urgentTask ? (
-          <button onClick={() => void openTask(urgentTask)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-[28px] border border-red-200 bg-red-50 p-5 text-left shadow-sm">
+          <button onClick={() => void openTask(urgentTask)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-[28px] border border-red-200 bg-red-50 p-5 text-left text-neutral-900 shadow-sm dark:border-red-400/25 dark:bg-[#2A1B22] dark:text-white">
             <div className="grid size-16 place-items-center rounded-full bg-[#E7DDFE] text-[#8064D8]">
               <Flag className="size-7 text-red-600" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Task urgente</p>
-              <h2 className="mt-2 truncate text-2xl font-semibold">{urgentTask.title}</h2>
-              <p className="mt-1 truncate text-sm text-black/55">Scadenza {formatShortDateTime(urgentTask.dueDate)} · {urgentTask.locationName}</p>
+              <h2 className="mt-2 truncate text-2xl font-semibold text-neutral-900 dark:text-white">{urgentTask.title}</h2>
+              <p className="mt-1 truncate text-sm text-black/55 dark:text-white/65">Scadenza {formatShortDateTime(urgentTask.dueDate)} · {urgentTask.locationName}</p>
             </div>
             <div className="grid size-14 place-items-center rounded-full bg-white shadow-sm">
               <ArrowRight className="size-6" />
