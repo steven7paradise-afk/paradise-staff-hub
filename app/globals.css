@@ -916,7 +916,9 @@ html:not(.dark) .paradise-theme-root {
 
 .dark .app-content-surface .management-dashboard-liquid {
   color: rgba(255, 255, 255, 0.94);
-  background: var(--dark-background) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .dark .app-content-surface .management-dashboard-liquid :is([class~="bg-white/70"], [class~="bg-white/72"], [class~="bg-white/75"], [class~="bg-white/80"], [class~="bg-white"]) {
