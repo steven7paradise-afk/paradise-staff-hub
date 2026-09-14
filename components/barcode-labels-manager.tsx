@@ -13,6 +13,7 @@ import {
   Printer,
   Search,
   Square,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -92,6 +93,7 @@ export function BarcodeLabelsManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [previewError, setPreviewError] = useState("");
@@ -235,6 +237,36 @@ export function BarcodeLabelsManager() {
       setError(cause instanceof Error ? cause.message : "Stampa non riuscita.");
     } finally {
       setPrinting(false);
+    }
+  }
+
+  async function deleteLabels(items: BarcodeLabel[]) {
+    if (!items.length) return;
+    const description = items.length === 1
+      ? `l’etichetta ${items[0].code}`
+      : `${items.length} etichette selezionate`;
+    if (!window.confirm(`Vuoi eliminare definitivamente ${description}?`)) return;
+
+    setDeleting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const ids = items.map((label) => label.id);
+      const response = await fetch("/api/barcode-labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", ids }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Non riesco a eliminare le etichette.");
+      const deletedIds = new Set<string>(Array.isArray(data?.ids) ? data.ids : ids);
+      setLabels((current) => current.filter((label) => !deletedIds.has(label.id)));
+      setSelectedIds((current) => current.filter((id) => !deletedIds.has(id)));
+      setSuccess(`${data.deleted} ${data.deleted === 1 ? "etichetta eliminata" : "etichette eliminate"}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Non riesco a eliminare le etichette.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -391,6 +423,10 @@ export function BarcodeLabelsManager() {
                   {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
                   Stampa {selectedLabels.length ? selectedLabels.length * copies : ""}
                 </button>
+                <button type="button" onClick={() => void deleteLabels(selectedLabels)} disabled={!selectedLabels.length || deleting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-xs font-black text-red-600 transition hover:bg-red-50 disabled:pointer-events-none disabled:opacity-40 dark:border-red-400/25 dark:bg-white/[0.04] dark:text-red-300 dark:hover:bg-red-500/10">
+                  {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                  Elimina selezionate
+                </button>
               </div>
             </div>
 
@@ -418,9 +454,14 @@ export function BarcodeLabelsManager() {
                             <span>{label.print_count} {label.print_count === 1 ? "stampa" : "stampe"}</span>
                           </p>
                         </div>
-                        <button type="button" onClick={() => void printLabels([label])} disabled={printing} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A93469] transition hover:bg-[#FFF0F6] disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-[#F3A0C8] dark:hover:bg-white/10">
-                          <Printer className="size-4" /> Stampa
-                        </button>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => void printLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A93469] transition hover:bg-[#FFF0F6] disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-[#F3A0C8] dark:hover:bg-white/10">
+                            <Printer className="size-4" /> Stampa
+                          </button>
+                          <button type="button" onClick={() => void deleteLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 text-xs font-black text-red-600 transition hover:bg-red-50 disabled:opacity-40 dark:border-red-400/25 dark:bg-white/[0.06] dark:text-red-300 dark:hover:bg-red-500/10" aria-label={`Elimina etichetta ${label.code}`}>
+                            <Trash2 className="size-4" /> <span className="sm:hidden">Elimina</span>
+                          </button>
+                        </div>
                       </article>
                     );
                   })}
