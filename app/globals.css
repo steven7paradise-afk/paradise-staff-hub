@@ -3185,6 +3185,135 @@ html.dark .app-content-surface .notification-hero .notification-primary-action {
   -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
 }
 
+/* Impostazioni: tutte le pagine del gruppo condividono una palette notte
+   leggibile, inclusi gli editor Sidebar, Ruoli e Dashboard che usano token
+   zinc/slate non coperti dalle regole generali dell'app. */
+.dark .settings-theme-scope .app-content-surface :is(
+  [class~="text-zinc-950"],
+  [class~="text-zinc-900"],
+  [class~="text-zinc-800"],
+  [class~="text-zinc-700"],
+  [class~="text-slate-950"],
+  [class~="text-slate-900"],
+  [class~="text-slate-800"],
+  [class~="text-slate-700"]
+) {
+  color: rgba(255, 255, 255, 0.94) !important;
+  -webkit-text-fill-color: currentColor;
+}
+
+.dark .settings-theme-scope .app-content-surface :is(
+  [class~="text-zinc-600"],
+  [class~="text-zinc-500"],
+  [class~="text-zinc-400"],
+  [class~="text-zinc-300"],
+  [class~="text-slate-600"],
+  [class~="text-slate-500"],
+  [class~="text-slate-400"],
+  [class~="text-slate-300"]
+) {
+  color: rgba(255, 255, 255, 0.6) !important;
+  -webkit-text-fill-color: currentColor;
+}
+
+.dark .settings-theme-scope .app-content-surface :is(
+  [class~="bg-zinc-50"],
+  [class~="bg-zinc-50/40"],
+  [class~="bg-zinc-50/50"],
+  [class~="bg-zinc-100"],
+  [class~="bg-zinc-200"],
+  [class~="bg-slate-50"],
+  [class~="bg-slate-100"],
+  [class~="bg-slate-200"]
+) {
+  background-color: rgba(255, 255, 255, 0.055) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is(
+  [class~="border-zinc-100"],
+  [class~="border-zinc-200"],
+  [class~="border-zinc-300"],
+  [class~="border-slate-100"],
+  [class~="border-slate-200"],
+  [class~="border-slate-300"]
+) {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is(
+  [class~="bg-pink-50"],
+  [class~="bg-pink-50/40"],
+  [class~="bg-pink-50/50"],
+  [class~="bg-pink-50/60"],
+  [class~="bg-pink-50/70"],
+  [class~="bg-pink-100"]
+) {
+  background-color: rgba(216, 90, 145, 0.15) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="bg-blue-50"], [class~="bg-blue-50/60"]) {
+  background-color: rgba(74, 132, 255, 0.14) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="bg-amber-50"], [class~="bg-yellow-50"], [class~="bg-orange-50"]) {
+  background-color: rgba(245, 158, 11, 0.13) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="bg-emerald-50"], [class~="bg-green-50"]) {
+  background-color: rgba(16, 185, 129, 0.13) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="bg-rose-50"], [class~="bg-red-50"]) {
+  background-color: rgba(244, 63, 94, 0.13) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="text-pink-600"], [class~="text-pink-700"]) {
+  color: #f3a6ca !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="text-blue-600"], [class~="text-blue-700"]) {
+  color: #9dbbff !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="text-amber-600"], [class~="text-amber-700"], [class~="text-amber-800"]) {
+  color: #f6cf72 !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="text-emerald-600"], [class~="text-emerald-700"], [class~="text-emerald-800"]) {
+  color: #6ee7b7 !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is(
+  [class~="text-rose-600"], [class~="text-rose-700"], [class~="text-rose-800"],
+  [class~="text-red-600"], [class~="text-red-700"], [class~="text-red-800"]
+) {
+  color: #fda4af !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="border-blue-100"], [class~="border-blue-200"]) {
+  border-color: rgba(96, 165, 250, 0.28) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="border-amber-200"], [class~="border-yellow-200"]) {
+  border-color: rgba(245, 158, 11, 0.28) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="border-emerald-200"], [class~="border-emerald-300"]) {
+  border-color: rgba(16, 185, 129, 0.28) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is([class~="border-rose-200"], [class~="border-red-100"], [class~="border-red-200"]) {
+  border-color: rgba(244, 63, 94, 0.28) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface [class*="bg-gradient-to-r"][class*="from-white"] {
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.07), rgba(216, 90, 145, 0.1)) !important;
+}
+
+.dark .settings-theme-scope .app-content-surface :is(input, textarea, select) {
+  color-scheme: dark;
+}
+
 .dark .app-content-surface .administrative-night-page :is(input, textarea)::placeholder {
   color: rgba(255, 255, 255, 0.4) !important;
   -webkit-text-fill-color: rgba(255, 255, 255, 0.4) !important;
