@@ -110,7 +110,7 @@ export function SidebarFrame({
         ) : null}
         {aside}
       </div>
-      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[124px]" : "xl:ml-[300px]")}>
+      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[108px]" : "xl:ml-[284px]")}>
         <div className="xl:flex xl:h-screen xl:flex-col">
           <div className={cn(
             "app-content-surface flex-1 overflow-hidden border-0 shadow-none xl:flex xl:flex-col",
