@@ -20,11 +20,32 @@ type BarcodeLabel = {
   id: string;
   code: string;
   title: string | null;
+  color: string | null;
+  weight: string | null;
+  length: string | null;
+  product_code: string | null;
+  typology: string | null;
   format: string;
   print_count: number;
   last_printed_at: string | null;
   created_at: string;
   created_by: { name: string };
+};
+
+type BackDetails = {
+  color: string;
+  weight: string;
+  length: string;
+  productCode: string;
+  typology: string;
+};
+
+const emptyBackDetails: BackDetails = {
+  color: "",
+  weight: "",
+  length: "",
+  productCode: "",
+  typology: "",
 };
 
 function escapeHtml(value: string) {
@@ -64,6 +85,7 @@ export function BarcodeLabelsManager() {
   const [labels, setLabels] = useState<BarcodeLabel[]>([]);
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
+  const [backDetails, setBackDetails] = useState<BackDetails>(emptyBackDetails);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copies, setCopies] = useState(1);
@@ -119,7 +141,9 @@ export function BarcodeLabelsManager() {
     const cleanQuery = query.trim().toLocaleLowerCase("it");
     if (!cleanQuery) return labels;
     return labels.filter((label) =>
-      `${label.code} ${label.title || ""}`.toLocaleLowerCase("it").includes(cleanQuery),
+      `${label.code} ${label.title || ""} ${label.color || ""} ${label.product_code || ""} ${label.typology || ""}`
+        .toLocaleLowerCase("it")
+        .includes(cleanQuery),
     );
   }, [labels, query]);
 
@@ -143,7 +167,7 @@ export function BarcodeLabelsManager() {
       const response = await fetch("/api/barcode-labels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", code: cleanCode, title: title.trim() }),
+        body: JSON.stringify({ action: "create", code: cleanCode, title: title.trim(), ...backDetails }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Non riesco a salvare l’etichetta.");
@@ -151,6 +175,7 @@ export function BarcodeLabelsManager() {
       setSelectedIds([data.label.id]);
       setCode("");
       setTitle("");
+      setBackDetails(emptyBackDetails);
       setSuccess(`Etichetta ${data.label.code} salvata. Ora puoi stamparla.`);
       window.setTimeout(() => codeInputRef.current?.focus(), 50);
     } catch (cause) {
@@ -174,18 +199,23 @@ export function BarcodeLabelsManager() {
         Array.from({ length: copies }, () => ({ label, svg: barcodeSvg(label.code) })),
       );
       const sections = printable.map(({ label, svg }) => `
-        <section class="label">
-          <div class="label-content">
-            <div class="brand">PARADISE BEAUTY</div>
-            ${label.title ? `<div class="title">${escapeHtml(label.title)}</div>` : ""}
-            <div class="barcode">${svg}</div>
-            <div class="code">${escapeHtml(label.code)}</div>
-          </div>
+        <section class="label label-front">
+          <div class="barcode">${svg}</div>
+          <div class="caption">${escapeHtml(label.title || label.code)}</div>
+        </section>
+        <section class="label label-back">
+          <dl>
+            <div><dt>Colore:</dt><dd>${escapeHtml(label.color || "—")}</dd></div>
+            <div><dt>Peso:</dt><dd>${escapeHtml(label.weight || "—")}</dd></div>
+            <div><dt>Lunghezza:</dt><dd>${escapeHtml(label.length || "—")}</dd></div>
+            <div><dt>Codice:</dt><dd>${escapeHtml(label.product_code || "—")}</dd></div>
+            <div><dt>Tipologia:</dt><dd>${escapeHtml(label.typology || "—")}</dd></div>
+          </dl>
         </section>
       `).join("");
 
       printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etichette barcode</title><style>
-        @page{size:25.4mm 50.8mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{position:relative;width:25.4mm;height:50.8mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-content{position:absolute;left:50%;top:50%;width:48.4mm;height:23mm;padding:1mm 1.3mm;display:flex;transform:translate(-50%,-50%) rotate(90deg);flex-direction:column;align-items:stretch;justify-content:center;overflow:hidden}.brand{text-align:center;font-size:5px;font-weight:800;line-height:1.7mm;letter-spacing:1px}.title{overflow:hidden;text-align:center;font-size:7px;font-weight:800;line-height:2.7mm;white-space:nowrap;text-overflow:ellipsis}.barcode{min-height:0;flex:1;margin-top:.3mm}.barcode svg{display:block;width:100%;height:100%}.code{text-align:center;font:700 8px/2.7mm monospace;letter-spacing:.3px}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
+        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:grid;place-items:center;padding:2mm 3mm}.label-back dl{width:100%;margin:0;font-size:8px;font-weight:700;line-height:3.7mm}.label-back dl div{display:grid;grid-template-columns:16mm 1fr;gap:1mm}.label-back dt,.label-back dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.label-back dt{font-weight:800}.label-back dd{font-weight:700}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
       </style></head><body>${sections}<script>window.onload=()=>window.print()</script></body></html>`);
       printWindow.document.close();
 
@@ -199,7 +229,7 @@ export function BarcodeLabelsManager() {
       if (!response.ok) throw new Error(data?.error || "La stampa è partita, ma non ho aggiornato lo storico.");
       const updatedById = new Map<string, BarcodeLabel>(data.labels.map((label: BarcodeLabel) => [label.id, label]));
       setLabels((current) => current.map((label) => updatedById.get(label.id) || label));
-      setSuccess(`${printable.length} ${printable.length === 1 ? "etichetta pronta" : "etichette pronte"} per la stampa.`);
+      setSuccess(`${printable.length} ${printable.length === 1 ? "coppia fronte/retro pronta" : "coppie fronte/retro pronte"} per la stampa.`);
     } catch (cause) {
       if (printWindow && !printWindow.closed && !printWindow.document.body?.children.length) printWindow.close();
       setError(cause instanceof Error ? cause.message : "Stampa non riuscita.");
@@ -227,7 +257,7 @@ export function BarcodeLabelsManager() {
               <p className="mt-2 max-w-2xl text-sm font-semibold text-white/65">Crea un codice, salvalo e stampalo. Tutte le etichette restano disponibili per le ristampe future.</p>
             </div>
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black">
-              <Barcode className="size-4 text-[#F3A0C8]" /> Code 128 · 2 × 1 pollici verticale
+              <Barcode className="size-4 text-[#F3A0C8]" /> Fronte + retro · 2 × 1 pollici
             </span>
           </div>
         </header>
@@ -258,24 +288,65 @@ export function BarcodeLabelsManager() {
             </label>
 
             <label className="mt-4 block">
-              <span className="text-[11px] font-black uppercase tracking-[0.14em] text-black/50 dark:text-white/55">Nome etichetta · facoltativo</span>
+              <span className="text-[11px] font-black uppercase tracking-[0.14em] text-black/50 dark:text-white/55">Testo sotto il barcode · facoltativo</span>
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 maxLength={120}
                 className="mt-2 h-12 w-full rounded-2xl border border-[#E6D8DF] bg-[#FCFAFB] px-4 text-sm font-bold outline-none transition focus:border-[#B83D7F] focus:ring-4 focus:ring-[#D96B94]/15 dark:border-white/10 dark:bg-white/[0.055]"
-                placeholder="Esempio: Extension castano 55 cm"
+                placeholder="Esempio: 3 - Castano fondente"
               />
             </label>
 
+            <fieldset className="mt-6 rounded-[22px] border border-[#E9D8E1] bg-[#FCFAFB] p-4 dark:border-white/10 dark:bg-white/[0.035] sm:p-5">
+              <legend className="px-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#A93469] dark:text-[#F3A0C8]">Informazioni sul retro</legend>
+              <p className="mb-4 text-xs font-semibold text-black/45 dark:text-white/45">Compila i dati che verranno stampati dietro l’etichetta.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {([
+                  ["color", "Colore", "Castano fondente"],
+                  ["weight", "Peso", "50 g"],
+                  ["length", "Lunghezza", "55 cm"],
+                  ["productCode", "Codice", "L"],
+                  ["typology", "Tipologia", "Tessitura"],
+                ] as const).map(([field, label, placeholder]) => (
+                  <label key={field} className={field === "typology" ? "sm:col-span-2" : ""}>
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/55">{label} *</span>
+                    <input
+                      required
+                      value={backDetails[field]}
+                      onChange={(event) => setBackDetails((current) => ({ ...current, [field]: event.target.value }))}
+                      maxLength={80}
+                      className="mt-1.5 h-11 w-full rounded-xl border border-[#E6D8DF] bg-white px-3 text-sm font-bold outline-none transition focus:border-[#B83D7F] focus:ring-4 focus:ring-[#D96B94]/15 dark:border-white/10 dark:bg-white/[0.055]"
+                      placeholder={placeholder}
+                    />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             <div className="mt-6 rounded-[22px] border border-dashed border-[#DDB8CA] bg-[#FFF9FC] p-5 dark:border-white/15 dark:bg-black/10">
-              <p className="text-center text-[9px] font-black uppercase tracking-[0.2em] text-[#A93469] dark:text-[#F3A0C8]">Anteprima etichetta</p>
-              <div className="relative mx-auto mt-3 aspect-[1/2] w-full max-w-[180px] overflow-hidden rounded-xl bg-white text-black shadow-sm ring-1 ring-black/5">
-                <div className="absolute left-1/2 top-1/2 flex h-[160px] w-[320px] -translate-x-1/2 -translate-y-1/2 rotate-90 flex-col justify-center px-4 py-3">
-                  <p className="truncate text-center text-[8px] font-black uppercase tracking-[0.18em]">Paradise Beauty</p>
-                  {title.trim() ? <p className="truncate text-center text-xs font-black">{title.trim()}</p> : null}
-                  {code.trim() ? <svg ref={previewRef} className="mt-1 h-24 w-full" aria-label={`Anteprima barcode ${code.trim()}`} /> : <div className="mt-1 grid h-24 place-items-center rounded-lg bg-black/[0.03] text-xs font-bold text-black/35">Il barcode apparirà qui</div>}
-                  <p className="truncate text-center font-mono text-xs font-black tracking-wider">{code.trim() || "—"}</p>
+              <p className="text-center text-[9px] font-black uppercase tracking-[0.2em] text-[#A93469] dark:text-[#F3A0C8]">Anteprima fronte e retro</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/40">Fronte</p>
+                  <div className="mx-auto flex aspect-[2/1] w-full max-w-[300px] flex-col rounded-xl bg-white px-3 py-2 text-black shadow-sm ring-1 ring-black/5">
+                    {code.trim() ? <svg ref={previewRef} className="min-h-0 w-full flex-1" aria-label={`Anteprima barcode ${code.trim()}`} /> : <div className="grid min-h-0 flex-1 place-items-center rounded-lg bg-black/[0.03] text-[10px] font-bold text-black/35">Il barcode apparirà qui</div>}
+                    <p className="truncate text-center text-[10px] font-black">{title.trim() || code.trim() || "—"}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/40">Retro</p>
+                  <div className="mx-auto grid aspect-[2/1] w-full max-w-[300px] place-items-center rounded-xl bg-white px-4 py-2 text-black shadow-sm ring-1 ring-black/5">
+                    <dl className="w-full space-y-0.5 text-[9px] font-bold leading-tight">
+                      {([
+                        ["Colore", backDetails.color],
+                        ["Peso", backDetails.weight],
+                        ["Lunghezza", backDetails.length],
+                        ["Codice", backDetails.productCode],
+                        ["Tipologia", backDetails.typology],
+                      ] as const).map(([label, value]) => <div key={label} className="grid grid-cols-[72px_1fr] gap-1"><dt className="font-black">{label}:</dt><dd className="truncate">{value.trim() || "—"}</dd></div>)}
+                    </dl>
+                  </div>
                 </div>
               </div>
               {previewError ? <p className="mt-3 text-center text-xs font-bold text-red-600">{previewError}</p> : null}
@@ -300,7 +371,7 @@ export function BarcodeLabelsManager() {
                 </div>
                 <label className="relative block min-w-0 lg:w-72">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-black/35 dark:text-white/35" />
-                  <input value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-xl border border-black/10 bg-[#FAF8F9] pl-11 pr-10 text-sm font-bold outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-white/[0.055]" placeholder="Cerca codice o nome" />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-xl border border-black/10 bg-[#FAF8F9] pl-11 pr-10 text-sm font-bold outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-white/[0.055]" placeholder="Cerca codice, colore o tipo" />
                   {query ? <button type="button" onClick={() => setQuery("")} className="absolute right-0 top-0 grid size-11 place-items-center text-black/35 dark:text-white/40" aria-label="Cancella ricerca"><X className="size-4" /></button> : null}
                 </label>
               </div>
@@ -341,6 +412,7 @@ export function BarcodeLabelsManager() {
                         <div className="min-w-0">
                           <p className="truncate font-mono text-sm font-black tracking-wide max-sm:hidden">{label.code}</p>
                           <p className="mt-1 truncate text-xs font-bold text-black/50 dark:text-white/55">{label.title || "Senza nome"}</p>
+                          {label.color || label.weight || label.length || label.typology ? <p className="mt-1 truncate text-[10px] font-semibold text-black/40 dark:text-white/45">{[label.color, label.weight, label.length, label.typology].filter(Boolean).join(" · ")}</p> : null}
                           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-black/35 dark:text-white/35">
                             <span className="inline-flex items-center gap-1"><Clock3 className="size-3" /> Creata {formatDate(label.created_at)}</span>
                             <span>{label.print_count} {label.print_count === 1 ? "stampa" : "stampe"}</span>

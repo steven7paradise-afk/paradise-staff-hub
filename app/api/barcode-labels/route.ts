@@ -10,6 +10,11 @@ const barcodeLabelSelect = {
   id: true,
   code: true,
   title: true,
+  color: true,
+  weight: true,
+  length: true,
+  product_code: true,
+  typology: true,
   format: true,
   print_count: true,
   last_printed_at: true,
@@ -38,6 +43,12 @@ function validCode(value: unknown) {
   return code;
 }
 
+function requiredDetail(value: unknown, label: string, maxLength = 80) {
+  const detail = String(value ?? "").trim();
+  if (!detail) throw new Error(`Inserisci ${label}.`);
+  return detail.slice(0, maxLength);
+}
+
 function apiError(error: unknown) {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
     return NextResponse.json({ error: "Questa etichetta è già stata salvata." }, { status: 409 });
@@ -59,6 +70,9 @@ export async function GET(request: NextRequest) {
           OR: [
             { code: { contains: query, mode: "insensitive" } },
             { title: { contains: query, mode: "insensitive" } },
+            { color: { contains: query, mode: "insensitive" } },
+            { product_code: { contains: query, mode: "insensitive" } },
+            { typology: { contains: query, mode: "insensitive" } },
           ],
         }
       : undefined,
@@ -81,10 +95,20 @@ export async function POST(request: NextRequest) {
     if (action === "create") {
       const code = validCode(body?.code);
       const title = String(body?.title ?? "").trim().slice(0, 120) || null;
+      const color = requiredDetail(body?.color, "il colore");
+      const weight = requiredDetail(body?.weight, "il peso");
+      const length = requiredDetail(body?.length, "la lunghezza");
+      const productCode = requiredDetail(body?.productCode, "il codice prodotto");
+      const typology = requiredDetail(body?.typology, "la tipologia");
       const label = await prisma.barcodeLabel.create({
         data: {
           code,
           title,
+          color,
+          weight,
+          length,
+          product_code: productCode,
+          typology,
           created_by_id: user.id,
         },
         select: barcodeLabelSelect,
