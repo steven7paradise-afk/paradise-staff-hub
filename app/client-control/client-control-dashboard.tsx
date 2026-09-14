@@ -69,17 +69,11 @@ function countsInAnalytics(answers: Record<string, any>) {
 const discoveryColors: Record<(typeof CLIENT_CONTROL_DISCOVERY_OPTIONS)[number], string> = {
   Instagram: "#E1306C",
   TikTok: "#1F1F1F",
-  Facebook: "#1877F2",
-  YouTube: "#FF0000",
-  Pinterest: "#BD081C",
-  Snapchat: "#E8C900",
-  Threads: "#4A4A4A",
-  "X (Twitter)": "#657786",
-  LinkedIn: "#0A66C2",
-  WhatsApp: "#25D366",
-  Telegram: "#229ED9",
-  Google: "#4285F4",
   ChatGPT: "#10A37F",
+  Pinterest: "#BD081C",
+  Google: "#4285F4",
+  YouTube: "#FF0000",
+  Facebook: "#1877F2",
   Altro: "#E88AC5",
 };
 

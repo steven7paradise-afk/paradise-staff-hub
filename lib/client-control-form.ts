@@ -35,17 +35,11 @@ export const CLIENT_CONTROL_FIELD_IDS = {
 export const CLIENT_CONTROL_DISCOVERY_OPTIONS = [
   "Instagram",
   "TikTok",
-  "Facebook",
-  "YouTube",
-  "Pinterest",
-  "Snapchat",
-  "Threads",
-  "X (Twitter)",
-  "LinkedIn",
-  "WhatsApp",
-  "Telegram",
-  "Google",
   "ChatGPT",
+  "Pinterest",
+  "Google",
+  "YouTube",
+  "Facebook",
   "Altro",
 ] as const;
 
@@ -237,9 +231,11 @@ export async function ensureClientControlForm(createdById?: string | null) {
     const discoverySourceOptions = Array.isArray(discoverySourceField?.options)
       ? discoverySourceField.options.map(String)
       : [];
-    const hasDiscoveryOptions = CLIENT_CONTROL_DISCOVERY_OPTIONS.every(
-      (option) => discoverySourceOptions.includes(option),
-    );
+    const hasDiscoveryOptions =
+      discoverySourceOptions.length === CLIENT_CONTROL_DISCOVERY_OPTIONS.length &&
+      CLIENT_CONTROL_DISCOVERY_OPTIONS.every(
+        (option, index) => discoverySourceOptions[index] === option,
+      );
     const hasPaymentVerificationFields = currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.paymentMethod);
     const paymentMethodField = currentFields.find(
       (field) => field.id === CLIENT_CONTROL_FIELD_IDS.paymentMethod,
