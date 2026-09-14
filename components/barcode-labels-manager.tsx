@@ -239,6 +239,12 @@ export function BarcodeLabelsManager() {
     () => collections.find((collection) => collection.id === selectedCollectionId) || null,
     [collections, selectedCollectionId],
   );
+  const previewFields = selectedCollection?.fields || [];
+  const previewFeatureField = previewFields.find((field) => field.key === "color") || previewFields[0];
+  const previewTypeField = previewFields.find((field) => field.key === "typology");
+  const previewSpecFields = previewFields.filter(
+    (field) => field.key !== previewFeatureField?.key && field.key !== previewTypeField?.key,
+  );
 
   const selectedLabels = useMemo(() => {
     const selected = new Set(selectedIds);
@@ -446,8 +452,12 @@ export function BarcodeLabelsManager() {
           productCode: label.product_code,
           typology: label.typology,
         };
-        const backRows = fields.map((field) => `
-          <div><dt>${escapeHtml(field.label)}:</dt><dd>${escapeHtml(label.details?.[field.key] || legacyValues[field.key] || "—")}</dd></div>
+        const valueFor = (field: CollectionField) => label.details?.[field.key] || legacyValues[field.key] || "—";
+        const featureField = fields.find((field) => field.key === "color") || fields[0];
+        const typeField = fields.find((field) => field.key === "typology");
+        const specFields = fields.filter((field) => field.key !== featureField?.key && field.key !== typeField?.key);
+        const backSpecs = specFields.map((field) => `
+          <div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(valueFor(field))}</dd></div>
         `).join("");
         const pages: string[] = [];
         if (printMode !== "info") pages.push(`
@@ -458,15 +468,22 @@ export function BarcodeLabelsManager() {
         `);
         if (printMode !== "barcode") pages.push(`
           <section class="label label-back">
-            <div class="back-title">PARADISE BEAUTY</div>
-            <dl class="${fields.length > 5 ? "compact" : ""}">${backRows}</dl>
+            <header class="back-header">
+              <div class="back-brand"><span class="brand-mark">P</span><span>PARADISE BEAUTY</span></div>
+              <span class="type-pill">${escapeHtml(typeField ? valueFor(typeField) : label.collection?.name || "PRODOTTO")}</span>
+            </header>
+            <div class="back-feature">
+              <span>${escapeHtml(featureField?.label || "Prodotto")}</span>
+              <strong>${escapeHtml(featureField ? valueFor(featureField) : label.title || label.code)}</strong>
+            </div>
+            <dl class="back-specs ${specFields.length > 4 ? "compact" : ""}" style="--columns:${Math.min(Math.max(specFields.length, 1), 5)}">${backSpecs}</dl>
           </section>
         `);
         return pages;
       }).join("");
 
       printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etichette barcode</title><style>
-        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 3mm}.back-title{text-align:center;font-size:7px;font-weight:900;line-height:2.8mm;letter-spacing:.8px}.label-back dl{width:100%;margin:.3mm 0 0;font-size:7.5px;font-weight:700;line-height:3.25mm}.label-back dl.compact{font-size:6.5px;line-height:2.55mm}.label-back dl div{display:grid;grid-template-columns:16mm 1fr;gap:1mm}.label-back dt,.label-back dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.label-back dt{font-weight:800}.label-back dd{font-weight:700}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
+        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 2.2mm}.back-header{display:flex;height:3.8mm;align-items:center;justify-content:space-between;border-bottom:.25mm solid #111}.back-brand{display:flex;align-items:center;gap:1mm;font-size:6.5px;font-weight:900;letter-spacing:.65px}.brand-mark{display:grid;width:3.2mm;height:3.2mm;place-items:center;border-radius:50%;background:#111;color:#fff;font-size:6px;letter-spacing:0}.type-pill{max-width:18mm;overflow:hidden;border:.2mm solid #111;border-radius:3mm;padding:.45mm 1.3mm;font-size:5.5px;font-weight:900;letter-spacing:.25px;line-height:1;white-space:nowrap;text-overflow:ellipsis;text-transform:uppercase}.back-feature{display:flex;min-height:7.2mm;flex-direction:column;justify-content:center;border-bottom:.2mm solid #bbb}.back-feature span{font-size:5.5px;font-weight:900;letter-spacing:.65px;text-transform:uppercase}.back-feature strong{overflow:hidden;font-size:10px;font-weight:900;line-height:3.4mm;white-space:nowrap;text-overflow:ellipsis}.back-specs{display:grid;flex:1;grid-template-columns:repeat(var(--columns),minmax(0,1fr));align-items:center;margin:0}.back-specs div{min-width:0;padding:0 1mm;border-left:.2mm solid #ddd}.back-specs div:first-child{border-left:0;padding-left:0}.back-specs div:last-child{padding-right:0}.back-specs dt,.back-specs dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.back-specs dt{font-size:5px;font-weight:900;letter-spacing:.35px;text-transform:uppercase}.back-specs dd{margin-top:.35mm;font-size:7.5px;font-weight:900;line-height:2.7mm}.back-specs.compact dt{font-size:4.5px}.back-specs.compact dd{font-size:6.5px}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
       </style></head><body>${sections}<script>window.onload=()=>window.print()</script></body></html>`);
       printWindow.document.close();
 
@@ -713,10 +730,29 @@ export function BarcodeLabelsManager() {
                 </div>
                 <div>
                   <p className="mb-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/40">Retro</p>
-                  <div className="mx-auto flex aspect-[2/1] w-full max-w-[300px] flex-col justify-center rounded-xl bg-white px-4 py-2 text-black shadow-sm ring-1 ring-black/5">
-                    <p className="mb-1 text-center text-[8px] font-black uppercase tracking-[0.15em]">Paradise Beauty</p>
-                    <dl className={`w-full font-bold leading-tight ${selectedCollection && selectedCollection.fields.length > 5 ? "text-[6px]" : "text-[8px]"}`}>
-                      {(selectedCollection?.fields || []).map((field) => <div key={field.key} className="grid grid-cols-[72px_1fr] gap-1"><dt className="truncate font-black">{field.label}:</dt><dd className="truncate">{detailValues[field.key]?.trim() || "—"}</dd></div>)}
+                  <div className="mx-auto flex aspect-[2/1] w-full max-w-[300px] flex-col rounded-xl bg-white px-3 py-2 text-black shadow-sm ring-1 ring-black/5">
+                    <div className="flex h-6 shrink-0 items-center justify-between border-b border-black">
+                      <div className="flex items-center gap-1.5 text-[7px] font-black tracking-[0.12em]">
+                        <span className="grid size-4 place-items-center rounded-full bg-black text-[7px] text-white">P</span>
+                        PARADISE BEAUTY
+                      </div>
+                      <span className="max-w-[92px] truncate rounded-full border border-black px-2 py-0.5 text-[6px] font-black uppercase tracking-wide">
+                        {previewTypeField ? detailValues[previewTypeField.key]?.trim() || selectedCollection?.name : selectedCollection?.name || "Prodotto"}
+                      </span>
+                    </div>
+                    <div className="flex min-h-0 flex-1 flex-col justify-center border-b border-black/25 py-1">
+                      <span className="text-[6px] font-black uppercase tracking-[0.12em]">{previewFeatureField?.label || "Prodotto"}</span>
+                      <strong className="truncate text-[12px] font-black leading-tight">
+                        {previewFeatureField ? detailValues[previewFeatureField.key]?.trim() || "—" : title.trim() || code.trim() || "—"}
+                      </strong>
+                    </div>
+                    <dl className="grid h-8 shrink-0 items-center" style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(previewSpecFields.length, 1), 5)}, minmax(0, 1fr))` }}>
+                      {previewSpecFields.map((field, index) => (
+                        <div key={field.key} className={`min-w-0 px-1.5 ${index ? "border-l border-black/15" : "pl-0"}`}>
+                          <dt className="truncate text-[5px] font-black uppercase tracking-wide">{field.label}</dt>
+                          <dd className="mt-0.5 truncate text-[8px] font-black leading-none">{detailValues[field.key]?.trim() || "—"}</dd>
+                        </div>
+                      ))}
                     </dl>
                   </div>
                 </div>
