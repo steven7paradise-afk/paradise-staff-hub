@@ -52,6 +52,7 @@ const nav = [
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/shopify-orders", label: "Ordini Shopify", iconName: "Store", roles: routePermissions["/shopify-orders"], section: "Planning & Saloni" },
   { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: routePermissions["/shipping"], section: "Planning & Saloni" },
+  { href: "/barcode-labels", label: "Etichette barcode", iconName: "Barcode", roles: routePermissions["/barcode-labels"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
@@ -286,6 +287,21 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     const sectionIndex = preferredSection >= 0 ? preferredSection : 0;
     sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
       ? { ...section, routes: [...section.routes, "/fine-giornata"] }
+      : section);
+  }
+  if (
+    ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole)
+    && sidebarConfig
+    && !sidebarConfig.some((section) => section.routes.includes("/barcode-labels"))
+  ) {
+    const preferredSection = sidebarConfig.findIndex((section) =>
+      section.id === "planning"
+      || section.title.toLowerCase().includes("planning")
+      || section.routes.includes("/orders")
+    );
+    const sectionIndex = preferredSection >= 0 ? preferredSection : 0;
+    sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
+      ? { ...section, routes: [...section.routes, "/barcode-labels"] }
       : section);
   }
   const getSidebarLabel = (href: string, fallback: string) => {

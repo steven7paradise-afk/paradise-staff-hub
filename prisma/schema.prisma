@@ -156,6 +156,7 @@ model User {
   inventory_movements       InventoryMovement[]
   inventory_print_jobs      InventoryPrintJob[]
   inventory_count_sessions  InventoryCountSession[]
+  barcode_labels_created    BarcodeLabel[]             @relation("BarcodeLabelCreator")
 
   @@map("users")
 }
@@ -368,6 +369,23 @@ model InventoryPrintJobLabel {
   @@id([print_job_id, label_id])
   @@index([label_id])
   @@map("inventory_print_job_labels")
+}
+
+model BarcodeLabel {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  title           String?
+  format          String    @default("CODE128")
+  print_count     Int       @default(0)
+  last_printed_at DateTime?
+  created_by_id   String
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  created_by      User      @relation("BarcodeLabelCreator", fields: [created_by_id], references: [id])
+
+  @@index([created_at])
+  @@index([title])
+  @@map("barcode_labels")
 }
 
 model InventoryStockSyncJob {

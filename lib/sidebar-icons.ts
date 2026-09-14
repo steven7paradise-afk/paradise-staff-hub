@@ -16,6 +16,7 @@ export const SIDEBAR_ICON_OPTIONS = [
   { name: "Store", label: "Negozio" },
   { name: "Truck", label: "Spedizione" },
   { name: "Package", label: "Pacco" },
+  { name: "Barcode", label: "Barcode" },
   { name: "DollarSign", label: "Denaro" },
   { name: "CashRegister", label: "Registratore" },
   { name: "ReceiptText", label: "Ricevuta" },

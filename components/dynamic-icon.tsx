@@ -56,6 +56,7 @@ import {
   BarChart3,
   ClipboardCheck,
   Award,
+  Barcode,
 } from "lucide-react";
 
 const iconMap = {
@@ -113,6 +114,7 @@ const iconMap = {
   BarChart3,
   ClipboardCheck,
   Award,
+  Barcode,
   CashRegister
 } as const;
 
