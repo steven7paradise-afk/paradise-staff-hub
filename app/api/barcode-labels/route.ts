@@ -116,6 +116,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ label }, { status: 201 });
     }
 
+    if (action === "delete") {
+      const ids = Array.from(new Set(Array.isArray(body?.ids) ? body.ids.map(String).filter(Boolean) : []));
+      if (!ids.length || ids.length > 500) throw new Error("Seleziona da 1 a 500 etichette da eliminare.");
+
+      const result = await prisma.barcodeLabel.deleteMany({ where: { id: { in: ids } } });
+      if (!result.count) throw new Error("Le etichette selezionate non sono più disponibili.");
+      return NextResponse.json({ deleted: result.count, ids });
+    }
+
     if (action === "recordPrint") {
       const ids = Array.from(new Set(Array.isArray(body?.ids) ? body.ids.map(String).filter(Boolean) : []));
       const copies = Math.min(50, Math.max(1, Math.trunc(Number(body?.copies) || 1)));
