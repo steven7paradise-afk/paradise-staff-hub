@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { WorkHoursManager } from "@/components/work-hours-manager";
 import { auth } from "@/lib/auth";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 
@@ -18,7 +19,6 @@ export default async function WorkHoursPage() {
   const workers = await prisma.user.findMany({
       where: {
         role: { notIn: ["ZERO", "SUPER_ADMIN"] },
-        active: true,
       },
       include: { location: true },
       orderBy: { name: "asc" },
@@ -34,7 +34,7 @@ export default async function WorkHoursPage() {
           id: worker.id,
           name: worker.name,
           email: worker.email,
-          active: worker.active,
+          active: worker.active && worker.employee_status !== FORMER_EMPLOYEE_STATUS,
           location: worker.location?.name ?? "Nessun salone",
           photoUrl: worker.photo_url ?? null,
         }))}
