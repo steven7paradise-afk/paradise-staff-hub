@@ -444,7 +444,7 @@ const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
 const appointmentStatusClasses: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "border-sky-100 bg-sky-50 text-sky-700",
   NON_PRESENTATO: "border-red-100 bg-red-50 text-red-700",
-  INIZIATO: "border-emerald-100 bg-emerald-50 text-emerald-700",
+  INIZIATO: "border-yellow-200 bg-yellow-50 text-yellow-800",
   IN_ATTESA: "border-amber-100 bg-amber-50 text-amber-700",
   COMPLETATO: "border-green-100 bg-green-50 text-green-700",
   ARRIVATO_IN_RITARDO: "border-orange-100 bg-orange-50 text-orange-700",
@@ -7234,6 +7234,8 @@ export function AppointmentsBrowser({
                                     ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
                                     : status === "COMPLETATO"
                                     ? "border-[#B9DFC5] border-l-[#45A96A] bg-[#F1FAF4]"
+                                    : status === "INIZIATO"
+                                      ? "border-[#F0D36A] border-l-[#D9AA18] bg-[#FFF9DB]"
                                     : status === "IN_ATTESA"
                                       ? "border-[#EBD58B] border-l-[#D6A52D] bg-[#FFF9E5]"
                                     : "border-[#E1E3E7] border-l-[#D45B91] bg-white"
