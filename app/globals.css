@@ -1648,7 +1648,7 @@ textarea {
   }
 
   .dark .sidebar-collapsed .sidebar-logout {
-    color: var(--dark-sidebar-text) !important;
+    color: var(--sidebar-text, #f8f3f6) !important;
   }
 
   .sidebar-collapsed .sidebar-logout:hover {
@@ -1666,6 +1666,8 @@ textarea {
     width: 1.15rem !important;
     height: 1.15rem !important;
     margin: 0 !important;
+    color: currentColor !important;
+    stroke: currentColor !important;
   }
 }
 
