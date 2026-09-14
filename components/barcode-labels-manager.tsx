@@ -8,7 +8,9 @@ import {
   CheckSquare2,
   Clock3,
   Copy,
+  Image as ImageIcon,
   Loader2,
+  PackageCheck,
   Plus,
   Printer,
   Search,
@@ -26,6 +28,7 @@ type BarcodeLabel = {
   length: string | null;
   product_code: string | null;
   typology: string | null;
+  preview_url: string | null;
   collection_id: string | null;
   details: Record<string, string> | null;
   format: string;
@@ -109,6 +112,16 @@ function barcodeSvg(code: string) {
   return svg.outerHTML;
 }
 
+function isValidHttpUrl(value: string) {
+  if (!value.trim()) return true;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export function BarcodeLabelsManager() {
   const previewRef = useRef<SVGSVGElement>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
@@ -116,6 +129,8 @@ export function BarcodeLabelsManager() {
   const [collections, setCollections] = useState<BarcodeCollection[]>([]);
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewImageError, setPreviewImageError] = useState(false);
   const [detailValues, setDetailValues] = useState<Record<string, string>>({});
   const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [collectionFilter, setCollectionFilter] = useState("all");
@@ -126,6 +141,7 @@ export function BarcodeLabelsManager() {
   const [newCollectionFields, setNewCollectionFields] = useState<string[]>(["color", "weight", "length", "productCode", "typology"]);
   const [newCustomQuestions, setNewCustomQuestions] = useState<CustomQuestion[]>([]);
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(100);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copies, setCopies] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -209,6 +225,12 @@ export function BarcodeLabelsManager() {
     });
   }, [collectionFilter, labels, query]);
 
+  const visibleLabels = useMemo(() => filteredLabels.slice(0, visibleCount), [filteredLabels, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [collectionFilter, query]);
+
   const selectedCollection = useMemo(
     () => collections.find((collection) => collection.id === selectedCollectionId) || null,
     [collections, selectedCollectionId],
@@ -220,7 +242,7 @@ export function BarcodeLabelsManager() {
   }, [labels, selectedIds]);
 
   const allVisibleSelected = Boolean(
-    filteredLabels.length && filteredLabels.every((label) => selectedIds.includes(label.id)),
+    visibleLabels.length && visibleLabels.every((label) => selectedIds.includes(label.id)),
   );
 
   const requiredDetailsComplete = Boolean(
@@ -228,6 +250,7 @@ export function BarcodeLabelsManager() {
     && selectedCollection.fields.length
     && selectedCollection.fields.every((field) => detailValues[field.key]?.trim()),
   );
+  const previewUrlValid = isValidHttpUrl(previewUrl);
 
   function chooseCollection(collectionId: string) {
     const collection = collections.find((item) => item.id === collectionId);
@@ -288,6 +311,7 @@ export function BarcodeLabelsManager() {
           action: "create",
           code: cleanCode,
           title: title.trim(),
+          previewUrl: previewUrl.trim(),
           collectionId: selectedCollection.id,
           details: detailValues,
         }),
@@ -298,6 +322,8 @@ export function BarcodeLabelsManager() {
       setSelectedIds([data.label.id]);
       setCode("");
       setTitle("");
+      setPreviewUrl("");
+      setPreviewImageError(false);
       setDetailValues({ typology: selectedCollection.name });
       setCreateOpen(false);
       setSuccess(`Etichetta ${data.label.code} salvata. Ora puoi stamparla.`);
@@ -408,7 +434,7 @@ export function BarcodeLabelsManager() {
   }
 
   function toggleVisibleSelection() {
-    const visibleIds = filteredLabels.map((label) => label.id);
+    const visibleIds = visibleLabels.map((label) => label.id);
     setSelectedIds((current) => {
       if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id));
       return Array.from(new Set([...current, ...visibleIds]));
@@ -416,29 +442,38 @@ export function BarcodeLabelsManager() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F3F5] px-4 py-6 text-[#221D20] dark:bg-[#121114] dark:text-white sm:px-6 lg:px-10 lg:py-10">
-      <div className="mx-auto max-w-[1500px] space-y-6">
-        <header className="overflow-hidden rounded-[28px] bg-[linear-gradient(125deg,#24151D_0%,#4A1D33_55%,#B53D7A_145%)] px-5 py-7 text-white shadow-[0_24px_70px_rgba(80,24,51,0.18)] sm:px-8 sm:py-9">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <div className="min-h-screen bg-[#F3F1F2] px-3 py-4 text-[#221D20] dark:bg-[#111114] dark:text-white sm:px-5 lg:px-8 lg:py-6">
+      <div className="mx-auto max-w-[1600px] space-y-4">
+        <header className="overflow-hidden rounded-[22px] border border-white/10 bg-[#211A1E] px-5 py-5 text-white shadow-[0_14px_38px_rgba(42,20,31,0.16)] sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#F3A0C8]">Strumenti operativi</p>
-              <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-5xl">Etichette barcode</h1>
-              <p className="mt-2 max-w-2xl text-sm font-semibold text-white/65">Crea un codice, salvalo e stampalo. Tutte le etichette restano disponibili per le ristampe future.</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#F080B7]">Centro etichette</p>
+              <h1 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">Barcode prodotti</h1>
+              <p className="mt-1 text-xs font-semibold text-white/55">Archivio, selezione e stampa Code 128.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black">
+              <span className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-[11px] font-black">
                 <Barcode className="size-4 text-[#F3A0C8]" /> CODE 128 · 2 × 1 pollici
               </span>
-              <button type="button" onClick={() => setCreateOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F080B7] px-5 text-sm font-black text-[#25141D] transition hover:bg-[#F3A0C8]">
+              <button type="button" onClick={() => setCreateOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F080B7] px-5 text-sm font-black text-[#25141D] shadow-[0_8px_24px_rgba(240,128,183,0.2)] transition hover:bg-[#F3A0C8]">
                 <Plus className="size-5" /> Aggiungi prodotto
               </button>
             </div>
           </div>
         </header>
 
+        <section className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Riepilogo operativo">
+          {[
+            { label: "Archivio", value: labels.length, note: "etichette", icon: Barcode },
+            { label: "Selezionate", value: selectedIds.length, note: "pronte", icon: CheckSquare2 },
+            { label: "Mai stampate", value: labels.filter((label) => label.print_count === 0).length, note: "da verificare", icon: Printer },
+            { label: "Collezioni", value: collections.length, note: "attive", icon: PackageCheck },
+          ].map((item) => <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-black/[0.07] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#1D1D22]"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#FFF0F6] text-[#B83D7F] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]"><item.icon className="size-4" /></span><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/40 dark:text-white/40">{item.label}</p><p className="mt-0.5 text-xl font-black tabular-nums">{item.value} <span className="text-[10px] font-bold text-black/35 dark:text-white/35">{item.note}</span></p></div></div>)}
+        </section>
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(420px,1.08fr)]">
           {createOpen ? <button type="button" onClick={() => setCreateOpen(false)} className="fixed inset-0 z-40 cursor-default bg-black/55 backdrop-blur-sm" aria-label="Chiudi pop-up" /> : null}
-          <form onSubmit={createLabel} role="dialog" aria-modal="true" aria-labelledby="new-barcode-title" className={`${createOpen ? "fixed left-1/2 top-1/2 z-50 block max-h-[92vh] w-[min(760px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto" : "hidden"} rounded-[28px] border border-black/[0.07] bg-white p-5 shadow-[0_24px_80px_rgba(20,10,15,0.3)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7`}>
+          <form onSubmit={createLabel} role="dialog" aria-modal="true" aria-labelledby="new-barcode-title" className={`${createOpen ? "fixed inset-y-0 right-0 z-50 block h-dvh w-full max-w-[760px] overflow-y-auto" : "hidden"} border-l border-black/[0.08] bg-white p-5 shadow-[-24px_0_80px_rgba(20,10,15,0.28)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7`}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F] dark:text-[#F080B7]">Nuova etichetta</p>
@@ -529,6 +564,23 @@ export function BarcodeLabelsManager() {
               />
             </label>
 
+            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-end">
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.14em] text-black/50 dark:text-white/55">URL immagine prodotto · facoltativo</span>
+                <span className="mt-2 flex h-12 items-center gap-3 rounded-2xl border border-[#E6D8DF] bg-[#FCFAFB] px-4 transition focus-within:border-[#B83D7F] focus-within:ring-4 focus-within:ring-[#D96B94]/15 dark:border-white/10 dark:bg-white/[0.055]">
+                  <ImageIcon className="size-4 shrink-0 text-black/35 dark:text-white/40" />
+                  <input value={previewUrl} onChange={(event) => { setPreviewUrl(event.target.value); setPreviewImageError(false); }} maxLength={1000} inputMode="url" className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" placeholder="https://…/foto-prodotto.jpg" />
+                </span>
+                {!previewUrlValid ? <span className="mt-1 block text-xs font-bold text-red-600 dark:text-red-300">Inserisci un link che inizi con http:// o https://.</span> : null}
+              </label>
+              <div className="grid aspect-square w-28 place-items-center overflow-hidden rounded-2xl border border-dashed border-black/10 bg-[#F8F5F6] dark:border-white/10 dark:bg-white/[0.04]">
+                {previewUrl.trim() && previewUrlValid && !previewImageError ? (
+                  <img src={previewUrl.trim()} alt="Anteprima del prodotto" onError={() => setPreviewImageError(true)} className="size-full object-cover" />
+                ) : <ImageIcon className="size-6 text-black/20 dark:text-white/20" />}
+              </div>
+            </div>
+            {previewImageError ? <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">L’immagine non è raggiungibile. Controlla il link.</p> : null}
+
             <fieldset className="mt-6 rounded-[22px] border border-[#E9D8E1] bg-[#FCFAFB] p-4 dark:border-white/10 dark:bg-white/[0.035] sm:p-5">
               <legend className="px-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#A93469] dark:text-[#F3A0C8]">Informazioni sul retro</legend>
               <p className="mb-4 text-xs font-semibold text-black/45 dark:text-white/45">Compila i dati che verranno stampati dietro l’etichetta.</p>
@@ -577,7 +629,7 @@ export function BarcodeLabelsManager() {
             </div>
 
             <button
-              disabled={saving || !code.trim() || Boolean(previewError) || !requiredDetailsComplete}
+              disabled={saving || !code.trim() || Boolean(previewError) || !requiredDetailsComplete || !previewUrlValid || previewImageError}
               className="mt-6 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#B83D7F] px-5 text-sm font-black text-white shadow-[0_12px_28px_rgba(184,61,127,0.24)] transition hover:bg-[#A83273] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94] disabled:pointer-events-none disabled:opacity-45"
             >
               {saving ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
@@ -644,15 +696,27 @@ export function BarcodeLabelsManager() {
               {loading ? (
                 <div className="grid min-h-72 place-items-center text-sm font-bold text-black/40 dark:text-white/40"><span className="inline-flex items-center gap-2"><Loader2 className="size-5 animate-spin" /> Caricamento etichette…</span></div>
               ) : filteredLabels.length ? (
-                <div className="space-y-2">
-                  {filteredLabels.map((label) => {
+                <div>
+                  <div className="mb-2 hidden grid-cols-[32px_52px_minmax(0,1fr)_auto] items-center gap-3 px-3 text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/35 sm:grid">
+                    <span />
+                    <span>Foto</span>
+                    <span>Prodotto e identificativo</span>
+                    <span className="pr-4">Azioni</span>
+                  </div>
+                  <div className="space-y-1.5">
+                  {visibleLabels.map((label) => {
                     const selected = selectedIds.includes(label.id);
                     return (
-                      <article key={label.id} className={`grid gap-3 rounded-2xl border p-4 transition sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center ${selected ? "border-[#D96B94] bg-[#FFF3F8] ring-2 ring-[#D96B94]/10 dark:border-[#F080B7] dark:bg-[#F080B7]/10" : "border-black/[0.07] bg-white hover:border-[#E6B4CC] dark:border-white/10 dark:bg-white/[0.035]"}`}>
+                      <article key={label.id} className={`grid gap-3 rounded-xl border p-3 transition sm:grid-cols-[32px_52px_minmax(0,1fr)_auto] sm:items-center ${selected ? "border-[#D96B94] bg-[#FFF3F8] ring-2 ring-[#D96B94]/10 dark:border-[#F080B7] dark:bg-[#F080B7]/10" : "border-black/[0.07] bg-white hover:border-[#E6B4CC] dark:border-white/10 dark:bg-white/[0.025]"}`}>
                         <label className="flex cursor-pointer items-center gap-3 sm:block">
                           <input type="checkbox" checked={selected} onChange={(event) => setSelectedIds((current) => event.target.checked ? Array.from(new Set([...current, label.id])) : current.filter((id) => id !== label.id))} className="size-5 accent-[#B83D7F]" aria-label={`Seleziona ${label.code}`} />
                           <span className="font-mono text-sm font-black sm:hidden">{label.code}</span>
                         </label>
+                        <div className="hidden size-12 overflow-hidden rounded-lg border border-black/[0.06] bg-[#F6F3F4] dark:border-white/10 dark:bg-white/[0.04] sm:grid sm:place-items-center">
+                          {label.preview_url ? (
+                            <img src={label.preview_url} alt="" loading="lazy" className="size-full object-cover" />
+                          ) : <ImageIcon className="size-4 text-black/20 dark:text-white/20" />}
+                        </div>
                         <div className="min-w-0">
                           <p className="truncate font-mono text-sm font-black tracking-wide max-sm:hidden">{label.code}</p>
                           <p className="mt-1 truncate text-xs font-bold text-black/50 dark:text-white/55">{label.title || "Senza nome"}</p>
@@ -674,6 +738,8 @@ export function BarcodeLabelsManager() {
                       </article>
                     );
                   })}
+                  </div>
+                  {visibleLabels.length < filteredLabels.length ? <button type="button" onClick={() => setVisibleCount((current) => current + 100)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-black/10 bg-[#F8F5F6] text-xs font-black text-black/55 transition hover:border-[#D96B94] hover:text-[#A93469] dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60">Mostra altre 100 · {filteredLabels.length - visibleLabels.length} rimanenti</button> : null}
                 </div>
               ) : (
                 <div className="grid min-h-72 place-items-center px-6 text-center">

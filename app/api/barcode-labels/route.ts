@@ -34,6 +34,7 @@ const barcodeLabelSelect = {
   length: true,
   product_code: true,
   typology: true,
+  preview_url: true,
   collection_id: true,
   details: true,
   format: true,
@@ -87,6 +88,19 @@ function requiredDetail(value: unknown, label: string, maxLength = 80) {
   const detail = String(value ?? "").trim();
   if (!detail) throw new Error(`Inserisci ${label}.`);
   return detail.slice(0, maxLength);
+}
+
+function optionalPreviewUrl(value: unknown) {
+  const rawValue = String(value ?? "").trim();
+  if (!rawValue) return null;
+  if (rawValue.length > 1000) throw new Error("Il link dell’immagine è troppo lungo.");
+  try {
+    const url = new URL(rawValue);
+    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error();
+    return url.toString();
+  } catch {
+    throw new Error("Inserisci un URL immagine valido che inizi con http:// o https://.");
+  }
 }
 
 function apiError(error: unknown) {
@@ -179,6 +193,7 @@ export async function POST(request: NextRequest) {
     if (action === "create") {
       const code = validCode(body?.code);
       const title = String(body?.title ?? "").trim().slice(0, 120) || null;
+      const previewUrl = optionalPreviewUrl(body?.previewUrl);
       const collectionId = requiredDetail(body?.collectionId, "la collezione");
       const collection = await prisma.barcodeLabelCollection.findUnique({
         where: { id: collectionId },
@@ -203,6 +218,7 @@ export async function POST(request: NextRequest) {
           length: details.length || null,
           product_code: details.productCode || null,
           typology: details.typology || null,
+          preview_url: previewUrl,
           collection_id: collectionId,
           details,
           created_by_id: user.id,
