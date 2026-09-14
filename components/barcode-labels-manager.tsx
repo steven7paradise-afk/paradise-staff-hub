@@ -6,7 +6,6 @@ import {
   Barcode,
   Check,
   CheckSquare2,
-  Clock3,
   Copy,
   Image as ImageIcon,
   Loader2,
@@ -469,7 +468,7 @@ export function BarcodeLabelsManager() {
         if (printMode !== "barcode") pages.push(`
           <section class="label label-back">
             <header class="back-header">
-              <div class="back-brand"><span class="brand-mark">P</span><span>PARADISE BEAUTY</span></div>
+              <div class="back-brand">PARADISE BEAUTY</div>
               <span class="type-pill">${escapeHtml(typeField ? valueFor(typeField) : label.collection?.name || "PRODOTTO")}</span>
             </header>
             <div class="back-feature">
@@ -483,7 +482,7 @@ export function BarcodeLabelsManager() {
       }).join("");
 
       printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etichette barcode</title><style>
-        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 2.2mm}.back-header{display:flex;height:3.8mm;align-items:center;justify-content:space-between;border-bottom:.25mm solid #111}.back-brand{display:flex;align-items:center;gap:1mm;font-size:6.5px;font-weight:900;letter-spacing:.65px}.brand-mark{display:grid;width:3.2mm;height:3.2mm;place-items:center;border-radius:50%;background:#111;color:#fff;font-size:6px;letter-spacing:0}.type-pill{max-width:18mm;overflow:hidden;border:.2mm solid #111;border-radius:3mm;padding:.45mm 1.3mm;font-size:5.5px;font-weight:900;letter-spacing:.25px;line-height:1;white-space:nowrap;text-overflow:ellipsis;text-transform:uppercase}.back-feature{display:flex;min-height:7.2mm;flex-direction:column;justify-content:center;border-bottom:.2mm solid #bbb}.back-feature span{font-size:5.5px;font-weight:900;letter-spacing:.65px;text-transform:uppercase}.back-feature strong{overflow:hidden;font-size:10px;font-weight:900;line-height:3.4mm;white-space:nowrap;text-overflow:ellipsis}.back-specs{display:grid;flex:1;grid-template-columns:repeat(var(--columns),minmax(0,1fr));align-items:center;margin:0}.back-specs div{min-width:0;padding:0 1mm;border-left:.2mm solid #ddd}.back-specs div:first-child{border-left:0;padding-left:0}.back-specs div:last-child{padding-right:0}.back-specs dt,.back-specs dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.back-specs dt{font-size:5px;font-weight:900;letter-spacing:.35px;text-transform:uppercase}.back-specs dd{margin-top:.35mm;font-size:7.5px;font-weight:900;line-height:2.7mm}.back-specs.compact dt{font-size:4.5px}.back-specs.compact dd{font-size:6.5px}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
+        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 2.2mm}.back-header{display:flex;height:3.8mm;align-items:center;justify-content:space-between;border-bottom:.25mm solid #111}.back-brand{font-size:6.5px;font-weight:900;letter-spacing:.65px}.type-pill{max-width:18mm;overflow:hidden;border:.2mm solid #111;border-radius:3mm;padding:.45mm 1.3mm;font-size:5.5px;font-weight:900;letter-spacing:.25px;line-height:1;white-space:nowrap;text-overflow:ellipsis;text-transform:uppercase}.back-feature{display:flex;min-height:7.2mm;flex-direction:column;justify-content:center;border-bottom:.2mm solid #bbb}.back-feature span{font-size:5.5px;font-weight:900;letter-spacing:.65px;text-transform:uppercase}.back-feature strong{overflow:hidden;font-size:10px;font-weight:900;line-height:3.4mm;white-space:nowrap;text-overflow:ellipsis}.back-specs{display:grid;flex:1;grid-template-columns:repeat(var(--columns),minmax(0,1fr));align-items:center;margin:0}.back-specs div{min-width:0;padding:0 1mm;border-left:.2mm solid #ddd}.back-specs div:first-child{border-left:0;padding-left:0}.back-specs div:last-child{padding-right:0}.back-specs dt,.back-specs dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.back-specs dt{font-size:5px;font-weight:900;letter-spacing:.35px;text-transform:uppercase}.back-specs dd{margin-top:.35mm;font-size:7.5px;font-weight:900;line-height:2.7mm}.back-specs.compact dt{font-size:4.5px}.back-specs.compact dd{font-size:6.5px}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
       </style></head><body>${sections}<script>window.onload=()=>window.print()</script></body></html>`);
       printWindow.document.close();
 
@@ -548,21 +547,22 @@ export function BarcodeLabelsManager() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F1F2] px-3 py-4 text-[#221D20] dark:bg-[#111114] dark:text-white sm:px-5 lg:px-8 lg:py-6">
-      <div className="mx-auto max-w-[1600px] space-y-4">
-        <header className="overflow-hidden rounded-[22px] border border-white/10 bg-[#211A1E] px-5 py-5 text-white shadow-[0_14px_38px_rgba(42,20,31,0.16)] sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-h-screen bg-[#F7F6F6] px-3 py-4 text-[#181719] dark:bg-[#111114] dark:text-white sm:px-5 lg:px-8 lg:py-7">
+      <div className="mx-auto max-w-[1600px] space-y-5">
+        <header className="px-1 py-2 sm:px-0">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#F080B7]">Centro etichette</p>
-              <h1 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">Barcode prodotti</h1>
-              <p className="mt-1 text-xs font-semibold text-white/55">Archivio, selezione e stampa Code 128.</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#A93469] dark:text-[#F080B7]">Centro etichette</p>
+              <h1 className="mt-1 text-3xl font-black tracking-[-0.045em] sm:text-4xl">Barcode prodotti</h1>
+              <p className="mt-1 text-sm font-semibold text-black/45 dark:text-white/45">Archivio, selezione e stampa Code 128.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-[11px] font-black">
-                <Barcode className="size-4 text-[#F3A0C8]" /> CODE 128 · 2 × 1 pollici
-              </span>
-              <button type="button" onClick={openCreateProduct} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F080B7] px-5 text-sm font-black text-[#25141D] shadow-[0_8px_24px_rgba(240,128,183,0.2)] transition hover:bg-[#F3A0C8]">
-                <Plus className="size-5" /> Aggiungi prodotto
+            <div className="grid gap-3 sm:grid-cols-[minmax(240px,1fr)_auto]">
+              <div className="flex min-h-12 items-center justify-between gap-4 rounded-xl border border-black/10 bg-white px-4 shadow-sm dark:border-white/10 dark:bg-[#1D1D22]">
+                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/40 dark:text-white/40">Formato etichetta</span>
+                <span className="inline-flex items-center gap-2 text-xs font-black"><Barcode className="size-4" /> CODE 128 · 2 × 1 pollici</span>
+              </div>
+              <button type="button" onClick={openCreateProduct} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#171518] px-6 text-sm font-black text-white shadow-[0_10px_24px_rgba(20,18,20,0.12)] transition hover:bg-black dark:bg-[#F080B7] dark:text-[#25141D] dark:hover:bg-[#F3A0C8]">
+                <Plus className="size-5" /> Nuova etichetta
               </button>
             </div>
           </div>
@@ -574,10 +574,10 @@ export function BarcodeLabelsManager() {
             { label: "Selezionate", value: selectedIds.length, note: "pronte", icon: CheckSquare2 },
             { label: "Mai stampate", value: labels.filter((label) => label.print_count === 0).length, note: "da verificare", icon: Printer },
             { label: "Collezioni", value: collections.length, note: "attive", icon: PackageCheck },
-          ].map((item) => <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-black/[0.07] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#1D1D22]"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#FFF0F6] text-[#B83D7F] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]"><item.icon className="size-4" /></span><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/40 dark:text-white/40">{item.label}</p><p className="mt-0.5 text-xl font-black tabular-nums">{item.value} <span className="text-[10px] font-bold text-black/35 dark:text-white/35">{item.note}</span></p></div></div>)}
+          ].map((item) => <div key={item.label} className="flex min-h-24 items-center gap-4 rounded-2xl border border-black/[0.07] bg-white px-4 py-4 shadow-[0_8px_24px_rgba(34,20,28,0.025)] dark:border-white/10 dark:bg-[#1D1D22]"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#F5F2F3] text-black/70 dark:bg-white/[0.07] dark:text-white/75"><item.icon className="size-5" /></span><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-black/40 dark:text-white/40">{item.label}</p><p className="mt-0.5 text-2xl font-black tabular-nums">{item.value} <span className="text-[10px] font-bold text-black/35 dark:text-white/35">{item.note}</span></p></div></div>)}
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(420px,1.08fr)]">
+        <div>
           {createOpen ? <button type="button" onClick={closeProductForm} className="fixed inset-0 z-40 cursor-default bg-black/55 backdrop-blur-sm" aria-label="Chiudi pop-up" /> : null}
           <form onSubmit={saveLabel} role="dialog" aria-modal="true" aria-labelledby="product-form-title" className={`${createOpen ? "fixed inset-y-0 right-0 z-50 block h-dvh w-full max-w-[760px] overflow-y-auto" : "hidden"} border-l border-black/[0.08] bg-white p-5 shadow-[-24px_0_80px_rgba(20,10,15,0.28)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7`}>
             <div className="flex items-start justify-between gap-4">
@@ -732,10 +732,7 @@ export function BarcodeLabelsManager() {
                   <p className="mb-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/40">Retro</p>
                   <div className="mx-auto flex aspect-[2/1] w-full max-w-[300px] flex-col rounded-xl bg-white px-3 py-2 text-black shadow-sm ring-1 ring-black/5">
                     <div className="flex h-6 shrink-0 items-center justify-between border-b border-black">
-                      <div className="flex items-center gap-1.5 text-[7px] font-black tracking-[0.12em]">
-                        <span className="grid size-4 place-items-center rounded-full bg-black text-[7px] text-white">P</span>
-                        PARADISE BEAUTY
-                      </div>
+                      <div className="text-[7px] font-black tracking-[0.12em]">PARADISE BEAUTY</div>
                       <span className="max-w-[92px] truncate rounded-full border border-black px-2 py-0.5 text-[6px] font-black uppercase tracking-wide">
                         {previewTypeField ? detailValues[previewTypeField.key]?.trim() || selectedCollection?.name : selectedCollection?.name || "Prodotto"}
                       </span>
@@ -769,112 +766,108 @@ export function BarcodeLabelsManager() {
             </button>
           </form>
 
-          <section className="min-w-0 rounded-[28px] border border-black/[0.07] bg-white shadow-[0_18px_55px_rgba(47,27,37,0.07)] dark:border-white/10 dark:bg-[#1D1D22] xl:col-span-2">
-            <div className="border-b border-black/[0.06] p-5 dark:border-white/10 sm:p-7">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F] dark:text-[#F080B7]">Archivio permanente</p>
-                  <h2 className="mt-1 text-2xl font-black">Tutte le etichette</h2>
-                  <p className="mt-1 text-xs font-semibold text-black/45 dark:text-white/45">Seleziona quelle da stampare o ristampare.</p>
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-black/[0.07] bg-white shadow-[0_16px_50px_rgba(47,27,37,0.045)] dark:border-white/10 dark:bg-[#1D1D22]">
+            <div className="border-b border-black/[0.07] p-4 dark:border-white/10 sm:p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filtra per collezione">
+                  <button type="button" onClick={() => { setCollectionFilter("all"); setSelectedIds([]); }} className={`shrink-0 rounded-full px-5 py-2.5 text-xs font-black transition ${collectionFilter === "all" ? "bg-[#171518] text-white dark:bg-white dark:text-black" : "text-black/55 hover:bg-black/[0.045] dark:text-white/60 dark:hover:bg-white/[0.07]"}`}>Tutte <span className="ml-1.5 opacity-60">{labels.length}</span></button>
+                  {collections.map((collection) => {
+                    const count = labels.filter((label) => label.collection_id === collection.id).length;
+                    return <button key={collection.id} type="button" onClick={() => { setCollectionFilter(collection.id); setSelectedIds([]); }} className={`shrink-0 rounded-full px-5 py-2.5 text-xs font-black transition ${collectionFilter === collection.id ? "bg-[#171518] text-white dark:bg-white dark:text-black" : "text-black/55 hover:bg-black/[0.045] dark:text-white/60 dark:hover:bg-white/[0.07]"}`}>{collection.name} <span className="ml-1.5 opacity-60">{count}</span></button>;
+                  })}
                 </div>
-                <label className="relative block min-w-0 lg:w-72">
+                <label className="relative block min-w-0 xl:w-[360px]">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-black/35 dark:text-white/35" />
-                  <input value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-xl border border-black/10 bg-[#FAF8F9] pl-11 pr-10 text-sm font-bold outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-white/[0.055]" placeholder="Cerca codice, colore o tipo" />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-xl border border-black/10 bg-[#FAF9F9] pl-11 pr-10 text-sm font-bold outline-none transition focus:border-[#B83D7F] focus:ring-4 focus:ring-[#D96B94]/10 dark:border-white/10 dark:bg-white/[0.055]" placeholder="Cerca per codice, prodotto o colore…" />
                   {query ? <button type="button" onClick={() => setQuery("")} className="absolute right-0 top-0 grid size-11 place-items-center text-black/35 dark:text-white/40" aria-label="Cancella ricerca"><X className="size-4" /></button> : null}
                 </label>
               </div>
 
-              <div className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label="Filtra per collezione">
-                <button type="button" onClick={() => { setCollectionFilter("all"); setSelectedIds([]); }} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition ${collectionFilter === "all" ? "border-[#B83D7F] bg-[#B83D7F] text-white" : "border-black/10 bg-white text-black/55 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60"}`}>Tutte <span className="ml-1 opacity-70">{labels.length}</span></button>
-                {collections.map((collection) => {
-                  const count = labels.filter((label) => label.collection_id === collection.id).length;
-                  return <button key={collection.id} type="button" onClick={() => { setCollectionFilter(collection.id); setSelectedIds([]); }} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition ${collectionFilter === collection.id ? "border-[#B83D7F] bg-[#B83D7F] text-white" : "border-black/10 bg-white text-black/55 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60"}`}>{collection.name} <span className="ml-1 opacity-70">{count}</span></button>;
-                })}
-              </div>
-
-              <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-[#F8F4F6] p-3 dark:bg-black/15 sm:flex-row sm:items-center">
-                <button type="button" onClick={toggleVisibleSelection} disabled={!filteredLabels.length} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-xs font-black text-black/65 transition hover:border-[#D96B94] hover:text-[#A93469] disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70">
+              <div className="mt-4 flex flex-col gap-3 rounded-xl bg-[#F6F4F5] p-2.5 dark:bg-black/20 xl:flex-row xl:items-center">
+                <button type="button" onClick={toggleVisibleSelection} disabled={!filteredLabels.length} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-black text-black/65 transition hover:bg-white disabled:opacity-40 dark:text-white/70 dark:hover:bg-white/[0.07]">
                   {allVisibleSelected ? <CheckSquare2 className="size-4" /> : <Square className="size-4" />}
-                  {allVisibleSelected ? "Deseleziona visibili" : "Seleziona visibili"}
+                  {allVisibleSelected ? "Deseleziona tutti" : "Seleziona tutti"}
                 </button>
-                <label className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black/55 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/60">
-                  <Printer className="size-4" /> Contenuto
-                  <select value={printMode} onChange={(event) => setPrintMode(event.target.value as PrintMode)} className="h-8 min-w-36 rounded-lg border border-black/10 bg-white px-2 font-black text-black outline-none dark:border-white/15 dark:bg-[#24242A] dark:text-white" aria-label="Contenuto da stampare">
+                <span className="hidden h-6 w-px bg-black/10 dark:bg-white/10 xl:block" />
+                <label className="flex min-h-10 items-center justify-between gap-2 rounded-lg bg-white px-3 text-xs font-black text-black/55 dark:bg-white/[0.06] dark:text-white/60">
+                  <Printer className="size-4" /> Tipo stampa
+                  <select value={printMode} onChange={(event) => setPrintMode(event.target.value as PrintMode)} className="h-8 min-w-36 bg-transparent font-black text-black outline-none dark:text-white" aria-label="Contenuto da stampare">
                     <option value="both">Barcode + info</option>
                     <option value="barcode">Solo barcode</option>
                     <option value="info">Solo informazioni</option>
                   </select>
                 </label>
-                <label className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black/55 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/60">
+                <label className="flex min-h-10 items-center justify-between gap-2 rounded-lg bg-white px-3 text-xs font-black text-black/55 dark:bg-white/[0.06] dark:text-white/60">
                   <Copy className="size-4" /> Copie
-                  <select value={copies} onChange={(event) => setCopies(Number(event.target.value))} className="h-8 rounded-lg border border-black/10 bg-white px-2 font-black text-black outline-none dark:border-white/15 dark:bg-[#24242A] dark:text-white" aria-label="Numero di copie">
+                  <select value={copies} onChange={(event) => setCopies(Number(event.target.value))} className="h-8 bg-transparent font-black text-black outline-none dark:text-white" aria-label="Numero di copie">
                     {Array.from({ length: 20 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
                   </select>
                 </label>
-                <button type="button" onClick={() => void printLabels(selectedLabels)} disabled={!selectedLabels.length || printing} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#21171D] px-4 text-xs font-black text-white transition hover:bg-black disabled:pointer-events-none disabled:opacity-40 dark:bg-[#F080B7] dark:text-[#25141D] dark:hover:bg-[#F3A0C8]">
+                <button type="button" onClick={() => void printLabels(selectedLabels)} disabled={!selectedLabels.length || printing} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#171518] px-5 text-xs font-black text-white transition hover:bg-black disabled:pointer-events-none disabled:opacity-35 dark:bg-[#F080B7] dark:text-[#25141D] dark:hover:bg-[#F3A0C8]">
                   {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
-                  Stampa {selectedLabels.length ? selectedLabels.length * copies : ""}
+                  Stampa selezionate
                 </button>
-                <button type="button" onClick={() => void deleteLabels(selectedLabels)} disabled={!selectedLabels.length || deleting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-xs font-black text-red-600 transition hover:bg-red-50 disabled:pointer-events-none disabled:opacity-40 dark:border-red-400/25 dark:bg-white/[0.04] dark:text-red-300 dark:hover:bg-red-500/10">
-                  {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                  Elimina selezionate
+                <button type="button" onClick={() => void deleteLabels(selectedLabels)} disabled={!selectedLabels.length || deleting} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-black text-red-600 transition hover:bg-red-50 disabled:pointer-events-none disabled:opacity-35 dark:text-red-300 dark:hover:bg-red-500/10">
+                  {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />} Elimina
                 </button>
+                <span className="text-center text-xs font-bold text-black/35 dark:text-white/35 xl:ml-auto">{selectedIds.length} selezionate</span>
               </div>
             </div>
 
-            {error || success ? <div className="px-5 pt-5 sm:px-7"><p className={`rounded-2xl border px-4 py-3 text-xs font-bold ${error ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-200" : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200"}`}>{error || success}</p></div> : null}
+            {error || success ? <div className="px-4 pt-4 sm:px-5"><p className={`rounded-xl border px-4 py-3 text-xs font-bold ${error ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-200" : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200"}`}>{error || success}</p></div> : null}
 
-            <div className="max-h-[720px] overflow-y-auto p-3 sm:p-5">
+            <div className="max-h-[760px] overflow-y-auto">
               {loading ? (
                 <div className="grid min-h-72 place-items-center text-sm font-bold text-black/40 dark:text-white/40"><span className="inline-flex items-center gap-2"><Loader2 className="size-5 animate-spin" /> Caricamento etichette…</span></div>
               ) : filteredLabels.length ? (
                 <div>
-                  <div className="mb-2 hidden grid-cols-[32px_52px_minmax(0,1fr)_auto] items-center gap-3 px-3 text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/35 sm:grid">
-                    <span />
-                    <span>Foto</span>
-                    <span>Prodotto e identificativo</span>
-                    <span className="pr-4">Azioni</span>
-                  </div>
-                  <div className="space-y-1.5">
+                  <div className="hidden min-w-[1120px] lg:block">
+                    <div className="grid grid-cols-[40px_minmax(260px,1.5fr)_minmax(120px,.7fr)_120px_130px_150px_115px_230px] items-center gap-3 border-b border-black/[0.07] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-black/40 dark:border-white/10 dark:text-white/40">
+                      <span /><span>Prodotto e codice</span><span>Variante</span><span>Categoria</span><span>Dimensioni</span><span>Creata il</span><span>Stato</span><span>Azioni</span>
+                    </div>
                   {visibleLabels.map((label) => {
                     const selected = selectedIds.includes(label.id);
                     return (
-                      <article key={label.id} className={`grid gap-3 rounded-xl border p-3 transition sm:grid-cols-[32px_52px_minmax(0,1fr)_auto] sm:items-center ${selected ? "border-[#D96B94] bg-[#FFF3F8] ring-2 ring-[#D96B94]/10 dark:border-[#F080B7] dark:bg-[#F080B7]/10" : "border-black/[0.07] bg-white hover:border-[#E6B4CC] dark:border-white/10 dark:bg-white/[0.025]"}`}>
-                        <label className="flex cursor-pointer items-center gap-3 sm:block">
-                          <input type="checkbox" checked={selected} onChange={(event) => setSelectedIds((current) => event.target.checked ? Array.from(new Set([...current, label.id])) : current.filter((id) => id !== label.id))} className="size-5 accent-[#B83D7F]" aria-label={`Seleziona ${label.code}`} />
-                          <span className="font-mono text-sm font-black sm:hidden">{label.code}</span>
-                        </label>
-                        <div className="hidden size-12 overflow-hidden rounded-lg border border-black/[0.06] bg-[#F6F3F4] dark:border-white/10 dark:bg-white/[0.04] sm:grid sm:place-items-center">
-                          {label.preview_url ? (
-                            <img src={label.preview_url} alt="" loading="lazy" className="size-full object-cover" />
-                          ) : <ImageIcon className="size-4 text-black/20 dark:text-white/20" />}
+                      <article key={label.id} className={`grid grid-cols-[40px_minmax(260px,1.5fr)_minmax(120px,.7fr)_120px_130px_150px_115px_230px] items-center gap-3 border-b border-black/[0.06] px-5 py-3.5 transition last:border-b-0 dark:border-white/[0.07] ${selected ? "bg-[#FFF3F8] dark:bg-[#F080B7]/10" : "hover:bg-black/[0.018] dark:hover:bg-white/[0.025]"}`}>
+                        <input type="checkbox" checked={selected} onChange={(event) => setSelectedIds((current) => event.target.checked ? Array.from(new Set([...current, label.id])) : current.filter((id) => id !== label.id))} className="size-4 accent-[#B83D7F]" aria-label={`Seleziona ${label.code}`} />
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-black/[0.06] bg-[#F4F2F3] dark:border-white/10 dark:bg-white/[0.04]">
+                            {label.preview_url ? <img src={label.preview_url} alt="" loading="lazy" className="size-full object-cover" /> : <ImageIcon className="size-4 text-black/20 dark:text-white/20" />}
+                          </div>
+                          <div className="min-w-0"><p className="truncate font-mono text-xs font-black tracking-wide">{label.code}</p><p className="mt-1 truncate text-xs font-bold text-black/55 dark:text-white/60">{label.title || "Senza nome"}</p></div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-mono text-sm font-black tracking-wide max-sm:hidden">{label.code}</p>
-                          <p className="mt-1 truncate text-xs font-bold text-black/50 dark:text-white/55">{label.title || "Senza nome"}</p>
-                          <span className="mt-1.5 inline-flex rounded-full bg-[#FFF0F6] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#A93469] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]">{label.collection?.name || label.typology || "Altro"}</span>
-                          {label.color || label.weight || label.length || label.typology ? <p className="mt-1 truncate text-[10px] font-semibold text-black/40 dark:text-white/45">{[label.color, label.weight, label.length, label.typology].filter(Boolean).join(" · ")}</p> : null}
-                          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-black/35 dark:text-white/35">
-                            <span className="inline-flex items-center gap-1"><Clock3 className="size-3" /> Creata {formatDate(label.created_at)}</span>
-                            <span>{label.print_count} {label.print_count === 1 ? "stampa" : "stampe"}</span>
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => openEditProduct(label)} disabled={printing || deleting} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 transition hover:border-[#D96B94] hover:bg-[#FFF0F6] hover:text-[#A93469] disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/65 dark:hover:bg-white/10 dark:hover:text-[#F3A0C8]" aria-label={`Modifica prodotto ${label.code}`}>
-                            <Pencil className="size-4" /> Modifica
-                          </button>
-                          <button type="button" onClick={() => void printLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A93469] transition hover:bg-[#FFF0F6] disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-[#F3A0C8] dark:hover:bg-white/10">
-                            <Printer className="size-4" /> Stampa
-                          </button>
-                          <button type="button" onClick={() => void deleteLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 text-xs font-black text-red-600 transition hover:bg-red-50 disabled:opacity-40 dark:border-red-400/25 dark:bg-white/[0.06] dark:text-red-300 dark:hover:bg-red-500/10" aria-label={`Elimina etichetta ${label.code}`}>
-                            <Trash2 className="size-4" /> <span className="sm:hidden">Elimina</span>
-                          </button>
+                        <p className="truncate text-xs font-bold text-black/55 dark:text-white/60">{label.color || "—"}</p>
+                        <span className="w-fit rounded-full bg-[#F4ECEF] px-2.5 py-1 text-[11px] font-semibold text-[#765362] dark:bg-[#F080B7]/12 dark:text-[#F3A0C8]">{label.collection?.name || label.typology || "Altro"}</span>
+                        <p className="text-xs font-bold text-black/55 dark:text-white/60">{[label.weight, label.length].filter(Boolean).join(" · ") || "—"}</p>
+                        <p className="text-xs font-medium leading-4 text-black/50 dark:text-white/50">{formatDate(label.created_at)}</p>
+                        <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${label.print_count ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"}`}><span className="size-1.5 rounded-full bg-current" />{label.print_count ? "Stampata" : "Pronta"}</span>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => openEditProduct(label)} disabled={printing || deleting} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-black text-black/60 transition hover:bg-black/[0.045] hover:text-[#A93469] disabled:opacity-40 dark:text-white/65 dark:hover:bg-white/[0.07] dark:hover:text-[#F3A0C8]" aria-label={`Modifica prodotto ${label.code}`}><Pencil className="size-3.5" /> Modifica</button>
+                          <button type="button" onClick={() => void printLabels([label])} disabled={printing || deleting} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-black text-black/60 transition hover:bg-black/[0.045] hover:text-[#A93469] disabled:opacity-40 dark:text-white/65 dark:hover:bg-white/[0.07] dark:hover:text-[#F3A0C8]"><Printer className="size-3.5" /> Stampa</button>
+                          <button type="button" onClick={() => void deleteLabels([label])} disabled={printing || deleting} className="grid size-9 place-items-center rounded-lg text-black/30 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:text-white/35 dark:hover:bg-red-500/10 dark:hover:text-red-300" aria-label={`Elimina etichetta ${label.code}`}><Trash2 className="size-3.5" /></button>
                         </div>
                       </article>
                     );
                   })}
                   </div>
-                  {visibleLabels.length < filteredLabels.length ? <button type="button" onClick={() => setVisibleCount((current) => current + 100)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-black/10 bg-[#F8F5F6] text-xs font-black text-black/55 transition hover:border-[#D96B94] hover:text-[#A93469] dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60">Mostra altre 100 · {filteredLabels.length - visibleLabels.length} rimanenti</button> : null}
+                  <div className="space-y-2 p-3 lg:hidden">
+                    {visibleLabels.map((label) => {
+                      const selected = selectedIds.includes(label.id);
+                      return <article key={label.id} className={`rounded-xl border p-3 ${selected ? "border-[#D96B94] bg-[#FFF3F8] dark:border-[#F080B7] dark:bg-[#F080B7]/10" : "border-black/[0.07] dark:border-white/10"}`}>
+                        <div className="flex items-start gap-3">
+                          <input type="checkbox" checked={selected} onChange={(event) => setSelectedIds((current) => event.target.checked ? Array.from(new Set([...current, label.id])) : current.filter((id) => id !== label.id))} className="mt-3 size-5 accent-[#B83D7F]" aria-label={`Seleziona ${label.code}`} />
+                          <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#F4F2F3] dark:bg-white/[0.05]">{label.preview_url ? <img src={label.preview_url} alt="" loading="lazy" className="size-full object-cover" /> : <ImageIcon className="size-4 text-black/20 dark:text-white/20" />}</div>
+                          <div className="min-w-0 flex-1"><p className="truncate font-mono text-xs font-black">{label.code}</p><p className="mt-1 truncate text-xs font-bold text-black/50 dark:text-white/55">{label.title || "Senza nome"}</p><p className="mt-1 text-[10px] font-semibold text-black/40 dark:text-white/40">{[label.collection?.name || label.typology, label.weight, label.length].filter(Boolean).join(" · ")}</p></div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-black/[0.06] pt-3 dark:border-white/10">
+                          <button type="button" onClick={() => openEditProduct(label)} disabled={printing || deleting} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[#F5F2F3] text-[11px] font-black dark:bg-white/[0.06]"><Pencil className="size-3.5" /> Modifica</button>
+                          <button type="button" onClick={() => void printLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[#171518] text-[11px] font-black text-white dark:bg-[#F080B7] dark:text-[#25141D]"><Printer className="size-3.5" /> Stampa</button>
+                          <button type="button" onClick={() => void deleteLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-red-50 text-[11px] font-black text-red-600 dark:bg-red-500/10 dark:text-red-300"><Trash2 className="size-3.5" /> Elimina</button>
+                        </div>
+                      </article>;
+                    })}
+                  </div>
+                  {visibleLabels.length < filteredLabels.length ? <button type="button" onClick={() => setVisibleCount((current) => current + 100)} className="mx-4 mb-4 flex min-h-11 items-center justify-center rounded-xl border border-black/10 bg-[#F8F5F6] text-xs font-black text-black/55 transition hover:border-[#D96B94] hover:text-[#A93469] dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60">Mostra altre 100 · {filteredLabels.length - visibleLabels.length} rimanenti</button> : null}
                 </div>
               ) : (
                 <div className="grid min-h-72 place-items-center px-6 text-center">
