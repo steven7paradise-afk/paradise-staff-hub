@@ -141,9 +141,24 @@ export function BarcodeLabelsManager() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/barcode-labels", { cache: "no-store" });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Non riesco a caricare le etichette.");
+      let data: { labels?: BarcodeLabel[]; collections?: BarcodeCollection[] } | null = null;
+      let lastError: Error | null = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const response = await fetch(`/api/barcode-labels?refresh=${Date.now()}`, { cache: "no-store" });
+          const result = await response.json().catch(() => null);
+          if (!response.ok) throw new Error(result?.error || "Non riesco a caricare le etichette.");
+          if (!Array.isArray(result?.collections) || !result.collections.length) {
+            throw new Error("Le collezioni non sono ancora disponibili.");
+          }
+          data = result;
+          break;
+        } catch (cause) {
+          lastError = cause instanceof Error ? cause : new Error("Non riesco a caricare le etichette.");
+          if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, attempt * 800));
+        }
+      }
+      if (!data) throw lastError || new Error("Non riesco a caricare le etichette.");
       setLabels(Array.isArray(data?.labels) ? data.labels : []);
       const loadedCollections = Array.isArray(data?.collections) ? data.collections as BarcodeCollection[] : [];
       setCollections(loadedCollections);
@@ -432,7 +447,7 @@ export function BarcodeLabelsManager() {
               <button type="button" onClick={() => setCreateOpen(false)} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] transition hover:bg-[#FBE1EC] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]" aria-label="Chiudi"><X className="size-6" /></button>
             </div>
 
-            {error ? <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-200">{error}</p> : null}
+            {error ? <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-200"><span>{error}</span><button type="button" onClick={() => void loadLabels()} className="shrink-0 rounded-lg border border-current px-3 py-2 font-black">Riprova</button></div> : null}
 
             <div className="mt-6 rounded-[22px] border border-[#E9D8E1] bg-[#FCFAFB] p-4 dark:border-white/10 dark:bg-white/[0.035]">
               <div className="flex items-end gap-3">
