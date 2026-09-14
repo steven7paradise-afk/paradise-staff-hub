@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Loader2,
   PackageCheck,
+  Pencil,
   Plus,
   Printer,
   Search,
@@ -136,6 +137,7 @@ export function BarcodeLabelsManager() {
   const [collectionFilter, setCollectionFilter] = useState("all");
   const [printMode, setPrintMode] = useState<PrintMode>("both");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [newCollectionOpen, setNewCollectionOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionFields, setNewCollectionFields] = useState<string[]>(["color", "weight", "length", "productCode", "typology"]);
@@ -146,6 +148,8 @@ export function BarcodeLabelsManager() {
   const [copies, setCopies] = useState(1);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [lookingUpImage, setLookingUpImage] = useState(false);
+  const [imageLookupMessage, setImageLookupMessage] = useState("");
   const [savingCollection, setSavingCollection] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -255,7 +259,88 @@ export function BarcodeLabelsManager() {
   function chooseCollection(collectionId: string) {
     const collection = collections.find((item) => item.id === collectionId);
     setSelectedCollectionId(collectionId);
-    setDetailValues(collection ? { typology: collection.name } : {});
+    setDetailValues((current) => collection ? Object.fromEntries(collection.fields.map((field) => [
+      field.key,
+      field.key === "typology" ? collection.name : current[field.key] || "",
+    ])) : {});
+  }
+
+  function openCreateProduct() {
+    const preferredCollection = collections.find((collection) => collection.id === collectionFilter)
+      || collections.find((collection) => collection.name === "Tessitura")
+      || collections[0];
+    setEditingLabelId(null);
+    setCode("");
+    setTitle("");
+    setPreviewUrl("");
+    setPreviewImageError(false);
+    setImageLookupMessage("");
+    setSelectedCollectionId(preferredCollection?.id || "");
+    setDetailValues(preferredCollection ? { typology: preferredCollection.name } : {});
+    setNewCollectionOpen(false);
+    setError("");
+    setSuccess("");
+    setCreateOpen(true);
+    window.setTimeout(() => codeInputRef.current?.focus(), 50);
+  }
+
+  function openEditProduct(label: BarcodeLabel) {
+    const collection = collections.find((item) => item.id === label.collection_id)
+      || collections.find((item) => item.id === label.collection?.id)
+      || collections[0];
+    const details = {
+      color: label.color || "",
+      weight: label.weight || "",
+      length: label.length || "",
+      productCode: label.product_code || "",
+      typology: label.typology || collection?.name || "",
+      ...(label.details || {}),
+    };
+    setEditingLabelId(label.id);
+    setCode(label.code);
+    setTitle(label.title || "");
+    setPreviewUrl(label.preview_url || "");
+    setPreviewImageError(false);
+    setImageLookupMessage("");
+    setSelectedCollectionId(collection?.id || "");
+    setDetailValues(details);
+    setNewCollectionOpen(false);
+    setError("");
+    setSuccess("");
+    setCreateOpen(true);
+    window.setTimeout(() => codeInputRef.current?.focus(), 50);
+  }
+
+  function closeProductForm() {
+    setCreateOpen(false);
+    setNewCollectionOpen(false);
+    setImageLookupMessage("");
+  }
+
+  async function lookupProductImage() {
+    const cleanCode = code.trim();
+    if (!cleanCode) {
+      setImageLookupMessage("Inserisci prima il codice barcode.");
+      return;
+    }
+    setLookingUpImage(true);
+    setImageLookupMessage("");
+    try {
+      const response = await fetch("/api/barcode-labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "lookupProductImage", code: cleanCode }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Immagine non trovata.");
+      setPreviewUrl(data.imageUrl);
+      setPreviewImageError(false);
+      setImageLookupMessage(`Immagine trovata nel catalogo Paradise Beauty${data.productName ? `: ${data.productName}` : "."}`);
+    } catch (cause) {
+      setImageLookupMessage(cause instanceof Error ? cause.message : "Immagine non trovata.");
+    } finally {
+      setLookingUpImage(false);
+    }
   }
 
   function addCustomQuestion() {
@@ -296,7 +381,7 @@ export function BarcodeLabelsManager() {
     }
   }
 
-  async function createLabel(event: React.FormEvent<HTMLFormElement>) {
+  async function saveLabel(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanCode = code.trim();
     if (!cleanCode || previewError || !selectedCollection) return;
@@ -308,7 +393,8 @@ export function BarcodeLabelsManager() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "create",
+          action: editingLabelId ? "update" : "create",
+          id: editingLabelId,
           code: cleanCode,
           title: title.trim(),
           previewUrl: previewUrl.trim(),
@@ -319,14 +405,17 @@ export function BarcodeLabelsManager() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Non riesco a salvare l’etichetta.");
       setLabels((current) => [data.label, ...current.filter((label) => label.id !== data.label.id)]);
-      setSelectedIds([data.label.id]);
+      if (!editingLabelId) setSelectedIds([data.label.id]);
+      const completedAction = editingLabelId ? "aggiornato" : "salvato";
       setCode("");
       setTitle("");
       setPreviewUrl("");
       setPreviewImageError(false);
+      setImageLookupMessage("");
       setDetailValues({ typology: selectedCollection.name });
+      setEditingLabelId(null);
       setCreateOpen(false);
-      setSuccess(`Etichetta ${data.label.code} salvata. Ora puoi stamparla.`);
+      setSuccess(`Prodotto ${data.label.code} ${completedAction}.`);
       window.setTimeout(() => codeInputRef.current?.focus(), 50);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Non riesco a salvare l’etichetta.");
@@ -455,7 +544,7 @@ export function BarcodeLabelsManager() {
               <span className="inline-flex w-fit items-center gap-2 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-[11px] font-black">
                 <Barcode className="size-4 text-[#F3A0C8]" /> CODE 128 · 2 × 1 pollici
               </span>
-              <button type="button" onClick={() => setCreateOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F080B7] px-5 text-sm font-black text-[#25141D] shadow-[0_8px_24px_rgba(240,128,183,0.2)] transition hover:bg-[#F3A0C8]">
+              <button type="button" onClick={openCreateProduct} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F080B7] px-5 text-sm font-black text-[#25141D] shadow-[0_8px_24px_rgba(240,128,183,0.2)] transition hover:bg-[#F3A0C8]">
                 <Plus className="size-5" /> Aggiungi prodotto
               </button>
             </div>
@@ -472,14 +561,14 @@ export function BarcodeLabelsManager() {
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(420px,1.08fr)]">
-          {createOpen ? <button type="button" onClick={() => setCreateOpen(false)} className="fixed inset-0 z-40 cursor-default bg-black/55 backdrop-blur-sm" aria-label="Chiudi pop-up" /> : null}
-          <form onSubmit={createLabel} role="dialog" aria-modal="true" aria-labelledby="new-barcode-title" className={`${createOpen ? "fixed inset-y-0 right-0 z-50 block h-dvh w-full max-w-[760px] overflow-y-auto" : "hidden"} border-l border-black/[0.08] bg-white p-5 shadow-[-24px_0_80px_rgba(20,10,15,0.28)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7`}>
+          {createOpen ? <button type="button" onClick={closeProductForm} className="fixed inset-0 z-40 cursor-default bg-black/55 backdrop-blur-sm" aria-label="Chiudi pop-up" /> : null}
+          <form onSubmit={saveLabel} role="dialog" aria-modal="true" aria-labelledby="product-form-title" className={`${createOpen ? "fixed inset-y-0 right-0 z-50 block h-dvh w-full max-w-[760px] overflow-y-auto" : "hidden"} border-l border-black/[0.08] bg-white p-5 shadow-[-24px_0_80px_rgba(20,10,15,0.28)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7`}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F] dark:text-[#F080B7]">Nuova etichetta</p>
-                <h2 id="new-barcode-title" className="mt-1 text-2xl font-black">Aggiungi prodotto</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F] dark:text-[#F080B7]">{editingLabelId ? "Modifica etichetta" : "Nuova etichetta"}</p>
+                <h2 id="product-form-title" className="mt-1 text-2xl font-black">{editingLabelId ? "Modifica prodotto" : "Aggiungi prodotto"}</h2>
               </div>
-              <button type="button" onClick={() => setCreateOpen(false)} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] transition hover:bg-[#FBE1EC] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]" aria-label="Chiudi"><X className="size-6" /></button>
+              <button type="button" onClick={closeProductForm} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] transition hover:bg-[#FBE1EC] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]" aria-label="Chiudi"><X className="size-6" /></button>
             </div>
 
             {error ? <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-200"><span>{error}</span><button type="button" onClick={() => void loadLabels()} className="shrink-0 rounded-lg border border-current px-3 py-2 font-black">Riprova</button></div> : null}
@@ -566,7 +655,13 @@ export function BarcodeLabelsManager() {
 
             <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-end">
               <label className="block">
-                <span className="text-[11px] font-black uppercase tracking-[0.14em] text-black/50 dark:text-white/55">URL immagine prodotto · facoltativo</span>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-black uppercase tracking-[0.14em] text-black/50 dark:text-white/55">URL immagine prodotto · facoltativo</span>
+                  <button type="button" onClick={() => void lookupProductImage()} disabled={lookingUpImage || !code.trim()} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#E7B6CD] bg-white px-3 text-[10px] font-black text-[#A93469] transition hover:bg-[#FFF0F6] disabled:pointer-events-none disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-[#F3A0C8] dark:hover:bg-white/10">
+                    {lookingUpImage ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+                    Cerca sul sito
+                  </button>
+                </span>
                 <span className="mt-2 flex h-12 items-center gap-3 rounded-2xl border border-[#E6D8DF] bg-[#FCFAFB] px-4 transition focus-within:border-[#B83D7F] focus-within:ring-4 focus-within:ring-[#D96B94]/15 dark:border-white/10 dark:bg-white/[0.055]">
                   <ImageIcon className="size-4 shrink-0 text-black/35 dark:text-white/40" />
                   <input value={previewUrl} onChange={(event) => { setPreviewUrl(event.target.value); setPreviewImageError(false); }} maxLength={1000} inputMode="url" className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" placeholder="https://…/foto-prodotto.jpg" />
@@ -580,6 +675,7 @@ export function BarcodeLabelsManager() {
               </div>
             </div>
             {previewImageError ? <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">L’immagine non è raggiungibile. Controlla il link.</p> : null}
+            {imageLookupMessage ? <p className="mt-1 text-xs font-bold text-black/50 dark:text-white/55" role="status">{imageLookupMessage}</p> : null}
 
             <fieldset className="mt-6 rounded-[22px] border border-[#E9D8E1] bg-[#FCFAFB] p-4 dark:border-white/10 dark:bg-white/[0.035] sm:p-5">
               <legend className="px-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#A93469] dark:text-[#F3A0C8]">Informazioni sul retro</legend>
@@ -633,7 +729,7 @@ export function BarcodeLabelsManager() {
               className="mt-6 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#B83D7F] px-5 text-sm font-black text-white shadow-[0_12px_28px_rgba(184,61,127,0.24)] transition hover:bg-[#A83273] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94] disabled:pointer-events-none disabled:opacity-45"
             >
               {saving ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
-              {saving ? "Salvataggio…" : "Salva etichetta"}
+              {saving ? "Salvataggio…" : editingLabelId ? "Salva modifiche" : "Salva etichetta"}
             </button>
           </form>
 
@@ -728,6 +824,9 @@ export function BarcodeLabelsManager() {
                           </p>
                         </div>
                         <div className="flex gap-2">
+                          <button type="button" onClick={() => openEditProduct(label)} disabled={printing || deleting} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 transition hover:border-[#D96B94] hover:bg-[#FFF0F6] hover:text-[#A93469] disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/65 dark:hover:bg-white/10 dark:hover:text-[#F3A0C8]" aria-label={`Modifica prodotto ${label.code}`}>
+                            <Pencil className="size-4" /> Modifica
+                          </button>
                           <button type="button" onClick={() => void printLabels([label])} disabled={printing || deleting} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A93469] transition hover:bg-[#FFF0F6] disabled:opacity-40 dark:border-white/15 dark:bg-white/[0.06] dark:text-[#F3A0C8] dark:hover:bg-white/10">
                             <Printer className="size-4" /> Stampa
                           </button>
