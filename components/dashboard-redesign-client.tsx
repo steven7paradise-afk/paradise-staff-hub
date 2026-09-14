@@ -18,6 +18,11 @@ import {
   X,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import {
+  MONTHLY_LATE_WARNING_DURATION_MS,
+  MONTHLY_LATE_WARNING_THRESHOLD,
+  shouldShowMonthlyLateWarning,
+} from "@/lib/monthly-late-warning";
 import { cn } from "@/lib/utils";
 
 type Communication = { id: string; title: string; detail: string; tag: string };
@@ -107,11 +112,22 @@ export function DashboardRedesignClient({
   const [communicationsOpen, setCommunicationsOpen] = useState(false);
   const [activeComms, setActiveComms] = useState(unreadCommunications);
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [lateWarningOpen, setLateWarningOpen] = useState(() => shouldShowMonthlyLateWarning(monthlyLateCount));
   // Il primo render deve essere identico tra server e browser. Il tempo live
   // parte soltanto dopo l'hydration, evitando differenze di un secondo.
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => setActiveComms(unreadCommunications), [unreadCommunications]);
+  useEffect(() => {
+    if (!shouldShowMonthlyLateWarning(monthlyLateCount)) {
+      setLateWarningOpen(false);
+      return;
+    }
+
+    setLateWarningOpen(true);
+    const timer = window.setTimeout(() => setLateWarningOpen(false), MONTHLY_LATE_WARNING_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [monthlyLateCount]);
   useEffect(() => {
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -272,6 +288,49 @@ export function DashboardRedesignClient({
           </button>
         </section>
       </main>
+
+      {shouldShowMonthlyLateWarning(monthlyLateCount) ? (
+        <aside
+          role="status"
+          aria-live="polite"
+          aria-label="Avviso ritardi della Direzione"
+          className={cn(
+            "fixed bottom-4 right-3 z-[70] flex max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-sm flex-col overflow-hidden rounded-[26px] border border-rose-200 bg-[#7d294f] text-white shadow-[-12px_18px_55px_rgba(65,18,42,0.30)] transition duration-500 sm:bottom-6 sm:right-6",
+            lateWarningOpen ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-[115%] opacity-0",
+          )}
+        >
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/15 px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/12">
+                <ClockAlert className="size-5 text-[#ffc3dc]" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.17em] text-[#ffc3dc]">Avviso della Direzione</p>
+                <p className="mt-1 text-sm font-black">Puntualità del mese</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLateWarningOpen(false)}
+              className="grid size-10 shrink-0 place-items-center rounded-full border border-white/15 bg-white/10 transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label="Chiudi avviso ritardi"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="overflow-y-auto px-5 py-5 [scrollbar-color:rgba(255,255,255,0.35)_transparent] [scrollbar-width:thin]">
+            <p className="text-lg font-black leading-snug">
+              Hai superato {MONTHLY_LATE_WARNING_THRESHOLD} ritardi nel mese. Fai attenzione, per favore.
+            </p>
+            <p className="mt-4 text-sm font-semibold leading-6 text-white/80">
+              La Direzione ti chiede di organizzarti al meglio per rispettare l’orario di lavoro e arrivare puntuale.
+            </p>
+            <p className="mt-4 text-xs font-black uppercase tracking-[0.14em] text-[#ffc3dc]">
+              Ritardi registrati: {monthlyLateCount}
+            </p>
+          </div>
+        </aside>
+      ) : null}
 
       {communicationsOpen && <div className="fixed inset-0 z-[80] bg-black/35" onClick={() => setCommunicationsOpen(false)} />}
       <aside className={cn("fixed inset-y-0 right-0 z-[90] flex w-full max-w-md flex-col bg-white shadow-[-20px_0_60px_rgba(0,0,0,0.16)] transition-transform duration-300 dark:bg-[#1c1c21] dark:text-white", communicationsOpen ? "translate-x-0" : "translate-x-full")} aria-hidden={!communicationsOpen}>
