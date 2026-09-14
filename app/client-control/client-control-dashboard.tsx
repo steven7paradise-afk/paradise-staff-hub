@@ -617,7 +617,7 @@ export function ClientControlDashboard({
   const totalChecks = selectedSalon?.staff.reduce((sum, staff) => sum + staff.checks, 0) ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="administrative-night-page space-y-6">
       <section className="overflow-hidden rounded-lg border border-black/10 bg-[#111114] text-white shadow-[0_20px_55px_rgba(0,0,0,0.14)]">
         <div className="grid gap-6 p-5 lg:grid-cols-[1.15fr_0.85fr] lg:p-7">
           <div>

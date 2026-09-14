@@ -331,7 +331,7 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
   }
 
   return (
-    <div className={fullPage ? "min-h-screen bg-transparent px-3 py-5 sm:px-6 sm:py-7 xl:px-10 xl:py-9" : "mt-5 bg-transparent p-3 sm:p-5"}>
+    <div className={fullPage ? "min-h-screen bg-[color:var(--card)] px-3 pb-5 pt-[76px] sm:px-6 sm:pb-7 sm:pt-[84px] xl:px-10 xl:pb-9 xl:pt-[100px]" : "mt-5 bg-transparent p-3 sm:p-5"}>
       <div className="mx-auto max-w-[1680px] space-y-5">
         <header className="rounded-[26px] border border-black/[0.06] bg-white p-5 shadow-[0_18px_55px_rgba(47,28,38,0.06)] sm:p-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
@@ -524,7 +524,7 @@ function ResponseDetail({ row, questions }: { row: { day: string; values: Record
           const branchValue = row.values[`${question.id}::${followUp.key}`];
           return branchValue ? [{ ...followUp, value: branchValue }] : [];
         });
-        return <article key={question.id} className="grid gap-4 px-4 py-5 transition hover:bg-[#fdfbfc] sm:px-6 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.35fr)] md:gap-8">
+        return <article key={question.id} className="shift-response-row grid gap-4 px-4 py-5 transition hover:bg-[#fdfbfc] sm:px-6 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.35fr)] md:gap-8">
           <div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#ffe7f1] text-[9px] font-black text-[#b7356d]">{index + 1}</span><div><p className="text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Domanda</p><p className="mt-1 text-[11px] font-black leading-relaxed text-[#302c2e]">{question.title}</p></div></div>
           <div className="min-w-0 rounded-xl bg-[#faf8f9] p-3.5 sm:p-4"><p className="mb-2 text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Risposta</p>{value ? <StructuredResponse value={value} question={question} /> : <p className="text-[10px] italic text-black/35">Non compilata</p>}{branches.map((branch) => <div key={branch.key} className="mt-3 border-t border-black/[0.07] pt-3"><p className="mb-2 text-[8px] font-black uppercase tracking-wide text-[#9b667c]">{branch.prompt}</p><StructuredResponse value={branch.value} /></div>)}</div>
         </article>;

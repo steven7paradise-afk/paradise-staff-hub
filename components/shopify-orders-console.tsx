@@ -113,8 +113,8 @@ function StatusPill({ kind, value }: { kind: "financial" | "fulfillment"; value:
     : fulfillmentLabels[value] || value;
 
   return (
-    <span className={cn(
-      "inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold leading-none",
+    <span data-tone={positive ? "positive" : warning ? "warning" : "neutral"} className={cn(
+      "shopify-order-status inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold leading-none",
       positive && "bg-[#e3f1e7] text-[#315c3e]",
       warning && "bg-[#fff0c7] text-[#7a5513]",
       !positive && !warning && "bg-[#ececef] text-[#56565b]",
@@ -215,7 +215,7 @@ export function ShopifyOrdersConsole({ initialData, initialError }: { initialDat
   };
 
   return (
-    <div className="min-h-dvh bg-[#f1f1f1] text-[#303030]">
+    <div className="shopify-orders-page min-h-dvh bg-[#f1f1f1] text-[#303030]">
       <header className="sticky top-0 z-30 border-b border-black/10 bg-[#f7f7f7]/95 shadow-[0_1px_0_rgba(0,0,0,.04)] backdrop-blur-xl">
         <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -297,7 +297,7 @@ export function ShopifyOrdersConsole({ initialData, initialError }: { initialDat
               </thead>
               <tbody>
                 {visibleOrders.map((order) => (
-                  <tr key={order.id} onClick={() => openOrder(order)} className="cursor-pointer border-b border-black/[0.07] transition hover:bg-[#f6f6f7] last:border-b-0">
+                  <tr key={order.id} onClick={() => openOrder(order)} className="shopify-order-row cursor-pointer border-b border-black/[0.07] transition hover:bg-[#f6f6f7] last:border-b-0">
                     <td className="px-4 py-3 text-[#8c9196]"><ChevronRight className="size-4" /></td>
                     <td className="whitespace-nowrap px-3 py-3 font-bold text-[#202223]">{order.name}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-[#616161]">{dateLabel(order.createdAt)}</td>
@@ -316,7 +316,7 @@ export function ShopifyOrdersConsole({ initialData, initialError }: { initialDat
 
           <div className="divide-y divide-black/[0.07] lg:hidden">
             {visibleOrders.map((order) => (
-              <button key={order.id} type="button" onClick={() => openOrder(order)} className="block w-full px-4 py-4 text-left transition active:bg-[#f6f6f7]">
+              <button key={order.id} type="button" onClick={() => openOrder(order)} className="shopify-order-row block w-full px-4 py-4 text-left transition active:bg-[#f6f6f7]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0"><p className="font-bold text-[#202223]">{order.name}</p><p className="mt-0.5 truncate text-sm text-[#616161]">{order.customerName}</p></div>
                   <p className="shrink-0 font-bold">{money(order.total, order.currency)}</p>

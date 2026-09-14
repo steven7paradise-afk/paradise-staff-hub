@@ -104,6 +104,11 @@ export function DesktopSidebarNav({
   const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
+  const openSidebarSearch = () => {
+    window.dispatchEvent(new CustomEvent("paradise-sidebar-expand"));
+    window.setTimeout(() => document.getElementById("desktop-sidebar-search")?.focus(), 320);
+  };
+
   useEffect(() => {
     if (hasAreaSwitch) setActiveArea(activePageArea);
   }, [activePageArea, hasAreaSwitch, pathname]);
@@ -118,32 +123,36 @@ export function DesktopSidebarNav({
 
   return (
     <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
-      <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-white/10 px-2 pb-5 pt-2">
-        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white/8">
-          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
+      <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-black/[0.07] px-1 pb-5 pt-2">
+        <div className="sidebar-brand-logo flex h-12 w-24 shrink-0 items-center justify-start overflow-hidden">
+          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-12 w-full object-contain object-left dark:invert select-none pointer-events-none" />
+        </div>
+        <div className="sidebar-brand-icon hidden size-11 shrink-0 place-items-center overflow-hidden rounded-2xl">
+          <img src="/favicon.png" alt="" className="size-11 object-cover select-none pointer-events-none" aria-hidden="true" />
         </div>
         <div className="sidebar-label text-left min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)]">Paradise</p>
-          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">Staff Hub</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]">Staff Hub</p>
+          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">Area operativa</p>
         </div>
       </div>
 
       <div className="sidebar-label relative mx-1 mt-4 shrink-0">
-        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 dark:text-zinc-500">
+        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500 dark:text-zinc-300">
           <Search size={13} className="opacity-75" />
         </span>
         <input
+          id="desktop-sidebar-search"
           type="text"
           placeholder="Cerca una pagina"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-11 w-full rounded-xl border border-white/12 bg-white/[0.07] py-2 pl-9 pr-11 text-xs font-bold text-white outline-none backdrop-blur-xl transition placeholder:text-slate-400 focus:border-white/30 focus:bg-white/[0.11]"
+          className="h-11 w-full rounded-xl border border-black/[0.08] bg-black/[0.025] py-2 pl-9 pr-11 text-xs font-bold text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-black/20 focus:bg-white dark:border-white/10 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-white/45 dark:focus:border-white/20 dark:focus:bg-white/[0.06]"
         />
         {searchQuery ? (
           <button
             type="button"
             onClick={() => setSearchQuery("")}
-            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-white/55 transition hover:text-white"
+            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-black/40 transition hover:text-black dark:text-white/45 dark:hover:text-white"
             aria-label="Cancella ricerca"
           >
             <X className="size-3.5" />
@@ -152,7 +161,7 @@ export function DesktopSidebarNav({
       </div>
 
       {hasAreaSwitch ? (
-        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-white/12 bg-white/[0.06] p-1">
+        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-black/[0.07] bg-black/[0.025] p-1 dark:border-white/10 dark:bg-white/[0.035]">
           {(["PERSONALE", "LAVORO"] as const).map((area) => {
             const selected = activeArea === area;
             const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
@@ -164,7 +173,7 @@ export function DesktopSidebarNav({
                 aria-pressed={selected}
                 className={cn(
                   "flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-[9px] font-black uppercase tracking-[0.12em] transition",
-                  selected ? "bg-white text-zinc-900 shadow-sm" : "text-white/55 hover:text-white",
+                  selected ? "bg-white text-zinc-900 shadow-sm" : "text-black/45 hover:text-black dark:text-white/50 dark:hover:text-white",
                 )}
               >
                 <Icon className="size-3.5" />
@@ -175,6 +184,42 @@ export function DesktopSidebarNav({
         </div>
       ) : null}
 
+      <div className="sidebar-compact-tools mt-3 hidden shrink-0 flex-col items-center gap-1" aria-label="Strumenti rapidi">
+        <button
+          type="button"
+          onClick={openSidebarSearch}
+          className="sidebar-compact-tool"
+          aria-label="Cerca una pagina"
+          title="Cerca una pagina"
+        >
+          <Search className="size-[18px]" />
+        </button>
+        {hasAreaSwitch ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveArea("PERSONALE")}
+              className={cn("sidebar-compact-tool", activeArea === "PERSONALE" && "is-active")}
+              aria-label="Mostra area Personale"
+              aria-pressed={activeArea === "PERSONALE"}
+              title="Personale"
+            >
+              <UserRound className="size-[18px]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveArea("LAVORO")}
+              className={cn("sidebar-compact-tool", activeArea === "LAVORO" && "is-active")}
+              aria-label="Mostra area Lavoro"
+              aria-pressed={activeArea === "LAVORO"}
+              title="Lavoro"
+            >
+              <BriefcaseBusiness className="size-[18px]" />
+            </button>
+          </>
+        ) : null}
+      </div>
+
       <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto" aria-label="Navigazione principale">
         <div className="space-y-4 px-1 pb-4">
           {sections.map((section) => (
@@ -183,7 +228,7 @@ export function DesktopSidebarNav({
                 <button
                   type="button"
                   onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                  className="sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.075]"
+                  className="sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-black/[0.035]"
                   aria-expanded={openSectionId === section.id}
                 >
                   <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
@@ -209,13 +254,13 @@ export function DesktopSidebarNav({
                           "sidebar-nav-link group relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
                           isActive
                             ? "active border-white/12 bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)] shadow-none"
-                            : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-white/[0.065] hover:opacity-100"
+                            : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-black/[0.035] hover:opacity-100"
                         )}
                       >
                         <span
                           className={cn(
                             "grid size-7 shrink-0 place-items-center rounded-md transition",
-                            isActive ? "bg-white/[0.12] text-[color:var(--sidebar-active-icon)]" : "text-[color:var(--sidebar-icon)] group-hover:bg-white/[0.06]"
+                            isActive ? "bg-black/[0.05] text-[color:var(--sidebar-active-icon)]" : "text-[color:var(--sidebar-icon)] group-hover:bg-black/[0.035]"
                           )}
                         >
                           <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
@@ -236,16 +281,16 @@ export function DesktopSidebarNav({
           ))}
 
           {sections.length === 0 ? (
-            <div className="sidebar-label rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs font-bold text-[color:var(--sidebar-text)] opacity-50">
+            <div className="sidebar-label rounded-lg border border-dashed border-black/10 px-3 py-4 text-center text-xs font-bold text-[color:var(--sidebar-text)] opacity-50">
               Nessuna pagina trovata.
             </div>
           ) : null}
         </div>
       </nav>
 
-      <div className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-2 border-t border-white/10 px-2 pt-4 text-[color:var(--sidebar-text)]">
+      <div className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-2 border-t border-black/[0.07] px-2 pt-4 text-[color:var(--sidebar-text)]">
         <Link href="/profile" title={`${userName} - ${roleLabel}`} className="flex min-w-0 flex-1 items-center gap-3 transition hover:opacity-80">
-          <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10">
+          <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-black/10 bg-black/[0.035]">
             {userPhoto ? (
               <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
             ) : (
@@ -264,7 +309,7 @@ export function DesktopSidebarNav({
           <Link
             href="/remote"
             title="Controlla da remoto un PC del salone"
-            className="sidebar-label inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition hover:bg-white/20"
+            className="sidebar-label inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-black/10 bg-black/[0.03] px-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition hover:bg-black/[0.06]"
           >
             <DynamicIcon name="MonitorCog" className="size-3.5" />
             Remoto

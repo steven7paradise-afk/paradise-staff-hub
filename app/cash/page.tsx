@@ -773,7 +773,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       role={role}
       hideHeader
     >
-      <div className="space-y-5">
+      <div className="administrative-night-page space-y-5">
         <section className="-mx-4 overflow-hidden border-y border-black/10 bg-white sm:mx-0 sm:rounded-lg sm:border">
           <div className="grid gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7">
             <div>
@@ -808,8 +808,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             <MetricCard href={monthlyClosingsHref} label="Prelevato nel mese" value={formatMoney(totalWithdrawn)} note="Vedi le chiusure del mese" icon={ShieldCheck} tone="green" />
           </div>
 
-          <div className="grid border-t border-black/10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <div className="grid grid-cols-1 divide-y divide-black/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:flex lg:divide-x-0">
+          <div className="grid border-t border-black/10 2xl:grid-cols-[minmax(0,1fr)_auto] 2xl:items-center">
+            <div className="grid grid-cols-1 divide-y divide-black/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 2xl:flex 2xl:divide-x-0">
               <a href="#chiusure-sedi" className="flex min-h-[72px] items-center gap-3 px-5 py-3 transition hover:bg-[#FAF7F9]">
                 <span className={`grid size-9 place-items-center rounded-md ${missingTodayCount ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
                   {missingTodayCount ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}
@@ -831,7 +831,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                 <ArrowRight className="ml-auto size-4 text-black/25" />
               </a>
             </div>
-            <div className="border-t border-black/10 p-4 lg:border-l lg:border-t-0">
+            <div className="border-t border-black/10 p-4 2xl:border-l 2xl:border-t-0">
               <CashActions
               month={selectedMonth}
               monthClosed={monthCloseValue}
@@ -1491,10 +1491,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
 function MetricCard({ href, label, value, note, icon: Icon, tone }: { href: string; label: string; value: string; note: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
   const tones = {
-    gold: "bg-[#FFF9E9] text-[#8A6A19]",
-    blue: "bg-[#F2F5FF] text-[#4D61A8]",
-    pink: "bg-[#FFF1F5] text-[#A74758]",
-    green: "bg-[#EEFBF5] text-emerald-700",
+    gold: "bg-[#FFF9E9] text-[#8A6A19] dark:bg-[#29251D] dark:text-[#E5C66F]",
+    blue: "bg-[#F2F5FF] text-[#4D61A8] dark:bg-[#222633] dark:text-[#AAB9F5]",
+    pink: "bg-[#FFF1F5] text-[#A74758] dark:bg-[#342129] dark:text-[#F39BC0]",
+    green: "bg-[#EEFBF5] text-emerald-700 dark:bg-[#1E2D28] dark:text-emerald-300",
   };
   return (
     <Link href={href} className={`group min-h-32 border-b border-black/10 p-4 last:border-b-0 odd:border-r transition hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black/30 lg:border-b-0 lg:border-r lg:last:border-r-0 ${tones[tone]} sm:p-5`}>
@@ -1502,7 +1502,7 @@ function MetricCard({ href, label, value, note, icon: Icon, tone }: { href: stri
         <span className="text-[10px] font-black uppercase tracking-[0.14em] opacity-70">{label}</span>
         <span className="grid size-8 place-items-center rounded-full bg-white/60"><Icon className="size-4" /></span>
       </div>
-      <p className="mt-3 text-xl font-black tracking-tight text-[#111017] sm:text-2xl">{value}</p>
+      <p className="mt-3 text-xl font-black tracking-tight text-[#111017] dark:text-white sm:text-2xl">{value}</p>
       <p className="mt-2 flex items-center gap-1 text-[11px] font-bold opacity-65">{note}<ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" /></p>
     </Link>
   );

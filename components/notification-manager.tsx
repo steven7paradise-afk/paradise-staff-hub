@@ -634,9 +634,9 @@ export function NotificationManager({
     <>
       <div className="w-full max-w-none space-y-6">
         {/* AppShell mostra gia il titolo pagina: qui restano solo contesto e azioni. */}
-        <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,#17151a_0%,#24202a_70%,#31232b_100%)] px-5 py-6 text-white shadow-[0_18px_55px_rgba(32,18,25,0.16)] sm:px-7 lg:flex lg:items-center lg:justify-between">
+        <div className="notification-hero relative isolate overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,#17151a_0%,#24202a_70%,#31232b_100%)] px-5 py-6 text-white shadow-[0_18px_55px_rgba(32,18,25,0.16)] sm:px-7 lg:flex lg:items-center lg:justify-between">
           <div className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-[#d96b94]/15 blur-3xl" />
-          <div className="flex items-center gap-3">
+          <div className="relative z-10 flex items-center gap-3">
             <span className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-[#f4a8c6] shadow-inner">
               <MessageSquareText className="size-5" />
             </span>
@@ -647,7 +647,7 @@ export function NotificationManager({
             </div>
           </div>
 
-          <div className="relative mt-5 flex flex-col gap-2 sm:flex-row sm:items-center lg:mt-0">
+          <div className="relative z-10 mt-5 flex flex-col gap-2 sm:flex-row sm:items-center lg:mt-0">
             {stats.unread > 0 ? (
               <button type="button" onClick={() => void markAllRead()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-4 text-xs font-black text-white transition hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]">
                 <CheckCheck className="size-4" /> Segna tutte lette
@@ -666,7 +666,7 @@ export function NotificationManager({
               <button
                 type="button"
                 onClick={() => router.push("/notifications/new")}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-5 text-xs font-black text-[#17151A] shadow-sm transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]"
+                className="notification-primary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]"
               >
                 <MailPlus className="size-4" /> Nuova comunicazione
               </button>

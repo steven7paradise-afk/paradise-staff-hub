@@ -124,7 +124,7 @@ function Avatar({ name, photoUrl, size = 44 }: { name: string; photoUrl: string 
   );
 }
 
-const revenueLineColors = ["#F080B7", "#62D4FF", "#72E0B1"];
+const revenueLineColors = ["#B62F69", "#E36C9F", "#F3A0C8"];
 
 function ThreeMonthControlsChart({ months, selectedDay, onSelectDay, subjectLabel }: {
   months: AnalyticsMonth[];
@@ -165,18 +165,19 @@ function ThreeMonthControlsChart({ months, selectedDay, onSelectDay, subjectLabe
           </div>
         </div>
       </div>
-      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-3 text-2xl font-black tabular-nums text-white">{day?.controls || 0}</p><p className="text-[10px] font-bold uppercase tracking-wider text-white/45">schede completate</p><p className="mt-3 border-t border-white/10 pt-3 text-xs font-black text-emerald-300">{money.format(day?.revenue || 0)} attribuiti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare il totale delle schede nei tre mesi.</p>}
+      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-3 text-2xl font-black tabular-nums text-white">{day?.controls || 0}</p><p className="text-[10px] font-bold uppercase tracking-wider text-white/45">schede completate</p><p className="mt-3 border-t border-white/10 pt-3 text-xs font-black text-[#f3a0c8]">{money.format(day?.revenue || 0)} attribuiti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare il totale delle schede nei tre mesi.</p>}
     </div>
   );
 }
 
-function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, controls, onClick }: {
+function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, featured = false, controls, onClick }: {
   label: string;
   value: string;
   note: string;
   icon: typeof Users;
   tone?: "pink" | "green" | "gold" | "red";
   active?: boolean;
+  featured?: boolean;
   controls: string;
   onClick: () => void;
 }) {
@@ -193,14 +194,16 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       aria-pressed={active}
       aria-expanded={active}
       aria-controls={controls}
-      className={`group min-h-28 min-w-0 border-r border-white/10 px-4 py-3 text-left transition duration-200 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#f0a0c3] motion-reduce:transition-none last:border-r-0 ${active ? "bg-white/[0.09] shadow-[inset_0_-3px_0_#ee86b3]" : ""}`}
+      aria-label={`${label}: ${value}. ${note}`}
+      title={`${label}: ${value}`}
+      className={`group min-h-[94px] min-w-0 rounded-[18px] border px-1 py-2 text-center transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none sm:min-h-[108px] sm:rounded-[22px] sm:px-3 sm:py-3 ${featured ? "border-[#d85991] bg-[linear-gradient(145deg,#b62f69_0%,#d95d95_55%,#f08bb8_100%)] text-white shadow-[0_18px_35px_rgba(183,47,105,0.22)] hover:border-[#b62f69]" : "border-black/[0.07] bg-white text-[#171719] shadow-[0_8px_24px_rgba(20,16,18,0.045)] hover:border-black/15 dark:border-white/10 dark:bg-[#292a30] dark:text-white dark:hover:border-white/20"} ${active && !featured ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
     >
-      <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase text-white/60">
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${colors}`}><Icon size={16} aria-hidden="true" /></span>
-        {label}
+      <div className="flex flex-col items-center justify-center gap-1">
+        <p className={`w-full truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] ${featured ? "text-white/80" : "text-black/50 dark:text-white/60"}`}>{label}</p>
+        <span className={`flex size-7 shrink-0 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none sm:size-9 ${featured ? "bg-white text-[#b62f69]" : colors}`}><Icon className="size-3.5 sm:size-4" aria-hidden="true" /></span>
+        <p className={`text-lg font-black leading-none tabular-nums sm:text-2xl ${featured ? "text-white" : "text-[#171719] dark:text-white"}`}>{value}</p>
+        <span className="sr-only">{label}. {note}</span>
       </div>
-      <p className="text-3xl font-black text-white">{value}</p>
-      <p className="mt-1 flex items-center gap-1 text-xs text-white/70">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
     </button>
   );
 }
@@ -289,7 +292,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       : data.leaves;
   const financialItems = [
     { label: "Disponibilità", value: data.availableCash, color: "#d75489", soft: "bg-[#fff0f6]", text: "text-[#a92f63]" },
-    { label: "Versamenti", value: data.monthDeposits, color: "#28a37a", soft: "bg-emerald-50", text: "text-emerald-700" },
+    { label: "Versamenti", value: data.monthDeposits, color: "#e174a5", soft: "bg-[#fff0f6]", text: "text-[#a92f63]" },
     { label: "Prelievi", value: data.monthWithdrawals, color: "#d69a32", soft: "bg-amber-50", text: "text-amber-700" },
     { label: "Spese", value: data.monthExpenses, color: "#e05b62", soft: "bg-red-50", text: "text-red-700" },
   ];
@@ -310,43 +313,53 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
     }));
   }
 
+  const greetingHour = Number.parseInt(data.updatedAt.split(":")[0] || "0", 10);
+  const greeting = greetingHour >= 5 && greetingHour < 12
+    ? "Buongiorno"
+    : greetingHour >= 12 && greetingHour < 18
+      ? "Buon pomeriggio"
+      : "Buonasera";
+
   return (
-    <div className="management-dashboard-liquid w-full max-w-none space-y-6 rounded-[32px] p-4 pb-12 font-sans antialiased sm:p-6">
-      <section className="overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(145deg,rgba(31,27,38,0.98),rgba(17,16,24,0.98))] text-white shadow-[0_20px_60px_rgba(20,11,16,0.18)] backdrop-blur-2xl">
-        <div className="flex flex-col gap-5 border-b border-white/10 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-none bg-[#f5f5f5] p-3 pb-12 font-sans antialiased dark:bg-[#151518] sm:rounded-[34px] sm:p-6 lg:p-8">
+      <section className="order-0 relative isolate min-h-44 overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.16)] sm:min-h-56">
+        <img
+          src="/beta-login-hero.png"
+          alt=""
+          className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center"
+          aria-hidden="true"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(38,9,22,0.86)_0%,rgba(55,13,31,0.58)_48%,rgba(55,13,31,0.12)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(30,7,17,0.28)_0%,transparent_55%)]" />
+        <div className="relative z-10 flex min-h-44 max-w-2xl flex-col justify-end p-6 sm:min-h-56 sm:p-8 lg:p-10">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffc3dc]">Paradise Staff Hub</p>
+          <h1 className="mt-2 text-3xl font-black leading-none tracking-[-0.04em] drop-shadow-sm sm:text-5xl">{greeting}, {data.viewerName.split(" ")[0]}</h1>
+          <p className="mt-3 max-w-lg text-sm font-medium leading-6 text-white/78 sm:text-base">Ecco cosa sta succedendo oggi nei tuoi saloni.</p>
+        </div>
+      </section>
+
+      <section className="order-1 rounded-[28px] border border-black/[0.05] bg-[#fafafa] p-4 shadow-[0_14px_40px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-6">
+        <div className="flex flex-col gap-5 px-1 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[11px] font-black uppercase text-[#ee86b3]">Direzione operativa</p>
-            <h1 className="mt-1 text-2xl font-black sm:text-3xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
-            <p className="mt-1 text-sm text-white/70">Stato in tempo reale · {data.scopeLabel}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b83f70]">Direzione operativa</p>
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.045em] text-[#171719] dark:text-white sm:text-5xl">Dashboard</h1>
+            <p className="mt-2 text-sm text-black/50 dark:text-white/55">Stato in tempo reale · {data.scopeLabel}</p>
           </div>
-          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.06] px-5 text-xs font-bold uppercase transition hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
+          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#b62f69] bg-[#b62f69] px-6 text-xs font-black uppercase text-white shadow-[0_12px_25px_rgba(182,47,105,0.20)] transition hover:bg-[#9f285b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5">
-          <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
+          <Metric label="Presenti" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="pink" featured active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
           <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
-          <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
-          <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
+          <Metric label="Ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
+          <Metric label="Malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
           <Metric label="Ritardi" value={String(data.lateStaff.length)} note="presi in visione" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
         </div>
       </section>
 
-      {data.missingPayslips.length > 0 && (
-        <section className="flex flex-col gap-4 rounded-[20px] border border-[#efb2ca] bg-white/75 p-4 shadow-sm backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <FileWarning className="mt-0.5 shrink-0 text-[#b92f68]" size={22} />
-            <div>
-              <p className="font-black text-[#341522]">Buste paga da inviare: {data.missingPayslips.length}</p>
-              <p className="mt-1 text-sm text-[#775563]">Mancano i documenti di {data.payrollMonthLabel}: {data.missingPayslips.slice(0, 4).map((item) => item.name).join(", ")}{data.missingPayslips.length > 4 ? "…" : ""}</p>
-            </div>
-          </div>
-          <Link href="/cedolini" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#17131a] px-5 text-xs font-black uppercase text-white transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none">Apri cedolini</Link>
-        </section>
-      )}
-
       {personnelView === "PRESENT" || personnelView === "ABSENT" || personnelView === "LATE" ? (
-        <section id="personale-oggi" className="scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
+        <section id="personale-oggi" className="order-2 scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
@@ -386,7 +399,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       ) : null}
 
       {personnelView === "HOLIDAYS" || personnelView === "SICKNESS" ? (
-        <section id="assenze-attive" className="scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
+        <section id="assenze-attive" className="order-2 scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
@@ -411,20 +424,21 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-[28px] border border-white/85 bg-[linear-gradient(135deg,rgba(255,255,255,0.86),rgba(250,244,255,0.76))] p-5 shadow-[0_20px_70px_rgba(69,38,52,0.10)] backdrop-blur-2xl lg:p-7">
+      <div className="order-4 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.7fr)]">
+      <section className="min-w-0 overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] lg:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
-            <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg text-left text-xl font-black transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none"><TrendingUp className="size-5 text-[#eb5da3]" /> Controlli cliente completati per ora</button>
+            <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg text-left text-xl font-black text-[#171719] transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:text-white dark:hover:text-[#f3a0c8]"><TrendingUp className="size-5 text-[#eb5da3]" /> Controlli cliente completati per ora</button>
           </div>
-          <button type="button" onClick={() => router.push("/client-control?date=today")} aria-label={`Apri tutte le ${data.clientsToday} schede Controllo Cliente completate oggi`} className="min-h-11 rounded-xl px-3 text-left transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#6f676b]">schede oggi · apri controlli</p></button>
+          <button type="button" onClick={() => router.push("/client-control?date=today")} aria-label={`Apri tutte le ${data.clientsToday} schede Controllo Cliente completate oggi`} className="min-h-11 rounded-xl px-3 text-left text-[#171719] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:text-white dark:hover:bg-white/5 sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#6f676b] dark:text-white/55">schede oggi · apri controlli</p></button>
         </div>
         <div className="mt-6 overflow-x-auto pb-2">
-          <div className="flex min-w-[720px] items-end gap-4 border-b border-[#dfd5dd] px-3 pt-8">
+          <div className="flex min-w-[720px] items-end gap-4 border-b border-[#dfd5dd] px-3 pt-8 dark:border-white/15">
             {hourlyChartItems.map((item) => (
-              <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede completate alle ${item.hour}`} className="group flex min-h-36 min-w-16 flex-1 flex-col items-center justify-end rounded-t-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f]">
+              <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede completate alle ${item.hour}`} className="group flex min-h-36 min-w-16 flex-1 flex-col items-center justify-end rounded-t-2xl text-[#171719] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] dark:text-white">
                 <strong className="mb-2 text-sm tabular-nums">{item.count}</strong>
-                <span className="w-full max-w-16 rounded-t-xl bg-[linear-gradient(180deg,#f15ba6,#f8afd1_65%,rgba(248,175,209,0.20))] shadow-[0_0_25px_rgba(235,93,163,0.24)] transition group-hover:brightness-105" style={{ height: `${Math.max(28, item.count / maxHourly * 108)}px` }} />
+                <span className="w-full max-w-16 rounded-t-xl bg-[#ee78ad] transition group-hover:bg-[#d95b93]" style={{ height: `${Math.max(28, item.count / maxHourly * 108)}px` }} />
                 <span className="py-3 text-xs font-black">{item.hour}</span>
               </button>
             ))}
@@ -432,14 +446,51 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[30px] border border-white/15 bg-[linear-gradient(145deg,#101725,#07131f)] text-white shadow-[0_24px_80px_rgba(6,15,28,0.20)]">
-        <div className="flex flex-col gap-4 border-b border-white/10 p-6 sm:flex-row sm:items-end sm:justify-between lg:p-8">
+      <aside>
+        <section className="h-full rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#b83f70]">Priorità</p>
+              <h2 className="mt-1 text-xl font-black text-[#171719] dark:text-white">Da gestire</h2>
+            </div>
+            <span className="grid size-10 place-items-center rounded-full bg-[#fff0f6] text-[#b62f69]"><AlertTriangle className="size-4" aria-hidden="true" /></span>
+          </div>
+          <div className="mt-5 divide-y divide-black/[0.06] dark:divide-white/10">
+            <button type="button" onClick={() => showPersonnelSection("ABSENT")} className="flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-red-50 text-red-600"><AlertTriangle className="size-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm text-[#171719] dark:text-white">Assenze da verificare</strong><span className="text-xs text-black/45 dark:text-white/45">Situazione odierna</span></span>
+              <strong className="text-lg tabular-nums text-[#b62f69]">{data.absentToday.length}</strong>
+            </button>
+            <button type="button" onClick={() => showPersonnelSection("LATE")} className="flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-700"><Clock3 className="size-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm text-[#171719] dark:text-white">Ritardi</strong><span className="text-xs text-black/45 dark:text-white/45">Da prendere in visione</span></span>
+              <strong className="text-lg tabular-nums text-[#b62f69]">{data.lateStaff.length}</strong>
+            </button>
+            <Link href="/cedolini" className="flex min-h-16 items-center gap-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#fff0f6] text-[#b62f69]"><FileWarning className="size-4" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm text-[#171719] dark:text-white">Buste paga</strong><span className="block truncate text-xs text-black/45 dark:text-white/45">{data.payrollMonthLabel}</span></span>
+              <strong className="text-lg tabular-nums text-[#b62f69]">{data.missingPayslips.length}</strong>
+            </Link>
+          </div>
+        </section>
+
+      </aside>
+      </div>
+
+      <section className="order-5 overflow-hidden rounded-[28px] border border-[#8d345d]/25 bg-[linear-gradient(145deg,#24151d_0%,#321824_52%,#431c30_100%)] text-white shadow-[0_18px_45px_rgba(54,18,37,0.18)]">
+        <div className="flex flex-col gap-6 border-b border-white/10 p-6 lg:flex-row lg:items-end lg:justify-between lg:p-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f080b7]">Performance Buenos Aires</p>
-            <h2 className="mt-2 text-2xl font-black">Confronto ultimi 3 mesi</h2>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.025em] sm:text-3xl">Confronto ultimi 3 mesi</h2>
             <p className="mt-1 text-sm text-white/60">Schede cliente, servizi e fatturazione attribuita · giorni 1–31</p>
           </div>
-          {analytics ? <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 text-right"><strong className="text-2xl tabular-nums">{analytics.totals.controls}</strong><p className="text-[10px] font-bold uppercase tracking-wider text-white/55">schede nei 3 mesi</p></div> : null}
+          {analytics ? (
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[470px]">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3"><strong className="block text-xl tabular-nums sm:text-2xl">{analytics.totals.controls}</strong><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/50">Schede</p></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3"><strong className="block truncate text-base tabular-nums text-[#f3a0c8] sm:text-xl">{money.format(analytics.totals.revenue)}</strong><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/50">Fatturato</p></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3"><strong className="block text-xl tabular-nums sm:text-2xl">{analytics.workers.filter((worker) => worker.controls > 0).length}</strong><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/50">Staff attivo</p></div>
+            </div>
+          ) : null}
         </div>
 
         {analyticsLoading ? (
@@ -447,15 +498,21 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         ) : !analytics || !analytics.workers.length ? (
           <div className="p-8 text-sm text-white/60">Nessuna scheda valida trovata per il salone Buenos Aires.</div>
         ) : (
-          <div className="space-y-7 p-5 lg:p-8">
-            <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="grid gap-5 p-5 lg:p-8 xl:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="min-w-0 rounded-[24px] border border-white/10 bg-black/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#f080b7]">Classifica</p><h3 className="mt-1 font-black">Performance staff</h3></div>
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase text-white/55">3 mesi</span>
+              </div>
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-2 xl:max-h-[430px] xl:flex-col xl:overflow-x-hidden xl:overflow-y-auto xl:pr-1">
               {analytics.ranking.map((worker, index) => (
-                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId((current) => current === worker.id ? null : worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
-                  <span className="text-sm font-black text-[#f3a0c8]">#{index + 1}</span>
-                  <Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />
+                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId((current) => current === worker.id ? null : worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-20 min-w-52 items-center gap-3 rounded-[18px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] xl:w-full xl:min-w-0 ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15 shadow-[inset_3px_0_0_#f080b7]" : "border-white/10 bg-white/[0.045] hover:bg-white/[0.09]"}`}>
+                  <span className="w-5 text-center text-xs font-black text-[#f3a0c8]">{index + 1}</span>
+                  <Avatar name={worker.name} photoUrl={worker.photoUrl} size={42} />
                   <span className="min-w-0"><span className="block truncate text-sm font-black">{worker.name}</span><span className="mt-1 block text-xs text-white/55">{worker.controls} schede</span></span>
                 </button>
               ))}
+              </div>
             </div>
 
             <ThreeMonthControlsChart
@@ -466,16 +523,16 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             />
 
             {selectedWorker ? (
-              <div className="space-y-5">
+              <div className="space-y-5 xl:col-span-2">
                 <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-                <div className="rounded-[24px] border border-white/15 bg-[#172131] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
+                <div className="rounded-[24px] border border-white/15 bg-[#2c1823] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
                   <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
                   <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-1">
                     <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Clienti svolti</p><strong className="mt-1 block text-2xl tabular-nums">{selectedWorker.controls}</strong></div>
-                    <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Media per cliente</p><strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedWorker.averageRevenue)}</strong></div>
+                    <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Media per cliente</p><strong className="mt-1 block text-xl tabular-nums text-[#f3a0c8]">{money.format(selectedWorker.averageRevenue)}</strong></div>
                     <div className="col-span-2 rounded-2xl border border-white/10 bg-white/[0.07] p-4 xl:col-span-1">
                       <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/55">{selectedDayDetails ? "Fatturazione del giorno" : "Fatturazione attribuita"}</p>
-                      <strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedDayDetails?.revenue ?? selectedWorker.revenue)}</strong>
+                      <strong className="mt-1 block text-xl tabular-nums text-[#f3a0c8]">{money.format(selectedDayDetails?.revenue ?? selectedWorker.revenue)}</strong>
                       <p className="mt-2 text-[10px] font-semibold leading-4 text-white/50">{selectedDayDetails && selectedDayMonth ? `${selectedDayDetails.day} ${selectedDayMonth.label} · ${selectedDayDetails.controls} clienti` : attributionPeriod}</p>
                       {selectedDayDetails ? <button type="button" onClick={() => setSelectedAnalyticsDay(null)} className="mt-3 min-h-11 rounded-xl border border-white/15 px-3 text-[10px] font-black uppercase text-white/70 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7]">Mostra totale periodo</button> : <p className="mt-2 text-[10px] font-semibold text-[#f3a0c8]">Tocca un giorno per vedere il ricavo</p>}
                     </div>
@@ -489,7 +546,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                       {selectedWorker.months.map((month) => {
                         const max = Math.max(1, ...month.days.map((day) => day.controls));
                         return <div key={month.key} className="grid grid-cols-[120px_repeat(31,44px)] items-center gap-1.5">
-                          <div className="sticky left-0 z-10 self-stretch bg-[#151e2c] pr-3 shadow-[12px_0_18px_-14px_rgba(0,0,0,0.95)]">
+                          <div className="sticky left-0 z-10 self-stretch bg-[#24151d] pr-3 shadow-[12px_0_18px_-14px_rgba(0,0,0,0.95)]">
                             <div className="flex h-full flex-col justify-center">
                               <p className="truncate text-xs font-black capitalize">{month.label}</p>
                               <p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p>
@@ -535,12 +592,12 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                 </div>
               </div>
             ) : null}
-            {dayTooltip ? <div className="pointer-events-none fixed z-[200] w-72 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/15 bg-[#101725]/[0.98] p-4 text-left text-white shadow-[0_20px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl" style={{ left: dayTooltip.x, top: dayTooltip.y }}><div className="flex justify-between gap-3"><strong className="text-xs capitalize">{dayTooltip.day.day} {dayTooltip.month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{dayTooltip.day.controls} schede</span></div><p className="mt-1 text-sm font-black text-emerald-300">{money.format(dayTooltip.day.revenue)} attribuiti</p><div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">{dayTooltip.day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/75"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
+            {dayTooltip ? <div className="pointer-events-none fixed z-[200] w-72 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/15 bg-[#101725]/[0.98] p-4 text-left text-white shadow-[0_20px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl" style={{ left: dayTooltip.x, top: dayTooltip.y }}><div className="flex justify-between gap-3"><strong className="text-xs capitalize">{dayTooltip.day.day} {dayTooltip.month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{dayTooltip.day.controls} schede</span></div><p className="mt-1 text-sm font-black text-[#f3a0c8]">{money.format(dayTooltip.day.revenue)} attribuiti</p><div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">{dayTooltip.day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/75"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
           </div>
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(145deg,rgba(31,27,38,0.98),rgba(17,16,24,0.98))] text-white shadow-[0_20px_60px_rgba(20,11,16,0.16)] backdrop-blur-2xl">
+      <section className="order-3 overflow-hidden rounded-[28px] border border-[#7e294f]/30 bg-[linear-gradient(145deg,#2b1722_0%,#431b30_52%,#642441_100%)] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)] dark:border-[#f080b7]/20 dark:bg-[linear-gradient(145deg,#171217_0%,#2a1822_55%,#451d31_100%)]">
         <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>
@@ -550,12 +607,11 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <Link href="/cash" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.06] px-5 text-xs font-black uppercase transition hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">Apri cassa <ChevronRight className="size-4" aria-hidden="true" /></Link>
         </div>
 
-        <div className="grid gap-6 p-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:p-7">
+        <div className="grid gap-5 p-5 md:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.6fr)] lg:p-7">
           <Link href="/cash" aria-label={`Apri cassa. Disponibilità attuale ${money.format(data.availableCash)}`} className="group relative flex min-h-72 flex-col items-center justify-center overflow-hidden rounded-[22px] border border-white/15 bg-white/[0.055] p-6 transition duration-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(215,84,137,0.16),transparent_42%)]" />
             <div
               className="relative grid size-48 place-items-center rounded-full p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]"
-              style={{ background: movementSum > 0 ? `conic-gradient(#28a37a 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}
+              style={{ background: movementSum > 0 ? `conic-gradient(#d95d95 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}
             >
               <div className="grid size-full place-items-center rounded-full border border-white/10 bg-[#17151e] text-center shadow-inner">
                 <div>
@@ -567,7 +623,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             </div>
             <div className="relative mt-5 flex items-center gap-2 text-xs font-bold text-white/70">
               Totale ricavato nel mese
-              <span className="rounded-full bg-emerald-400/15 px-2 py-1 font-black text-emerald-300">{money.format(data.monthRevenue)}</span>
+              <span className="rounded-full bg-[#f080b7]/15 px-2 py-1 font-black text-[#f3a0c8]">{money.format(data.monthRevenue)}</span>
             </div>
           </Link>
 
@@ -599,7 +655,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <p className="flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b]"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
+      <p className="order-6 flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b] dark:text-white/55"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
     </div>
   );
 }

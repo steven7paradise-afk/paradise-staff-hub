@@ -108,7 +108,7 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
           setIsOpen((prev) => !prev);
           if (!isOpen) fetchNotifications();
         }}
-        className="relative grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15 active:scale-95"
+        className="relative grid size-10 place-items-center rounded-2xl bg-white/90 text-slate-800 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white dark:text-[#171719] dark:ring-white/20 dark:hover:bg-[#f3edf0] active:scale-95"
         aria-label="Notifiche"
       >
         <Bell className="size-5 transition-transform duration-300 hover:rotate-12 text-[#4E382C] dark:text-white" />

@@ -10,8 +10,6 @@ import {
   Palette,
   RotateCcw,
   Save,
-  SlidersHorizontal,
-  Sparkles,
   Smartphone,
   Sun,
 } from "lucide-react";
@@ -23,7 +21,6 @@ type StringThemeKey = {
   [Key in keyof BrandingTheme]: BrandingTheme[Key] extends string ? Key : never;
 }[keyof BrandingTheme];
 type ColorKey = Exclude<StringThemeKey, "sidebar_font_family">;
-type GlassNumberKey = "glass_opacity" | "glass_blur" | "glass_saturation" | "glass_border_opacity";
 type Mode = "light" | "dark";
 
 type ColorField = {
@@ -40,9 +37,6 @@ const sidebarFontOptions = [
 
 const lightFields: ColorField[] = [
   { key: "background_color", label: "Sfondo sito", help: "Colore principale delle pagine." },
-  { key: "sidebar_color", label: "Sidebar", help: "Menu laterale e header mobile." },
-  { key: "sidebar_text_color", label: "Testo sidebar", help: "Etichette del menu." },
-  { key: "sidebar_icon_color", label: "Icone sidebar", help: "Icone e dettagli del menu." },
   { key: "card_color", label: "Card", help: "Pannelli e contenitori." },
   { key: "text_color", label: "Testo", help: "Titoli e testi principali." },
   { key: "button_color", label: "Bottoni", help: "Azioni principali." },
@@ -53,9 +47,6 @@ const lightFields: ColorField[] = [
 
 const darkFields: ColorField[] = [
   { key: "dark_background_color", label: "Sfondo notte", help: "Colore principale in dark mode." },
-  { key: "dark_sidebar_color", label: "Sidebar notte", help: "Menu laterale in dark mode." },
-  { key: "dark_sidebar_text_color", label: "Testo sidebar notte", help: "Etichette menu in dark mode." },
-  { key: "dark_sidebar_icon_color", label: "Icone sidebar notte", help: "Icone menu in dark mode." },
   { key: "dark_card_color", label: "Card notte", help: "Pannelli in dark mode." },
   { key: "dark_text_color", label: "Testo notte", help: "Titoli e testi in dark mode." },
   { key: "dark_button_color", label: "Bottoni notte", help: "Azioni principali in dark mode." },
@@ -85,9 +76,9 @@ const defaults: BrandingTheme = {
   glass_blur: 24,
   glass_saturation: 140,
   glass_border_opacity: 16,
-  sidebar_active_bg_color: "#FFFFFF",
-  sidebar_active_text_color: "#FFFFFF",
-  sidebar_active_icon_color: "#FFFFFF",
+  sidebar_active_bg_color: "#FCE7F0",
+  sidebar_active_text_color: "#9F315B",
+  sidebar_active_icon_color: "#9F315B",
   sidebar_font_family: "Manrope",
   logo_url: null,
 };
@@ -101,6 +92,9 @@ const presets: Array<{ name: string; description: string; values: Partial<Brandi
       sidebar_color: "#FFFFFF",
       sidebar_text_color: "#1F1F1F",
       sidebar_icon_color: "#1F1F1F",
+      sidebar_active_bg_color: "#FCE7F0",
+      sidebar_active_text_color: "#9F315B",
+      sidebar_active_icon_color: "#9F315B",
       card_color: "#FFFFFF",
       text_color: "#1F1F1F",
       button_color: "#FFA8DD",
@@ -117,6 +111,9 @@ const presets: Array<{ name: string; description: string; values: Partial<Brandi
       sidebar_color: "#F7C9EB",
       sidebar_text_color: "#1F1F1F",
       sidebar_icon_color: "#1F1F1F",
+      sidebar_active_bg_color: "#FFFFFF",
+      sidebar_active_text_color: "#9F315B",
+      sidebar_active_icon_color: "#9F315B",
       card_color: "#FFFFFF",
       text_color: "#1F1F1F",
       button_color: "#F49AD4",
@@ -143,12 +140,12 @@ const presets: Array<{ name: string; description: string; values: Partial<Brandi
 function modeValues(theme: BrandingTheme, mode: Mode) {
   return {
     background: mode === "dark" ? theme.dark_background_color : theme.background_color,
-    sidebar: mode === "dark" ? theme.dark_sidebar_color : theme.sidebar_color,
+    sidebar: theme.sidebar_color,
     card: mode === "dark" ? theme.dark_card_color : theme.card_color,
     text: mode === "dark" ? theme.dark_text_color : theme.text_color,
     button: mode === "dark" ? theme.dark_button_color : theme.button_color,
-    sidebarText: mode === "dark" ? theme.dark_sidebar_text_color : theme.sidebar_text_color,
-    sidebarIcon: mode === "dark" ? theme.dark_sidebar_icon_color : theme.sidebar_icon_color,
+    sidebarText: theme.sidebar_text_color,
+    sidebarIcon: theme.sidebar_icon_color,
   };
 }
 
@@ -268,24 +265,6 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     });
   }
 
-  function updateGlass(key: GlassNumberKey, value: number) {
-    setStatus("idle");
-    setForm((current) => {
-      const next = { ...current, [key]: value };
-      applyLiveTheme(next, mode);
-      return next;
-    });
-  }
-
-  function toggleGlass() {
-    setStatus("idle");
-    setForm((current) => {
-      const next = { ...current, glass_enabled: !current.glass_enabled };
-      applyLiveTheme(next, mode);
-      return next;
-    });
-  }
-
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
     document.documentElement.classList.toggle("dark", nextMode === "dark");
@@ -320,12 +299,10 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     setStatus("error");
   }
 
-  const sidebarGradientFields: ColorField[] = [
-    { key: "dark_sidebar_color", label: "Base menu scura", help: "Parte principale della sidebar desktop." },
-    { key: "sidebar_gradient_mid_color", label: "Centro sfumatura", help: "Colore centrale scuro della sidebar desktop e del menu telefono." },
-    { key: "gradient_color", label: "Sfumatura menu", help: "Colore che crea profondita nella sidebar." },
-    { key: "dark_sidebar_text_color", label: "Testo menu", help: "Titoli e nomi delle pagine nel menu scuro." },
-    { key: "dark_sidebar_icon_color", label: "Icone menu", help: "Icone della sidebar scura." },
+  const sidebarFields: ColorField[] = [
+    { key: "sidebar_color", label: "Colore sidebar", help: "Sfondo pieno del menu desktop e mobile." },
+    { key: "sidebar_text_color", label: "Testo", help: "Titoli e nomi delle pagine." },
+    { key: "sidebar_icon_color", label: "Icone", help: "Icone e controlli del menu." },
     { key: "sidebar_active_bg_color", label: "Sfondo selezionato", help: "Colore della pagina attiva nel menu." },
     { key: "sidebar_active_text_color", label: "Testo selezionato", help: "Colore del testo quando una pagina e selezionata." },
     { key: "sidebar_active_icon_color", label: "Icona selezionata", help: "Colore dell'icona quando una pagina e selezionata." },
@@ -358,17 +335,17 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
   }
 
   return (
-    <div className="branding-studio grid min-h-dvh min-w-0 w-full gap-6 px-4 pb-16 pt-[calc(env(safe-area-inset-top)+80px)] sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] xl:px-8 xl:pt-24">
+    <div className="branding-studio grid min-h-dvh min-w-0 w-full gap-5 px-4 pb-12 pt-[calc(env(safe-area-inset-top)+72px)] sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] xl:px-8 xl:py-8">
       <section className="min-w-0 space-y-5">
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+        <div className="rounded-[24px] border border-black/[0.08] bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.24em] text-pink-500">Branding</p>
               <h2 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-[color:var(--text)]">
-                Personalizza colori e menu <Crown className="size-5 text-pink-500" />
+                Aspetto dell’app <Crown className="size-5 text-pink-500" />
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-black/55 dark:text-white/60">
-                Qui controlli sidebar desktop, menu mobile, bottoni, card, testi e logo. Le modifiche si vedono subito e poi si confermano con Salva.
+                Scegli i colori essenziali, il logo e lo stile del menu. L’anteprima si aggiorna subito; salva quando il risultato ti piace.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -399,76 +376,18 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.24em] text-pink-500"><Sparkles className="size-4" /> Liquid Glass</p>
-              <h3 className="mt-2 text-2xl font-black text-[color:var(--text)]">Regola il vetro di tutta l’app</h3>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-black/50 dark:text-white/55">Le modifiche controllano card, pannelli, sidebar desktop e menu telefono. L’anteprima si aggiorna immediatamente.</p>
-            </div>
-            <button
-              type="button"
-              onClick={toggleGlass}
-              aria-pressed={form.glass_enabled}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center gap-3 rounded-full border px-4 text-sm font-black transition",
-                form.glass_enabled ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-black/10 bg-black/[0.04] text-black/55 dark:border-white/10 dark:bg-white/5 dark:text-white/60",
-              )}
-            >
-              <span className={cn("relative h-6 w-11 rounded-full transition", form.glass_enabled ? "bg-emerald-500" : "bg-black/20 dark:bg-white/20")}>
-                <span className={cn("absolute top-1 size-4 rounded-full bg-white shadow-sm transition", form.glass_enabled ? "left-6" : "left-1")} />
-              </span>
-              {form.glass_enabled ? "Attivo" : "Disattivato"}
-            </button>
-          </div>
-
-          <div className={cn("mt-6 grid gap-4 md:grid-cols-2", !form.glass_enabled && "pointer-events-none opacity-45")}>
-            {([
-              { key: "glass_opacity", label: "Trasparenza", help: "Più basso = vetro più trasparente.", min: 20, max: 100, suffix: "%" },
-              { key: "glass_blur", label: "Sfocatura", help: "Aumenta la morbidezza dello sfondo.", min: 0, max: 50, suffix: " px" },
-              { key: "glass_saturation", label: "Saturazione", help: "Aumenta la vivacità dei colori sotto il vetro.", min: 100, max: 200, suffix: "%" },
-              { key: "glass_border_opacity", label: "Bordo luminoso", help: "Regola la visibilità dei contorni del vetro.", min: 0, max: 40, suffix: "%" },
-            ] as Array<{ key: GlassNumberKey; label: string; help: string; min: number; max: number; suffix: string }>).map((control) => (
-              <label key={control.key} className="rounded-2xl border border-black/10 bg-white/70 p-4 backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-                <span className="flex items-start justify-between gap-4">
-                  <span>
-                    <span className="block text-sm font-black">{control.label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-black/45 dark:text-white/45">{control.help}</span>
-                  </span>
-                  <span className="rounded-full bg-black/[0.05] px-3 py-1 text-xs font-black tabular-nums dark:bg-white/10">{form[control.key]}{control.suffix}</span>
-                </span>
-                <input
-                  type="range"
-                  min={control.min}
-                  max={control.max}
-                  value={form[control.key]}
-                  onChange={(event) => updateGlass(control.key, Number(event.target.value))}
-                  className="mt-5 h-11 w-full cursor-pointer accent-pink-500"
-                  aria-label={control.label}
-                />
-                <span className="flex justify-between text-[10px] font-bold text-black/35 dark:text-white/35"><span>{control.min}{control.suffix}</span><span>{control.max}{control.suffix}</span></span>
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-4 flex items-start gap-3 rounded-2xl bg-black/[0.035] p-4 text-xs leading-5 text-black/55 dark:bg-white/5 dark:text-white/55">
-            <SlidersHorizontal className="mt-0.5 size-4 shrink-0 text-pink-500" />
-            <p><strong>Consiglio:</strong> usa Trasparenza 65–80%, Sfocatura 20–30 px e Saturazione 130–155% per un effetto professionale e leggibile.</p>
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+        <div className="rounded-[24px] border border-black/[0.08] bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.24em] text-pink-500">Menu laterale</p>
-              <h3 className="mt-1 text-2xl font-black text-[color:var(--text)]">Sidebar desktop sfumata</h3>
-              <p className="mt-1 text-sm text-black/50 dark:text-white/55">Questi colori controllano il menu scuro che vedi su PC.</p>
+              <h3 className="mt-1 text-2xl font-black text-[color:var(--text)]">Sidebar pulita</h3>
+              <p className="mt-1 text-sm text-black/50 dark:text-white/55">Un solo colore pieno, usato sia su computer sia su telefono.</p>
             </div>
-            <button type="button" onClick={() => applyPreset(presets[2].values)} className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-xs font-black text-black/65 transition hover:border-pink-300 hover:bg-pink-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70">
-              Applica notte luxury
+            <button type="button" onClick={() => applyPreset(presets[0].values)} className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-xs font-black text-black/65 transition hover:border-pink-300 hover:bg-pink-50">
+              Ripristina bianco
             </button>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-2">{sidebarGradientFields.map((field) => renderColorField(field, true))}</div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">{sidebarFields.map((field) => renderColorField(field, true))}</div>
 
           <div className="mt-5 rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-white/5">
             <div>
@@ -501,7 +420,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+        <div className="rounded-[24px] border border-black/[0.08] bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.24em] text-pink-500">Colori sito</p>
@@ -527,7 +446,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           <div className="mt-5 grid gap-3 md:grid-cols-2">{fields.map((field) => renderColorField(field))}</div>
         </div>
 
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+        <div className="rounded-[24px] border border-black/[0.08] bg-white p-5 sm:p-6">
           <div className="flex items-center gap-2">
             <Palette className="size-4 text-pink-500" />
             <h3 className="font-black">Preset rapidi</h3>
@@ -547,7 +466,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-dashed border-black/15 bg-[color:var(--card)] p-5 shadow-sm dark:border-white/10">
+        <div className="rounded-[24px] border border-dashed border-black/15 bg-white p-5">
           <label className="block">
             <span className="text-sm font-black">Logo ufficiale</span>
             <span className="mt-1 block text-xs text-black/45 dark:text-white/45">Usato nella sidebar, header mobile, login e favicon se configurato.</span>
@@ -561,21 +480,22 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
         </div>
       </section>
 
-      <aside className="min-w-0 space-y-5 xl:sticky xl:top-24 xl:self-start">
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm">
+      <aside className="min-w-0 space-y-5 xl:sticky xl:top-8 xl:self-start">
+        <div className="rounded-[24px] border border-black/[0.08] bg-white p-5">
           <div className="mb-4 flex items-center gap-2">
             <Smartphone className="size-4 text-pink-500" />
             <p className="text-sm font-black">Anteprima menu desktop</p>
           </div>
           <div
-            className="rounded-[26px] border border-white/10 p-4 text-[color:var(--dark-sidebar-text)]"
+            className="rounded-[22px] border border-black/[0.08] p-4"
             style={{
-              background: `linear-gradient(165deg, ${form.dark_sidebar_color}, ${form.sidebar_gradient_mid_color} 54%, color-mix(in srgb, ${form.dark_sidebar_color} 78%, ${form.gradient_color} 22%))`,
+              background: form.sidebar_color,
+              color: form.sidebar_text_color,
               fontFamily: `${form.sidebar_font_family}, Inter, sans-serif`,
             }}
           >
-            <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-              <span className="grid size-11 place-items-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+            <div className="flex items-center gap-3 border-b border-black/10 pb-4">
+              <span className="grid size-11 place-items-center overflow-hidden rounded-full bg-black/[0.04] ring-1 ring-black/[0.06]">
                 {form.logo_url ? <img src={form.logo_url} alt="" className="size-full object-cover" /> : "P"}
               </span>
               <div>
@@ -591,7 +511,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
                   className={cn("flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold", index !== 0 && "opacity-75")}
                   style={index === 0 ? { backgroundColor: form.sidebar_active_bg_color, color: form.sidebar_active_text_color } : undefined}
                 >
-                  <span className="grid size-8 place-items-center rounded-xl bg-white/[0.08]" style={{ color: index === 0 ? form.sidebar_active_icon_color : form.dark_sidebar_icon_color }}>
+                  <span className="grid size-8 place-items-center rounded-xl bg-black/[0.04]" style={{ color: index === 0 ? form.sidebar_active_icon_color : form.sidebar_icon_color }}>
                     {index + 1}
                   </span>
                   {item}
@@ -601,7 +521,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm">
+        <div className="rounded-[24px] border border-black/[0.08] bg-white p-5">
           <div className="mb-4 flex items-center gap-2">
             <Smartphone className="size-4 text-pink-500" />
             <p className="text-sm font-black">Anteprima pagina</p>

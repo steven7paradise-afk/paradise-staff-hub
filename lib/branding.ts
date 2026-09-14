@@ -57,9 +57,9 @@ const fallbackBranding: BrandingTheme = {
   glass_blur: 24,
   glass_saturation: 140,
   glass_border_opacity: 16,
-  sidebar_active_bg_color: "#FFFFFF",
-  sidebar_active_text_color: "#FFFFFF",
-  sidebar_active_icon_color: "#FFFFFF",
+  sidebar_active_bg_color: "#FCE7F0",
+  sidebar_active_text_color: "#9F315B",
+  sidebar_active_icon_color: "#9F315B",
   sidebar_font_family: "Manrope",
   logo_url: null,
 };

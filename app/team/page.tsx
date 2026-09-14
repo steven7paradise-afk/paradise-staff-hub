@@ -441,8 +441,8 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   return (
     <AppShell title="Team" subtitle="Panoramica personale e stato task aggiornato in tempo reale." role={role}>
       <AutoRefresh interval={12000} />
-      <div className="grid items-start gap-5 xl:grid-cols-[290px_minmax(0,1fr)]">
-        <Card className="bg-white p-4 xl:sticky xl:top-5 dark:bg-[#17151A]">
+      <div className="administrative-night-page grid items-start gap-5 xl:grid-cols-[290px_minmax(0,1fr)]">
+        <Card className="team-directory-panel bg-white p-4 xl:sticky xl:top-5 dark:bg-[#17151A]">
           <div className="mb-4 flex items-center justify-between gap-3 px-1">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40 dark:text-white/45">Personale</p>
@@ -450,9 +450,9 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
             </div>
             <span className="grid size-9 place-items-center rounded-full bg-[#F8EEF2] text-sm font-black text-[#A9475A] dark:bg-white/10 dark:text-white">{workers.length}</span>
           </div>
-          <div className="grid max-h-[calc(100dvh-230px)] gap-1.5 overflow-y-auto pr-1">
+          <div className="team-directory-list grid max-h-[calc(100dvh-230px)] gap-1.5 overflow-y-auto pr-1">
             {workers.map((worker) => (
-              <Link key={worker.id} href={`/team?user=${worker.id}&year=${year}`} className={`flex min-h-16 items-center gap-3 rounded-[20px] border p-2.5 transition ${selected?.id === worker.id ? "border-[#C66170]/35 bg-[#FFF0F5] shadow-sm dark:bg-[#C66170]/15" : "border-transparent hover:border-black/5 hover:bg-[#FBF7F9] dark:hover:bg-white/[0.06]"}`}>
+              <Link key={worker.id} href={`/team?user=${worker.id}&year=${year}`} className={`team-directory-item flex min-h-16 items-center gap-3 rounded-[20px] border p-2.5 transition ${selected?.id === worker.id ? "border-[#C66170]/35 bg-[#FFF0F5] shadow-sm dark:bg-[#C66170]/15" : "border-transparent hover:border-black/5 hover:bg-[#FBF7F9] dark:hover:bg-white/[0.06]"}`}>
                 <Avatar name={worker.name} photoUrl={worker.photo_url} size="size-11" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold">{worker.name}</p>
@@ -491,7 +491,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
             </div>
 
             <Card className="overflow-hidden border-white/80 bg-white/80 p-5 dark:bg-[#17151A]/90">
-              <div className="grid gap-5 lg:grid-cols-[minmax(240px,0.8fr)_minmax(0,2.2fr)] lg:items-center">
+              <div className="grid gap-5 2xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,2.2fr)] 2xl:items-center">
                 <div className="flex min-w-0 items-center gap-4">
                   <Avatar name={selected.name} photoUrl={selected.photo_url} size="size-24" />
                   <div className="min-w-0">
@@ -503,7 +503,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                     <p className="mt-2 flex items-center gap-2 truncate text-xs text-black/45 dark:text-white/45"><Mail className="size-3.5 shrink-0" /> {selected.email}</p>
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                   <DashboardStat icon={<CheckCircle2 className="size-4 text-emerald-600" />} label="Task completate" value={completed.length} tone="green" />
                   <DashboardStat icon={<Clock3 className="size-4 text-[#8064D8]" />} label="Task in corso" value={active.length} tone="violet" />
                   <DashboardStat icon={<Timer className="size-4 text-amber-600" />} label="Puntualità" value={`${punctuality}%`} tone="gold" />
@@ -512,7 +512,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
               </div>
             </Card>
 
-            <div className="grid items-start gap-5 xl:grid-cols-2">
+            <div className="grid items-start gap-5 2xl:grid-cols-2">
               <Card className="bg-white p-5 dark:bg-[#17151A]">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
@@ -521,7 +521,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                   </div>
                   <BarChart3 className="size-5 text-[#8064D8]" />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                   <DashboardStat icon={<BarChart3 className="size-4 text-[#8064D8]" />} label="Comportamento" value={`${behaviorScore}%`} tone="violet" />
                   <DashboardStat icon={<CalendarDays className="size-4 text-amber-600" />} label="Planning" value={`${respectedPlanning}%`} tone="gold" />
                   <DashboardStat icon={<ClipboardCheck className="size-4 text-emerald-600" />} label="Clienti" value={clientStats.clients} detail="controlli registrati" tone="green" />
@@ -538,7 +538,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                   </div>
                   <Clock3 className="size-5 text-[#C66170]" />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                   <DashboardStat icon={<Timer className="size-4 text-orange-500" />} label="Ingressi tardi" value={lateDays.length} detail={formatTimer(totalLateMinutes * 60)} tone="gold" />
                   <DashboardStat icon={<BadgeCheck className="size-4 text-emerald-600" />} label="Giustificate" value={justifiedAbsenceDays.length} tone="green" />
                   <DashboardStat icon={<AlertTriangle className="size-4 text-[#C66170]" />} label="Non giustificate" value={unjustifiedAbsenceDays.length} tone="pink" />
@@ -549,13 +549,13 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
               </Card>
             </div>
 
-            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+            <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
               <Card className="bg-white dark:bg-[#17151A]">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Planning, ritardi e presenza</h3>
                   <Badge tone={respectedPlanning >= 90 ? "green" : respectedPlanning >= 70 ? "gold" : "pink"}>{respectedPlanning}% rispettato</Badge>
                 </div>
-                <div className="mt-5 grid gap-3 md:grid-cols-5">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
                   <div className="rounded-2xl bg-[#FBF7F9] p-4">
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Turni anno</p>
                     <p className="mt-2 text-2xl font-semibold">{planningByDay.length}</p>
@@ -643,7 +643,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
               </Card>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-3">
+            <div className="grid gap-5 2xl:grid-cols-3">
               <Card className="bg-white">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Riepilogo settimana</h3>
@@ -694,7 +694,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
               </Card>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
+            <div className="grid gap-5 2xl:grid-cols-[1.2fr_1fr]">
               <Card className="bg-white">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Ultime task</h3>

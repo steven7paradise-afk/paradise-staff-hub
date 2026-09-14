@@ -696,17 +696,18 @@ function AppointmentNotePreviews({
         return (
         <div
           key={note.key}
+          data-appointment-note={note.key}
           className={isShopify
             ? compact
-              ? "rounded-lg border-2 border-[#E85A9B] bg-[#FFF0F7] px-2 py-2 text-[10px] font-bold leading-snug text-[#64183C] shadow-sm"
-              : "rounded-xl border-2 border-[#E85A9B] bg-[#FFF0F7] px-3 py-2.5 text-xs font-black leading-relaxed text-[#64183C] shadow-sm"
+              ? "appointment-note-preview rounded-lg border border-[#E85A9B] bg-[#FFF0F7] px-2.5 py-2 text-[10px] font-bold leading-snug text-[#64183C] shadow-sm"
+              : "appointment-note-preview rounded-xl border border-[#E85A9B] bg-[#FFF0F7] px-3 py-2.5 text-xs font-black leading-relaxed text-[#64183C] shadow-sm"
             : isCompleted
             ? compact
-              ? "rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[9px] font-semibold leading-snug text-emerald-900"
-              : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-900"
+              ? "appointment-note-preview rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[9px] font-semibold leading-snug text-emerald-900"
+              : "appointment-note-preview rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-900"
             : compact
-              ? "rounded-lg bg-[#FFF7FA] px-2 py-1.5 text-[9px] font-semibold leading-snug text-[#7E4353]"
-              : "rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
+              ? "appointment-note-preview rounded-lg border border-[#F5DCE5] bg-[#FFF7FA] px-2.5 py-2 text-[9px] font-semibold leading-snug text-[#7E4353]"
+              : "appointment-note-preview rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
         >
           <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${isShopify ? "text-[#C02F73]" : isCompleted ? "text-emerald-700" : "text-[#B9476D]"}`}>
             {isCompleted ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
@@ -7054,7 +7055,7 @@ export function AppointmentsBrowser({
               {visibleAppointmentBoardColumns.length ? (
                 <div
                   ref={boardScrollContainerRef}
-                  className="overflow-x-auto scroll-smooth bg-[#FBFAFB] p-3 sm:p-5"
+                  className="appointments-board-scroll overflow-x-auto scroll-smooth bg-[#FBFAFB] p-3 sm:p-5"
                   tabIndex={0}
                   aria-label="Colonne degli appuntamenti"
                 >
@@ -7097,7 +7098,7 @@ export function AppointmentsBrowser({
                           setDraggedBoardBookingId(null);
                           if (column.id !== "unassigned") void moveBoardBooking(bookingId, column.id);
                         }}
-                        className={`flex w-[286px] shrink-0 flex-col rounded-[20px] border p-3 transition ${
+                        className={`appointments-board-column flex w-[294px] shrink-0 flex-col rounded-[22px] border p-3 transition ${
                           boardDropTargetId === column.id
                             ? "border-[#7CB5F5] bg-[#EDF6FF] ring-2 ring-[#4C9AFF] ring-offset-2"
                             : boardWorkerDropTarget?.id === column.id
@@ -7121,7 +7122,7 @@ export function AppointmentsBrowser({
                             setDraggedBoardWorkerId(null);
                             setBoardWorkerDropTarget(null);
                           }}
-                          className={`mb-3 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          className={`appointments-board-worker mb-3 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
                           title={column.id !== "unassigned" ? "Tieni premuto e trascina per riordinare" : undefined}
                         >
                           <div className="flex items-center gap-2.5">
@@ -7179,6 +7180,7 @@ export function AppointmentsBrowser({
                                 </div>
                               ) : null}
                               <div
+                                data-appointment-state={booking.isCanceled ? "canceled" : status.toLowerCase()}
                                 role="button"
                                 tabIndex={0}
                                 onPointerDown={(event) => startBoardTouchGesture(event, booking, status)}
@@ -7227,7 +7229,7 @@ export function AppointmentsBrowser({
                                     isTouchPress,
                                   );
                                 }}
-                                className={`w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)] ${
+                                className={`appointments-board-card w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)] ${
                                   booking.isCanceled || status === "NON_PRESENTATO"
                                     ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
                                     : status === "COMPLETATO"
@@ -7248,7 +7250,7 @@ export function AppointmentsBrowser({
                                     <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(booking.startDate, booking.endDate)}</p>
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`rounded-full border px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
+                                    <span className={`appointments-board-status rounded-full border px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
                                       {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                                     </span>
                                     <button
@@ -7302,7 +7304,7 @@ export function AppointmentsBrowser({
                                 {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
-                                      <div className="relative overflow-hidden rounded-lg bg-[#FFF7E6] transition hover:bg-[#FFF0C2]">
+                                      <div className="appointments-board-office-note relative overflow-hidden rounded-xl border border-[#E8D7A6] bg-[#FFF7E6] transition hover:bg-[#FFF0C2]">
                                         <button
                                           type="button"
                                           onClick={(event) => {
@@ -7354,7 +7356,7 @@ export function AppointmentsBrowser({
                                         event.stopPropagation();
                                         openQuickNote(booking);
                                       }}
-                                      className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
+                                      className="appointments-board-add-note inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
                                     >
                                       <MessageSquare className="size-3" /> Aggiungi nota
                                     </button>

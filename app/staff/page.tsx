@@ -291,6 +291,7 @@ export default async function StaffPage({
       subtitle="Elenco anagrafiche dipendenti, ruoli, accessi attivi e note amministrative."
       transparentMain
     >
+      <div className="administrative-night-page">
       <StaffDirectory
         initialStaff={staff.map((user) => {
           const sicknessStats = user.leave_requests.reduce(
@@ -420,6 +421,7 @@ export default async function StaffPage({
           records: monthlyRecords,
         }}
       />
+      </div>
     </AppShell>
   );
 }

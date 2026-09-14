@@ -37,6 +37,7 @@ export default async function RequestsPage() {
 
   return (
     <AppShell title="Ferie e permessi" subtitle={employeeView ? "Invia e controlla le tue richieste personali." : "Quando Admin o Super Admin approva, la richiesta viene inserita automaticamente nel planning mensile."}>
+      <div className="administrative-night-page">
       <RequestManager
         role={role as Role}
         initialRequests={requests.map((request) => ({
@@ -61,6 +62,7 @@ export default async function RequestsPage() {
         }))}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? null }))}
       />
+      </div>
     </AppShell>
   );
 }

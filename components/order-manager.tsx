@@ -905,8 +905,8 @@ export function OrderManager({
   }
 
   return (
-    <div className="space-y-3 pb-8 md:space-y-6">
-      <div className="overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm">
+    <div className="orders-workspace space-y-3 pb-8 md:space-y-6">
+      <div className="orders-toolbar overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm">
         <div className="p-4 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -1016,7 +1016,7 @@ export function OrderManager({
           </div>
         </div>
         {scannerOpen ? (
-          <div className="mt-5 rounded-3xl border border-[#efc5d7] bg-[#fff8fb] p-4">
+          <div className="orders-scanner mt-5 rounded-3xl border border-[#efc5d7] bg-[#fff8fb] p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-black text-black">Lettore codice a barre</p>
@@ -1033,7 +1033,7 @@ export function OrderManager({
                     value={barcodeInput}
                     onChange={(event) => setBarcodeInput(event.target.value)}
                     placeholder="Scansiona o inserisci il codice…"
-                    className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-[#d8739f]"
+                    className="orders-scanner-input min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-[#d8739f]"
                   />
                   <button type="submit" className="rounded-2xl bg-[#b74660] px-5 text-sm font-black text-white">Apri</button>
                 </form>
@@ -1046,7 +1046,7 @@ export function OrderManager({
                     <button type="button" onClick={stopBarcodeCamera} className="absolute right-2 top-2 rounded-full bg-white/90 p-2 text-black"><X className="size-4" /></button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => { void startBarcodeCamera(); }} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white text-sm font-black text-black">
+                  <button type="button" onClick={() => { void startBarcodeCamera(); }} className="orders-scanner-camera inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white text-sm font-black text-black">
                     <Camera className="size-4" /> Usa fotocamera
                   </button>
                 )}
@@ -1056,7 +1056,7 @@ export function OrderManager({
         ) : null}
         </div>
 
-        <div className="hidden grid-cols-5 border-t border-black/[0.06] bg-[#fffafd] md:grid">
+        <div className="orders-summary hidden grid-cols-5 border-t border-black/[0.06] bg-[#fffafd] md:grid">
           {ORDER_COLUMNS.map((column) => {
             const Icon = column.icon;
             return (
@@ -1066,7 +1066,7 @@ export function OrderManager({
                 onClick={() => setMobileStatus(column.id)}
                 className={cn(
                   "flex min-w-0 items-center gap-2 border-r border-black/[0.05] px-3 py-3 text-left transition last:border-r-0 md:pointer-events-none md:px-4",
-                  mobileStatus === column.id && "bg-[#f9e6ef]"
+                  mobileStatus === column.id && "orders-summary-active bg-[#f9e6ef]"
                 )}
               >
                 <Icon className="size-4 shrink-0 text-[#bd5b85]" />
@@ -1135,7 +1135,7 @@ export function OrderManager({
                 type="button"
                 onClick={() => setSelected(order)}
                 className={cn(
-                  "w-full overflow-hidden rounded-[20px] border text-left shadow-[0_8px_24px_rgba(74,38,56,0.055)] transition active:scale-[0.99]",
+                  "orders-card w-full overflow-hidden rounded-[20px] border text-left shadow-[0_8px_24px_rgba(74,38,56,0.055)] transition active:scale-[0.99]",
                   readyOverdue ? "border-amber-300 bg-amber-50" : "border-black/[0.06] bg-white"
                 )}
               >
@@ -1197,7 +1197,7 @@ export function OrderManager({
           const columnOrders = filteredOrders.filter((order) => (order.status || "NEW") === column.id);
           const Icon = column.icon;
           return (
-            <Card key={column.id} className={cn("min-h-[26rem] border p-4", column.color)}>
+            <Card key={column.id} className={cn("orders-column min-h-[26rem] border p-4", column.color)}>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Icon className="size-5" />
@@ -1230,7 +1230,7 @@ export function OrderManager({
                       key={order.id} 
                       onClick={() => setSelected(order)} 
                       className={cn(
-                        "overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md border border-slate-100",
+                        "orders-card overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md border border-slate-100",
                         borderStyle,
                         readyOverdue && "!border-amber-300 !border-l-amber-500 bg-amber-50"
                       )}
@@ -1290,13 +1290,13 @@ export function OrderManager({
       </div>
 
       {selected ? (
-        <GlobalFullscreenLayer className="bg-[#F7F5F6]">
+        <GlobalFullscreenLayer className="orders-detail-layer bg-[#F7F5F6]">
         <div
           className="h-full w-full"
         >
-          <div className="h-full w-full overflow-y-auto bg-[#F7F5F6] p-3 lg:p-6">
+          <div className="orders-detail-page h-full w-full overflow-y-auto bg-[#F7F5F6] p-3 lg:p-6">
             <div className="mx-auto w-full max-w-[1500px]">
-            <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-black/5 bg-white/95 pb-4 backdrop-blur">
+            <div className="orders-detail-header sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-black/5 bg-white/95 pb-4 backdrop-blur">
               <div className="flex min-w-0 items-center gap-3">
                 <button onClick={closeSelectedOrder} className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition hover:bg-black/[0.03]"><ArrowLeft className="size-5" /></button>
                 <div className="min-w-0">

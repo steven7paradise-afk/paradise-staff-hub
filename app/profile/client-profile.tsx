@@ -38,8 +38,10 @@ type ClientProfileProps = {
     contractStartLabel: string;
     contractEndLabel: string;
     photoUrl: string | null;
+    coverUrl: string | null;
     locationName: string;
     role: string;
+    mansione: string | null;
   };
   colleagues: Array<{
     id: string;
@@ -345,67 +347,106 @@ export function ClientProfile({
     { label: "Scadenza Contratto", value: user.contractEndLabel, icon: ShieldAlert },
     { label: "Salone Primario", value: user.locationName, icon: MapPin },
   ];
+  const roleLabel = user.mansione?.trim() || (isEmployee ? "Collaboratore" : user.role.replaceAll("_", " "));
+  const formatHours = (value: number) => value.toLocaleString("it-IT", { maximumFractionDigits: 1 });
+  const profileSummary = [
+    { label: "Ore pianificate", value: `${formatHours(stats.plannedHours)}h`, icon: CalendarDays },
+    { label: "Ore lavorate", value: `${formatHours(stats.workedHours)}h`, icon: Clock },
+    { label: "Richieste aperte", value: String(stats.openRequests), icon: CalendarCheck2 },
+    { label: "Documenti", value: String(stats.documents), icon: FileText },
+    { label: "Task in corso", value: String(stats.taskInProgress), icon: FileCheck },
+    { label: "Punti disponibili", value: String(availablePoints), icon: Briefcase, accent: true },
+  ];
+  const workedPercent = Math.min(100, Math.round((stats.workedHours / Math.max(1, stats.plannedHours)) * 100));
 
   return (
-    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-3 overflow-hidden px-2.5 pb-16 pt-0 font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-4 sm:px-6 sm:pb-20 lg:px-8 xl:pt-20">
+    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-3 overflow-hidden px-2.5 pb-16 pt-0 font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-4 sm:px-6 sm:pb-20 lg:px-8 xl:grid xl:grid-cols-[280px_minmax(0,1fr)] xl:items-start xl:gap-4 xl:space-y-0 xl:pt-20">
       
-      {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none rounded-[20px] border border-white/55 bg-white/75 p-4 shadow-[0_18px_55px_rgba(44,24,15,0.12)] backdrop-blur-2xl sm:p-5 md:p-6">
-        <div className="flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-center md:gap-8">
-          
-          {/* Left Side: Avatar & Name */}
-          <div className="flex min-w-0 items-center gap-3 text-left sm:gap-4 md:gap-5">
-            <div className="relative group shrink-0">
-              <div className="relative flex size-16 items-center justify-center overflow-hidden rounded-[16px] border border-white/70 bg-white/40 text-xl font-serif text-neutral-800 shadow-[0_12px_30px_rgba(35,18,10,0.12)] sm:size-24 md:text-3xl">
-                {userPhoto ? (
-                  <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
-                ) : (
-                  user.name.slice(0, 2).toUpperCase()
-                )}
+      {/* Profilo professionale con banner e riepilogo operativo */}
+      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none rounded-[24px] border border-white/55 bg-white/75 p-3 shadow-[0_18px_55px_rgba(44,24,15,0.12)] backdrop-blur-2xl sm:p-4 xl:contents">
+        <div className="grid gap-4 xl:contents">
+          <section className="profile-glass-inset profile-page-enter overflow-hidden rounded-[22px] border border-neutral-200 bg-neutral-50 text-left xl:row-span-3 xl:row-start-1 xl:self-start">
+            <div className="relative h-28 overflow-hidden sm:h-36">
+              <img src={user.coverUrl ? resolveDrivePhotoUrl(user.coverUrl) : "/beta-login-hero.png"} alt="" className="size-full object-cover object-center" aria-hidden="true" />
+              <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(35,8,21,0.12),rgba(64,14,39,0.5))]" />
+              <span className="absolute right-3 top-3 inline-flex max-w-[70%] items-center gap-1.5 rounded-full border border-white/45 bg-white/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#8f2857] shadow-sm backdrop-blur-md dark:border-white/15 dark:bg-[#21191f]/90 dark:text-[#f4a6c9]">
+                <Briefcase className="size-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{roleLabel}</span>
+              </span>
+            </div>
+            <div className="relative px-4 pb-5 pt-12 text-center sm:px-5 sm:pb-6 sm:pt-14 sm:text-left">
+              <div className="absolute -top-10 left-1/2 grid size-20 -translate-x-1/2 place-items-center overflow-hidden rounded-full border-[3px] border-white bg-[#f6e8ee] text-xl font-serif text-[#7d294f] shadow-[0_12px_30px_rgba(35,18,10,0.2)] sm:-top-12 sm:left-5 sm:size-24 sm:translate-x-0 sm:rounded-[18px]">
+                {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="size-full object-cover" /> : user.name.slice(0, 2).toUpperCase()}
+              </div>
+              <h1 className="truncate text-2xl font-serif font-light text-neutral-900 sm:text-3xl">{user.name}</h1>
+              <p className="mt-1 truncate text-[10px] font-semibold text-neutral-500 sm:text-[11px]">{user.email}</p>
+              <p className="mt-3 inline-flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-500 sm:justify-start"><MapPin className="size-3" aria-hidden="true" /> {user.locationName}</p>
+
+              <div className="mt-5 border-t border-neutral-200 pt-4 text-left dark:border-white/10">
+                <p className="text-[8px] font-black uppercase tracking-[0.24em] text-[#b63870] dark:text-[#f080b7]">Dati registrati</p>
+                <h2 className="mt-1 text-base font-black text-neutral-900">Dati anagrafici</h2>
+                <div className="mt-4 space-y-3">
+                  {details.map(({ label, value, copyable }) => (
+                    <div key={label} className="border-b border-neutral-200 pb-2.5 last:border-0 last:pb-0 dark:border-white/10">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[8px] font-black uppercase tracking-[0.12em] text-neutral-500">{label}</span>
+                        {copyable ? (
+                          <button type="button" onClick={() => handleCopy(value, label)} className="min-h-7 rounded-full px-2 text-[8px] font-black uppercase text-[#a12d61] transition hover:bg-[#f8dce8] dark:text-[#f080b7] dark:hover:bg-white/10" title={`Copia ${label}`}>
+                            {copiedField === label ? "Copiato" : "Copia"}
+                          </button>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 break-words text-[11px] font-bold text-neutral-800">{value}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
+          </section>
 
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="rounded-full border border-neutral-200/60 bg-neutral-100 px-2 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-neutral-500 sm:px-3 sm:text-[9px] sm:tracking-[0.25em]">
-                  {isEmployee ? "Collaboratore" : user.role.replace("_", " ")}
-                </span>
-                <span className="flex items-center gap-1 rounded-full border border-neutral-200/60 bg-neutral-50 px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] text-neutral-500 sm:px-3 sm:text-[9px] sm:tracking-[0.25em]">
-                  <MapPin size={9} className="text-neutral-400" />
-                  {user.locationName}
-                </span>
-              </div>
+          <div className="profile-page-enter profile-page-enter-delay-1 flex min-w-0 flex-col gap-3 xl:col-start-2 xl:row-start-1">
+            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0 xl:pb-0">
+              {profileSummary.map(({ label, value, icon: Icon, accent }) => (
+                <article key={label} className={cn("flex min-h-24 w-[132px] shrink-0 snap-start flex-col justify-between rounded-[16px] border p-3 text-left xl:w-auto xl:min-w-0", accent ? "border-[#d85a91]/45 bg-[linear-gradient(145deg,#9e2c5d,#d65a91)] text-white shadow-[0_14px_30px_rgba(182,47,105,0.2)] dark:border-[#f080b7]/35 dark:bg-[linear-gradient(145deg,#762044,#a83768)]" : "border-neutral-200 bg-neutral-50 text-neutral-900 dark:border-white/10 dark:bg-[#232329] dark:text-white") }>
+                  <span className={cn("grid size-7 place-items-center rounded-full", accent ? "bg-white/18 text-white" : "bg-[#f8dce8] text-[#9f2f60] dark:bg-[#4b2738] dark:text-[#f4a6c9]")}><Icon className="size-3.5" aria-hidden="true" /></span>
+                  <div>
+                    <p className={cn("truncate text-xl font-black tabular-nums sm:text-2xl", accent ? "text-white" : "text-neutral-900")}>{value}</p>
+                    <p className={cn("mt-1 line-clamp-2 text-[7px] font-black uppercase leading-3 tracking-[0.08em] sm:text-[8px]", accent ? "text-white/70" : "text-neutral-500")}>{label}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
 
-              <h1 className="truncate text-xl font-serif font-light text-neutral-900 sm:text-3xl">
-                {user.name}
-              </h1>
+            <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:grid xl:grid-cols-[1.15fr_0.85fr] xl:overflow-visible xl:px-0 xl:pb-0">
+              <section className="profile-glass-inset flex min-h-36 w-[86vw] max-w-md shrink-0 snap-start flex-col justify-between rounded-[18px] border border-neutral-200 bg-neutral-50 p-4 text-left dark:border-white/10 dark:bg-[#232329] xl:w-auto xl:max-w-none">
+                <div className="flex items-start justify-between gap-4">
+                  <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">Presenza mensile</p><h2 className="mt-1 text-base font-black text-neutral-900">Ore lavorate</h2></div>
+                  <span className="text-2xl font-black tabular-nums text-[#b63870] dark:text-[#f080b7]">{workedPercent}%</span>
+                </div>
+                <div>
+                  <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10"><div className="h-full rounded-full bg-[linear-gradient(90deg,#a52f64,#e16b9f)]" style={{ width: `${workedPercent}%` }} /></div>
+                  <div className="mt-2 flex justify-between text-[9px] font-bold uppercase tracking-wider text-neutral-500"><span>{formatHours(stats.workedHours)}h effettuate</span><span>{formatHours(stats.plannedHours)}h pianificate</span></div>
+                </div>
+              </section>
 
-              <p className="truncate text-[10px] font-semibold text-neutral-500 sm:text-[11px] sm:font-bold sm:uppercase sm:tracking-[0.2em]">
-                {user.email}
-              </p>
+              <section className="profile-glass-inset min-h-36 w-[86vw] max-w-md shrink-0 snap-start rounded-[18px] border border-neutral-200 bg-neutral-50 p-4 text-left dark:border-white/10 dark:bg-[#232329] xl:w-auto xl:max-w-none">
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">Stato personale</p>
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-neutral-700">Mansione</span><strong className="max-w-[60%] truncate text-xs text-[#b63870] dark:text-[#f080b7]">{roleLabel}</strong></div>
+                  <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-2 dark:border-white/10"><span className="text-xs font-bold text-neutral-700">Sede</span><strong className="max-w-[60%] truncate text-xs text-neutral-900">{user.locationName}</strong></div>
+                  <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-2 dark:border-white/10"><span className="text-xs font-bold text-neutral-700">Contratto</span><strong className="text-xs text-neutral-900">{user.contractEndLabel}</strong></div>
+                </div>
+              </section>
             </div>
           </div>
-
-          {/* Right Side: Luxury Points Display */}
-          <Link href="/points" className="profile-points-card group w-full shrink-0 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 md:w-72 md:rounded-none md:border-0 md:border-l md:border-neutral-100 md:bg-transparent md:py-0 md:pl-8 md:pr-0">
-            <span className="text-[9px] font-black uppercase tracking-[0.24em] text-neutral-400 transition group-hover:text-neutral-600">PUNTI PREMIUM</span>
-            <span className="mt-1 block text-3xl font-serif font-light text-neutral-900 decoration-neutral-300 group-hover:underline">
-              {availablePoints} <span className="text-xs font-sans font-bold tracking-[0.2em] text-neutral-500 uppercase ml-1">Punti</span>
-            </span>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200"><div className="h-full rounded-full bg-[#b98080]" style={{ width: `${Math.min(100, availablePoints * 10)}%` }} /></div>
-              <span className="text-[9px] font-black text-neutral-500">{availablePoints} / 10</span>
-            </div>
-            <p className="mt-2 text-[9px] font-bold uppercase tracking-wider text-neutral-400">{Math.max(0, 10 - availablePoints)} punti al prossimo premio</p>
-          </Link>
         </div>
       </div>
 
         {/* Premium Underlined Navigation Tabs (Dior Style) */}
-        <div className="profile-glass-section grid grid-cols-3 gap-1 rounded-[16px] border border-neutral-200 bg-white p-1 sm:flex sm:items-center sm:gap-8 sm:overflow-x-auto sm:px-5 sm:pb-px sm:pt-0">
+        <div className="profile-glass-section profile-page-enter profile-page-enter-delay-2 grid grid-cols-3 gap-1 rounded-[16px] border border-neutral-200 bg-white p-1 sm:flex sm:items-center sm:gap-8 sm:overflow-x-auto sm:px-5 sm:pb-px sm:pt-0 xl:col-start-2 xl:row-start-2">
           {[
             { id: "points", label: "PARADISE", mobileLabel: "Paradise" },
-            { id: "info", label: "Informazioni & Documenti", mobileLabel: "Documenti" },
+            { id: "info", label: "Documenti", mobileLabel: "Documenti" },
             { id: "security", label: "Impostazioni & Sicurezza", mobileLabel: "Account" }
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -429,7 +470,7 @@ export function ClientProfile({
 
       {/* 🔴 TAB 1: PUNTI & TRAGUARDI */}
       {activeTab === "points" && (
-        <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+        <div className="profile-page-enter profile-page-enter-delay-3 flex flex-col gap-4 xl:col-start-2 xl:row-start-3">
           
           {/* Target Progress Section */}
           <div className="profile-glass-section order-3 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6">
@@ -535,9 +576,9 @@ export function ClientProfile({
           <div className="profile-glass-section order-1 flex flex-col gap-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:gap-5 sm:p-6">
             <div className="order-1 flex flex-col gap-3 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">I MIEI TURNI</span>
-                <h2 className="mt-1 text-lg font-serif font-light uppercase text-neutral-900">Calendario settimanale</h2>
-                <p className="mt-1 text-xs font-medium text-neutral-400">Seleziona un giorno per vedere orario e timbrature.</p>
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#b63870] dark:text-[#f080b7]">I MIEI TURNI</span>
+                <h2 className="mt-1 text-lg font-serif font-light uppercase text-neutral-900">Turni lavorativi</h2>
+                <p className="mt-1 text-xs font-medium text-neutral-500">Orari programmati e timbrature effettive, giorno per giorno.</p>
               </div>
               <Link href="/my-shifts" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white sm:w-auto">
                 Calendario completo <ChevronRight className="size-3.5" />
@@ -545,27 +586,29 @@ export function ClientProfile({
             </div>
 
             <div className="order-2 space-y-3">
-              <div className="text-left">
-                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-neutral-400">La tua giornata</p>
-                <p className="mt-1 text-sm font-serif text-neutral-900">{todayShift?.fullDateLabel || "Oggi"}</p>
-              </div>
-              <div className="grid grid-cols-2 overflow-hidden rounded-[18px] border border-neutral-200 bg-neutral-50 lg:grid-cols-[1.35fr_0.8fr_0.65fr_1fr] lg:divide-x lg:divide-neutral-200">
-              <div className="col-span-2 flex min-w-0 items-center gap-3 p-4 lg:col-span-1">
-                <span className="relative grid size-12 shrink-0 place-items-center rounded-full border-[5px] border-emerald-100 bg-white text-neutral-900 shadow-sm">
-                  <Clock className="size-4" />
-                  {todayWorkState.status === "WORKING" ? <span className="absolute -right-1 -top-1 size-3 rounded-full bg-emerald-500 ring-2 ring-white" /> : null}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">
-                    {todayWorkState.status === "WORKING" ? "Attualmente al lavoro" : todayWorkState.status === "BREAK" ? "Pausa in corso" : todayWorkState.status === "FINISHED" ? "Turno terminato" : "Non ancora timbrato"}
-                  </p>
-                  <p className="mt-1 text-3xl font-black tabular-nums tracking-tight text-neutral-900">{elapsedLabel(todayWorkState.status === "BREAK" ? todayWorkState.breakMilliseconds : todayWorkState.workedMilliseconds)}</p>
-                  <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400">{todayWorkState.status === "BREAK" ? "Tempo trascorso in pausa" : "Tempo effettivamente lavorato oggi"}</p>
+              <div className="overflow-hidden rounded-[20px] border border-[#b63870]/30 bg-neutral-50 dark:border-[#f080b7]/25 dark:bg-[#232329]">
+                <div className="flex flex-col gap-4 bg-[linear-gradient(135deg,#7e244d,#bd3d76)] p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/20">
+                      <Clock className="size-5" aria-hidden="true" />
+                      {todayWorkState.status === "WORKING" ? <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-emerald-400 ring-2 ring-[#8f2a57]" /> : null}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/65">Stato di oggi</p>
+                      <p className="mt-1 text-sm font-black">{todayWorkState.status === "WORKING" ? "Attualmente al lavoro" : todayWorkState.status === "BREAK" ? "Pausa in corso" : todayWorkState.status === "FINISHED" ? "Turno terminato" : "Non ancora timbrato"}</p>
+                    </div>
+                  </div>
+                  <div className="sm:text-right">
+                    <p className="text-3xl font-black tabular-nums tracking-tight">{elapsedLabel(todayWorkState.status === "BREAK" ? todayWorkState.breakMilliseconds : todayWorkState.workedMilliseconds)}</p>
+                    <p className="mt-1 text-[8px] font-black uppercase tracking-[0.14em] text-white/60">{todayWorkState.status === "BREAK" ? "Tempo in pausa" : "Tempo lavorato"}</p>
+                  </div>
                 </div>
-              </div>
-                <div className="border-t border-r border-neutral-200 p-3.5 lg:border-r-0 lg:border-t-0 lg:p-4"><p className="text-[9px] font-black uppercase tracking-wider text-neutral-500">Turno di oggi</p><p className="mt-2 text-sm font-black text-neutral-900">{todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} – ${todayShift.endTime}` : "Non programmato"}</p></div>
-                <div className="border-t border-neutral-200 p-3.5 lg:border-t-0 lg:p-4"><p className="text-[9px] font-black uppercase tracking-wider text-neutral-500">Entrata</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.firstEntry?.time || "--:--"}</p></div>
-                <div className="col-span-2 border-t border-neutral-200 p-3.5 lg:col-span-1 lg:border-t-0 lg:p-4"><p className="text-[9px] font-black uppercase tracking-wider text-neutral-500">Ultima timbratura</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.latest ? `${attendanceLabel(todayWorkState.latest.type)} · ${todayWorkState.latest.time}` : "Nessuna"}</p></div>
+                <div className="grid grid-cols-1 divide-y divide-neutral-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-white/10">
+                  <div className="p-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-neutral-500">Turno previsto</p><p className="mt-2 text-base font-black tabular-nums text-neutral-900">{todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} – ${todayShift.endTime}` : "Non programmato"}</p></div>
+                  <div className="p-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-neutral-500">Prima entrata</p><p className="mt-2 text-base font-black tabular-nums text-neutral-900">{todayWorkState.firstEntry?.time || "Non registrata"}</p></div>
+                  <div className="p-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-neutral-500">Ultima attività</p><p className="mt-2 text-base font-black tabular-nums text-neutral-900">{todayWorkState.latest ? `${attendanceLabel(todayWorkState.latest.type)} · ${todayWorkState.latest.time}` : "Nessuna"}</p></div>
+                </div>
+                <p className="border-t border-neutral-200 px-4 py-2.5 text-[9px] font-bold capitalize text-neutral-500 dark:border-white/10">{todayShift?.fullDateLabel || "Oggi"}</p>
               </div>
             </div>
 
@@ -582,11 +625,12 @@ export function ClientProfile({
                     const selected = selectedShift?.dateKey === day.dateKey;
                     const hasShift = Boolean(day.startTime && day.endTime);
                     return (
-                      <button key={day.dateKey} type="button" onClick={() => setSelectedShiftDate(day.dateKey)} aria-pressed={selected} className={cn("relative min-h-24 w-[92px] shrink-0 snap-start rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 sm:min-h-28 sm:w-auto", selected ? "border-neutral-900 bg-neutral-900 text-white shadow-lg" : "border-neutral-200 bg-neutral-50 text-neutral-900 hover:-translate-y-0.5 hover:bg-white hover:shadow-md")}>
-                        {day.isToday ? <span className={cn("absolute right-2 top-2 size-2 rounded-full", selected ? "bg-white" : "bg-neutral-900")} aria-label="Oggi" /> : null}
-                        <p className={cn("text-[9px] font-black uppercase tracking-[0.18em]", selected ? "text-white/55" : "text-neutral-400")}>{day.dayName}</p>
+                      <button key={day.dateKey} type="button" onClick={() => setSelectedShiftDate(day.dateKey)} aria-pressed={selected} className={cn("relative min-h-28 w-[104px] shrink-0 snap-start rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] sm:w-auto", selected ? hasShift ? "border-[#b63870] bg-[linear-gradient(145deg,#8e2957,#c6477e)] text-white shadow-[0_12px_28px_rgba(182,56,112,0.22)]" : "border-emerald-600 bg-[linear-gradient(145deg,#176b50,#29956e)] text-white shadow-[0_12px_28px_rgba(31,129,94,0.2)]" : hasShift ? "border-neutral-200 bg-neutral-50 text-neutral-900 hover:-translate-y-0.5 hover:border-[#d85a91]/40 hover:bg-white hover:shadow-md dark:hover:bg-white/5" : "border-emerald-200 bg-emerald-50 text-emerald-950 hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md dark:border-emerald-500/25 dark:bg-emerald-950/35 dark:text-emerald-100")}>
+                        {day.isToday ? <span className={cn("absolute right-2 top-2 rounded-full px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider", selected ? hasShift ? "bg-white text-[#9f2f60]" : "bg-white text-emerald-700" : hasShift ? "bg-[#f8dce8] text-[#9f2f60]" : "bg-emerald-600 text-white")} aria-label="Oggi">Oggi</span> : null}
+                        <p className={cn("text-[9px] font-black uppercase tracking-[0.18em]", selected ? "text-white/65" : "text-neutral-500")}>{day.dayName}</p>
                         <p className="mt-1 text-2xl font-serif">{day.dayNumber}</p>
-                        <p className={cn("mt-3 line-clamp-2 text-[10px] font-black uppercase leading-4", selected ? "text-white/80" : hasShift ? "text-neutral-700" : "text-neutral-400")}>{day.shiftName}</p>
+                        <p className={cn("mt-2 line-clamp-1 text-[9px] font-black uppercase leading-4", selected ? "text-white/85" : hasShift ? "text-neutral-700" : "text-emerald-800 dark:text-emerald-200")}>{hasShift ? day.shiftName : "Riposo"}</p>
+                        <p className={cn("mt-1 text-[9px] font-bold tabular-nums", selected ? "text-white/70" : hasShift ? "text-[#a12d61] dark:text-[#f080b7]" : "text-emerald-700 dark:text-emerald-300")}>{hasShift ? `${day.startTime}–${day.endTime}` : "Giornata libera"}</p>
                       </button>
                     );
                   })}
@@ -597,8 +641,8 @@ export function ClientProfile({
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">{selectedShift.fullDateLabel}</p>
                       <div className="mt-3 flex items-start gap-3">
-                        <span className="mt-0.5 size-3 shrink-0 rounded-full border border-black/10" style={{ backgroundColor: selectedShift.categoryColor || "#d4d4d4" }} />
-                        <div><h3 className="text-base font-black text-neutral-900">{selectedShift.shiftName}</h3><p className="mt-1 text-sm font-bold text-neutral-600">{selectedShift.startTime && selectedShift.endTime ? `${selectedShift.startTime} – ${selectedShift.endTime}` : "Nessun orario programmato"}</p>{selectedShift.note ? <p className="mt-2 text-xs text-neutral-500">{selectedShift.note}</p> : null}</div>
+                        <span className="mt-0.5 size-3 shrink-0 rounded-full border border-black/10" style={{ backgroundColor: selectedShift.startTime && selectedShift.endTime ? selectedShift.categoryColor || "#d4d4d4" : "#28a276" }} />
+                        <div><h3 className={cn("text-base font-black", selectedShift.startTime && selectedShift.endTime ? "text-neutral-900" : "text-emerald-700 dark:text-emerald-300")}>{selectedShift.startTime && selectedShift.endTime ? selectedShift.shiftName : "Riposo"}</h3><p className="mt-1 text-sm font-bold text-neutral-600">{selectedShift.startTime && selectedShift.endTime ? `${selectedShift.startTime} – ${selectedShift.endTime}` : "Giornata libera · nessun turno programmato"}</p>{selectedShift.note ? <p className="mt-2 text-xs text-neutral-500">{selectedShift.note}</p> : null}</div>
                       </div>
                     </div>
 
@@ -742,42 +786,10 @@ export function ClientProfile({
         </div>
       ) : null}
 
-      {/* 👤 TAB 2: INFORMAZIONI PERSONALI & DOCUMENTI PROPRI */}
+      {/* TAB 2: DOCUMENTI PROPRI */}
       {activeTab === "info" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
-          
-          {/* Personal Info Column (1/3) */}
-          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 lg:col-span-1 h-fit text-left">
-            <div className="border-b border-neutral-100 pb-4">
-              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">DATI REGISTRATI</span>
-              <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
-                Dati Anagrafici
-              </h2>
-            </div>
-
-            <div className="space-y-5">
-              {details.map(({ label, value, copyable }) => (
-                <div key={label} className="group border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">{label}</span>
-                    {copyable && (
-                      <button
-                        onClick={() => handleCopy(value, label)}
-                        className="text-neutral-400 hover:text-neutral-900 transition-colors p-1"
-                        title="Copia"
-                      >
-                        {copiedField === label ? <span className="text-[8px] font-black text-emerald-600 tracking-wider">COPIATO</span> : <span className="text-[9px] hover:underline">COPIA</span>}
-                      </button>
-                    )}
-                  </div>
-                  <span className="text-xs font-semibold text-neutral-800 block mt-1">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Documents Column (2/3) */}
-          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 lg:col-span-2 text-left">
+        <div className="profile-page-enter profile-page-enter-delay-3 xl:col-start-2 xl:row-start-3">
+          <div className="profile-glass-section space-y-6 rounded-[28px] border border-neutral-200 bg-white p-5 text-left shadow-2xs sm:p-8">
             <div className="border-b border-neutral-100 pb-4">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">ARCHIVIO UFFICIALE</span>
               <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
@@ -866,7 +878,7 @@ export function ClientProfile({
 
       {/* 🔒 TAB 3: IMPOSTAZIONI & SICUREZZA */}
       {activeTab === "security" && (
-        <div className="space-y-8 animate-in fade-in duration-200">
+        <div className="profile-page-enter profile-page-enter-delay-3 space-y-8 xl:col-start-2 xl:row-start-3">
           <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 text-left">
             <div className="border-b border-neutral-100 pb-4">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">PREFERENZE</span>

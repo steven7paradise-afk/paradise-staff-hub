@@ -1892,36 +1892,36 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
       ) : null}
 
       {selected ? (
-        <GlobalFullscreenLayer className="bg-[#F8F3F6]">
-        <div ref={taskDetailPageRef} className="task-detail-page h-full w-full overflow-y-auto overscroll-contain bg-[#F8F3F6]">
+        <GlobalFullscreenLayer className="bg-[#F8F3F6] dark:bg-[#111116]">
+        <div ref={taskDetailPageRef} className="task-detail-page h-full w-full overflow-y-auto overscroll-contain bg-[#F8F3F6] text-[#17151A] dark:bg-[#111116] dark:text-white">
           <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5 sm:pt-4 md:pb-24 xl:px-7 xl:pt-3">
-            <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-[#1D1D22]">
               <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
-                <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
-                  <button onClick={() => void openTask(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm"><ArrowLeft className="size-5" /></button>
+                <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 dark:border-white/10 md:border-b-0 md:border-r">
+                  <button onClick={() => void openTask(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm transition hover:bg-[#F2E8ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D85A91] dark:bg-white/10 dark:hover:bg-white/15"><ArrowLeft className="size-5" /></button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h1 className="min-w-0 whitespace-normal break-words text-xl font-black leading-tight tracking-tight sm:text-2xl md:text-3xl">{selected.title}</h1>
                       <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
                     </div>
-                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-black/35">{formatCategoryLabel(selected.category)}</p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-black/35 dark:text-white/45">{formatCategoryLabel(selected.category)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
-                  <CalendarDays className="size-5 shrink-0 text-black/45" />
+                <div className="flex items-center gap-3 border-b border-black/5 p-4 dark:border-white/10 md:border-b-0 md:border-r">
+                  <CalendarDays className="size-5 shrink-0 text-black/45 dark:text-white/55" />
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Scadenza</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/45">Scadenza</p>
                     <p className="text-sm font-black">{formatFullDate(selected.dueDate)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
+                <div className="flex items-center gap-3 border-b border-black/5 p-4 dark:border-white/10 md:border-b-0 md:border-r">
                   <Avatar name={selected.createdByName} photoUrl={selected.createdByPhoto ?? null} className="size-9" />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Assegnata da</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/45">Assegnata da</p>
                     <p className="truncate text-sm font-black">{selected.createdByName}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
+                <div className="flex items-center gap-3 border-b border-black/5 p-4 dark:border-white/10 md:border-b-0 md:border-r">
                   {selected.assignees && selected.assignees.length === 1 ? (
                     <Avatar name={selected.assignees[0].name} photoUrl={selected.assignees[0].photoUrl} className="size-9" />
                   ) : (
@@ -1931,7 +1931,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     />
                   )}
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Assegnata a</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/45">Assegnata a</p>
                     <p className="truncate text-sm font-black">
                       {selected.assignees && selected.assignees.length > 0
                         ? selected.assignees.length === 1 ? selected.assignees[0].name : `${selected.assignees.length} collaboratori`
@@ -1941,7 +1941,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 </div>
                 <div className="flex items-center justify-end p-4">
                   {canAssign || selected.createdById === userId ? (
-                    <button onClick={() => openEditTask(selected)} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#FAF7F9] px-4 text-sm font-black shadow-sm">
+                    <button onClick={() => openEditTask(selected)} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#FAF7F9] px-4 text-sm font-black shadow-sm transition hover:bg-[#F2E8ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D85A91] dark:bg-white/10 dark:hover:bg-white/15">
                       <Pencil className="size-4" /> <span className="hidden sm:inline">Modifica task</span>
                     </button>
                   ) : null}
@@ -1949,16 +1949,16 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               </div>
             </div>
             {selectedLoading ? (
-              <div className="flex items-center gap-3 rounded-[22px] border border-[#8064D8]/15 bg-white px-5 py-4 shadow-sm" role="status" aria-live="polite">
+              <div className="flex items-center gap-3 rounded-[22px] border border-[#8064D8]/15 bg-white px-5 py-4 shadow-sm dark:border-[#D85A91]/25 dark:bg-[#1D1D22]" role="status" aria-live="polite">
                 <span className="size-5 animate-spin rounded-full border-2 border-[#8064D8]/20 border-t-[#8064D8]" />
                 <div>
                   <p className="text-sm font-black">Apro la task</p>
-                  <p className="text-xs text-black/45">Caricamento di immagini, allegati, note e commenti…</p>
+                  <p className="text-xs text-black/45 dark:text-white/50">Caricamento di immagini, allegati, note e commenti…</p>
                 </div>
               </div>
             ) : null}
             {selectedExtrasLoading && !selectedLoading ? (
-              <div className="flex items-center gap-3 rounded-[22px] border border-black/5 bg-white/80 px-5 py-3 text-black/55 shadow-sm" role="status" aria-live="polite">
+              <div className="flex items-center gap-3 rounded-[22px] border border-black/5 bg-white/80 px-5 py-3 text-black/55 shadow-sm dark:border-white/10 dark:bg-[#1D1D22]/95 dark:text-white/60" role="status" aria-live="polite">
                 <span className="size-4 animate-spin rounded-full border-2 border-black/10 border-t-[#8064D8]" />
                 <p className="text-xs font-bold">La task è pronta. Immagini, allegati e commenti stanno arrivando…</p>
               </div>
@@ -1971,15 +1971,15 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             ) : null}
             <div className={cn("grid gap-4 xl:grid-cols-[minmax(320px,410px)_minmax(0,1fr)] xl:items-start", selectedLoading ? "pointer-events-none opacity-45" : "")}>
             <div className="space-y-4 xl:sticky xl:top-4">
-            <Card className="bg-white p-4 md:p-5">
+            <Card className="bg-white p-4 dark:bg-[#1D1D22] md:p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold">Descrizione</h2>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170] dark:border-white/10 dark:text-white/65 dark:hover:bg-white/10 dark:hover:text-[#F3A0C8]">
                   <FileImage className="size-4" /> Immagine
                   <input type="file" accept="image/*" className="hidden" onChange={(event) => { void attachDescriptionImage(event.target.files?.[0]); event.currentTarget.value = ""; }} />
                 </label>
               </div>
-              <p className="mt-3 text-sm leading-6 text-black/55 whitespace-pre-wrap">{renderTextWithLinks(selected.description)}</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-black/55 dark:text-white/70">{renderTextWithLinks(selected.description)}</p>
               {selected.photoUrl || selected.attachmentUrl || selected.attachmentName ? (
                 <div className="mt-4">
                   {selected.photoUrl ? (
@@ -1993,7 +1993,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             </Card>
 
             {selected.checklist && selected.checklist.length > 0 ? (
-              <Card className="bg-white p-4 md:p-5">
+              <Card className="bg-white p-4 dark:bg-[#1D1D22] md:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="font-semibold">Checklist</h2>
                   <span className="text-sm font-semibold text-[#8064D8]">
@@ -2006,15 +2006,15 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                       type="button"
                       key={`${item.text}-${index}`}
                       onClick={() => void toggleChecklistItem(index)}
-                      className="flex min-h-14 w-full items-start gap-3 rounded-xl p-2 text-left transition hover:bg-black/5"
+                      className="flex min-h-14 w-full items-start gap-3 rounded-xl p-2 text-left transition hover:bg-black/5 dark:hover:bg-white/5"
                     >
-                      <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border ${item.done ? "bg-[#8064D8] text-white" : "border-black/20"}`}>
+                      <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border ${item.done ? "bg-[#D85A91] text-white" : "border-black/20 dark:border-white/25"}`}>
                         {item.done ? <Check className="size-4" /> : null}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className={cn("block text-sm font-semibold", item.done && "text-black/45 line-through")}>{item.text}</span>
+                        <span className={cn("block text-sm font-semibold", item.done && "text-black/45 line-through dark:text-white/40")}>{item.text}</span>
                         {item.done && (item.completedBy || item.completedAt) ? (
-                          <span className="mt-1 block text-[11px] font-medium text-black/40">
+                          <span className="mt-1 block text-[11px] font-medium text-black/40 dark:text-white/40">
                             Completata{item.completedBy ? ` da ${item.completedBy}` : ""}{item.completedAt ? ` · ${new Date(item.completedAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}` : ""}
                           </span>
                         ) : null}
@@ -2045,36 +2045,36 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             ) : null}
 
             {/* Timeline Feed Cronologico Unificato */}
-            <Card className="bg-white p-4 md:p-5">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-black/5 pb-3">
+            <Card className="bg-white p-4 dark:bg-[#1D1D22] md:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-black/5 pb-3 dark:border-white/10">
                 <div>
                   <h2 className="font-semibold">Attività e cronologia</h2>
-                  <p className="mt-1 text-xs text-black/45">Il flusso storico di tutti gli eventi, commenti e note della task.</p>
+                  <p className="mt-1 text-xs text-black/45 dark:text-white/50">Il flusso storico di tutti gli eventi, commenti e note della task.</p>
                 </div>
                 <Badge tone="dark">{timelineEvents.length}</Badge>
               </div>
 
               {/* Timeline feed (scrollable list) */}
               <div className="max-h-[320px] overflow-y-auto pr-2 -mr-2 scrollbar-thin xl:max-h-[360px]">
-                <div className="relative ml-2 space-y-4 border-l border-black/10 py-1 pl-4 md:ml-3 md:space-y-5 md:pl-5">
+                <div className="relative ml-2 space-y-4 border-l border-black/10 py-1 pl-4 dark:border-white/15 md:ml-3 md:space-y-5 md:pl-5">
                   {timelineEvents.map((event, idx) => {
                     const isComment = event.type === "comment";
 
                     return (
                       <div key={idx} className="relative">
                         {/* Timeline dot */}
-                        <span className="absolute -left-[27px] top-1.5 size-3.5 rounded-full border-2 border-white bg-[#C66170] shadow-xs" />
+                        <span className="absolute -left-[27px] top-1.5 size-3.5 rounded-full border-2 border-white bg-[#C66170] shadow-xs dark:border-[#1D1D22]" />
 
                         {isComment ? (
                           /* Comment Element */
-                          <div className="rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-3 transition animate-in fade-in duration-200 hover:bg-[#FAF7F9]/50 md:p-4">
+                          <div className="animate-in fade-in rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-3 transition duration-200 hover:bg-[#FAF7F9]/50 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.07] md:p-4">
                             <div className="flex items-start gap-3">
                               <Avatar name={event.commentUser || "Collaboratore"} photoUrl={event.commentPhoto ?? null} className="size-8" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-semibold">{event.commentUser}</p>
-                                    <p className="text-[10px] text-black/45">{formatShortDateTime(event.date.toISOString())}</p>
+                                    <p className="text-[10px] text-black/45 dark:text-white/45">{formatShortDateTime(event.date.toISOString())}</p>
                                   </div>
                                   {event.commentUserId === userId ? (
                                     <button 
@@ -2091,7 +2091,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                                   ) : null}
                                 </div>
                                 {event.message && (
-                                  <p className="mt-2 text-sm leading-6 text-black/70 whitespace-pre-wrap">{renderTextWithLinks(event.message)}</p>
+                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-black/70 dark:text-white/75">{renderTextWithLinks(event.message)}</p>
                                 )}
                                 
                                 {/* Attached files */}
@@ -2122,11 +2122,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                               {event.user ? (
                                 <Avatar name={event.user.name} photoUrl={event.user.photoUrl} className="size-5 shrink-0" />
                               ) : null}
-                              <span className="font-semibold text-black/80">{event.title}</span>
-                              <span className="text-[10px] text-black/40 font-normal ml-auto shrink-0">{formatShortDateTime(event.date.toISOString())}</span>
+                              <span className="font-semibold text-black/80 dark:text-white/85">{event.title}</span>
+                              <span className="ml-auto shrink-0 text-[10px] font-normal text-black/40 dark:text-white/40">{formatShortDateTime(event.date.toISOString())}</span>
                             </div>
                             {event.description && (
-                              <p className="mt-1 text-xs text-black/50 ml-7">{event.description}</p>
+                              <p className="ml-7 mt-1 text-xs text-black/50 dark:text-white/50">{event.description}</p>
                             )}
 
                             {/* Completion Proof Files */}
@@ -2146,13 +2146,13 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               </div>
 
               {/* Comment Input Box at bottom of timeline */}
-              <div className="mt-4 space-y-3 border-t border-black/5 pt-4">
-                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-black/45">
+              <div className="mt-4 space-y-3 border-t border-black/5 pt-4 dark:border-white/10">
+                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-black/45 dark:text-white/45">
                   {editingCommentId ? "Modifica il commento" : "Aggiungi commento o nota"}
                 </h3>
-                <div className="rounded-2xl border border-black/10 bg-[#FAF7F9]/40 p-3">
+                <div className="rounded-2xl border border-black/10 bg-[#FAF7F9]/40 p-3 dark:border-white/10 dark:bg-white/[0.05]">
                   <textarea 
-                    className="min-h-16 w-full resize-none rounded-xl border border-black/5 bg-white px-3 py-2 text-sm shadow-xs outline-none transition focus:border-[#8064D8] md:min-h-20" 
+                    className="min-h-16 w-full resize-none rounded-xl border border-black/5 bg-white px-3 py-2 text-sm text-[#17151A] shadow-xs outline-none transition placeholder:text-black/35 focus:border-[#D85A91] focus:ring-2 focus:ring-[#D85A91]/15 dark:border-white/10 dark:bg-[#151518] dark:text-white dark:placeholder:text-white/35 md:min-h-20"
                     value={commentText} 
                     onChange={(event) => setCommentText(event.target.value)} 
                     onPaste={(event) => {
@@ -2165,17 +2165,17 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     placeholder="Scrivi un aggiornamento o incolla un'immagine (Cmd+V / Ctrl+V)... usa @nome per taggare una persona" 
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @ seguito dal nome</span>
+                    <span className="text-[11px] font-semibold text-black/40 dark:text-white/40">Tag: scrivi @ seguito dal nome</span>
                     {mentionSuggestions.map((worker) => (
                       <button
                         key={worker.id}
                         type="button"
                         onClick={() => insertMention(worker)}
                         title={`Tagga ${worker.name} · ${workerMentionRoleLabel(worker)}`}
-                        className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-[#8064D8] ring-1 ring-black/5 hover:bg-[#F5F1FF]"
+                        className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-[#8064D8] ring-1 ring-black/5 hover:bg-[#F5F1FF] dark:bg-white/10 dark:text-[#F3A0C8] dark:ring-white/10 dark:hover:bg-white/15"
                       >
                         @{workerMentionSlug(worker.name)}
-                        <span className="ml-1 font-semibold text-black/35">· {workerMentionRoleLabel(worker)}</span>
+                        <span className="ml-1 font-semibold text-black/35 dark:text-white/40">· {workerMentionRoleLabel(worker)}</span>
                       </button>
                     ))}
                     {mentionedWorkers.map((worker) => (
@@ -2187,11 +2187,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                   
                   {/* File Upload Previews */}
                   {commentFiles.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-black/[0.02] p-2">
+                    <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-black/[0.02] p-2 dark:bg-black/15">
                       {commentFiles.map((file, idx) => {
                         const previewUrl = taskFilePreviewUrl(file);
                         return (
-                        <div key={idx} className="relative flex items-center gap-2 rounded-lg bg-white px-2 py-1 text-xs font-medium border border-black/5 shadow-2xs">
+                        <div key={idx} className="relative flex items-center gap-2 rounded-lg border border-black/5 bg-white px-2 py-1 text-xs font-medium shadow-2xs dark:border-white/10 dark:bg-white/10">
                           {previewUrl && attachmentKind(previewUrl, file.name) === "image" ? (
                             <img src={previewUrl} alt={file.name} className="size-10 rounded-md object-cover" />
                           ) : null}
@@ -2199,7 +2199,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                           <button 
                             type="button" 
                             onClick={() => removeCommentFile(idx)} 
-                            className="text-black/40 hover:text-black"
+                            className="text-black/40 hover:text-black dark:text-white/45 dark:hover:text-white"
                           >
                             <X className="size-3.5" />
                           </button>
@@ -2215,11 +2215,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
+                      <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170] dark:border-white/10 dark:bg-white/10 dark:text-white/65 dark:hover:bg-white/15 dark:hover:text-[#F3A0C8]">
                         <FileImage className="size-4" /> Foto
                         <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void attachCommentFiles(event.target.files); event.currentTarget.value = ""; }} />
                       </label>
-                      <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
+                      <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170] dark:border-white/10 dark:bg-white/10 dark:text-white/65 dark:hover:bg-white/15 dark:hover:text-[#F3A0C8]">
                         <Paperclip className="size-4" /> File / PDF
                         <input type="file" accept="application/pdf,.pdf,*/*" multiple className="hidden" onChange={(event) => { void attachCommentFiles(event.target.files); event.currentTarget.value = ""; }} />
                       </label>
@@ -2231,7 +2231,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                           Annulla
                         </Button>
                       )}
-                      <Button className="h-9 min-w-24 text-xs" disabled={commentUploading || commentSaving} onClick={saveComment}>
+                      <Button className="h-9 min-w-24 bg-[#D85A91] text-xs text-white hover:bg-[#C84E85] dark:bg-[#F080B7] dark:text-[#17151A] dark:hover:bg-[#F39BC5]" disabled={commentUploading || commentSaving} onClick={saveComment}>
                         <Send className="size-3.5" /> {commentUploading ? "Carico file..." : commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
                       </Button>
                     </div>
@@ -2240,14 +2240,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               </div>
             </Card>
             {(selected.status === "ACTIVE" || selected.status === "WAITING" || selected.timerSeconds > 0) ? (
-              <Card className="bg-white p-4 md:p-5">
+              <Card className="bg-white p-4 dark:bg-[#1D1D22] md:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-black/45">
+                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-black/45 dark:text-white/50">
                       <Timer className="size-4 text-[#C66170]" />
                       Cronometro lavorativo
                     </p>
-                    <p className="mt-2 text-3xl font-black tabular-nums tracking-tight text-black md:text-4xl">
+                    <p className="mt-2 text-3xl font-black tabular-nums tracking-tight text-black dark:text-white md:text-4xl">
                       {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs))}
                     </p>
                     <p className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold ${timerAttendance.tone === "work" ? "bg-emerald-50 text-emerald-700" : timerAttendance.tone === "pause" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/45"}`}>
@@ -2255,17 +2255,17 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:min-w-60">
-                    <div className="rounded-2xl bg-[#FAF7F9] p-3 md:p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Giorni totali</p>
+                    <div className="rounded-2xl bg-[#FAF7F9] p-3 dark:bg-white/[0.06] md:p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35 dark:text-white/45">Giorni totali</p>
                       <p className="mt-1 text-2xl font-black">{totalTaskDays(selected)}</p>
                     </div>
-                    <div className="rounded-2xl bg-[#FAF7F9] p-3 md:p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Stato task</p>
+                    <div className="rounded-2xl bg-[#FAF7F9] p-3 dark:bg-white/[0.06] md:p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35 dark:text-white/45">Stato task</p>
                       <p className="mt-1 text-sm font-black">{statusLabel(selected.status)}</p>
                     </div>
                   </div>
                 </div>
-                <p className="mt-4 rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/45">
+                <p className="mt-4 rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/45 dark:bg-white/[0.06] dark:text-white/50">
                   Conta solo quando la timbratura risulta in lavoro. In pausa o dopo uscita il cronometro resta fermo.
                 </p>
               </Card>
@@ -2283,7 +2283,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     <Button variant="soft" disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "REJECT")}>
                       <X className="size-4" /> {completionDecisionSaving === "REJECT" ? "Invio..." : "Rifiuta"}
                     </Button>
-                    <Button disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "APPROVE")}>
+                    <Button className="bg-[#D85A91] text-white hover:bg-[#C84E85] dark:bg-[#F080B7] dark:text-[#17151A] dark:hover:bg-[#F39BC5]" disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "APPROVE")}>
                       <CheckCircle2 className="size-4" /> {completionDecisionSaving === "APPROVE" ? "Confermo..." : "Conferma completamento"}
                     </Button>
                   </div>
@@ -2296,9 +2296,9 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               )}
             </div>
             ) : (
-            <div className="sticky bottom-2 z-10 grid grid-cols-1 gap-2 rounded-[20px] border border-black/5 bg-white/95 p-2 shadow-xl backdrop-blur sm:grid-cols-2 md:bottom-4 md:gap-3 md:rounded-[24px] md:p-3">
+            <div className="sticky bottom-2 z-10 grid grid-cols-1 gap-2 rounded-[20px] border border-black/5 bg-white/95 p-2 shadow-xl backdrop-blur dark:border-white/10 dark:bg-[#1D1D22]/95 sm:grid-cols-2 md:bottom-4 md:gap-3 md:rounded-[24px] md:p-3">
               {isNewTask(selected) ? (
-                <Button className="sm:col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
+                <Button className="bg-[#D85A91] text-white hover:bg-[#C84E85] dark:bg-[#F080B7] dark:text-[#17151A] dark:hover:bg-[#F39BC5] sm:col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
                   <Clock3 className="size-4" /> Metti in corso
                 </Button>
               ) : (
@@ -2315,7 +2315,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                   >
                     {selected.status === "ACTIVE" ? "Metti fermo" : selected.timerSeconds > 0 ? "Riprendi in corso" : "Metti in corso"}
                   </Button>
-                  <Button onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> {selected.createdById === userId ? "Completa task" : "Richiedi completamento"}</Button>
+                  <Button className="bg-[#D85A91] text-white hover:bg-[#C84E85] dark:bg-[#F080B7] dark:text-[#17151A] dark:hover:bg-[#F39BC5]" onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> {selected.createdById === userId ? "Completa task" : "Richiedi completamento"}</Button>
                 </>
               )}
             </div>
