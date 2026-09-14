@@ -170,6 +170,22 @@ export function ClientControlDashboard({
   const [selectedYear, setSelectedYear] = useState(currentPeriod.getFullYear());
   const [downloadingReport, setDownloadingReport] = useState(false);
 
+  useEffect(() => {
+    setResponses(initialResponses);
+  }, [initialResponses]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const interval = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [router]);
+
   const monthsList = [
     { value: 0, label: "Gennaio" },
     { value: 1, label: "Febbraio" },
