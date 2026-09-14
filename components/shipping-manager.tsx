@@ -64,6 +64,7 @@ type ShipmentOrder = {
   email: string;
   phone: string;
   createdAt: string;
+  shippedAt: string | null;
   totalPrice: number;
   financialStatus: string;
   fulfillmentStatus: string;
@@ -373,6 +374,7 @@ export function ShippingManager({
                   notes,
                   trackingNumber,
                   courier,
+                  shippedAt: targetStatus === "SHIPPED" ? (o.shippedAt || new Date().toISOString()) : null,
                 }
               : o
           )
@@ -407,7 +409,7 @@ export function ShippingManager({
 
       // 2. For SHIPPED orders, filter strictly by selected month & year (auto-resets each month!)
       if (o.status === "SHIPPED") {
-        const d = new Date(o.createdAt);
+        const d = new Date(o.shippedAt || o.createdAt);
         const itemMonth = d.getMonth() + 1;
         const itemYear = d.getFullYear();
 
@@ -424,7 +426,7 @@ export function ShippingManager({
   const stats = useMemo(() => {
     const shippedThisMonth = orders.filter((o) => {
       if (o.status !== "SHIPPED") return false;
-      const d = new Date(o.createdAt);
+      const d = new Date(o.shippedAt || o.createdAt);
       return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
     }).length;
 

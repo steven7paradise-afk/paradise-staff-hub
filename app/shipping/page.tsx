@@ -147,6 +147,7 @@ export default async function ShippingPage() {
       email: order.customer?.email || order.email || "",
       phone: order.customer?.phone || addressObj.phone || "",
       createdAt: order.created_at,
+      shippedAt: dbRecord?.shipped_at?.toISOString() || null,
       totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
       financialStatus: order.financial_status || "paid",
       fulfillmentStatus: order.fulfillment_status || "unfulfilled",
@@ -162,6 +163,35 @@ export default async function ShippingPage() {
       packedBy: dbRecord?.packed_by || null,
     };
   });
+
+  // Gli ordini appena evasi non fanno più parte della risposta Shopify "unfulfilled".
+  // Manteniamo quindi visibili i record locali, compresa la loro data reale di spedizione.
+  const existingIds = new Set(initialOrders.map((order) => order.shopifyOrderId));
+  for (const dbRecord of dbShipments) {
+    if (existingIds.has(dbRecord.shopify_order_id)) continue;
+    initialOrders.push({
+      shopifyOrderId: dbRecord.shopify_order_id,
+      orderName: dbRecord.order_name,
+      customerName: dbRecord.customer_name || "Cliente",
+      email: "",
+      phone: "",
+      createdAt: dbRecord.created_at.toISOString(),
+      shippedAt: dbRecord.shipped_at?.toISOString() || null,
+      totalPrice: 0,
+      financialStatus: "paid",
+      fulfillmentStatus: dbRecord.status === "SHIPPED" ? "fulfilled" : "unfulfilled",
+      shippingMethod: "Spedizione",
+      shippingAddress: (dbRecord.shipping_address as any) || {},
+      lineItems: [],
+      status: (dbRecord.status as any) || "UNFULFILLED",
+      verifiedBarcodes: (dbRecord.verified_barcodes as string[]) || [],
+      photoUrl: dbRecord.photo_url || null,
+      notes: dbRecord.notes || null,
+      trackingNumber: dbRecord.tracking_number || null,
+      courier: dbRecord.courier || null,
+      packedBy: dbRecord.packed_by || null,
+    });
+  }
 
   return (
     <AppShell title="Spedizioni" subtitle="Preparazione, verifica e tracciamento degli ordini Shopify." role={role}>

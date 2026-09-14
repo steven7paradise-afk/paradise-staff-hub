@@ -1154,6 +1154,7 @@ model ShopifyShipment {
   notes             String?
   tracking_number   String?
   courier           String?
+  shipped_at        DateTime?
   packed_by_user_id String?
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
@@ -1161,6 +1162,7 @@ model ShopifyShipment {
   packed_by User? @relation("ShipmentPacker", fields: [packed_by_user_id], references: [id])
 
   @@index([status])
+  @@index([status, shipped_at])
   @@index([order_name])
   @@map("shopify_shipments")
 }

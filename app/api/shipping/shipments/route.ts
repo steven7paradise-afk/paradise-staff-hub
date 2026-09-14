@@ -35,6 +35,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Dati ordine mancanti." }, { status: 400 });
     }
 
+    const existingRecord = await prisma.shopifyShipment.findUnique({
+      where: { shopify_order_id: String(shopifyOrderId) },
+      select: { shipped_at: true },
+    });
+    const shippedAt = status === "SHIPPED" ? (existingRecord?.shipped_at ?? new Date()) : status ? null : undefined;
+
     const record = await prisma.shopifyShipment.upsert({
       where: { shopify_order_id: String(shopifyOrderId) },
       update: {
@@ -47,6 +53,7 @@ export async function POST(request: NextRequest) {
         notes: notes ?? undefined,
         tracking_number: trackingNumber ?? undefined,
         courier: courier ?? undefined,
+        shipped_at: shippedAt,
         packed_by_user_id: session.user.id,
       },
       create: {
@@ -60,6 +67,7 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         tracking_number: trackingNumber || null,
         courier: courier || null,
+        shipped_at: status === "SHIPPED" ? new Date() : null,
         packed_by_user_id: session.user.id,
       },
       include: {
