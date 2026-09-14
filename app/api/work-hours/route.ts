@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateClockHours } from "@/lib/work-hours";
+import { monthlyWorkedUserIds } from "@/lib/work-hours-visibility";
 
 const noStoreHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -241,7 +242,10 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json(rows, { headers: noStoreHeaders });
+  return NextResponse.json({
+    records: rows,
+    workedUserIds: monthlyWorkedUserIds(logs, records),
+  }, { headers: noStoreHeaders });
 }
 
 export async function PUT(request: NextRequest) {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { CalendarDays, Download, RefreshCw, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award, Check } from "lucide-react";
 import { Badge, Button, Card, Field } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { visibleWorkHoursWorkers } from "@/lib/work-hours-visibility";
 
 type Worker = {
   id: string;
@@ -101,20 +102,25 @@ export function WorkHoursManager({
   const [month, setMonth] = useState(initialMonth);
   const [query, setQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState("Tutti i saloni");
-  const [selectedWorkerId, setSelectedWorkerId] = useState(workers[0]?.id ?? "");
+  const [selectedWorkerId, setSelectedWorkerId] = useState(workers.find((worker) => worker.active)?.id ?? "");
   const [records, setRecords] = useState<Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }>>({});
+  const [workedUserIds, setWorkedUserIds] = useState<string[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(true);
   const [savingKey, setSavingKey] = useState("");
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState("");
 
-  const locationOptions = useMemo(() => ["Tutti i saloni", ...Array.from(new Set(workers.map((worker) => worker.location))).sort((a, b) => a.localeCompare(b, "it"))], [workers]);
-  const filteredWorkers = workers.filter((worker) => {
+  const visibleWorkers = useMemo(
+    () => visibleWorkHoursWorkers(workers, workedUserIds),
+    [workers, workedUserIds],
+  );
+  const locationOptions = useMemo(() => ["Tutti i saloni", ...Array.from(new Set(visibleWorkers.map((worker) => worker.location))).sort((a, b) => a.localeCompare(b, "it"))], [visibleWorkers]);
+  const filteredWorkers = visibleWorkers.filter((worker) => {
     const matchesLocation = locationFilter === "Tutti i saloni" || worker.location === locationFilter;
     const matchesQuery = `${worker.name} ${worker.email} ${worker.location}`.toLowerCase().includes(query.toLowerCase());
     return matchesLocation && matchesQuery;
   });
-  const selectedWorker = workers.find((worker) => worker.id === selectedWorkerId);
+  const selectedWorker = visibleWorkers.find((worker) => worker.id === selectedWorkerId);
   const days = useMemo(() => daysInMonth(year, month), [year, month]);
 
   const weeks = useMemo(() => {
@@ -163,8 +169,10 @@ export function WorkHoursManager({
       setLoadingRecords(false);
       return;
     }
+    const payload = data as { records?: WorkRecord[]; workedUserIds?: string[] };
+    const loadedRecords = Array.isArray(data) ? data as WorkRecord[] : payload.records ?? [];
     const map: Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }> = {};
-    (data as (WorkRecord & { scheduledHours?: number; plannedStart?: string | null; plannedEnd?: string | null; categoryCode?: string | null })[]).forEach((record) => {
+    loadedRecords.forEach((record) => {
       map[`${record.userId}-${record.date.slice(0, 10)}`] = {
         hours: record.hours,
         note: record.note,
@@ -189,6 +197,7 @@ export function WorkHoursManager({
       };
     });
     setRecords(map);
+    setWorkedUserIds(Array.isArray(payload.workedUserIds) ? payload.workedUserIds : []);
     setLoadingRecords(false);
   }, [month, year]);
 
@@ -562,7 +571,7 @@ export function WorkHoursManager({
   }
 
   async function exportAllPdf() {
-    const scope = (locationFilter === "Tutti i saloni" ? workers : workers.filter((worker) => worker.location === locationFilter))
+    const scope = (locationFilter === "Tutti i saloni" ? visibleWorkers : visibleWorkers.filter((worker) => worker.location === locationFilter))
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name, "it"));
     await exportPdf(scope, `Ore-staff-${locationFilter.replaceAll(" ", "-")}-${monthNames[month]}-${year}.pdf`);
@@ -673,7 +682,7 @@ export function WorkHoursManager({
                 <Download className="size-3.5" />
                 PDF Lavoratore
               </Button>
-              <Button className="h-10 text-xs px-4" onClick={exportAllPdf} disabled={exporting || workers.length === 0}>
+              <Button className="h-10 text-xs px-4" onClick={exportAllPdf} disabled={exporting || visibleWorkers.length === 0}>
                 <Download className="size-3.5" />
                 {exporting ? "Generando..." : locationFilter === "Tutti i saloni" ? "PDF Tutti Saloni" : "PDF Salone"}
               </Button>
