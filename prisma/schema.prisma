@@ -375,6 +375,11 @@ model BarcodeLabel {
   id              String    @id @default(cuid())
   code            String    @unique
   title           String?
+  color           String?
+  weight          String?
+  length          String?
+  product_code    String?
+  typology        String?
   format          String    @default("CODE128")
   print_count     Int       @default(0)
   last_printed_at DateTime?
