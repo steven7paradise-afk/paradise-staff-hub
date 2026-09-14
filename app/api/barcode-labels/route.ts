@@ -103,9 +103,56 @@ function optionalPreviewUrl(value: unknown) {
   }
 }
 
+async function barcodeLabelData(body: Record<string, unknown>) {
+  const code = validCode(body.code);
+  const title = String(body.title ?? "").trim().slice(0, 120) || null;
+  const suppliedPreviewUrl = optionalPreviewUrl(body.previewUrl);
+  const collectionId = requiredDetail(body.collectionId, "la collezione");
+  const collection = await prisma.barcodeLabelCollection.findUnique({
+    where: { id: collectionId },
+    select: { fields: true },
+  });
+  if (!collection) throw new Error("La collezione selezionata non è più disponibile.");
+  const fields = collectionFields(collection.fields);
+  if (!fields.length) throw new Error("La collezione non contiene domande valide.");
+  const suppliedDetails = body.details && typeof body.details === "object" && !Array.isArray(body.details)
+    ? body.details as Record<string, unknown>
+    : {};
+  const details = Object.fromEntries(fields.map((field) => [
+    field.key,
+    requiredDetail(suppliedDetails[field.key], `il campo ${field.label.toLocaleLowerCase("it")}`),
+  ]));
+  const catalogProduct = suppliedPreviewUrl ? null : await prisma.inventoryProduct.findFirst({
+    where: {
+      image_url: { not: null },
+      OR: [
+        { barcode: { equals: code, mode: "insensitive" } },
+        { sku: { equals: code, mode: "insensitive" } },
+      ],
+    },
+    select: { image_url: true },
+  });
+
+  return {
+    code,
+    title,
+    color: details.color || null,
+    weight: details.weight || null,
+    length: details.length || null,
+    product_code: details.productCode || null,
+    typology: details.typology || null,
+    preview_url: suppliedPreviewUrl || catalogProduct?.image_url || null,
+    collection_id: collectionId,
+    details,
+  };
+}
+
 function apiError(error: unknown) {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-    return NextResponse.json({ error: "Questa etichetta è già stata salvata." }, { status: 409 });
+    return NextResponse.json({ error: "Un altro prodotto usa già questo codice barcode." }, { status: 409 });
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    return NextResponse.json({ error: "Il prodotto non è più disponibile. Aggiorna la pagina e riprova." }, { status: 404 });
   }
   return NextResponse.json(
     { error: error instanceof Error ? error.message : "Operazione non riuscita." },
@@ -150,7 +197,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const action = String(body?.action ?? "create");
+    if (!body) throw new Error("I dati del prodotto non sono validi.");
+    const action = String(body.action ?? "create");
 
     if (action === "createCollection") {
       const name = requiredDetail(body?.name, "il nome della collezione", 60);
@@ -191,41 +239,42 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "create") {
-      const code = validCode(body?.code);
-      const title = String(body?.title ?? "").trim().slice(0, 120) || null;
-      const previewUrl = optionalPreviewUrl(body?.previewUrl);
-      const collectionId = requiredDetail(body?.collectionId, "la collezione");
-      const collection = await prisma.barcodeLabelCollection.findUnique({
-        where: { id: collectionId },
-        select: { fields: true },
-      });
-      if (!collection) throw new Error("La collezione selezionata non è più disponibile.");
-      const fields = collectionFields(collection.fields);
-      if (!fields.length) throw new Error("La collezione non contiene domande valide.");
-      const suppliedDetails = body?.details && typeof body.details === "object" && !Array.isArray(body.details)
-        ? body.details as Record<string, unknown>
-        : {};
-      const details = Object.fromEntries(fields.map((field) => [
-        field.key,
-        requiredDetail(suppliedDetails[field.key], `il campo ${field.label.toLocaleLowerCase("it")}`),
-      ]));
+      const data = await barcodeLabelData(body);
       const label = await prisma.barcodeLabel.create({
         data: {
-          code,
-          title,
-          color: details.color || null,
-          weight: details.weight || null,
-          length: details.length || null,
-          product_code: details.productCode || null,
-          typology: details.typology || null,
-          preview_url: previewUrl,
-          collection_id: collectionId,
-          details,
+          ...data,
           created_by_id: user.id,
         },
         select: barcodeLabelSelect,
       });
       return NextResponse.json({ label }, { status: 201 });
+    }
+
+    if (action === "update") {
+      const id = requiredDetail(body.id, "il prodotto");
+      const data = await barcodeLabelData(body);
+      const label = await prisma.barcodeLabel.update({
+        where: { id },
+        data,
+        select: barcodeLabelSelect,
+      });
+      return NextResponse.json({ label });
+    }
+
+    if (action === "lookupProductImage") {
+      const code = validCode(body.code);
+      const product = await prisma.inventoryProduct.findFirst({
+        where: {
+          image_url: { not: null },
+          OR: [
+            { barcode: { equals: code, mode: "insensitive" } },
+            { sku: { equals: code, mode: "insensitive" } },
+          ],
+        },
+        select: { name: true, image_url: true },
+      });
+      if (!product?.image_url) throw new Error("Nessuna immagine trovata nel catalogo Paradise Beauty per questo codice.");
+      return NextResponse.json({ imageUrl: product.image_url, productName: product.name });
     }
 
     if (action === "delete") {
