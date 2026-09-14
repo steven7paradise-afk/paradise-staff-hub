@@ -1329,9 +1329,23 @@ async function getPayslipMonthStatus(month: number | null, year: number | null) 
     targetMonth = latest?.month || new Date().getMonth();
     targetYear = latest?.year || new Date().getFullYear();
   }
+  const targetPeriod = monthBounds(targetMonth, targetYear);
   const [workers, documents] = await Promise.all([
     prisma.user.findMany({
-      where: activeStaffWhere(),
+      where: {
+        ...activeStaffWhere(),
+        contract_start: { lt: targetPeriod.end },
+        OR: [
+          { contract_end: null },
+          { contract_end: { gte: targetPeriod.start } },
+        ],
+        attendance_logs: {
+          some: {
+            type: "ENTRATA",
+            date: { gte: targetPeriod.start, lt: targetPeriod.end },
+          },
+        },
+      },
       select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),

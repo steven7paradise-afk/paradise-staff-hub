@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { DocumentUpload } from "@/components/document-upload";
 import { DocumentsViewer, type DocumentRecord } from "@/components/documents-viewer";
 import { auth } from "@/lib/auth";
+import { attendanceMonthsFromDates } from "@/lib/payroll-status";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +31,35 @@ export default async function CedoliniPage({
     }),
     prisma.user.findMany({
       where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
-      select: { id: true, name: true, role: true, mansione: true, photo_url: true, email: true },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        mansione: true,
+        photo_url: true,
+        email: true,
+        contract_start: true,
+        contract_end: true,
+        attendance_logs: {
+          where: { type: "ENTRATA" },
+          select: { date: true },
+        },
+      },
       orderBy: { name: "asc" },
     }),
   ]);
+
+  const workerItems = workers.map(({
+    attendance_logs: attendanceLogs,
+    contract_start: contractStart,
+    contract_end: contractEnd,
+    ...worker
+  }) => ({
+    ...worker,
+    contractStart: contractStart?.toISOString() ?? null,
+    contractEnd: contractEnd?.toISOString() ?? null,
+    workedMonths: attendanceMonthsFromDates(attendanceLogs.map((log) => log.date)),
+  }));
 
   const documentItems: DocumentRecord[] = documents.map((document) => ({
     id: document.id,
@@ -61,13 +87,13 @@ export default async function CedoliniPage({
     >
       <div className="administrative-night-page">
       <div className="mb-6">
-        <DocumentUpload workers={workers} />
+        <DocumentUpload workers={workerItems} />
       </div>
       
       <DocumentsViewer
         documents={documentItems}
         employeeView={false}
-        workers={workers}
+        workers={workerItems}
         initialWorkerId={params.employee ?? ""}
         initialType={params.type ?? "ALL"}
       />
