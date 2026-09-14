@@ -2026,6 +2026,7 @@ export function AppointmentsBrowser({
   const [clientControlLastVisitAt, setClientControlLastVisitAt] = useState<string | null>(null);
   const [clientControlHistoryLoaded, setClientControlHistoryLoaded] = useState(false);
   const [serviceDetailsModalOpen, setServiceDetailsModalOpen] = useState(false);
+  const [editingClientIdentity, setEditingClientIdentity] = useState(false);
   const clientControlRequestRef = useRef<AbortController | null>(null);
 
   function closeClientControl() {
@@ -2038,6 +2039,7 @@ export function AppointmentsBrowser({
     setShopifyNoteFallbackToDeposit(false);
     setIsStaffDropdownOpen(false);
     setServiceDetailsModalOpen(false);
+    setEditingClientIdentity(false);
   }
   const [clientControlPolishing, setClientControlPolishing] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{
@@ -3397,6 +3399,32 @@ export function AppointmentsBrowser({
     clientControlFormRef.current = nextForm;
     setClientControlForm(nextForm);
     scheduleClientControlDraft(nextForm);
+  }
+
+  function updateClientControlIdentity(
+    field: "clientName" | "email" | "phone",
+    value: string,
+  ) {
+    const nextForm = {
+      ...clientControlFormRef.current,
+      [field]: value,
+    };
+    clientControlFormRef.current = nextForm;
+    setClientControlForm(nextForm);
+  }
+
+  function saveClientIdentityAndSearchPayment() {
+    const nextForm = clientControlFormRef.current;
+    scheduleClientControlDraft(nextForm);
+    setEditingClientIdentity(false);
+    setShowShopifyOrdersPanel(true);
+    setShowTodayOrdersDropdown(true);
+    void fetchTodayShopifyOrders({
+      clientName: nextForm.clientName,
+      email: nextForm.email,
+      phone: nextForm.phone,
+      shopifyOrder: nextForm.shopifyOrder,
+    });
   }
 
   const activeBookingsCount = initialBookings.filter(
@@ -5089,10 +5117,22 @@ export function AppointmentsBrowser({
                   </div>
 
                   <div className="min-w-0 bg-white p-5">
-                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                      <User className="size-4 text-[#D96B94]" />
-                      Cliente e contatti
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
+                        <User className="size-4 text-[#D96B94]" />
+                        Cliente e contatti
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setEditingClientIdentity((current) => !current)}
+                        aria-expanded={editingClientIdentity}
+                        aria-controls="client-control-identity-editor"
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#F0C4D7] bg-[#FFF7FB] px-2.5 text-[9px] font-black uppercase tracking-wider text-[#A93469] transition hover:bg-[#FCE5F3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94]"
+                      >
+                        <Pencil className="size-3" />
+                        {editingClientIdentity ? "Chiudi" : "Correggi"}
+                      </button>
+                    </div>
                     <p className="mt-3 truncate text-sm font-black text-[#1F1F1F]">
                       {clientControlForm.clientName || "Cliente non indicata"}
                     </p>
@@ -5105,6 +5145,57 @@ export function AppointmentsBrowser({
                       <span className="truncate">{clientControlForm.email || "Email non disponibile"}</span>
                     </p>
                   </div>
+
+                  {editingClientIdentity ? (
+                    <div id="client-control-identity-editor" className="order-last bg-[#FFF9FC] p-5 sm:col-span-2 xl:col-span-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
+                        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
+                          <label className="block min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Nome cliente</span>
+                            <input
+                              value={clientControlForm.clientName}
+                              onChange={(event) => updateClientControlIdentity("clientName", event.target.value)}
+                              className="mt-1.5 h-11 w-full rounded-xl border border-[#E8C3D4] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/20"
+                              placeholder="Nome e cognome corretti"
+                            />
+                          </label>
+                          <label className="block min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Email</span>
+                            <input
+                              type="email"
+                              value={clientControlForm.email}
+                              onChange={(event) => updateClientControlIdentity("email", event.target.value)}
+                              className="mt-1.5 h-11 w-full rounded-xl border border-[#E8C3D4] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/20"
+                              placeholder="email@esempio.com"
+                            />
+                          </label>
+                          <label className="block min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Telefono</span>
+                            <input
+                              type="tel"
+                              inputMode="tel"
+                              value={clientControlForm.phone}
+                              onChange={(event) => updateClientControlIdentity("phone", event.target.value)}
+                              className="mt-1.5 h-11 w-full rounded-xl border border-[#E8C3D4] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/20"
+                              placeholder="Numero di telefono"
+                            />
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={saveClientIdentityAndSearchPayment}
+                          disabled={loadingTodayOrders || (!clientControlForm.clientName.trim() && !clientControlForm.email.trim() && !clientControlForm.phone.trim())}
+                          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#B83D7F] px-5 text-xs font-black text-white shadow-[0_8px_18px_rgba(184,61,127,0.22)] transition hover:bg-[#A83273] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94] disabled:pointer-events-none disabled:opacity-45"
+                        >
+                          {loadingTodayOrders ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                          Salva e cerca pagamento
+                        </button>
+                      </div>
+                      <p className="mt-3 text-[11px] font-semibold text-black/45">
+                        Il pagamento viene cercato prima tramite email o telefono; il nome può essere diverso da quello inserito nella prenotazione.
+                      </p>
+                    </div>
+                  ) : null}
 
                   <div className="min-w-0 bg-white p-5">
                     <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
