@@ -372,6 +372,13 @@ export function StaffDirectory({
   const [contractRemindersReady, setContractRemindersReady] = useState(false);
   const [contractDecisionEmployeeId, setContractDecisionEmployeeId] = useState<string | null>(null);
   const [contractDecisionError, setContractDecisionError] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newEmployeeForm, setNewEmployeeForm] = useState<Partial<Employee> | null>(null);
+  const [creationMessage, setCreationMessage] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
 
   const todayKey = romeTodayKey();
   const contractRenewalReminders = staff.flatMap((employee): ContractRenewalReminder[] => {
@@ -410,14 +417,17 @@ export function StaffDirectory({
   }, [contractPopupOpen]);
 
   useEffect(() => {
-    if (!isEditing) setStaff(initialStaff);
-  }, [initialStaff, isEditing]);
+    if (!isEditing && !showCreateModal) setStaff(initialStaff);
+  }, [initialStaff, isEditing, showCreateModal]);
 
   useEffect(() => {
-    if (isEditing) return;
+    // Keep live attendance data fresh only while the directory is idle. A server
+    // refresh during creation can remount the route and interrupt a partially
+    // completed employee form.
+    if (isEditing || showCreateModal || submitting || contractPopupOpen) return;
     const timer = window.setInterval(() => router.refresh(), 60_000);
     return () => window.clearInterval(timer);
-  }, [isEditing, router]);
+  }, [contractPopupOpen, isEditing, router, showCreateModal, submitting]);
 
   useEffect(() => {
     if (isEditing && selectedEmployee?.id) {
@@ -460,16 +470,6 @@ export function StaffDirectory({
     return () => { active = false; };
   }, [isEditing, selectedEmployee?.id]);
   
-  // Modals creation state
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newEmployeeForm, setNewEmployeeForm] = useState<Partial<Employee> | null>(null);
-  const [creationMessage, setCreationMessage] = useState("");
-  
-  const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
-
   function syncRenewalDocumentInHistory(document: EmployeeContractDocument) {
     setEmploymentHistory((current) => {
       const withoutDocument = current.filter((event) => event.id !== `document-renewal-${document.id}`);
