@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
 import { DashboardRedesignClient } from "@/components/dashboard-redesign-client";
 import { ManagementDashboard, type ManagementDashboardData } from "@/components/management-dashboard";
@@ -134,12 +135,11 @@ export default async function DashboardPage() {
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
 
-  await safe(ensureTomorrowRestNotifications(), { created: 0, deferred: true });
+  after(async () => {
+    await safe(ensureTomorrowRestNotifications(), { created: 0, deferred: true });
+  });
 
   if (canViewManagementDashboard(role)) {
-    if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)) {
-      await safe(ensureAutomaticLateRequests(statusToday), { created: 0, updated: 0, removed: 0, lateRequests: [] });
-    }
     const scopedLocationId: string | null = null;
     const userScope = {};
     const locationScope = {};
@@ -151,6 +151,20 @@ export default async function DashboardPage() {
     const previousMonthDate = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
     const payrollMonth = previousMonthDate.getUTCMonth() + 1;
     const payrollYear = previousMonthDate.getUTCFullYear();
+    const automaticLateRequestsPromise = (async () => {
+      if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)) {
+        await safe(ensureAutomaticLateRequests(statusToday), { created: 0, updated: 0, removed: 0, lateRequests: [] });
+      }
+      return safe(prisma.leaveRequest.findMany({
+        where: {
+          start_date: { gte: statusToday, lt: statusTomorrow },
+          reason: { startsWith: "RITARDO AUTOMATICO — " },
+          user: { active: true, ...userScope },
+        },
+        select: { user_id: true, status: true },
+        orderBy: { created_at: "desc" },
+      }), []);
+    })();
 
     const [
       managementUsers,
@@ -195,15 +209,7 @@ export default async function DashboardPage() {
         include: { user: { include: { location: true } } },
         orderBy: { end_date: "asc" },
       }), []),
-      safe(prisma.leaveRequest.findMany({
-        where: {
-          start_date: { gte: statusToday, lt: statusTomorrow },
-          reason: { startsWith: "RITARDO AUTOMATICO — " },
-          user: { active: true, ...userScope },
-        },
-        select: { user_id: true, status: true },
-        orderBy: { created_at: "desc" },
-      }), []),
+      automaticLateRequestsPromise,
       safe(prisma.serviceForm.findMany({
         where: { active: true },
         select: { id: true, name: true, category: true },

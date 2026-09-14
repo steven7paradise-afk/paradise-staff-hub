@@ -10,6 +10,10 @@ type VideoSignal = {
   status: "requested" | "connecting" | "live" | "denied" | "ended";
 };
 
+const INITIAL_POLL_DELAY_MS = 8_000;
+const IDLE_POLL_INTERVAL_MS = 5_000;
+const ACTIVE_POLL_INTERVAL_MS = 1_200;
+
 function waitForIce(peer: RTCPeerConnection, timeoutMs = 5_000) {
   if (peer.iceGatheringState === "complete") return Promise.resolve();
   return new Promise<void>((resolve) => {
@@ -33,6 +37,7 @@ export function RemoteScreenShare() {
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const handledRequestRef = useRef("");
+  const currentRequestRef = useRef("");
 
   const stopLocalShare = useCallback((signalToNotify: VideoSignal | null = null) => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -53,39 +58,67 @@ export function RemoteScreenShare() {
   useEffect(() => {
     let cancelled = false;
     let unauthorized = false;
-    const poll = async () => {
-      if (unauthorized) return;
-      const response = await fetch("/api/remote-video?mode=pc", { cache: "no-store" }).catch(() => null);
-      if (!response) return;
-      if (response.status === 401 || response.status === 403) {
-        unauthorized = true;
-        return;
-      }
-      const data = response.ok ? await response.json().catch(() => null) : null;
-      if (cancelled) return;
-      const nextSignal = (data?.signal || null) as VideoSignal | null;
-      if (!nextSignal) {
-        if (streamRef.current) stopLocalShare();
-        setSignal(null);
-        handledRequestRef.current = "";
-        return;
-      }
-      if (nextSignal.requestId !== signal?.requestId) {
-        if (streamRef.current) stopLocalShare();
-        setSignal(nextSignal);
-        setStarting(false);
-      } else {
-        setSignal(nextSignal);
-      }
-      if (["denied", "ended"].includes(nextSignal.status) && streamRef.current) stopLocalShare();
+    let timer: number | null = null;
+    let polling = false;
+
+    const schedulePoll = (delay: number) => {
+      if (cancelled || unauthorized || document.hidden) return;
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => void poll(), delay);
     };
-    void poll();
-    const interval = window.setInterval(poll, 1_200);
+
+    const poll = async () => {
+      if (cancelled || unauthorized || polling || document.hidden) return;
+      polling = true;
+      let nextDelay = IDLE_POLL_INTERVAL_MS;
+      try {
+        const response = await fetch("/api/remote-video?mode=pc", { cache: "no-store" }).catch(() => null);
+        if (!response) return;
+        if (response.status === 401 || response.status === 403) {
+          unauthorized = true;
+          return;
+        }
+        const data = response.ok ? await response.json().catch(() => null) : null;
+        if (cancelled) return;
+        const nextSignal = (data?.signal || null) as VideoSignal | null;
+        if (!nextSignal) {
+          if (streamRef.current) stopLocalShare();
+          setSignal(null);
+          handledRequestRef.current = "";
+          currentRequestRef.current = "";
+          return;
+        }
+        nextDelay = ACTIVE_POLL_INTERVAL_MS;
+        if (nextSignal.requestId !== currentRequestRef.current) {
+          if (streamRef.current) stopLocalShare();
+          currentRequestRef.current = nextSignal.requestId;
+          setStarting(false);
+        }
+        setSignal(nextSignal);
+        if (["denied", "ended"].includes(nextSignal.status) && streamRef.current) stopLocalShare();
+      } finally {
+        polling = false;
+        schedulePoll(nextDelay);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (timer !== null) window.clearTimeout(timer);
+        timer = null;
+        return;
+      }
+      schedulePoll(0);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    schedulePoll(INITIAL_POLL_DELAY_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (timer !== null) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [signal?.requestId, stopLocalShare]);
+  }, [stopLocalShare]);
 
   useEffect(() => () => stopLocalShare(), [stopLocalShare]);
 

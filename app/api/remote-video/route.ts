@@ -70,11 +70,22 @@ async function saveSignal(targetCode: string, signal: VideoSignal) {
   });
 }
 
-async function resolveAccess(requestedTarget: string, expectedKind: "admin" | "pc") {
-  const [session, cookieStore] = await Promise.all([auth(), cookies()]);
-  const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+type PcAuthorization = NonNullable<Awaited<ReturnType<typeof checkPCAuthorization>>>;
+
+async function resolveAccess(
+  requestedTarget: string,
+  expectedKind: "admin" | "pc",
+  resolvedPcAuth?: PcAuthorization | null,
+) {
+  const pcAuth = expectedKind === "pc"
+    ? resolvedPcAuth ?? await (async () => {
+        const cookieStore = await cookies();
+        return checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+      })()
+    : null;
+  const session = expectedKind === "admin" ? await auth() : null;
   const isAdmin = Boolean(session?.user?.id && ADMIN_ROLES.has(session.user.role));
-  const targetCode = expectedKind === "pc" ? pcAuth?.code || "" : requestedTarget;
+  const targetCode = pcAuth?.code || requestedTarget;
 
   if (!targetCode || (expectedKind === "pc" ? !pcAuth : !isAdmin)) return null;
   const row = await prisma.setting.findUnique({ where: { key: SESSIONS_KEY } });
@@ -88,13 +99,14 @@ async function resolveAccess(requestedTarget: string, expectedKind: "admin" | "p
 
 export async function GET(request: NextRequest) {
   const mode = request.nextUrl.searchParams.get("mode") === "pc" ? "pc" : "admin";
+  let pcAuth: PcAuthorization | null = null;
   if (mode === "pc") {
     const cookieStore = await cookies();
-    const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+    pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
     if (!pcAuth) return NextResponse.json({ error: "Dispositivo non autorizzato." }, { status: 403 });
   }
   const requestedTarget = request.nextUrl.searchParams.get("targetCode")?.trim() || "";
-  const access = await resolveAccess(requestedTarget, mode);
+  const access = await resolveAccess(requestedTarget, mode, pcAuth);
   if (!access) return NextResponse.json({ signal: null }, { status: 200 });
   const signal = await readSignal(access.targetCode);
   if (!signal || signal.controllerId !== access.remoteSession.controllerId) {
