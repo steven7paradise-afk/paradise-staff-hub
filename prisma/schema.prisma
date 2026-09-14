@@ -381,6 +381,7 @@ model BarcodeLabel {
   length          String?
   product_code    String?
   typology        String?
+  preview_url     String?
   collection_id   String?
   details         Json?
   format          String                  @default("CODE128")
