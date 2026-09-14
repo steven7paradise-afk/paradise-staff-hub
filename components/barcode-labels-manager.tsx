@@ -175,15 +175,17 @@ export function BarcodeLabelsManager() {
       );
       const sections = printable.map(({ label, svg }) => `
         <section class="label">
-          <div class="brand">PARADISE BEAUTY</div>
-          ${label.title ? `<div class="title">${escapeHtml(label.title)}</div>` : ""}
-          <div class="barcode">${svg}</div>
-          <div class="code">${escapeHtml(label.code)}</div>
+          <div class="label-content">
+            <div class="brand">PARADISE BEAUTY</div>
+            ${label.title ? `<div class="title">${escapeHtml(label.title)}</div>` : ""}
+            <div class="barcode">${svg}</div>
+            <div class="code">${escapeHtml(label.code)}</div>
+          </div>
         </section>
       `).join("");
 
       printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etichette barcode</title><style>
-        @page{size:50mm 30mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50mm;height:30mm;padding:2mm 2.5mm;display:flex;flex-direction:column;align-items:stretch;justify-content:center;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.brand{text-align:center;font-size:5.5px;font-weight:800;letter-spacing:1.1px}.title{margin-top:.5mm;overflow:hidden;text-align:center;font-size:8px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.barcode{height:15mm;margin-top:1mm}.barcode svg{display:block;width:100%;height:100%}.code{text-align:center;font:700 8px/3.5mm monospace;letter-spacing:.35px}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
+        @page{size:25.4mm 50.8mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{position:relative;width:25.4mm;height:50.8mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-content{position:absolute;left:50%;top:50%;width:48.4mm;height:23mm;padding:1mm 1.3mm;display:flex;transform:translate(-50%,-50%) rotate(90deg);flex-direction:column;align-items:stretch;justify-content:center;overflow:hidden}.brand{text-align:center;font-size:5px;font-weight:800;line-height:1.7mm;letter-spacing:1px}.title{overflow:hidden;text-align:center;font-size:7px;font-weight:800;line-height:2.7mm;white-space:nowrap;text-overflow:ellipsis}.barcode{min-height:0;flex:1;margin-top:.3mm}.barcode svg{display:block;width:100%;height:100%}.code{text-align:center;font:700 8px/2.7mm monospace;letter-spacing:.3px}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
       </style></head><body>${sections}<script>window.onload=()=>window.print()</script></body></html>`);
       printWindow.document.close();
 
@@ -225,7 +227,7 @@ export function BarcodeLabelsManager() {
               <p className="mt-2 max-w-2xl text-sm font-semibold text-white/65">Crea un codice, salvalo e stampalo. Tutte le etichette restano disponibili per le ristampe future.</p>
             </div>
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black">
-              <Barcode className="size-4 text-[#F3A0C8]" /> Code 128 · 50 × 30 mm
+              <Barcode className="size-4 text-[#F3A0C8]" /> Code 128 · 2 × 1 pollici verticale
             </span>
           </div>
         </header>
@@ -268,11 +270,13 @@ export function BarcodeLabelsManager() {
 
             <div className="mt-6 rounded-[22px] border border-dashed border-[#DDB8CA] bg-[#FFF9FC] p-5 dark:border-white/15 dark:bg-black/10">
               <p className="text-center text-[9px] font-black uppercase tracking-[0.2em] text-[#A93469] dark:text-[#F3A0C8]">Anteprima etichetta</p>
-              <div className="mx-auto mt-3 flex aspect-[5/3] w-full max-w-[360px] flex-col justify-center rounded-xl bg-white px-5 py-4 text-black shadow-sm ring-1 ring-black/5">
-                <p className="truncate text-center text-[8px] font-black uppercase tracking-[0.18em]">Paradise Beauty</p>
-                {title.trim() ? <p className="mt-1 truncate text-center text-xs font-black">{title.trim()}</p> : null}
-                {code.trim() ? <svg ref={previewRef} className="mt-2 h-20 w-full" aria-label={`Anteprima barcode ${code.trim()}`} /> : <div className="mt-3 grid h-20 place-items-center rounded-lg bg-black/[0.03] text-xs font-bold text-black/35">Il barcode apparirà qui</div>}
-                <p className="mt-1 truncate text-center font-mono text-xs font-black tracking-wider">{code.trim() || "—"}</p>
+              <div className="relative mx-auto mt-3 aspect-[1/2] w-full max-w-[180px] overflow-hidden rounded-xl bg-white text-black shadow-sm ring-1 ring-black/5">
+                <div className="absolute left-1/2 top-1/2 flex h-[160px] w-[320px] -translate-x-1/2 -translate-y-1/2 rotate-90 flex-col justify-center px-4 py-3">
+                  <p className="truncate text-center text-[8px] font-black uppercase tracking-[0.18em]">Paradise Beauty</p>
+                  {title.trim() ? <p className="truncate text-center text-xs font-black">{title.trim()}</p> : null}
+                  {code.trim() ? <svg ref={previewRef} className="mt-1 h-24 w-full" aria-label={`Anteprima barcode ${code.trim()}`} /> : <div className="mt-1 grid h-24 place-items-center rounded-lg bg-black/[0.03] text-xs font-bold text-black/35">Il barcode apparirà qui</div>}
+                  <p className="truncate text-center font-mono text-xs font-black tracking-wider">{code.trim() || "—"}</p>
+                </div>
               </div>
               {previewError ? <p className="mt-3 text-center text-xs font-bold text-red-600">{previewError}</p> : null}
             </div>
