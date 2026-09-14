@@ -8,6 +8,8 @@ export const CLIENT_CONTROL_FIELD_IDS = {
   clientName: "client_control_client_name",
   email: "client_control_email",
   phone: "client_control_phone",
+  discoverySource: "client_control_discovery_source",
+  discoveryOther: "client_control_discovery_other",
   depositPaid: "client_control_deposit_paid",
   paid: "client_control_paid",
   paymentMethod: "client_control_payment_method",
@@ -29,6 +31,8 @@ export const CLIENT_CONTROL_FIELD_IDS = {
   correctness: "client_control_correctness",
   clientPhoto: "client_control_photo",
 } as const;
+
+export const CLIENT_CONTROL_DISCOVERY_OPTIONS = ["TikTok", "ChatGPT", "Google", "Altro"] as const;
 
 export const CLIENT_CONTROL_FORM_FIELDS = [
   {
@@ -59,6 +63,21 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     type: "text",
     required: false,
     description: "Numero di telefono del cliente.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.discoverySource,
+    label: "Come ci hai conosciuti?",
+    type: "select",
+    required: false,
+    options: [...CLIENT_CONTROL_DISCOVERY_OPTIONS],
+    description: "Canale dal quale la cliente ha conosciuto Paradise.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.discoveryOther,
+    label: "Altra provenienza",
+    type: "text",
+    required: false,
+    description: "Compila quando la provenienza selezionata è Altro.",
   },
   {
     id: CLIENT_CONTROL_FIELD_IDS.depositPaid,
@@ -194,6 +213,9 @@ export async function ensureClientControlForm(createdById?: string | null) {
       ? existing.fields as Array<{ id?: string; options?: unknown }>
       : [];
     const currentFieldIds = new Set(currentFields.map((field) => field.id));
+    const hasDiscoveryFields =
+      currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.discoverySource) &&
+      currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.discoveryOther);
     const hasPaymentVerificationFields = currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.paymentMethod);
     const paymentMethodField = currentFields.find(
       (field) => field.id === CLIENT_CONTROL_FIELD_IDS.paymentMethod,
@@ -211,6 +233,7 @@ export async function ensureClientControlForm(createdById?: string | null) {
       JSON.stringify(roles ?? []) === JSON.stringify(expectedRoles) &&
       JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles) &&
       Boolean(existing.fields) &&
+      hasDiscoveryFields &&
       hasPaymentVerificationFields &&
       hasManualPaymentMethods;
 

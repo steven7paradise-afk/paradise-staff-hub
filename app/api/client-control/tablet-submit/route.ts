@@ -80,6 +80,8 @@ function clientControlChangeSummary(
     { key: CLIENT_CONTROL_FIELD_IDS.clientName, label: "Cliente", kind: "text" },
     { key: CLIENT_CONTROL_FIELD_IDS.email, label: "Email", kind: "text" },
     { key: CLIENT_CONTROL_FIELD_IDS.phone, label: "Telefono", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.discoverySource, label: "Come ci ha conosciuti", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.discoveryOther, label: "Altra provenienza", kind: "text" },
     { key: CLIENT_CONTROL_FIELD_IDS.depositPaid, label: "Acconto", kind: "money" },
     { key: CLIENT_CONTROL_FIELD_IDS.paid, label: "Totale pagato", kind: "money" },
     { key: CLIENT_CONTROL_FIELD_IDS.paymentMethod, label: "Metodo di pagamento", kind: "text" },
@@ -145,6 +147,8 @@ export async function POST(request: NextRequest) {
     clientName?: string;
     email?: string;
     phone?: string;
+    discoverySource?: string;
+    discoveryOther?: string;
     serviceTitle?: string;
     depositPaid?: string | number;
     paid?: string | number;
@@ -191,6 +195,13 @@ export async function POST(request: NextRequest) {
       (!isDraft && staffIds.length === 0))
   ) {
     return NextResponse.json({ error: "Completa sede, nome cliente e collaboratore." }, { status: 400 });
+  }
+  if (
+    !isDraft &&
+    textValue(body?.discoverySource).toLowerCase() === "altro" &&
+    !textValue(body?.discoveryOther)
+  ) {
+    return NextResponse.json({ error: "Specifica come la cliente ci ha conosciuti." }, { status: 400 });
   }
 
   const location =
@@ -485,6 +496,8 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isDraft ? "Cliente da completare" : ""),
     [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
     [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
+    [CLIENT_CONTROL_FIELD_IDS.discoverySource]: textValue(body?.discoverySource),
+    [CLIENT_CONTROL_FIELD_IDS.discoveryOther]: textValue(body?.discoveryOther),
     client_control_service_title: textValue(body?.serviceTitle),
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: trustedDepositPaid,
     [CLIENT_CONTROL_FIELD_IDS.paid]: trustedPaid,
