@@ -26,28 +26,57 @@ type BarcodeLabel = {
   length: string | null;
   product_code: string | null;
   typology: string | null;
+  collection_id: string | null;
+  details: Record<string, string> | null;
   format: string;
   print_count: number;
   last_printed_at: string | null;
   created_at: string;
   created_by: { name: string };
+  collection: { id: string; name: string; fields: CollectionField[] } | null;
 };
 
-type BackDetails = {
-  color: string;
-  weight: string;
-  length: string;
-  productCode: string;
-  typology: string;
+type CollectionField = {
+  key: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  type?: "text" | "buttons";
+  options?: string[];
 };
 
-const emptyBackDetails: BackDetails = {
-  color: "",
-  weight: "",
-  length: "",
-  productCode: "",
-  typology: "",
+type BarcodeCollection = {
+  id: string;
+  name: string;
+  fields: CollectionField[];
+  is_default: boolean;
 };
+
+type PrintMode = "barcode" | "both" | "info";
+
+type CustomQuestion = {
+  id: string;
+  label: string;
+  type: "text" | "buttons";
+  options: string;
+};
+
+const collectionQuestionOptions = [
+  { key: "color", label: "Colore" },
+  { key: "weight", label: "Peso" },
+  { key: "length", label: "Lunghezza" },
+  { key: "productCode", label: "Codice" },
+  { key: "typology", label: "Tipologia" },
+  { key: "bands", label: "Fasce" },
+  { key: "price", label: "Prezzo" },
+] as const;
+
+const legacyFields: CollectionField[] = collectionQuestionOptions.slice(0, 5).map((field) => ({
+  ...field,
+  placeholder: "",
+  required: true,
+  type: "text",
+}));
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -84,14 +113,24 @@ export function BarcodeLabelsManager() {
   const previewRef = useRef<SVGSVGElement>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
   const [labels, setLabels] = useState<BarcodeLabel[]>([]);
+  const [collections, setCollections] = useState<BarcodeCollection[]>([]);
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
-  const [backDetails, setBackDetails] = useState<BackDetails>(emptyBackDetails);
+  const [detailValues, setDetailValues] = useState<Record<string, string>>({});
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
+  const [collectionFilter, setCollectionFilter] = useState("all");
+  const [printMode, setPrintMode] = useState<PrintMode>("both");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newCollectionOpen, setNewCollectionOpen] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [newCollectionFields, setNewCollectionFields] = useState<string[]>(["color", "weight", "length", "productCode", "typology"]);
+  const [newCustomQuestions, setNewCustomQuestions] = useState<CustomQuestion[]>([]);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copies, setCopies] = useState(1);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingCollection, setSavingCollection] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -106,6 +145,11 @@ export function BarcodeLabelsManager() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Non riesco a caricare le etichette.");
       setLabels(Array.isArray(data?.labels) ? data.labels : []);
+      const loadedCollections = Array.isArray(data?.collections) ? data.collections as BarcodeCollection[] : [];
+      setCollections(loadedCollections);
+      const initialCollection = loadedCollections.find((collection) => collection.name === "Tessitura") || loadedCollections[0];
+      setSelectedCollectionId((current) => current || initialCollection?.id || "");
+      setDetailValues((current) => Object.keys(current).length ? current : initialCollection ? { typology: initialCollection.name } : {});
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Non riesco a caricare le etichette.");
     } finally {
@@ -141,13 +185,19 @@ export function BarcodeLabelsManager() {
 
   const filteredLabels = useMemo(() => {
     const cleanQuery = query.trim().toLocaleLowerCase("it");
-    if (!cleanQuery) return labels;
-    return labels.filter((label) =>
-      `${label.code} ${label.title || ""} ${label.color || ""} ${label.product_code || ""} ${label.typology || ""}`
-        .toLocaleLowerCase("it")
-        .includes(cleanQuery),
-    );
-  }, [labels, query]);
+    return labels.filter((label) => {
+      if (collectionFilter !== "all" && label.collection_id !== collectionFilter) return false;
+      if (!cleanQuery) return true;
+      return `${label.code} ${label.title || ""} ${label.color || ""} ${label.product_code || ""} ${label.typology || ""}`
+          .toLocaleLowerCase("it")
+          .includes(cleanQuery);
+    });
+  }, [collectionFilter, labels, query]);
+
+  const selectedCollection = useMemo(
+    () => collections.find((collection) => collection.id === selectedCollectionId) || null,
+    [collections, selectedCollectionId],
+  );
 
   const selectedLabels = useMemo(() => {
     const selected = new Set(selectedIds);
@@ -158,10 +208,60 @@ export function BarcodeLabelsManager() {
     filteredLabels.length && filteredLabels.every((label) => selectedIds.includes(label.id)),
   );
 
+  const requiredDetailsComplete = Boolean(
+    selectedCollection
+    && selectedCollection.fields.length
+    && selectedCollection.fields.every((field) => detailValues[field.key]?.trim()),
+  );
+
+  function chooseCollection(collectionId: string) {
+    const collection = collections.find((item) => item.id === collectionId);
+    setSelectedCollectionId(collectionId);
+    setDetailValues(collection ? { typology: collection.name } : {});
+  }
+
+  function addCustomQuestion() {
+    setNewCustomQuestions((current) => [
+      ...current,
+      { id: `question-${Date.now()}-${current.length}`, label: "", type: "text", options: "" },
+    ]);
+  }
+
+  async function createCollection() {
+    setSavingCollection(true);
+    setError("");
+    try {
+      const response = await fetch("/api/barcode-labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "createCollection",
+          name: newCollectionName,
+          fieldKeys: newCollectionFields,
+          customFields: newCustomQuestions.map(({ label, type, options }) => ({ label, type, options })),
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Non riesco a creare la collezione.");
+      const collection = data.collection as BarcodeCollection;
+      setCollections((current) => [...current, collection].sort((a, b) => a.name.localeCompare(b.name, "it")));
+      setNewCollectionName("");
+      setNewCustomQuestions([]);
+      setNewCollectionOpen(false);
+      setSelectedCollectionId(collection.id);
+      setDetailValues({ typology: collection.name });
+      setSuccess(`Collezione ${collection.name} creata.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Non riesco a creare la collezione.");
+    } finally {
+      setSavingCollection(false);
+    }
+  }
+
   async function createLabel(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanCode = code.trim();
-    if (!cleanCode || previewError) return;
+    if (!cleanCode || previewError || !selectedCollection) return;
     setSaving(true);
     setError("");
     setSuccess("");
@@ -169,7 +269,13 @@ export function BarcodeLabelsManager() {
       const response = await fetch("/api/barcode-labels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", code: cleanCode, title: title.trim(), ...backDetails }),
+        body: JSON.stringify({
+          action: "create",
+          code: cleanCode,
+          title: title.trim(),
+          collectionId: selectedCollection.id,
+          details: detailValues,
+        }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Non riesco a salvare l’etichetta.");
@@ -177,7 +283,8 @@ export function BarcodeLabelsManager() {
       setSelectedIds([data.label.id]);
       setCode("");
       setTitle("");
-      setBackDetails(emptyBackDetails);
+      setDetailValues({ typology: selectedCollection.name });
+      setCreateOpen(false);
       setSuccess(`Etichetta ${data.label.code} salvata. Ora puoi stamparla.`);
       window.setTimeout(() => codeInputRef.current?.focus(), 50);
     } catch (cause) {
@@ -200,25 +307,36 @@ export function BarcodeLabelsManager() {
       const printable = items.flatMap((label) =>
         Array.from({ length: copies }, () => ({ label, svg: barcodeSvg(label.code) })),
       );
-      const sections = printable.map(({ label, svg }) => `
-        <section class="label label-front">
-          <div class="barcode">${svg}</div>
-          <div class="caption">${escapeHtml(label.title || label.code)}</div>
-        </section>
-        <section class="label label-back">
-          <div class="back-title">PARADISE BEAUTY</div>
-          <dl>
-            <div><dt>Colore:</dt><dd>${escapeHtml(label.color || "—")}</dd></div>
-            <div><dt>Peso:</dt><dd>${escapeHtml(label.weight || "—")}</dd></div>
-            <div><dt>Lunghezza:</dt><dd>${escapeHtml(label.length || "—")}</dd></div>
-            <div><dt>Codice:</dt><dd>${escapeHtml(label.product_code || "—")}</dd></div>
-            <div><dt>Tipologia:</dt><dd>${escapeHtml(label.typology || "—")}</dd></div>
-          </dl>
-        </section>
-      `).join("");
+      const sections = printable.flatMap(({ label, svg }) => {
+        const fields = label.collection?.fields?.length ? label.collection.fields : legacyFields;
+        const legacyValues: Record<string, string | null> = {
+          color: label.color,
+          weight: label.weight,
+          length: label.length,
+          productCode: label.product_code,
+          typology: label.typology,
+        };
+        const backRows = fields.map((field) => `
+          <div><dt>${escapeHtml(field.label)}:</dt><dd>${escapeHtml(label.details?.[field.key] || legacyValues[field.key] || "—")}</dd></div>
+        `).join("");
+        const pages: string[] = [];
+        if (printMode !== "info") pages.push(`
+          <section class="label label-front">
+            <div class="barcode">${svg}</div>
+            <div class="caption">${escapeHtml(label.title || label.code)}</div>
+          </section>
+        `);
+        if (printMode !== "barcode") pages.push(`
+          <section class="label label-back">
+            <div class="back-title">PARADISE BEAUTY</div>
+            <dl class="${fields.length > 5 ? "compact" : ""}">${backRows}</dl>
+          </section>
+        `);
+        return pages;
+      }).join("");
 
       printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etichette barcode</title><style>
-        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 3mm}.back-title{text-align:center;font-size:7px;font-weight:900;line-height:2.8mm;letter-spacing:.8px}.label-back dl{width:100%;margin:.3mm 0 0;font-size:7.5px;font-weight:700;line-height:3.25mm}.label-back dl div{display:grid;grid-template-columns:16mm 1fr;gap:1mm}.label-back dt,.label-back dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.label-back dt{font-weight:800}.label-back dd{font-weight:700}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
+        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 3mm}.back-title{text-align:center;font-size:7px;font-weight:900;line-height:2.8mm;letter-spacing:.8px}.label-back dl{width:100%;margin:.3mm 0 0;font-size:7.5px;font-weight:700;line-height:3.25mm}.label-back dl.compact{font-size:6.5px;line-height:2.55mm}.label-back dl div{display:grid;grid-template-columns:16mm 1fr;gap:1mm}.label-back dt,.label-back dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.label-back dt{font-weight:800}.label-back dd{font-weight:700}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
       </style></head><body>${sections}<script>window.onload=()=>window.print()</script></body></html>`);
       printWindow.document.close();
 
@@ -232,7 +350,8 @@ export function BarcodeLabelsManager() {
       if (!response.ok) throw new Error(data?.error || "La stampa è partita, ma non ho aggiornato lo storico.");
       const updatedById = new Map<string, BarcodeLabel>(data.labels.map((label: BarcodeLabel) => [label.id, label]));
       setLabels((current) => current.map((label) => updatedById.get(label.id) || label));
-      setSuccess(`${printable.length} ${printable.length === 1 ? "coppia fronte/retro pronta" : "coppie fronte/retro pronte"} per la stampa.`);
+      const modeLabel = printMode === "both" ? "fronte e retro" : printMode === "barcode" ? "solo barcode" : "solo informazioni";
+      setSuccess(`${printable.length} ${printable.length === 1 ? "etichetta pronta" : "etichette pronte"} (${modeLabel}).`);
     } catch (cause) {
       if (printWindow && !printWindow.closed && !printWindow.document.body?.children.length) printWindow.close();
       setError(cause instanceof Error ? cause.message : "Stampa non riuscita.");
@@ -291,20 +410,82 @@ export function BarcodeLabelsManager() {
               <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-5xl">Etichette barcode</h1>
               <p className="mt-2 max-w-2xl text-sm font-semibold text-white/65">Crea un codice, salvalo e stampalo. Tutte le etichette restano disponibili per le ristampe future.</p>
             </div>
-            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black">
-              <Barcode className="size-4 text-[#F3A0C8]" /> Fronte + retro · 2 × 1 pollici
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black">
+                <Barcode className="size-4 text-[#F3A0C8]" /> CODE 128 · 2 × 1 pollici
+              </span>
+              <button type="button" onClick={() => setCreateOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F080B7] px-5 text-sm font-black text-[#25141D] transition hover:bg-[#F3A0C8]">
+                <Plus className="size-5" /> Aggiungi prodotto
+              </button>
+            </div>
           </div>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(420px,1.08fr)]">
-          <form onSubmit={createLabel} className="rounded-[28px] border border-black/[0.07] bg-white p-5 shadow-[0_18px_55px_rgba(47,27,37,0.07)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7">
+          {createOpen ? <button type="button" onClick={() => setCreateOpen(false)} className="fixed inset-0 z-40 cursor-default bg-black/55 backdrop-blur-sm" aria-label="Chiudi pop-up" /> : null}
+          <form onSubmit={createLabel} role="dialog" aria-modal="true" aria-labelledby="new-barcode-title" className={`${createOpen ? "fixed left-1/2 top-1/2 z-50 block max-h-[92vh] w-[min(760px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto" : "hidden"} rounded-[28px] border border-black/[0.07] bg-white p-5 shadow-[0_24px_80px_rgba(20,10,15,0.3)] dark:border-white/10 dark:bg-[#1D1D22] sm:p-7`}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F] dark:text-[#F080B7]">Nuova etichetta</p>
-                <h2 className="mt-1 text-2xl font-black">Inserisci il codice</h2>
+                <h2 id="new-barcode-title" className="mt-1 text-2xl font-black">Aggiungi prodotto</h2>
               </div>
-              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]"><Plus className="size-6" /></span>
+              <button type="button" onClick={() => setCreateOpen(false)} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] transition hover:bg-[#FBE1EC] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]" aria-label="Chiudi"><X className="size-6" /></button>
+            </div>
+
+            {error ? <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-200">{error}</p> : null}
+
+            <div className="mt-6 rounded-[22px] border border-[#E9D8E1] bg-[#FCFAFB] p-4 dark:border-white/10 dark:bg-white/[0.035]">
+              <div className="flex items-end gap-3">
+                <label className="min-w-0 flex-1">
+                  <span className="text-[11px] font-black uppercase tracking-[0.14em] text-black/50 dark:text-white/55">Collezione *</span>
+                  <select value={selectedCollectionId} onChange={(event) => chooseCollection(event.target.value)} required className="mt-2 h-12 w-full rounded-xl border border-[#E6D8DF] bg-white px-3 text-sm font-black outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-[#24242A]">
+                    <option value="">Scegli una collezione</option>
+                    {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={() => setNewCollectionOpen((value) => !value)} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A93469] dark:border-white/15 dark:bg-white/[0.06] dark:text-[#F3A0C8]">
+                  <Plus className="size-4" /> Nuova collezione
+                </button>
+              </div>
+              {newCollectionOpen ? (
+                <div className="mt-4 rounded-xl border border-[#E8D7DF] bg-white p-4 dark:border-white/10 dark:bg-black/10">
+                  <label className="block text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/55">Nome collezione</label>
+                  <input value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)} maxLength={60} className="mt-1.5 h-11 w-full rounded-xl border border-[#E6D8DF] bg-white px-3 text-sm font-bold outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-white/[0.055]" placeholder="Esempio: Curly" />
+                  <p className="mt-3 text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/55">Domande da mostrare</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {collectionQuestionOptions.map((field) => {
+                      const checked = newCollectionFields.includes(field.key);
+                      return <label key={field.key} className={`cursor-pointer rounded-lg border px-3 py-2 text-xs font-black ${checked ? "border-[#D96B94] bg-[#FFF0F6] text-[#A93469] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]" : "border-black/10 text-black/50 dark:border-white/10 dark:text-white/50"}`}><input type="checkbox" checked={checked} onChange={(event) => setNewCollectionFields((current) => event.target.checked ? [...current, field.key] : current.filter((key) => key !== field.key))} className="sr-only" />{field.label}</label>;
+                    })}
+                  </div>
+                  <div className="mt-4 border-t border-black/[0.07] pt-4 dark:border-white/10">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/55">Domande personalizzate</p>
+                      <button type="button" onClick={addCustomQuestion} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#E7B6CD] px-3 text-[11px] font-black text-[#A93469] dark:border-white/15 dark:text-[#F3A0C8]"><Plus className="size-3.5" /> Aggiungi domanda</button>
+                    </div>
+                    {newCustomQuestions.length ? (
+                      <div className="mt-3 space-y-3">
+                        {newCustomQuestions.map((question) => (
+                          <div key={question.id} className="rounded-xl bg-[#F8F4F6] p-3 dark:bg-white/[0.04]">
+                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+                              <input value={question.label} onChange={(event) => setNewCustomQuestions((current) => current.map((item) => item.id === question.id ? { ...item, label: event.target.value } : item))} maxLength={60} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-bold outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-[#24242A]" placeholder="Esempio: Tipo di capello" />
+                              <select value={question.type} onChange={(event) => setNewCustomQuestions((current) => current.map((item) => item.id === question.id ? { ...item, type: event.target.value as CustomQuestion["type"] } : item))} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-black outline-none dark:border-white/10 dark:bg-[#24242A]">
+                                <option value="text">Risposta scritta</option>
+                                <option value="buttons">Scelta con bottoni</option>
+                              </select>
+                              <button type="button" onClick={() => setNewCustomQuestions((current) => current.filter((item) => item.id !== question.id))} className="grid size-10 place-items-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10" aria-label="Elimina domanda"><Trash2 className="size-4" /></button>
+                            </div>
+                            {question.type === "buttons" ? <input value={question.options} onChange={(event) => setNewCustomQuestions((current) => current.map((item) => item.id === question.id ? { ...item, options: event.target.value } : item))} maxLength={240} className="mt-2 h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-xs font-bold outline-none focus:border-[#B83D7F] dark:border-white/10 dark:bg-[#24242A]" placeholder="Risposte separate da virgola: Sì, No, Non applicabile" /> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="mt-2 text-xs font-semibold text-black/35 dark:text-white/35">Puoi aggiungere domande con risposta scritta oppure scelte a bottone.</p>}
+                  </div>
+                  <button type="button" onClick={() => void createCollection()} disabled={savingCollection || !newCollectionName.trim() || (!newCollectionFields.length && !newCustomQuestions.some((question) => question.label.trim()))} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#21171D] px-4 text-xs font-black text-white disabled:opacity-40 dark:bg-[#F080B7] dark:text-[#25141D]">
+                    {savingCollection ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Crea collezione
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             <label className="mt-6 block">
@@ -336,27 +517,25 @@ export function BarcodeLabelsManager() {
             <fieldset className="mt-6 rounded-[22px] border border-[#E9D8E1] bg-[#FCFAFB] p-4 dark:border-white/10 dark:bg-white/[0.035] sm:p-5">
               <legend className="px-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#A93469] dark:text-[#F3A0C8]">Informazioni sul retro</legend>
               <p className="mb-4 text-xs font-semibold text-black/45 dark:text-white/45">Compila i dati che verranno stampati dietro l’etichetta.</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {([
-                  ["color", "Colore", "Castano fondente"],
-                  ["weight", "Peso", "50 g"],
-                  ["length", "Lunghezza", "55 cm"],
-                  ["productCode", "Codice", "L"],
-                  ["typology", "Tipologia", "Tessitura"],
-                ] as const).map(([field, label, placeholder]) => (
-                  <label key={field} className={field === "typology" ? "sm:col-span-2" : ""}>
-                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/55">{label} *</span>
-                    <input
-                      required
-                      value={backDetails[field]}
-                      onChange={(event) => setBackDetails((current) => ({ ...current, [field]: event.target.value }))}
-                      maxLength={80}
-                      className="mt-1.5 h-11 w-full rounded-xl border border-[#E6D8DF] bg-white px-3 text-sm font-bold outline-none transition focus:border-[#B83D7F] focus:ring-4 focus:ring-[#D96B94]/15 dark:border-white/10 dark:bg-white/[0.055]"
-                      placeholder={placeholder}
-                    />
-                  </label>
-                ))}
-              </div>
+              {selectedCollection?.fields.length ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {selectedCollection.fields.map((field) => (
+                    <div key={field.key} className={field.type === "buttons" || field.key === "typology" ? "sm:col-span-2" : ""}>
+                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/55">{field.label}{field.required ? " *" : ""}</span>
+                      {field.type === "buttons" && field.options?.length ? (
+                        <div className="mt-1.5 flex flex-wrap gap-2">
+                          {field.options.map((option) => {
+                            const active = detailValues[field.key] === option;
+                            return <button key={option} type="button" onClick={() => setDetailValues((current) => ({ ...current, [field.key]: option }))} className={`min-h-11 rounded-xl border px-4 text-xs font-black transition ${active ? "border-[#B83D7F] bg-[#B83D7F] text-white" : "border-[#E6D8DF] bg-white text-black/60 hover:border-[#D96B94] dark:border-white/10 dark:bg-white/[0.055] dark:text-white/65"}`}>{option}</button>;
+                          })}
+                        </div>
+                      ) : (
+                        <input required={field.required} value={detailValues[field.key] || ""} onChange={(event) => setDetailValues((current) => ({ ...current, [field.key]: event.target.value }))} maxLength={80} className="mt-1.5 h-11 w-full rounded-xl border border-[#E6D8DF] bg-white px-3 text-sm font-bold outline-none transition focus:border-[#B83D7F] focus:ring-4 focus:ring-[#D96B94]/15 dark:border-white/10 dark:bg-white/[0.055]" placeholder={field.placeholder || `Inserisci ${field.label.toLocaleLowerCase("it")}`} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="rounded-xl border border-dashed border-black/10 px-4 py-6 text-center text-xs font-bold text-black/40 dark:border-white/10 dark:text-white/40">Scegli prima una collezione.</div>}
             </fieldset>
 
             <div className="mt-6 rounded-[22px] border border-dashed border-[#DDB8CA] bg-[#FFF9FC] p-5 dark:border-white/15 dark:bg-black/10">
@@ -373,14 +552,8 @@ export function BarcodeLabelsManager() {
                   <p className="mb-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/40">Retro</p>
                   <div className="mx-auto flex aspect-[2/1] w-full max-w-[300px] flex-col justify-center rounded-xl bg-white px-4 py-2 text-black shadow-sm ring-1 ring-black/5">
                     <p className="mb-1 text-center text-[8px] font-black uppercase tracking-[0.15em]">Paradise Beauty</p>
-                    <dl className="w-full text-[8px] font-bold leading-tight">
-                      {([
-                        ["Colore", backDetails.color],
-                        ["Peso", backDetails.weight],
-                        ["Lunghezza", backDetails.length],
-                        ["Codice", backDetails.productCode],
-                        ["Tipologia", backDetails.typology],
-                      ] as const).map(([label, value]) => <div key={label} className="grid grid-cols-[72px_1fr] gap-1"><dt className="font-black">{label}:</dt><dd className="truncate">{value.trim() || "—"}</dd></div>)}
+                    <dl className={`w-full font-bold leading-tight ${selectedCollection && selectedCollection.fields.length > 5 ? "text-[6px]" : "text-[8px]"}`}>
+                      {(selectedCollection?.fields || []).map((field) => <div key={field.key} className="grid grid-cols-[72px_1fr] gap-1"><dt className="truncate font-black">{field.label}:</dt><dd className="truncate">{detailValues[field.key]?.trim() || "—"}</dd></div>)}
                     </dl>
                   </div>
                 </div>
@@ -389,7 +562,7 @@ export function BarcodeLabelsManager() {
             </div>
 
             <button
-              disabled={saving || !code.trim() || Boolean(previewError)}
+              disabled={saving || !code.trim() || Boolean(previewError) || !requiredDetailsComplete}
               className="mt-6 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#B83D7F] px-5 text-sm font-black text-white shadow-[0_12px_28px_rgba(184,61,127,0.24)] transition hover:bg-[#A83273] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94] disabled:pointer-events-none disabled:opacity-45"
             >
               {saving ? <Loader2 className="size-5 animate-spin" /> : <Check className="size-5" />}
@@ -397,7 +570,7 @@ export function BarcodeLabelsManager() {
             </button>
           </form>
 
-          <section className="min-w-0 rounded-[28px] border border-black/[0.07] bg-white shadow-[0_18px_55px_rgba(47,27,37,0.07)] dark:border-white/10 dark:bg-[#1D1D22]">
+          <section className="min-w-0 rounded-[28px] border border-black/[0.07] bg-white shadow-[0_18px_55px_rgba(47,27,37,0.07)] dark:border-white/10 dark:bg-[#1D1D22] xl:col-span-2">
             <div className="border-b border-black/[0.06] p-5 dark:border-white/10 sm:p-7">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
@@ -412,11 +585,27 @@ export function BarcodeLabelsManager() {
                 </label>
               </div>
 
+              <div className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label="Filtra per collezione">
+                <button type="button" onClick={() => { setCollectionFilter("all"); setSelectedIds([]); }} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition ${collectionFilter === "all" ? "border-[#B83D7F] bg-[#B83D7F] text-white" : "border-black/10 bg-white text-black/55 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60"}`}>Tutte <span className="ml-1 opacity-70">{labels.length}</span></button>
+                {collections.map((collection) => {
+                  const count = labels.filter((label) => label.collection_id === collection.id).length;
+                  return <button key={collection.id} type="button" onClick={() => { setCollectionFilter(collection.id); setSelectedIds([]); }} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition ${collectionFilter === collection.id ? "border-[#B83D7F] bg-[#B83D7F] text-white" : "border-black/10 bg-white text-black/55 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/60"}`}>{collection.name} <span className="ml-1 opacity-70">{count}</span></button>;
+                })}
+              </div>
+
               <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-[#F8F4F6] p-3 dark:bg-black/15 sm:flex-row sm:items-center">
                 <button type="button" onClick={toggleVisibleSelection} disabled={!filteredLabels.length} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-xs font-black text-black/65 transition hover:border-[#D96B94] hover:text-[#A93469] disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70">
                   {allVisibleSelected ? <CheckSquare2 className="size-4" /> : <Square className="size-4" />}
                   {allVisibleSelected ? "Deseleziona visibili" : "Seleziona visibili"}
                 </button>
+                <label className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black/55 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/60">
+                  <Printer className="size-4" /> Contenuto
+                  <select value={printMode} onChange={(event) => setPrintMode(event.target.value as PrintMode)} className="h-8 min-w-36 rounded-lg border border-black/10 bg-white px-2 font-black text-black outline-none dark:border-white/15 dark:bg-[#24242A] dark:text-white" aria-label="Contenuto da stampare">
+                    <option value="both">Barcode + info</option>
+                    <option value="barcode">Solo barcode</option>
+                    <option value="info">Solo informazioni</option>
+                  </select>
+                </label>
                 <label className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black/55 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/60">
                   <Copy className="size-4" /> Copie
                   <select value={copies} onChange={(event) => setCopies(Number(event.target.value))} className="h-8 rounded-lg border border-black/10 bg-white px-2 font-black text-black outline-none dark:border-white/15 dark:bg-[#24242A] dark:text-white" aria-label="Numero di copie">
@@ -452,6 +641,7 @@ export function BarcodeLabelsManager() {
                         <div className="min-w-0">
                           <p className="truncate font-mono text-sm font-black tracking-wide max-sm:hidden">{label.code}</p>
                           <p className="mt-1 truncate text-xs font-bold text-black/50 dark:text-white/55">{label.title || "Senza nome"}</p>
+                          <span className="mt-1.5 inline-flex rounded-full bg-[#FFF0F6] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#A93469] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]">{label.collection?.name || label.typology || "Altro"}</span>
                           {label.color || label.weight || label.length || label.typology ? <p className="mt-1 truncate text-[10px] font-semibold text-black/40 dark:text-white/45">{[label.color, label.weight, label.length, label.typology].filter(Boolean).join(" · ")}</p> : null}
                           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-black/35 dark:text-white/35">
                             <span className="inline-flex items-center gap-1"><Clock3 className="size-3" /> Creata {formatDate(label.created_at)}</span>
@@ -472,7 +662,7 @@ export function BarcodeLabelsManager() {
                 </div>
               ) : (
                 <div className="grid min-h-72 place-items-center px-6 text-center">
-                  <div><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]"><Barcode className="size-7" /></span><p className="mt-4 text-sm font-black">{query ? "Nessuna etichetta trovata" : "Nessuna etichetta salvata"}</p><p className="mt-1 text-xs font-semibold text-black/40 dark:text-white/40">{query ? "Prova con un altro codice o nome." : "La prima etichetta apparirà qui dopo il salvataggio."}</p></div>
+                  <div><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F] dark:bg-[#F080B7]/15 dark:text-[#F3A0C8]"><Barcode className="size-7" /></span><p className="mt-4 text-sm font-black">{query || collectionFilter !== "all" ? "Nessuna etichetta trovata" : "Nessuna etichetta salvata"}</p><p className="mt-1 text-xs font-semibold text-black/40 dark:text-white/40">{query || collectionFilter !== "all" ? "Prova un’altra ricerca o collezione." : "La prima etichetta apparirà qui dopo il salvataggio."}</p></div>
                 </div>
               )}
             </div>

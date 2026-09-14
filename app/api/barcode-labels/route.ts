@@ -6,6 +6,25 @@ import { canAccessForUser } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
+type CollectionField = {
+  key: string;
+  label: string;
+  placeholder: string;
+  required: boolean;
+  type: "text" | "buttons";
+  options?: string[];
+};
+
+const collectionFieldOptions: Record<string, CollectionField> = {
+  color: { key: "color", label: "Colore", placeholder: "Biondo", required: true, type: "text" },
+  weight: { key: "weight", label: "Peso", placeholder: "50 g", required: true, type: "text" },
+  length: { key: "length", label: "Lunghezza", placeholder: "55 cm", required: true, type: "text" },
+  productCode: { key: "productCode", label: "Codice", placeholder: "L", required: true, type: "text" },
+  typology: { key: "typology", label: "Tipologia", placeholder: "Tessitura", required: true, type: "text" },
+  bands: { key: "bands", label: "Fasce", placeholder: "9", required: true, type: "text" },
+  price: { key: "price", label: "Prezzo", placeholder: "550 €", required: true, type: "text" },
+};
+
 const barcodeLabelSelect = {
   id: true,
   code: true,
@@ -15,12 +34,33 @@ const barcodeLabelSelect = {
   length: true,
   product_code: true,
   typology: true,
+  collection_id: true,
+  details: true,
   format: true,
   print_count: true,
   last_printed_at: true,
   created_at: true,
   created_by: { select: { name: true } },
+  collection: { select: { id: true, name: true, fields: true } },
 } satisfies Prisma.BarcodeLabelSelect;
+
+function collectionFields(value: Prisma.JsonValue): CollectionField[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const key = String(item.key ?? "");
+    if (key in collectionFieldOptions) return [collectionFieldOptions[key]];
+    if (!/^custom_[a-z0-9_]+$/i.test(key)) return [];
+    const label = String(item.label ?? "").trim().slice(0, 60);
+    if (!label) return [];
+    const type = item.type === "buttons" ? "buttons" : "text";
+    const options = type === "buttons" && Array.isArray(item.options)
+      ? item.options.map(String).map((option) => option.trim()).filter(Boolean).slice(0, 8)
+      : undefined;
+    if (type === "buttons" && !options?.length) return [];
+    return [{ key, label, placeholder: String(item.placeholder ?? "").slice(0, 80), required: true, type, options }];
+  });
+}
 
 async function currentUser() {
   const session = await auth();
@@ -64,9 +104,10 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
 
   const query = request.nextUrl.searchParams.get("q")?.trim() || "";
-  const labels = await prisma.barcodeLabel.findMany({
-    where: query
-      ? {
+  const [labels, collections] = await Promise.all([
+    prisma.barcodeLabel.findMany({
+      where: query
+        ? {
           OR: [
             { code: { contains: query, mode: "insensitive" } },
             { title: { contains: query, mode: "insensitive" } },
@@ -75,13 +116,18 @@ export async function GET(request: NextRequest) {
             { typology: { contains: query, mode: "insensitive" } },
           ],
         }
-      : undefined,
-    select: barcodeLabelSelect,
-    orderBy: { created_at: "desc" },
-    take: 500,
-  });
+        : undefined,
+      select: barcodeLabelSelect,
+      orderBy: { created_at: "desc" },
+      take: 2000,
+    }),
+    prisma.barcodeLabelCollection.findMany({
+      select: { id: true, name: true, fields: true, is_default: true },
+      orderBy: [{ is_default: "desc" }, { name: "asc" }],
+    }),
+  ]);
 
-  return NextResponse.json({ labels });
+  return NextResponse.json({ labels, collections });
 }
 
 export async function POST(request: NextRequest) {
@@ -92,23 +138,73 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const action = String(body?.action ?? "create");
 
+    if (action === "createCollection") {
+      const name = requiredDetail(body?.name, "il nome della collezione", 60);
+      const requestedKeys = Array.from(new Set(Array.isArray(body?.fieldKeys) ? body.fieldKeys.map(String) : []));
+      const defaultFields = requestedKeys.flatMap((key) => key in collectionFieldOptions ? [collectionFieldOptions[key]] : []);
+      const requestedCustomFields = Array.isArray(body?.customFields) ? body.customFields : [];
+      const customFields = requestedCustomFields.slice(0, 8).flatMap((item, index): CollectionField[] => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const custom = item as Record<string, unknown>;
+        const label = String(custom.label ?? "").trim().slice(0, 60);
+        if (!label) return [];
+        const type = custom.type === "buttons" ? "buttons" : "text";
+        const options = type === "buttons"
+          ? String(custom.options ?? "").split(",").map((option) => option.trim()).filter(Boolean).slice(0, 8)
+          : undefined;
+        if (type === "buttons" && !options?.length) throw new Error(`Inserisci le risposte per ${label}.`);
+        return [{
+          key: `custom_${Date.now()}_${index}`,
+          label,
+          placeholder: type === "text" ? "Scrivi la risposta" : "",
+          required: true,
+          type,
+          options,
+        }];
+      });
+      const fields = [...defaultFields, ...customFields];
+      if (!fields.length) throw new Error("Scegli almeno una domanda per la collezione.");
+      const duplicate = await prisma.barcodeLabelCollection.findFirst({
+        where: { name: { equals: name, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (duplicate) throw new Error("Esiste già una collezione con questo nome.");
+      const collection = await prisma.barcodeLabelCollection.create({
+        data: { name, fields, created_by_id: user.id },
+        select: { id: true, name: true, fields: true, is_default: true },
+      });
+      return NextResponse.json({ collection }, { status: 201 });
+    }
+
     if (action === "create") {
       const code = validCode(body?.code);
       const title = String(body?.title ?? "").trim().slice(0, 120) || null;
-      const color = requiredDetail(body?.color, "il colore");
-      const weight = requiredDetail(body?.weight, "il peso");
-      const length = requiredDetail(body?.length, "la lunghezza");
-      const productCode = requiredDetail(body?.productCode, "il codice prodotto");
-      const typology = requiredDetail(body?.typology, "la tipologia");
+      const collectionId = requiredDetail(body?.collectionId, "la collezione");
+      const collection = await prisma.barcodeLabelCollection.findUnique({
+        where: { id: collectionId },
+        select: { fields: true },
+      });
+      if (!collection) throw new Error("La collezione selezionata non è più disponibile.");
+      const fields = collectionFields(collection.fields);
+      if (!fields.length) throw new Error("La collezione non contiene domande valide.");
+      const suppliedDetails = body?.details && typeof body.details === "object" && !Array.isArray(body.details)
+        ? body.details as Record<string, unknown>
+        : {};
+      const details = Object.fromEntries(fields.map((field) => [
+        field.key,
+        requiredDetail(suppliedDetails[field.key], `il campo ${field.label.toLocaleLowerCase("it")}`),
+      ]));
       const label = await prisma.barcodeLabel.create({
         data: {
           code,
           title,
-          color,
-          weight,
-          length,
-          product_code: productCode,
-          typology,
+          color: details.color || null,
+          weight: details.weight || null,
+          length: details.length || null,
+          product_code: details.productCode || null,
+          typology: details.typology || null,
+          collection_id: collectionId,
+          details,
           created_by_id: user.id,
         },
         select: barcodeLabelSelect,
