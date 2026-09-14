@@ -432,7 +432,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
         <div className="mt-auto hidden shrink-0 pt-3 xl:block">
           <LogoutButton
-            className="sidebar-logout flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/[0.035] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[color:var(--dark-sidebar-text)] transition hover:border-red-400/25 hover:bg-red-500/15 hover:text-red-200"
+            className="sidebar-logout flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/[0.035] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[color:var(--sidebar-text)] transition hover:border-red-400/25 hover:bg-red-500/15 hover:text-red-200"
             redirectTo={isPcCassa ? pcProfileChooserHref : undefined}
             skipSignOut={isPcCassa}
             label={isPcCassa ? "Cambia profilo" : "Esci"}
