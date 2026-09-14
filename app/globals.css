@@ -2187,7 +2187,7 @@ textarea {
 /* Sidebar globale: superficie piena, pulita e configurabile dal Branding. */
 @media (min-width: 1280px) {
   .app-liquid-sidebar {
-    border: 1px solid color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 10%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--primary, #ffa8dd) 58%, transparent) !important;
     border-radius: 28px;
     background: var(--user-sidebar-color, var(--light-sidebar, #ffffff)) !important;
     box-shadow: none;
