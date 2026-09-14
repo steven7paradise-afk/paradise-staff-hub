@@ -32,7 +32,22 @@ export const CLIENT_CONTROL_FIELD_IDS = {
   clientPhoto: "client_control_photo",
 } as const;
 
-export const CLIENT_CONTROL_DISCOVERY_OPTIONS = ["TikTok", "ChatGPT", "Google", "Altro"] as const;
+export const CLIENT_CONTROL_DISCOVERY_OPTIONS = [
+  "Instagram",
+  "TikTok",
+  "Facebook",
+  "YouTube",
+  "Pinterest",
+  "Snapchat",
+  "Threads",
+  "X (Twitter)",
+  "LinkedIn",
+  "WhatsApp",
+  "Telegram",
+  "Google",
+  "ChatGPT",
+  "Altro",
+] as const;
 
 export const CLIENT_CONTROL_FORM_FIELDS = [
   {
@@ -216,6 +231,15 @@ export async function ensureClientControlForm(createdById?: string | null) {
     const hasDiscoveryFields =
       currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.discoverySource) &&
       currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.discoveryOther);
+    const discoverySourceField = currentFields.find(
+      (field) => field.id === CLIENT_CONTROL_FIELD_IDS.discoverySource,
+    );
+    const discoverySourceOptions = Array.isArray(discoverySourceField?.options)
+      ? discoverySourceField.options.map(String)
+      : [];
+    const hasDiscoveryOptions = CLIENT_CONTROL_DISCOVERY_OPTIONS.every(
+      (option) => discoverySourceOptions.includes(option),
+    );
     const hasPaymentVerificationFields = currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.paymentMethod);
     const paymentMethodField = currentFields.find(
       (field) => field.id === CLIENT_CONTROL_FIELD_IDS.paymentMethod,
@@ -234,6 +258,7 @@ export async function ensureClientControlForm(createdById?: string | null) {
       JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles) &&
       Boolean(existing.fields) &&
       hasDiscoveryFields &&
+      hasDiscoveryOptions &&
       hasPaymentVerificationFields &&
       hasManualPaymentMethods;
 
