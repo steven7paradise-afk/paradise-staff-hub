@@ -206,6 +206,7 @@ export function BarcodeLabelsManager() {
           <div class="caption">${escapeHtml(label.title || label.code)}</div>
         </section>
         <section class="label label-back">
+          <div class="back-title">PARADISE BEAUTY</div>
           <dl>
             <div><dt>Colore:</dt><dd>${escapeHtml(label.color || "—")}</dd></div>
             <div><dt>Peso:</dt><dd>${escapeHtml(label.weight || "—")}</dd></div>
@@ -217,7 +218,7 @@ export function BarcodeLabelsManager() {
       `).join("");
 
       printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etichette barcode</title><style>
-        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:grid;place-items:center;padding:2mm 3mm}.label-back dl{width:100%;margin:0;font-size:8px;font-weight:700;line-height:3.7mm}.label-back dl div{display:grid;grid-template-columns:16mm 1fr;gap:1mm}.label-back dt,.label-back dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.label-back dt{font-weight:800}.label-back dd{font-weight:700}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
+        @page{size:50.8mm 25.4mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}.label{width:50.8mm;height:25.4mm;padding:1.5mm 2mm;overflow:hidden;page-break-after:always;break-after:page}.label:last-child{page-break-after:auto;break-after:auto}.label-front{display:flex;flex-direction:column}.barcode{min-height:0;flex:1}.barcode svg{display:block;width:100%;height:100%}.caption{overflow:hidden;text-align:center;font-size:9px;font-weight:800;line-height:3.5mm;white-space:nowrap;text-overflow:ellipsis}.label-back{display:flex;flex-direction:column;padding:1.5mm 3mm}.back-title{text-align:center;font-size:7px;font-weight:900;line-height:2.8mm;letter-spacing:.8px}.label-back dl{width:100%;margin:.3mm 0 0;font-size:7.5px;font-weight:700;line-height:3.25mm}.label-back dl div{display:grid;grid-template-columns:16mm 1fr;gap:1mm}.label-back dt,.label-back dd{overflow:hidden;margin:0;white-space:nowrap;text-overflow:ellipsis}.label-back dt{font-weight:800}.label-back dd{font-weight:700}@media screen{body{display:flex;flex-direction:column;align-items:center;gap:6mm;padding:10mm}.label{border:1px dashed #bbb;box-shadow:0 3mm 8mm rgba(0,0,0,.08)}}
       </style></head><body>${sections}<script>window.onload=()=>window.print()</script></body></html>`);
       printWindow.document.close();
 
@@ -245,7 +246,9 @@ export function BarcodeLabelsManager() {
     const description = items.length === 1
       ? `l’etichetta ${items[0].code}`
       : `${items.length} etichette selezionate`;
-    if (!window.confirm(`Vuoi eliminare definitivamente ${description}?`)) return;
+    if (!window.confirm(`Conferma 1 di 3: vuoi eliminare ${description}?`)) return;
+    if (!window.confirm(`Conferma 2 di 3: ${description} non sarà più disponibile nell’archivio. Continuare?`)) return;
+    if (!window.confirm(`Conferma 3 di 3: eliminare definitivamente ${description}? Questa operazione non può essere annullata.`)) return;
 
     setDeleting(true);
     setError("");
@@ -368,8 +371,9 @@ export function BarcodeLabelsManager() {
                 </div>
                 <div>
                   <p className="mb-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] text-black/35 dark:text-white/40">Retro</p>
-                  <div className="mx-auto grid aspect-[2/1] w-full max-w-[300px] place-items-center rounded-xl bg-white px-4 py-2 text-black shadow-sm ring-1 ring-black/5">
-                    <dl className="w-full space-y-0.5 text-[9px] font-bold leading-tight">
+                  <div className="mx-auto flex aspect-[2/1] w-full max-w-[300px] flex-col justify-center rounded-xl bg-white px-4 py-2 text-black shadow-sm ring-1 ring-black/5">
+                    <p className="mb-1 text-center text-[8px] font-black uppercase tracking-[0.15em]">Paradise Beauty</p>
+                    <dl className="w-full text-[8px] font-bold leading-tight">
                       {([
                         ["Colore", backDetails.color],
                         ["Peso", backDetails.weight],
