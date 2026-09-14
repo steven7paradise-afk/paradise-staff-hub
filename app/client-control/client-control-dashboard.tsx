@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save, Loader2, RotateCcw, ShieldCheck, ClipboardCheck, Users } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { downloadTeamBonusReportPdf } from "@/lib/client-control-bonus-pdf";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
+import { previousPayrollMonth, type TeamBonusReport } from "@/lib/team-bonus-report";
 import { cn } from "@/lib/utils";
-import { jsPDF } from "jspdf";
 
 type Field = {
   id: string;
@@ -147,8 +148,10 @@ export function ClientControlDashboard({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const defaultReportPeriod = previousPayrollMonth(new Date());
+  const [selectedMonth, setSelectedMonth] = useState(defaultReportPeriod.monthIndex);
+  const [selectedYear, setSelectedYear] = useState(defaultReportPeriod.year);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   const monthsList = [
     { value: 0, label: "Gennaio" },
@@ -209,146 +212,23 @@ export function ClientControlDashboard({
     ? { salon: "Tutti i saloni", responses: analyticsResponses.length, paid: salons.reduce((sum, item) => sum + item.paid, 0), staff: allStaff }
     : salons.find((item) => item.salon === activeSalon) ?? { salon: activeSalon, responses: 0, paid: 0, staff: [] };
 
-  const handleDownloadStatement = () => {
-    const monthLabel = monthsList.find((m) => m.value === selectedMonth)?.label || "Mese";
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-
-    const primaryColor = [15, 16, 20];
-    const accentColor = [243, 155, 209];
-    const mutedColor = [110, 110, 115];
-    const tableHeaderBg = [255, 241, 245];
-
-    // Header Title Band
-    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.rect(0, 0, 210, 40, "F");
-
-    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.text("PARADISE HAIR & SPA", 15, 18);
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text("Estratto Conto - Controllo Cliente", 15, 25);
-    doc.text(`Periodo: ${monthLabel.toUpperCase()} ${selectedYear}`, 15, 31);
-
-    doc.setTextColor(200, 200, 200);
-    doc.setFontSize(9);
-    doc.text(`Generato il: ${new Date().toLocaleDateString("it-IT")}`, 150, 18);
-    doc.text(`Sede: ${activeSalon.toUpperCase()}`, 150, 23);
-
-    // Summary Box
-    doc.setFillColor(248, 249, 250);
-    doc.roundedRect(15, 50, 180, 25, 3, 3, "F");
-    
-    doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.text("SCHEDE COMPILATE", 20, 57);
-    doc.text("INCASSO REGISTRATO", 65, 57);
-    doc.text("COLLABORATORI", 115, 57);
-    doc.text("CHECK BONUS", 160, 57);
-
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text(String(selectedSalon?.responses ?? 0), 20, 67);
-    doc.text(money(selectedSalon?.paid ?? 0), 65, 67);
-    doc.text(String(selectedSalon?.staff.length ?? 0), 115, 67);
-    doc.text(String(totalChecks), 160, 67);
-
-    // Section title
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("Dettaglio Produttività Collaboratori", 15, 90);
-
-    // Table Headers
-    const startY = 96;
-    doc.setFillColor(tableHeaderBg[0], tableHeaderBg[1], tableHeaderBg[2]);
-    doc.rect(15, startY, 180, 8, "F");
-
-    doc.setTextColor(198, 97, 112);
-    doc.setFontSize(8.5);
-    doc.setFont("helvetica", "bold");
-    
-    doc.text("COLLABORATORE", 18, startY + 5.5);
-    doc.text("SERVIZI", 70, startY + 5.5);
-    doc.text("NOTE/FOTO", 90, startY + 5.5);
-    doc.text("PRODOTTI", 112, startY + 5.5);
-    doc.text("RECENSIONI", 134, startY + 5.5);
-    doc.text("CONSUL.", 156, startY + 5.5);
-    doc.text("BONUS TOT", 175, startY + 5.5);
-
-    doc.setDrawColor(230, 230, 230);
-    doc.setLineWidth(0.3);
-    doc.line(15, startY + 8, 195, startY + 8);
-
-    let currentY = startY + 8;
-    const staffList = selectedSalon?.staff || [];
-
-    if (staffList.length === 0) {
-      doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text("Nessun dato registrato per questo mese.", 15, currentY + 10);
-    } else {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-
-      staffList.forEach((staff, index) => {
-        if (index % 2 === 1) {
-          doc.setFillColor(252, 252, 252);
-          doc.rect(15, currentY, 180, 8, "F");
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.text(staff.name, 18, currentY + 5.5);
-        doc.setFont("helvetica", "normal");
-        
-        doc.text(String(staff.services), 70, currentY + 5.5);
-        doc.text(String(staff.notePhoto), 90, currentY + 5.5);
-        doc.text(String(staff.products), 112, currentY + 5.5);
-        doc.text(String(staff.reviews), 134, currentY + 5.5);
-        doc.text(String(staff.consulenze), 156, currentY + 5.5);
-        
-        doc.setFont("helvetica", "bold");
-        doc.text(String(staff.checks), 175, currentY + 5.5);
-        doc.setFont("helvetica", "normal");
-
-        doc.line(15, currentY + 8, 195, currentY + 8);
-        currentY += 8;
-
-        if (currentY > 270 && index < staffList.length - 1) {
-          doc.addPage();
-          currentY = 20;
-          doc.setFillColor(tableHeaderBg[0], tableHeaderBg[1], tableHeaderBg[2]);
-          doc.rect(15, currentY, 180, 8, "F");
-          doc.setTextColor(198, 97, 112);
-          doc.setFont("helvetica", "bold");
-          doc.text("COLLABORATORE", 18, currentY + 5.5);
-          doc.text("SERVIZI", 70, currentY + 5.5);
-          doc.text("NOTE/FOTO", 90, currentY + 5.5);
-          doc.text("PRODOTTI", 112, currentY + 5.5);
-          doc.text("RECENSIONI", 134, currentY + 5.5);
-          doc.text("CONSUL.", 156, currentY + 5.5);
-          doc.text("BONUS TOT", 175, currentY + 5.5);
-          doc.line(15, currentY + 8, 195, currentY + 8);
-          currentY += 8;
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        }
+  const handleDownloadStatement = async () => {
+    setDownloadingReport(true);
+    try {
+      const query = new URLSearchParams({
+        month: String(selectedMonth + 1),
+        year: String(selectedYear),
+        salon: activeSalon,
       });
+      const response = await fetch(`/api/client-control/bonus-report?${query.toString()}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Non è stato possibile creare il report.");
+      downloadTeamBonusReportPdf(data as TeamBonusReport);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Non è stato possibile creare il report.");
+    } finally {
+      setDownloadingReport(false);
     }
-
-    const filename = `estratto_conto_${monthLabel.toLowerCase()}_${selectedYear}.pdf`;
-    doc.save(filename);
   };
 
   const workerReport = useMemo(() => {
@@ -614,8 +494,6 @@ export function ClientControlDashboard({
   }
 
   const maxServices = Math.max(...(selectedSalon?.staff ?? []).map((staff) => staff.services), 1);
-  const totalChecks = selectedSalon?.staff.reduce((sum, staff) => sum + staff.checks, 0) ?? 0;
-
   return (
     <div className="administrative-night-page space-y-6">
       <section className="overflow-hidden rounded-lg border border-black/10 bg-[#111114] text-white shadow-[0_20px_55px_rgba(0,0,0,0.14)]">
@@ -677,11 +555,12 @@ export function ClientControlDashboard({
 
               <button
                 type="button"
-                onClick={handleDownloadStatement}
-                className="ml-auto flex items-center gap-2 rounded-md bg-[#F39BD1] px-4 py-2.5 text-xs font-black text-black shadow-sm transition hover:bg-[#f5add8]"
+                onClick={() => void handleDownloadStatement()}
+                disabled={downloadingReport}
+                className="ml-auto flex items-center gap-2 rounded-md bg-[#F39BD1] px-4 py-2.5 text-xs font-black text-black shadow-sm transition hover:bg-[#f5add8] disabled:cursor-wait disabled:opacity-60"
               >
-                <Download className="size-3.5" />
-                Scarica Estratto Conto PDF
+                {downloadingReport ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                {downloadingReport ? "Creazione report..." : "Scarica report bonus PDF"}
               </button>
             </div>
           </div>
