@@ -40,6 +40,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shopify-orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
+  "/barcode-labels": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
@@ -104,6 +105,8 @@ const legacyAccessRouteMap: Record<string, string> = {
   social: "/social-calendar",
   ordini: "/orders",
   orders: "/orders",
+  "etichette barcode": "/barcode-labels",
+  barcode: "/barcode-labels",
   "ordini shopify": "/shopify-orders",
   "shopify orders": "/shopify-orders",
   appuntamenti: "/appointments",
@@ -224,8 +227,8 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
   });
   (["SUPER_ADMIN", "ADMIN"] as Role[]).forEach((role) => {
     next[role] = {
-      view: Array.from(new Set([...next[role].view, "/fine-giornata"])),
-      edit: Array.from(new Set([...next[role].edit, "/fine-giornata"])),
+      view: Array.from(new Set([...next[role].view, "/fine-giornata", "/barcode-labels"])),
+      edit: Array.from(new Set([...next[role].edit, "/fine-giornata", "/barcode-labels"])),
     };
   });
   (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"] as Role[]).forEach((role) => {

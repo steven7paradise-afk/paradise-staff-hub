@@ -57,6 +57,7 @@ const PAGE_ICONS: Record<string, string> = {
   "/orders": "ShoppingCart",
   "/shopify-orders": "Store",
   "/shipping": "Truck",
+  "/barcode-labels": "Barcode",
   "/appointments": "CalendarCheck",
   "/consulenza-online": "Video",
   "/cash": "DollarSign",
@@ -107,6 +108,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/magazzino": "Magazzino",
   "/foto": "Foto",
   "/shipping": "Spedizioni",
+  "/barcode-labels": "Etichette barcode",
   "/remote": "Controllo remoto",
   "/tables": "Tabelle",
   "/orders": "Ordini",
@@ -161,7 +163,7 @@ const DEFAULT_LAYOUT: SidebarFolder[] = [
   {
     id: "planning",
     title: "Planning & Saloni",
-    routes: ["/schedules", "/orders"],
+    routes: ["/schedules", "/orders", "/barcode-labels"],
     area: "LAVORO",
   },
   {

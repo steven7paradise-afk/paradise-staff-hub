@@ -25,6 +25,18 @@ test("Ordini Shopify ha un permesso separato configurabile", () => {
   assert.equal(defaultRolePermissions().ZERO.view.includes("/shopify-orders"), true);
 });
 
+test("l'archivio barcode resta disponibile agli amministratori", () => {
+  const permissions = normalizeRolePermissions({
+    ADMIN: { view: ["/dashboard"], edit: [] },
+    SUPER_ADMIN: { view: ["/dashboard"], edit: [] },
+  });
+
+  assert.equal(canAccess("/barcode-labels", "DIPENDENTE"), false);
+  assert.equal(permissions.ADMIN.view.includes("/barcode-labels"), true);
+  assert.equal(permissions.ADMIN.edit.includes("/barcode-labels"), true);
+  assert.equal(permissions.SUPER_ADMIN.view.includes("/barcode-labels"), true);
+});
+
 test("la mansione aggiunge permessi senza nascondere quelli del ruolo", () => {
   const permissions = mergePermissionSets(
     { view: ["/dashboard", "/tasks"], edit: ["/tasks"] },
