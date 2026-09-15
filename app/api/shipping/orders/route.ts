@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
+import { cacheShippingOrders, fetchRecentlyLabeledOrders, latestLabelFulfillment } from "@/lib/shipping-label-orders";
+import { shippingBarcodeMap } from "@/lib/shipping-product-barcodes";
 
 export async function GET(request: NextRequest) {
   try {
@@ -78,6 +80,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (shop && token) {
+      try {
+        const labeledOrders = await fetchRecentlyLabeledOrders(shop, token);
+        const existing = new Set(shopifyOrders.map((order) => String(order.id)));
+        const serviceKeywords = /commission|pos|a rate|rate|acconto|caparra|pagamento|salone|trattamento|prenotazione/i;
+        for (const order of labeledOrders) {
+          if (existing.has(String(order.id))) continue;
+          if (order.source_name?.toLowerCase() === "pos" || String(order.tags || "").toLowerCase().includes("pos")) continue;
+          if (!order.shipping_address?.address1 && !order.shipping_lines?.length) continue;
+          if (!order.line_items?.some((item: any) => item.requires_shipping !== false && !serviceKeywords.test(`${item.title || ""} ${item.sku || ""}`))) continue;
+          shopifyOrders.push(order);
+          existing.add(String(order.id));
+        }
+      } catch (error) {
+        console.error("Failed to query recently labeled Shopify orders:", error);
+      }
+    }
+
+    cacheShippingOrders(shopifyOrders);
+    const productBarcodes = await shippingBarcodeMap(prisma, shopifyOrders);
+
     // Get all records from local DB
     const dbShipments = await prisma.shopifyShipment.findMany({
       include: {
@@ -116,7 +139,9 @@ export async function GET(request: NextRequest) {
           quantity: item.quantity ? parseInt(item.quantity) : 1,
           price: item.price ? parseFloat(item.price) : 0,
           sku: item.sku || "",
-          barcode: item.variant_id ? String(item.variant_id) : (item.sku || String(item.id)),
+          variantId: item.variant_id ? String(item.variant_id) : "",
+          barcode: item.variant_id ? (productBarcodes.get(String(item.variant_id))?.barcode || item.sku || "") : (item.sku || ""),
+          imageUrl: item.variant_id ? (productBarcodes.get(String(item.variant_id))?.imageUrl || null) : null,
         }));
 
       const addressObj = order.shipping_address || order.billing_address || {};
@@ -132,6 +157,7 @@ export async function GET(request: NextRequest) {
       };
 
       const shippingMethod = order.shipping_lines?.[0]?.title || "Spedizione Standard";
+      const label = latestLabelFulfillment(order);
 
       return {
         shopifyOrderId: orderIdStr,
@@ -148,12 +174,13 @@ export async function GET(request: NextRequest) {
         shippingAddress,
         lineItems,
         // Status from DB if present, else default UNFULFILLED
-        status: dbRecord?.status || "UNFULFILLED",
+        status: dbRecord?.status || (label ? "PACKING" : "UNFULFILLED"),
         verifiedBarcodes: (dbRecord?.verified_barcodes as string[]) || [],
         photoUrl: dbRecord?.photo_url || null,
+        proofPhotoUrl: dbRecord?.proof_photo_url || null,
         notes: dbRecord?.notes || null,
-        trackingNumber: dbRecord?.tracking_number || null,
-        courier: dbRecord?.courier || null,
+        trackingNumber: dbRecord?.tracking_number || label?.tracking_number || null,
+        courier: dbRecord?.courier || label?.tracking_company || null,
         packedBy: dbRecord?.packed_by || null,
       };
     });
@@ -179,6 +206,7 @@ export async function GET(request: NextRequest) {
           status: dbRec.status,
           verifiedBarcodes: (dbRec.verified_barcodes as string[]) || [],
           photoUrl: dbRec.photo_url || null,
+          proofPhotoUrl: dbRec.proof_photo_url || null,
           notes: dbRec.notes || null,
           trackingNumber: dbRec.tracking_number || null,
           courier: dbRec.courier || null,

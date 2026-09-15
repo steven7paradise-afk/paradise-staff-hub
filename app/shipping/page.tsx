@@ -4,10 +4,13 @@ import { ShippingManager } from "@/components/shipping-manager";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
+import { cacheShippingOrders, fetchRecentlyLabeledOrders, latestLabelFulfillment } from "@/lib/shipping-label-orders";
+import { shippingBarcodeMap } from "@/lib/shipping-product-barcodes";
 
 export const dynamic = "force-dynamic";
 
-export default async function ShippingPage() {
+export default async function ShippingPage({ searchParams }: { searchParams: Promise<{ ordine?: string }> }) {
+  const requestedOrderId = (await searchParams).ordine || null;
   const session = await auth();
   if (!session?.user?.id || !session.user.role) redirect("/login");
 
@@ -86,6 +89,29 @@ export default async function ShippingPage() {
     }
   }
 
+  // Recupera anche gli ordini che Shopify ha già marcato evasi alla creazione
+  // dell'etichetta: devono restare lavorabili finché non vengono spediti qui.
+  if (shop && token) {
+    try {
+      const labeledOrders = await fetchRecentlyLabeledOrders(shop, token);
+      const existing = new Set(shopifyOrders.map((order) => String(order.id)));
+      const serviceKeywords = /commission|pos|a rate|rate|acconto|caparra|pagamento|salone|trattamento|prenotazione/i;
+      for (const order of labeledOrders) {
+        if (existing.has(String(order.id))) continue;
+        if (order.source_name?.toLowerCase() === "pos" || String(order.tags || "").toLowerCase().includes("pos")) continue;
+        if (!order.shipping_address?.address1 && !order.shipping_lines?.length) continue;
+        if (!order.line_items?.some((item: any) => item.requires_shipping !== false && !serviceKeywords.test(`${item.title || ""} ${item.sku || ""}`))) continue;
+        shopifyOrders.push(order);
+        existing.add(String(order.id));
+      }
+    } catch (error) {
+      console.error("Failed to query recently labeled Shopify orders:", error);
+    }
+  }
+
+  cacheShippingOrders(shopifyOrders);
+  const productBarcodes = await shippingBarcodeMap(prisma, shopifyOrders);
+
   // Get local shipments records
   const dbShipments = await prisma.shopifyShipment.findMany({
     include: {
@@ -123,7 +149,9 @@ export default async function ShippingPage() {
         quantity: item.quantity ? parseInt(item.quantity) : 1,
         price: item.price ? parseFloat(item.price) : 0,
         sku: item.sku || "",
-        barcode: item.variant_id ? String(item.variant_id) : (item.sku || String(item.id)),
+        variantId: item.variant_id ? String(item.variant_id) : "",
+        barcode: item.variant_id ? (productBarcodes.get(String(item.variant_id))?.barcode || item.sku || "") : (item.sku || ""),
+        imageUrl: item.variant_id ? (productBarcodes.get(String(item.variant_id))?.imageUrl || null) : null,
       }));
 
     const addressObj = order.shipping_address || order.billing_address || {};
@@ -139,6 +167,7 @@ export default async function ShippingPage() {
     };
 
     const shippingMethod = order.shipping_lines?.[0]?.title || "Spedizione Standard";
+    const label = latestLabelFulfillment(order);
 
     return {
       shopifyOrderId: orderIdStr,
@@ -154,12 +183,13 @@ export default async function ShippingPage() {
       shippingMethod,
       shippingAddress,
       lineItems,
-      status: (dbRecord?.status as any) || "UNFULFILLED",
+      status: (dbRecord?.status as any) || (label ? "PACKING" : "UNFULFILLED"),
       verifiedBarcodes: (dbRecord?.verified_barcodes as string[]) || [],
       photoUrl: dbRecord?.photo_url || null,
+      proofPhotoUrl: dbRecord?.proof_photo_url || null,
       notes: dbRecord?.notes || null,
-      trackingNumber: dbRecord?.tracking_number || null,
-      courier: dbRecord?.courier || null,
+      trackingNumber: dbRecord?.tracking_number || label?.tracking_number || null,
+      courier: dbRecord?.courier || label?.tracking_company || null,
       packedBy: dbRecord?.packed_by || null,
     };
   });
@@ -186,6 +216,7 @@ export default async function ShippingPage() {
       status: (dbRecord.status as any) || "UNFULFILLED",
       verifiedBarcodes: (dbRecord.verified_barcodes as string[]) || [],
       photoUrl: dbRecord.photo_url || null,
+      proofPhotoUrl: dbRecord.proof_photo_url || null,
       notes: dbRecord.notes || null,
       trackingNumber: dbRecord.tracking_number || null,
       courier: dbRecord.courier || null,
@@ -195,7 +226,7 @@ export default async function ShippingPage() {
 
   return (
     <AppShell title="Spedizioni" subtitle="Preparazione, verifica e tracciamento degli ordini Shopify." role={role}>
-      <ShippingManager initialOrders={initialOrders} currentUserName={currentUser.name} />
+      <ShippingManager initialOrders={initialOrders} initialOrderId={requestedOrderId} currentUserName={currentUser.name} />
     </AppShell>
   );
 }

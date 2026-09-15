@@ -1177,6 +1177,7 @@ model ShopifyShipment {
   status            String   @default("UNFULFILLED") // UNFULFILLED | PACKING | READY | SHIPPED
   verified_barcodes Json? // Scanned barcodes/SKUs
   photo_url         String? // Google Drive photo URL
+  proof_photo_url   String? // Shipping receipt or handover proof photo URL
   notes             String?
   tracking_number   String?
   courier           String?

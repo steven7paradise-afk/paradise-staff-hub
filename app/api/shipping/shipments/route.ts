@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       status,
       verifiedBarcodes,
       photoUrl,
+      proofPhotoUrl,
       notes,
       trackingNumber,
       courier,
@@ -34,11 +35,13 @@ export async function POST(request: NextRequest) {
     if (!shopifyOrderId || !orderName) {
       return NextResponse.json({ error: "Dati ordine mancanti." }, { status: 400 });
     }
-
     const existingRecord = await prisma.shopifyShipment.findUnique({
       where: { shopify_order_id: String(shopifyOrderId) },
-      select: { shipped_at: true },
+      select: { shipped_at: true, status: true },
     });
+    if (status === "SHIPPED" && existingRecord?.status !== "SHIPPED" && (!String(courier ?? "").trim() || !String(trackingNumber ?? "").trim())) {
+      return NextResponse.json({ error: "Per segnare l’ordine come spedito servono il corriere e il tracking dell’etichetta. Il numero ordine Shopify non è un tracking." }, { status: 400 });
+    }
     const shippedAt = status === "SHIPPED" ? (existingRecord?.shipped_at ?? new Date()) : status ? null : undefined;
 
     const record = await prisma.shopifyShipment.upsert({
@@ -50,6 +53,7 @@ export async function POST(request: NextRequest) {
         status: status ?? undefined,
         verified_barcodes: verifiedBarcodes ?? undefined,
         photo_url: photoUrl ?? undefined,
+        proof_photo_url: proofPhotoUrl ?? undefined,
         notes: notes ?? undefined,
         tracking_number: trackingNumber ?? undefined,
         courier: courier ?? undefined,
@@ -64,6 +68,7 @@ export async function POST(request: NextRequest) {
         status: status || "UNFULFILLED",
         verified_barcodes: verifiedBarcodes || [],
         photo_url: photoUrl || null,
+        proof_photo_url: proofPhotoUrl || null,
         notes: notes || null,
         tracking_number: trackingNumber || null,
         courier: courier || null,
@@ -77,13 +82,24 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // If status is set to SHIPPED and trackingNumber is provided, attempt to fulfill on Shopify
-    if (status === "SHIPPED") {
+    // Register the Shopify fulfillment after a courier tracking number has been provided.
+    if (status === "SHIPPED" && existingRecord?.status !== "SHIPPED") {
       const shop = process.env.SHOPIFY_SHOP_DOMAIN;
       const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
       if (shop && token) {
         try {
+          const orderRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${shopifyOrderId}.json?fields=id,fulfillment_status`, {
+            headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+            cache: "no-store",
+          });
+          // Una etichetta può aver già evaso l'ordine su Shopify. In tal caso
+          // non creare una seconda evasione né inviare un'altra notifica.
+          if (!orderRes.ok) throw new Error(`Shopify order lookup: ${orderRes.status}`);
+          const orderData = await orderRes.json();
+          if (orderData.order?.fulfillment_status === "fulfilled") {
+            return NextResponse.json({ shipment: record });
+          }
           // 1. Get fulfillment orders for this order
           const foRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${shopifyOrderId}/fulfillment_orders.json`, {
             headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
