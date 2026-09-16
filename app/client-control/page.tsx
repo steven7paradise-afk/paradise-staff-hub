@@ -69,6 +69,9 @@ export default async function ClientControlPage({ searchParams }: { searchParams
     select: {
       id: true,
       name: true,
+      role: true,
+      photo_url: true,
+      location: { select: { name: true } },
     },
   });
 
@@ -94,6 +97,15 @@ export default async function ClientControlPage({ searchParams }: { searchParams
     },
   }));
 
+  const corsoStaff = activeStaff.filter((employee) => {
+    if (["ZERO", "SUPER_ADMIN", "ADMIN", "MAGAZZINO"].includes(employee.role)) return false;
+    const locationName = employee.location?.name
+      ?.normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase() ?? "";
+    return locationName.includes("corso") || locationName.includes("buenos");
+  });
+
   return (
     <AppShell
       title="Controllo Cliente"
@@ -105,6 +117,10 @@ export default async function ClientControlPage({ searchParams }: { searchParams
         initialResponses={serializedResponses as any}
         canDelete={allowedRoles.has(role)}
         employeeNames={activeStaff.map((employee) => employee.name).filter((name): name is string => Boolean(name?.trim()))}
+        corsoStaffNames={corsoStaff.map((employee) => employee.name).filter((name): name is string => Boolean(name?.trim()))}
+        staffProfiles={corsoStaff
+          .filter((employee): employee is typeof employee & { name: string } => Boolean(employee.name?.trim()))
+          .map((employee) => ({ name: employee.name, photoUrl: employee.photo_url }))}
         dashboardDateFilter={params.date === "today" ? "today" : null}
         dashboardHourFilter={/^([01]\d|2[0-3])$/.test(params.hour || "") ? params.hour! : null}
       />
