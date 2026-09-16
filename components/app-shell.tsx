@@ -72,6 +72,7 @@ const nav = [
   { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/recruitment", label: "Talent System", iconName: "UserPlus", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
   { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
+  { href: "/registro-giornaliero", label: "Registro giornaliero", iconName: "CalendarCheck", roles: ["SUPER_ADMIN"], section: "Generale" },
   { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/requests", label: "Ferie e permessi", iconName: "ShieldCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
   { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
@@ -274,6 +275,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
 
   let sidebarConfig = resolveSidebarLayout(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
+  if (sidebarConfig && currentRole === "SUPER_ADMIN") {
+    const primaryIndex = sidebarConfig.findIndex(section => /principale/i.test(section.title) || section.routes.includes("/dashboard"));
+    sidebarConfig = sidebarConfig.map((section, index) => ({ ...section, routes: [
+      ...section.routes.filter(route => route !== "/registro-giornaliero"),
+      ...(index === (primaryIndex < 0 ? 0 : primaryIndex) ? ["/registro-giornaliero"] : []),
+    ] }));
+  }
   if (
     (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) || effectivePermissionSet?.view.includes("/fine-giornata"))
     && sidebarConfig
@@ -377,6 +385,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     badge: item.href === "/requests" ? requestActions : undefined,
   }));
   let effectiveSidebarConfig = sidebarConfig;
+  if (currentRole !== "SUPER_ADMIN") sidebarItems = sidebarItems.filter(item => item.href !== "/registro-giornaliero");
   if (isFormerEmployee) {
     sidebarItems = sidebarItems.filter((item) => item.href === "/documents");
     effectiveSidebarConfig = [{ id: "ex-dipendente", title: "Documenti disponibili", routes: ["/documents"] }];

@@ -25,6 +25,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/registro-giornaliero": ["SUPER_ADMIN"],
   "/work-hours": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/schedules": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/social-calendar": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
@@ -238,6 +239,10 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
     };
   });
   next.ZERO = defaults.ZERO;
+  next.SUPER_ADMIN.view = Array.from(new Set([...next.SUPER_ADMIN.view, "/registro-giornaliero"]));
+  for (const role of Object.keys(next) as Role[]) {
+    if (role !== "SUPER_ADMIN") next[role].view = next[role].view.filter(route => route !== "/registro-giornaliero");
+  }
   return next;
 }
 
