@@ -44,6 +44,7 @@ export function CommunicationComposer({
   const [targetId, setTargetId] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [bannerUntil, setBannerUntil] = useState("");
   const [customLinkUrl, setCustomLinkUrl] = useState("");
   const [attachedFileUrl, setAttachedFileUrl] = useState("");
   const [attachedFileName, setAttachedFileName] = useState("");
@@ -113,6 +114,7 @@ export function CommunicationComposer({
           targetId,
           title: title.trim(),
           message: publishedMessage,
+          bannerUntil,
           actionUrl: customLinkUrl.trim() || attachedFileUrl || "/notifications",
         }),
       });
@@ -282,6 +284,16 @@ export function CommunicationComposer({
                   </select>
                 </label>
               ) : null}
+            </section>
+
+            <section className="rounded-xl border border-black/10 bg-white p-5">
+              <h2 className="text-sm font-semibold">Durata del banner</h2>
+              <p className="mt-2 text-sm leading-6 text-black/60">Visibile per 3 giorni dalla pubblicazione. Scegli una data solo per prolungarlo.</p>
+              <label className="mt-4 block text-sm font-medium">
+                Visibile fino al <span className="font-normal text-black/50">(facoltativo)</span>
+                <input type="date" value={bannerUntil} onChange={(event) => setBannerUntil(event.target.value)} disabled={sending} className="mt-2 h-11 w-full rounded-lg border border-black/15 bg-white px-3 outline-none focus:border-[#C13F75]" />
+              </label>
+              <p className="mt-3 text-xs text-black/50">{bannerUntil ? `Fino al ${bannerUntil.split("-").reverse().join("/")}, a fine giornata (ora italiana).` : "Scadenza automatica dopo 72 ore. La comunicazione resta nell’archivio."}</p>
             </section>
 
             <section className="overflow-hidden border border-black/10 bg-white">

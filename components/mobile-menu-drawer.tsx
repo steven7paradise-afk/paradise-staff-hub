@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { BriefcaseBusiness, Search, ChevronDown, Menu, UserRound, X } from "lucide-react";
@@ -8,6 +8,7 @@ import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
 import { ThemeToggleButton } from "./top-controls";
+import { LogoutButton } from "./logout-button";
 
 type MobileMenuDrawerProps = {
   logoUrl?: string | null;
@@ -18,7 +19,9 @@ type MobileMenuDrawerProps = {
   colleagues?: Array<{ id: string; name: string; photo_url: string | null }>;
   items: Array<{ href: string; label: string; iconName: string; section?: string; badge?: number }>;
   sidebarConfig?: Array<{ id: string; title: string; routes: string[]; labels?: Record<string, string>; area?: "LAVORO" | "PERSONALE" }> | null;
-  logoutButton: ReactNode;
+  logoutRedirectTo?: string;
+  logoutSkipSignOut?: boolean;
+  logoutLabel?: string;
   homeHref?: string;
   profileHref?: string;
 };
@@ -32,7 +35,9 @@ export function MobileMenuDrawer({
   colleagues = [],
   items,
   sidebarConfig = null,
-  logoutButton,
+  logoutRedirectTo,
+  logoutSkipSignOut = false,
+  logoutLabel = "Esci",
   homeHref = "/dashboard",
   profileHref = "/profile",
 }: MobileMenuDrawerProps) {
@@ -315,7 +320,13 @@ export function MobileMenuDrawer({
             </Link>
             <ThemeToggleButton className="mobile-sidebar-theme grid w-12 shrink-0 place-items-center rounded-xl border transition active:scale-95" />
           </div>
-          {logoutButton}
+          <LogoutButton
+            className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200"
+            redirectTo={logoutRedirectTo}
+            skipSignOut={logoutSkipSignOut}
+            label={logoutLabel}
+            title={logoutSkipSignOut ? "Torna alla selezione profilo" : "Esci"}
+          />
         </div>
       </div>
     </div>

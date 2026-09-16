@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell } from "lucide-react";
+import { Bell, Megaphone, X } from "lucide-react";
 
 type LatestNotification = {
   id: string;
@@ -83,6 +83,8 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
   // Notification.permission during initialization causes a hydration mismatch
   // because the API does not exist while rendering on the server.
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [communication, setCommunication] = useState<Pick<LatestNotification, "id" | "title" | "message"> | null>(null);
+  const dismissedCommunication = useRef<string | null>(null);
 
   useEffect(() => {
     setPermission("Notification" in window ? Notification.permission : "unsupported");
@@ -95,7 +97,7 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
         .register("/sw.js")
         .then((reg) => {
           console.log("Service Worker registered with scope:", reg.scope);
-          if (Notification.permission === "granted") {
+          if ("Notification" in window && Notification.permission === "granted") {
             subscribeToPushNotifications().catch((err) =>
               console.error("Push subscription check failed", err),
             );
@@ -117,7 +119,9 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
     async function check() {
       const response = await fetch("/api/notifications/latest", { cache: "no-store" }).catch(() => null);
       if (!response?.ok || cancelled) return;
-      const data = (await response.json()) as { count: number; latest: LatestNotification | null };
+      const data = (await response.json()) as { count: number; latest: LatestNotification | null; communication?: Pick<LatestNotification, "id" | "title" | "message"> | null };
+      if (cancelled) return;
+      setCommunication(data.communication?.id === dismissedCommunication.current ? null : data.communication ?? null);
       const latestId = data.latest?.id ?? null;
       const lastShownId = typeof window !== "undefined" ? localStorage.getItem("last_shown_notification_id") : null;
 
@@ -150,12 +154,14 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
       lastCount.current = data.count;
     }
 
-    const first = window.setTimeout(check, 5000);
-    const interval = window.setInterval(check, 30000);
+    void check();
+    const interval = window.setInterval(check, 15000);
+    const onFocus = () => { void check(); };
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
-      window.clearTimeout(first);
       window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
@@ -174,9 +180,16 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
     }
   }
 
-  if (permission === "granted" || permission === "unsupported") return null;
-
   return (
+    <>
+    {communication && <aside aria-label="Nuova comunicazione" aria-live="polite" className="fixed inset-x-3 bottom-20 z-50 mx-auto max-w-lg rounded-xl border border-black/10 bg-white p-4 text-[#181719] shadow-xl sm:left-auto sm:right-5 sm:mx-0 sm:w-[420px]">
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#F8EDF2] text-[#A93469]"><Megaphone className="size-5" aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#A93469]">Nuova comunicazione</p><h2 className="mt-1 break-words text-sm font-semibold">{communication.title}</h2><p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-slate-500">{communication.message.split("📄 ALLEGATO DRIVE:")[0]}</p><a href={`/notifications?communication=${encodeURIComponent(communication.id)}`} className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-[#A93469] hover:underline">Leggi comunicazione →</a></div>
+        <button type="button" onClick={() => { dismissedCommunication.current = communication.id; setCommunication(null); }} aria-label="Nascondi banner senza segnare come letta" className="grid size-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"><X className="size-4" /></button>
+      </div>
+    </aside>}
+    {permission !== "granted" && permission !== "unsupported" &&
     <button
       type="button"
       onClick={enableNotifications}
@@ -184,6 +197,7 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
     >
       <Bell className="size-4" />
       Attiva notifiche
-    </button>
+    </button>}
+    </>
   );
 }

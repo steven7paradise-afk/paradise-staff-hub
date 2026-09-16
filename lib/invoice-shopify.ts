@@ -27,6 +27,7 @@ export async function enrichCompanyInvoiceIdentity(answers: Record<string, unkno
     invoice_address: company.address,
     ...(company.taxNumber ? { invoice_fiscal_code: company.taxNumber } : {}),
     invoice_vat_verified_by: company.source,
+    ...(company.warning ? { invoice_notes: clean(answers.invoice_notes).includes(company.warning) ? answers.invoice_notes : [clean(answers.invoice_notes), company.warning].filter(Boolean).join("\n") } : {}),
   };
 }
 

@@ -419,15 +419,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             sidebarConfig={effectiveSidebarConfig}
             homeHref={isFormerEmployee ? "/documents" : "/dashboard"}
             profileHref="/profile"
-            logoutButton={
-              <LogoutButton
-                className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200"
-                redirectTo={isPcCassa ? pcProfileChooserHref : undefined}
-                skipSignOut={isPcCassa}
-                label={isPcCassa ? "Cambia profilo" : "Esci"}
-                title={isPcCassa ? "Torna alla selezione profilo" : "Esci"}
-              />
-            }
+            logoutRedirectTo={isPcCassa ? pcProfileChooserHref : undefined}
+            logoutSkipSignOut={isPcCassa}
+            logoutLabel={isPcCassa ? "Cambia profilo" : "Esci"}
           />
         </div>
       )}

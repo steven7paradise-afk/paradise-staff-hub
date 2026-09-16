@@ -694,6 +694,7 @@ model Notification {
   action_url String?
   read       Boolean  @default(false)
   created_at DateTime @default(now())
+  banner_expires_at DateTime?
   user       User     @relation(fields: [user_id], references: [id])
 
   @@map("notifications")

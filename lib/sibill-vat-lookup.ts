@@ -16,7 +16,8 @@ type SibillCounterpartSearch = {
 export type VerifiedVatCompany = ItalianVatCompany & {
   vat: string;
   taxNumber: string;
-  source: "VIES + SIBILL";
+  source: "VIES + SIBILL" | "VIES";
+  warning?: string;
 };
 
 function clean(value: unknown) {
@@ -101,6 +102,16 @@ export function reconcileVatCompanyData(
 
 export async function lookupVerifiedItalianVatCompany(value: unknown) {
   const vies = await lookupItalianVatCompany(value);
+  try {
+    return await lookupSibillCompany(vies);
+  } catch (error) {
+    // Conflicting identities must still be reviewed before invoicing.
+    if (error instanceof ItalianVatLookupError && error.status === 409) throw error;
+    return { ...vies, taxNumber: "", warning: `Controllo Sibill non completato: ${error instanceof Error ? error.message : "Servizio non disponibile."} Dati anagrafici verificati solo con VIES.` };
+  }
+}
+
+async function lookupSibillCompany(vies: ItalianVatCompany & { vat: string }) {
   const token = process.env.SIBILL_API_TOKEN?.trim();
   const baseUrl = (process.env.SIBILL_API_BASE_URL?.trim() || DEFAULT_SIBILL_BASE_URL).replace(/\/$/, "");
   if (!token) {

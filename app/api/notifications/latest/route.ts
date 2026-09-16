@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
+import { BANNER_DEFAULT_DURATION_MS } from "@/lib/communication-banner";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
 
   try {
-    const [count, latest, items] = await Promise.all([
+    const [count, latest, items, communication] = await Promise.all([
       prisma.notification.count({ where: { user_id: session.user.id, read: false } }),
       prisma.notification.findFirst({
         where: { user_id: session.user.id, read: false },
@@ -21,10 +22,19 @@ export async function GET() {
         orderBy: { created_at: "desc" },
         select: { id: true, title: true, message: true, action_url: true, created_at: true, read: true, type: true },
       }),
+      prisma.notification.findFirst({
+        where: { user_id: session.user.id, type: "COMUNICAZIONE", OR: [
+          { banner_expires_at: { gt: new Date() } },
+          { banner_expires_at: null, created_at: { gt: new Date(Date.now() - BANNER_DEFAULT_DURATION_MS) } },
+        ] },
+        orderBy: { created_at: "desc" },
+        select: { id: true, title: true, message: true, created_at: true },
+      }),
     ]);
 
     return NextResponse.json({
       count,
+      communication: communication ? { id: communication.id, title: communication.title, message: communication.message, createdAt: communication.created_at.toISOString() } : null,
       latest: latest
         ? {
             id: latest.id,

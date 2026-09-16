@@ -584,6 +584,7 @@ export function StaffFormsViewer({
         invoice_address: data.address,
         invoice_fiscal_code: data.taxNumber || prev.invoice_fiscal_code || "",
         invoice_vat_verified_by: data.source,
+        ...(data.warning ? { invoice_notes: String(prev.invoice_notes || "").includes(data.warning) ? prev.invoice_notes : [prev.invoice_notes, data.warning].filter(Boolean).join("\n") } : {}),
         invoice_sdi_code: savedCustomer?.sdiCode || prev.invoice_sdi_code || "",
         invoice_pec: savedCustomer?.pec || prev.invoice_pec || "",
       }));
@@ -593,7 +594,7 @@ export function StaffFormsViewer({
         : "";
       setVatLookupStatus({
         success: true,
-        message: `✓ DATI VERIFICATI CON VIES + SIBILL\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}`
+        message: `✓ DATI VERIFICATI CON ${data.source}\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}${data.warning ? `\n⚠ ${data.warning}\nErrore aggiunto alle note della richiesta.` : ""}`
       });
     } catch (err: any) {
       setVatLookupStatus({
@@ -663,7 +664,9 @@ export function StaffFormsViewer({
         if (titles.length > 0) {
           productsNote += `\nProdotti: ${titles.join(", ")}`;
         }
-        if (!isOrderFormLookup) nextAnswers["invoice_notes"] = productsNote;
+        if (!isOrderFormLookup) nextAnswers["invoice_notes"] = String(prev.invoice_notes || "").includes(productsNote)
+          ? prev.invoice_notes
+          : [prev.invoice_notes, productsNote].filter(Boolean).join("\n");
 
         return nextAnswers;
       });

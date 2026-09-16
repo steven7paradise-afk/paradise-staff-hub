@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { communicationBannerExpiry } from "@/lib/communication-banner";
 
 const senderRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -25,6 +26,16 @@ export async function POST(request: NextRequest) {
   if (!title || !message) {
     return NextResponse.json({ error: "Inserisci titolo e messaggio." }, { status: 400 });
   }
+  if (!["all", "location", "user"].includes(target) || (target !== "all" && !targetId)) {
+    return NextResponse.json({ error: "Seleziona i destinatari." }, { status: 400 });
+  }
+  const createdAt = new Date();
+  let bannerExpiresAt: Date;
+  try {
+    bannerExpiresAt = communicationBannerExpiry(payload.bannerUntil, createdAt);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Data non valida." }, { status: 400 });
+  }
 
   let where = {};
   if (target === "user") where = { id: targetId, active: true };
@@ -40,7 +51,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nessun destinatario trovato." }, { status: 400 });
   }
 
-  const createdAt = new Date();
   await createNotifications(
     users.map((user) => ({
       id: randomUUID(),
@@ -52,6 +62,7 @@ export async function POST(request: NextRequest) {
       action_url: actionUrl,
       read: false,
       created_at: createdAt,
+      banner_expires_at: bannerExpiresAt,
     })),
     {
       deliveryActionUrl: (notification) =>
