@@ -8,7 +8,7 @@ export async function GET(request: import("next/server").NextRequest) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
   const fileId = new URL(request.url).searchParams.get("id")?.trim();
-  if (!fileId) {
+  if (!fileId || !/^[a-zA-Z0-9_-]+$/.test(fileId)) {
     return NextResponse.json({ error: "File mancante" }, { status: 400 });
   }
 
@@ -26,6 +26,26 @@ export async function GET(request: import("next/server").NextRequest) {
       },
     });
   } catch (error) {
+    // Already-public Drive thumbnails also work when local service-account
+    // credentials are unavailable. Keep the application authentication above.
+    try {
+      const thumbnail = await fetch(
+        `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1200`,
+        { signal: AbortSignal.timeout(10_000), cache: "no-store" }
+      );
+      const contentType = thumbnail.headers.get("content-type") || "";
+      if (thumbnail.ok && contentType.startsWith("image/")) {
+        return new NextResponse(await thumbnail.arrayBuffer(), {
+          headers: {
+            "Content-Type": contentType,
+            "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      }
+    } catch {
+      // Private or unavailable files must remain inaccessible.
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Immagine Drive non disponibile" },
       { status: 503 }

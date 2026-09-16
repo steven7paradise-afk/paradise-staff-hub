@@ -10,6 +10,29 @@ import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { cn } from "@/lib/utils";
 import "./staff-forms-editorial.css";
 
+function PickupPhotoPreview({ src, alt, className, children }: {
+  src: string;
+  alt: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const dialogRef = React.useRef<HTMLDialogElement>(null);
+  return <>
+    <button type="button" className={className} aria-label={`Ingrandisci: ${alt}`} onClick={() => dialogRef.current?.showModal()}>{children}</button>
+    <dialog ref={dialogRef} aria-label={alt} className="fixed inset-0 m-auto h-[100dvh] max-h-none w-screen max-w-none border-0 bg-black/95 p-4 text-white backdrop:bg-black/70 sm:p-8">
+      <div className="flex h-full flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium">{alt}</p>
+          <button type="button" autoFocus aria-label="Chiudi foto" onClick={() => dialogRef.current?.close()} className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"><X className="size-5" /></button>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+          <img src={src} alt={alt} className="max-h-full max-w-full rounded-2xl object-contain" />
+        </div>
+      </div>
+    </dialog>
+  </>;
+}
+
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
 }
@@ -60,6 +83,15 @@ type PickupReadyOrder = {
   createdAt?: string;
   summary?: string;
   notes?: string;
+  comments?: Array<{
+    id: string;
+    userName: string;
+    message: string;
+    createdAt: string;
+    imageUrl?: string;
+    imagePreviewUrl?: string;
+    imageName?: string;
+  }>;
   updatedAt?: string;
   status?: string;
   statusLabel?: string;
@@ -221,9 +253,6 @@ function pickupOrderDetails(order: PickupReadyOrder) {
   const fields = order.fields ?? [];
   const seen = new Set<string>();
   const details: Array<{ label: string; value: string }> = [];
-  if (order.notes) {
-    details.push({ label: "Note ordine", value: order.notes });
-  }
   if (order.summary) {
     details.push({ label: "Dettaglio lavoro", value: order.summary });
   }
@@ -1863,7 +1892,7 @@ export function StaffFormsViewer({
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Ritiro ordine</p>
                     <h3 className="mt-1 text-2xl font-black">Consegna al cliente</h3>
-                    <p className="mt-1 text-sm font-semibold text-white/45">Completa solo ordini in stato Arrivato / pronto.</p>
+                    <p className="mt-1 text-sm font-semibold text-white/45">Seleziona l’ordine e conferma il ritiro.</p>
                   </div>
                 </div>
                 <button
@@ -1966,7 +1995,7 @@ export function StaffFormsViewer({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Ordini pronti</p>
-                    <p className="text-xs font-semibold text-white/40">Clicca un ordine per vedere pagato, saldo mancante e dettagli.</p>
+                    <p className="text-xs font-semibold text-white/40">Seleziona quello da consegnare.</p>
                   </div>
                   <button
                     type="button"
@@ -2026,13 +2055,12 @@ export function StaffFormsViewer({
                                 missing && missing > 0 ? "bg-rose-400/15 text-rose-200" : "bg-emerald-300/15 text-emerald-200"
                               )}
                             >
-                              {missing !== null && missing !== undefined ? `Manca ${formatEuro(missing)}` : "Saldo da verificare"}
+                              {missing !== null && missing !== undefined ? missing > 0 ? `Da pagare ${formatEuro(missing)}` : "Saldato" : "Saldo da verificare"}
                             </span>
                           </div>
                           <div className="mt-3 grid gap-2 text-xs font-bold text-white/55 sm:grid-cols-3">
                             <span className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-emerald-100">Ha pagato: {formatEuro(order.payment?.paid ?? 0)}</span>
                             <span className="rounded-xl bg-black/25 px-3 py-2">Totale: {formatEuro(order.payment?.total)}</span>
-                            <span className="rounded-xl bg-black/25 px-3 py-2">Creato: {formatPickupDate(order.createdAt) || "-"}</span>
                           </div>
                         </button>
                       );
@@ -2052,8 +2080,8 @@ export function StaffFormsViewer({
                 )}
               >
                 <span>
-                  <span className="block text-sm font-black">Ha saldato tutto?</span>
-                  <span className="block text-xs font-semibold text-white/40">Conferma obbligatoria prima di completare.</span>
+                  <span className="block text-sm font-black">Pagamento completo</span>
+                  <span className="block text-xs font-semibold text-white/40">Conferma dopo aver verificato il saldo.</span>
                 </span>
                 <span
                   className={cn(
@@ -2072,19 +2100,18 @@ export function StaffFormsViewer({
                     .filter((attachment) => attachment.previewable)
                     .slice(0, 1)
                     .map((attachment, index) => (
-                      <a
+                      <PickupPhotoPreview
                         key={`${attachment.url}-preview-${index}`}
-                        href={attachment.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group block overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                        src={attachment.previewUrl || attachment.url}
+                        alt="Foto dell’ordine"
+                        className="group block w-full overflow-hidden rounded-2xl border border-white/10 bg-black/20"
                       >
-                        <img src={attachment.previewUrl || attachment.url} alt={attachment.name} className="h-48 w-full object-contain transition group-hover:scale-[1.01]" />
+                        <img src={attachment.previewUrl || attachment.url} alt="Foto dell’ordine" onError={event => { event.currentTarget.hidden = true; }} className="h-48 w-full object-contain transition group-hover:scale-[1.01]" />
                         <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                          <p className="truncate text-xs font-black text-white/70">{attachment.name}</p>
+                          <p className="text-xs font-semibold text-white/70">Apri foto dell’ordine</p>
                           <ArrowUpRight className="size-4 shrink-0 text-white/35" />
                         </div>
-                      </a>
+                      </PickupPhotoPreview>
                     ))}
                 </div>
               ) : null}
@@ -2098,15 +2125,13 @@ export function StaffFormsViewer({
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/70">Ordine selezionato</p>
                       <p className="mt-1 text-xl font-black text-white">{pickupSelectedOrder.clientName}</p>
-                      <p className="text-xs font-bold text-white/45">
-                        {pickupSelectedOrder.phone || "Telefono non indicato"} {pickupSelectedOrder.createdBy ? `· Creato da ${pickupSelectedOrder.createdBy}` : ""}
-                      </p>
+                      <p className="text-xs font-bold text-white/45">{pickupSelectedOrder.phone || "Telefono non indicato"}</p>
                     </div>
                     <span
                       className={cn(
                         "rounded-full px-3 py-1 text-xs font-black",
                         pickupSelectedOrder.status === "READY"
-                          ? "bg-blue-300/15 text-blue-100"
+                          ? "bg-blue-50 text-blue-800"
                           : pickupSelectedOrder.status === "COMPLETED"
                             ? "bg-emerald-300/15 text-emerald-100"
                             : "bg-amber-300/15 text-amber-100"
@@ -2149,7 +2174,9 @@ export function StaffFormsViewer({
                     </div>
                   </div>
                   {pickupSelectedOrder.statusAudit || pickupSelectedOrder.pickup ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <details key={`${pickupSelectedOrder.id}-history`} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <summary className="cursor-pointer text-sm font-semibold">Cronologia e consegna</summary>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Ultimo stato</p>
                         <p className="mt-2 text-sm font-black text-white">{pickupSelectedOrder.statusLabel || pickupSelectedOrder.status || "-"}</p>
@@ -2188,10 +2215,11 @@ export function StaffFormsViewer({
                         )}
                       </div>
                     </div>
+                    </details>
                   ) : null}
                   {pickupSelectedOrder.notes ? (
-                    <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/80">Tutte le note ordine</p>
+                    <details key={`${pickupSelectedOrder.id}-notes`} className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
+                      <summary className="cursor-pointer text-sm font-semibold">Note dell’ordine</summary>
                       <div className="mt-3 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                         <div className="space-y-3">
                           {pickupStructuredNotes(pickupSelectedOrder).highlights.map((note, index) => (
@@ -2216,11 +2244,11 @@ export function StaffFormsViewer({
                           </div>
                         ) : null}
                       </div>
-                    </div>
+                    </details>
                   ) : null}
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200/70">Info ordine completa</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                  <details key={`${pickupSelectedOrder.id}-details`} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <summary className="cursor-pointer text-sm font-semibold">Altri dettagli dell’ordine</summary>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       {pickupOrderDetails(pickupSelectedOrder).map((detail, index) => (
                         <div key={`${detail.label}-${index}`} className="rounded-2xl bg-white/[0.06] p-3">
                           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">{detail.label}</p>
@@ -2228,14 +2256,48 @@ export function StaffFormsViewer({
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </details>
+                  <section aria-label="Commenti dello staff" className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <h3 className="text-sm font-semibold">Commenti dello staff <span className="ml-1 text-xs font-normal opacity-60">({pickupSelectedOrder.comments?.length ?? 0})</span></h3>
+                    {pickupSelectedOrder.comments?.length ? (
+                      <ol aria-label="Timeline dei commenti" className="mt-5 ml-1 border-l border-slate-200 dark:border-slate-700">
+                        {[...pickupSelectedOrder.comments].sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0)).map((comment, index) => (
+                          <li key={`${comment.id}-${index}`} className="relative min-w-0 pb-6 pl-5 last:pb-1 sm:pl-6">
+                            <span aria-hidden="true" className="absolute -left-[5px] top-1.5 size-[9px] rounded-full bg-slate-400 ring-4 ring-slate-50 dark:ring-slate-900" />
+                            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3">
+                              <p className="break-words text-sm font-semibold">{comment.userName}</p>
+                              {comment.createdAt ? <time dateTime={comment.createdAt} className="text-xs opacity-60">{formatPickupDate(comment.createdAt)}</time> : null}
+                            </div>
+                            {comment.message ? <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{comment.message}</p> : null}
+                            {comment.imageUrl ? (
+                              <PickupPhotoPreview src={comment.imagePreviewUrl || comment.imageUrl} alt={`Foto allegata da ${comment.userName}`} className="mt-3 block w-fit max-w-full rounded-xl text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                                <img
+                                  key={comment.imagePreviewUrl || comment.imageUrl}
+                                  src={comment.imagePreviewUrl || comment.imageUrl}
+                                  alt={`Foto allegata da ${comment.userName}`}
+                                  loading="lazy"
+                                  onError={(event) => {
+                                    event.currentTarget.hidden = true;
+                                    const fallback = event.currentTarget.nextElementSibling;
+                                    if (fallback instanceof HTMLElement) fallback.hidden = false;
+                                  }}
+                                  className="max-h-64 w-auto max-w-full rounded-xl object-contain"
+                                />
+                                <span hidden className="p-3 text-center text-xs opacity-60">Anteprima non disponibile.</span>
+                              </PickupPhotoPreview>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : <p className="mt-2 text-sm opacity-60">Nessun commento dello staff per questo ordine.</p>}
+                  </section>
                 </div>
               ) : (
                 <div className="grid min-h-56 place-items-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] p-8 text-center">
                   <div>
                     <PackageCheck className="mx-auto size-10 text-white/20" />
                     <p className="mt-3 text-base font-black text-white/65">Seleziona un ordine pronto</p>
-                    <p className="mt-1 text-sm font-semibold text-white/35">Tutti i dettagli compariranno qui a destra.</p>
+                    <p className="mt-1 text-sm font-semibold text-white/35">Cerca per numero o nome cliente.</p>
                   </div>
                 </div>
               )}

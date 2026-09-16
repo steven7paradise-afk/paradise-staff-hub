@@ -137,19 +137,13 @@ function orderNotes(order: any) {
     if (note) notes.push(note);
   }
 
-  const commentNotes = Array.isArray(order.comments)
-    ? order.comments
-        .map((item: any) => plainAnswer(item?.message ?? item?.text ?? item?.comment ?? item?.note))
-        .filter(Boolean)
-    : [];
-
   const activityNotes = Array.isArray(order.activity_log)
     ? order.activity_log
         .map((item: any) => String(item?.note || item?.text || "").trim())
         .filter(Boolean)
     : [];
 
-  return Array.from(new Set([...notes, ...commentNotes, ...activityNotes])).join("\n");
+  return Array.from(new Set([...notes, ...activityNotes])).join("\n");
 }
 
 function attachmentUrl(value: any) {
@@ -233,6 +227,15 @@ function publicOrder(order: any) {
     statusAudit: orderStatusAudit(order),
     summary: orderSummary(order),
     notes: orderNotes(order),
+    comments: Array.isArray(order.comments) ? order.comments.map((comment: any, index: number) => ({
+      id: String(comment?.id ?? `comment-${index}`),
+      userName: String(comment?.userName ?? "Staff"),
+      message: plainAnswer(comment?.message ?? comment?.text ?? comment?.comment ?? comment?.note),
+      createdAt: typeof comment?.createdAt === "string" ? comment.createdAt : "",
+      imageUrl: comment?.imageDriveUrl || comment?.imageUrl || "",
+      imagePreviewUrl: comment?.imageDriveFileId ? `/api/drive-image?id=${encodeURIComponent(comment.imageDriveFileId)}` : comment?.imagePreviewUrl || comment?.imageUrl || "",
+      imageName: comment?.imageName || "Foto allegata",
+    })).filter((comment: any) => comment.message || comment.imageUrl) : [],
     payment: orderPaymentSummary(order),
     attachments: collectOrderAttachments(order),
     pickup: order.answers?.__pickup ?? null,
