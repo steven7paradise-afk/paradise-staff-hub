@@ -45,11 +45,19 @@ export function ShippingCameraScanner({ target, onRead, onClose }: { target: "TR
     let cancelled = false;
     let scanner: Html5Qrcode | null = null;
     let locked = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
     let stopped: Promise<void> | null = null;
     const stop = () => stopped ||= (async () => {
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       if (scanner?.isScanning) await scanner.stop().catch(() => {});
       if (scannerRef.current === scanner) scannerRef.current = null;
     })();
+    const accept = (code: string) => {
+      if (cancelled || locked || !code.trim()) return;
+      locked = true; setState("read");
+      if (navigator.vibrate) navigator.vibrate(60);
+      void stop().then(() => { if (!cancelled) callbacks.current.onRead(code.trim()); });
+    };
     setState("starting"); setError(""); setTorch(false); setTorchAvailable(false); setZoomRange(null);
     const start = lifecycle.current.then(async () => {
       const { Html5Qrcode, Html5QrcodeSupportedFormats: F } = await import("html5-qrcode");
@@ -60,17 +68,38 @@ export function ShippingCameraScanner({ target, onRead, onClose }: { target: "TR
       const portrait = window.matchMedia("(max-width: 640px)").matches;
       // Read the whole camera frame: long labels must not fall outside a tiny crop.
       await scanner.start({ facingMode: "environment" }, {
-        fps: 15, disableFlip: true,
+        fps: 8, disableFlip: true,
         videoConstraints: { facingMode: { ideal: "environment" }, width: { ideal: portrait ? 720 : 1280 }, height: { ideal: portrait ? 1280 : 720 }, aspectRatio: { ideal: portrait ? .75 : 16 / 9 } },
-      }, (code) => {
-        if (cancelled || locked || !code.trim()) return;
-        locked = true; setState("read");
-        if (navigator.vibrate) navigator.vibrate(60);
-        void stop().then(() => { if (!cancelled) callbacks.current.onRead(code.trim()); });
-      }, () => {});
+      }, accept, () => {});
       if (cancelled) { await stop(); return; }
       if (locked) return;
       setState("ready");
+      // Decode sensor pixels directly: fullscreen object-fit must not distort bars.
+      void import("@/lib/shipping-frame-decoder").then(({ createShippingFrameDecoder }) => {
+        if (cancelled || locked) return;
+        const decode = createShippingFrameDecoder(target);
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        let frame = 0;
+        const scan = () => {
+          if (cancelled || locked || !context) return;
+          const video = document.getElementById(id)?.querySelector("video");
+          if (video && video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+            // Alternate full image and a central crop, keeping the original aspect ratio.
+            const sourceHeight = video.videoHeight * (frame++ % 2 ? .6 : 1);
+            const scale = Math.min(1, 1280 / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale); canvas.height = Math.round(sourceHeight * scale);
+            context.drawImage(video, 0, (video.videoHeight - sourceHeight) / 2, video.videoWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+            try {
+              const image = context.getImageData(0, 0, canvas.width, canvas.height);
+              const code = decode(image.data, image.width, image.height);
+              if (code) { accept(code); return; }
+            } catch { /* A frame may be unavailable while the camera changes exposure. */ }
+          }
+          fallbackTimer = setTimeout(scan, 350);
+        };
+        fallbackTimer = setTimeout(scan, 100);
+      }).catch(() => { /* The primary decoder remains active if the extra chunk fails. */ });
       try {
         const capabilities = scanner.getRunningTrackCapabilities() as CameraCapabilities;
         setTorchAvailable(Boolean(capabilities.torch));
