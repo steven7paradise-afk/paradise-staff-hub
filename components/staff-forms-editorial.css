@@ -1,0 +1,85 @@
+/* Invoice workbench: scoped so other operational forms retain their UI. */
+.invoice-editorial-workspace.invoice-editorial-workspace {
+  color: #202936 !important;
+  --editorial-line: #e2e6eb;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-header {
+  background: #f8f9fb !important;
+  padding: 28px 24px;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-body {
+  padding-top: 28px;
+  background: #f4f6f8 !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-field-card {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: 24px !important;
+  border: 1px solid var(--editorial-line) !important;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px rgba(25, 35, 50, .025) !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-description {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: 0 0 20px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace :is(h3, .service-form-wizard-field-card label) {
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-field-card label {
+  font-size: 15px;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace :is(input, select, textarea) {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  font-weight: 400;
+  border-color: #cbd2dc !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace :is(input, select, textarea):focus-visible {
+  outline: 2px solid #a74758 !important;
+  outline-offset: 2px;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace :is(.service-form-wizard-step, .service-form-wizard-option, .service-form-wizard-secondary, .service-form-wizard-customer-row) {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  background: white !important;
+  color: #333 !important;
+  -webkit-text-fill-color: #333 !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace :is(.service-form-wizard-step[data-state="active"], .service-form-wizard-option[data-state="selected"]) {
+  border-color: #a74758 !important;
+  background: #f8edf0 !important;
+  color: #8c3346 !important;
+  -webkit-text-fill-color: #8c3346 !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-customer-list {
+  border-radius: 10px;
+  box-shadow: 0 -3px 12px rgba(25,35,50,.04);
+  max-height: 230px;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-step { width: auto; height: auto; display: flex; gap: 8px; padding: 10px 12px; min-height: 44px; }
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-footer {
+  position: sticky;
+  box-shadow: none;
+  background: white !important;
+}
+.invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-footer :is(button[type="submit"], button:last-child:not(.service-form-wizard-secondary)) {
+  border-radius: 8px;
+  background: #a74758;
+  box-shadow: none;
+  min-height: 44px;
+  font-weight: 600;
+  transform: none;
+}
+@media (max-width: 639px) {
+  .invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-header { padding: 16px; }
+  .invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-header h3 { font-size: 19px; }
+  .invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-field-card { padding: 18px 16px !important; }
+  .invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-footer { gap: 8px; padding-inline: 16px; }
+  .invoice-editorial-workspace.invoice-editorial-workspace .service-form-wizard-footer button { padding-inline: 12px; font-size: 12px; }
+}

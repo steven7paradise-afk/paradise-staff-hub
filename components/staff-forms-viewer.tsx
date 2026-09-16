@@ -8,6 +8,7 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { cn } from "@/lib/utils";
+import "./staff-forms-editorial.css";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
@@ -322,6 +323,7 @@ export function StaffFormsViewer({
   const [editingValue, setEditingValue] = useState<string>("");
   const [customSelectValue, setCustomSelectValue] = useState<string>("");
   const [showPastCustomers, setShowPastCustomers] = useState(false);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const customerSearchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [showPickupModal, setShowPickupModal] = useState(false);
@@ -720,6 +722,10 @@ export function StaffFormsViewer({
     : false;
   const isSelectedOrderForm = isOrderLabelForm(selectedForm);
   const isProfessionalWizardForm = Boolean(selectedForm) && !isCashClosingForm;
+  const isInvoiceWorkspace = Boolean(selectedForm?.name.toUpperCase().includes("FATTURA"));
+  const [invoiceSection, setInvoiceSection] = useState(0);
+  const invoiceSectionFor = (id: string) => ["invoice_shopify_order", "invoice_amount", "invoice_payment_method", "invoice_receipt_ref"].includes(id) ? 1 : id === "invoice_notes" ? 2 : 0;
+  const invoiceSections = ["Cliente e dati fiscali", "Ordine e pagamento", "Note e invio"];
   const isSelectedInvoiceForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("FATTURA") || selectedForm.category.toUpperCase().includes("FATTUR")
     : false;
@@ -837,6 +843,18 @@ export function StaffFormsViewer({
   };
 
   const handleNextOrSubmit = () => {
+    if (isInvoiceWorkspace) {
+      const invalid = visibleFields.find((field) => invoiceSectionFor(field.id) === invoiceSection && !isCurrentFieldValid(field));
+      if (invalid) {
+        setErrorMsg(`Completa e verifica il campo “${invalid.label}”.`);
+        document.getElementById(`invoice-field-${invalid.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      setErrorMsg("");
+      if (invoiceSection < 2) setInvoiceSection(invoiceSection + 1);
+      else handleSubmit();
+      return;
+    }
     const currentField = visibleFields[currentActiveIndex];
     if (!currentField) return;
 
@@ -1026,6 +1044,8 @@ export function StaffFormsViewer({
   };
 
   const handleOpenForm = (form: FormTemplate) => {
+    setCustomerSearchOpen(false);
+    setInvoiceSection(0);
     const isCashClosing = form.name.toUpperCase().includes("CHIUSURA CASSA") || form.category.toUpperCase().includes("CASSA");
     const isClientControl = form.name.toUpperCase().includes("CONTROLLO CLIENTE") || form.category.toUpperCase().includes("QUALITA");
     const isInvoice = form.name.toUpperCase().includes("FATTURA") || form.category.toUpperCase().includes("FATTUR");
@@ -1050,7 +1070,7 @@ export function StaffFormsViewer({
     setActiveFieldIndex(0);
     setCashOrderRows([{ id: `cash-order-${Date.now()}`, order: "", amount: "" }]);
     setActiveCashCustomerIndex(0);
-    setShowPastCustomers(isInvoice && pastCustomers.length > 0);
+    setShowPastCustomers(false);
     setCustomerSearchQuery("");
     setShopifyLookupStatus(null);
   };
@@ -1218,7 +1238,7 @@ export function StaffFormsViewer({
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
     setErrorMsg("");
 
-    if (value && value !== "Altro") {
+    if (!isInvoiceWorkspace && value && value !== "Altro") {
       setTimeout(() => {
         setActiveFieldIndex((prevIndex) => {
           if (prevIndex < visibleFields.length - 1) {
@@ -1248,6 +1268,7 @@ export function StaffFormsViewer({
     // Double check all fields validity
     const invalidField = visibleFields.find((f) => !isCurrentFieldValid(f));
     if (invalidField) {
+      if (isInvoiceWorkspace) setInvoiceSection(invoiceSectionFor(invalidField.id));
       setErrorMsg(`Il campo "${invalidField.label}" è obbligatorio.`);
       const idx = visibleFields.indexOf(invalidField);
       if (idx !== -1) {
@@ -1375,7 +1396,7 @@ export function StaffFormsViewer({
       {/* Tablet cash-register shortcuts */}
       <div className="w-full">
         {/* Unified POS Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+        <div className="service-forms-shortcuts grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
           {cashClosingForm && (
             <button
               type="button"
@@ -2269,6 +2290,7 @@ export function StaffFormsViewer({
           isCashClosingForm && "cash-closing-workspace",
           isProfessionalWizardForm && "service-form-wizard-workspace",
           isProfessionalWizardForm && "service-form-wizard-light",
+          isInvoiceWorkspace && "invoice-editorial-workspace",
           isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
             : isProfessionalWizardForm
@@ -2303,7 +2325,7 @@ export function StaffFormsViewer({
                     <h3 className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">{selectedForm.name}</h3>
                     <p className="mt-1 text-xs font-medium text-slate-500">
                       {visibleFields.length > 0
-                        ? `Domanda ${currentActiveIndex + 1} di ${visibleFields.length} · ${answeredVisibleCount} compilate`
+                        ? isInvoiceWorkspace ? `Sezione ${invoiceSection + 1} di 3 · ${answeredVisibleCount} campi compilati` : `Domanda ${currentActiveIndex + 1} di ${visibleFields.length} · ${answeredVisibleCount} compilate`
                         : "Modulo pronto per la compilazione"}
                     </p>
                   </div>
@@ -2324,17 +2346,17 @@ export function StaffFormsViewer({
                 <div className={cn("mt-5 space-y-3", isCashClosingForm && "mt-3", isProfessionalWizardForm && "xl:mt-12")}>
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
                     <span>Progresso compilazione</span>
-                    <span>{progressPercentage}%</span>
+                    <span>{isInvoiceWorkspace ? Math.round(answeredVisibleCount / visibleFields.length * 100) : progressPercentage}%</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                     <div 
                       className="h-full rounded-full bg-gradient-to-r from-[#A74758] via-[#ff7fb0] to-[#F7DFA7] transition-all duration-500 ease-out" 
-                      style={{ width: `${progressPercentage}%` }}
+                      style={{ width: `${isInvoiceWorkspace ? Math.round(answeredVisibleCount / visibleFields.length * 100) : progressPercentage}%`, ...(isInvoiceWorkspace ? { background: "#171717" } : {}) }}
                     />
                   </div>
                   <div className={cn("flex gap-1.5 overflow-x-auto pb-1", isProfessionalWizardForm && "xl:max-h-[calc(100vh-280px)] xl:flex-col xl:gap-2 xl:overflow-y-auto xl:pr-1")}>
-                    {visibleFields.map((field, index) => {
-                      const isActive = index === currentActiveIndex;
+                    {(isInvoiceWorkspace ? invoiceSections.map((label, index) => ({ id: `invoice-section-${index}`, label, type: "text" as const, required: false })) : visibleFields).map((field, index) => {
+                      const isActive = index === (isInvoiceWorkspace ? invoiceSection : currentActiveIndex);
                       const isDone = field.type === "file"
                         ? Boolean(files[field.id])
                         : Boolean(answers[field.id] !== undefined && answers[field.id] !== null && String(answers[field.id]).trim() !== "");
@@ -2345,6 +2367,7 @@ export function StaffFormsViewer({
                           onClick={() => {
                             setErrorMsg("");
                             setActiveFieldIndex(index);
+                            if (isInvoiceWorkspace) setInvoiceSection(index);
                           }}
                           className={cn(
                             "grid size-8 shrink-0 place-items-center rounded-full border text-[11px] font-black transition",
@@ -2361,7 +2384,7 @@ export function StaffFormsViewer({
                           <span className={cn(isProfessionalWizardForm && "xl:grid xl:size-7 xl:shrink-0 xl:place-items-center xl:rounded-full xl:border xl:border-current/25")}>
                             {isDone && !isActive ? <Check className="size-3.5" /> : index + 1}
                           </span>
-                          {isProfessionalWizardForm && <span className="hidden truncate text-xs font-black xl:block">{field.label}</span>}
+                          {isProfessionalWizardForm && <span className={cn("truncate text-xs font-black xl:block", isInvoiceWorkspace ? "block" : "hidden")}>{field.label}</span>}
                         </button>
                       );
                     })}
@@ -2402,7 +2425,19 @@ export function StaffFormsViewer({
                     : ""
                 )}>
                   <div className="space-y-5">
-                  {selectedForm.description && currentActiveIndex === 0 && !isSelectedOrderForm && (
+                  {isInvoiceWorkspace && invoiceSection === 2 && (
+                    <section className="mx-auto max-w-[960px] border-b border-black/15 py-6" aria-label="Riepilogo richiesta fattura">
+                      <h4 className="text-sm font-medium uppercase tracking-widest">Riepilogo richiesta</h4>
+                      <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+                        <div><dt className="text-slate-500">Intestatario</dt><dd className="mt-1 break-words">{answers.invoice_client_name || "Da completare"}</dd></div>
+                        <div><dt className="text-slate-500">Partita IVA / Codice fiscale</dt><dd className="mt-1">{answers.invoice_client_type?.includes("Partita IVA") ? answers.invoice_vat_number : answers.invoice_fiscal_code || "Da completare"}</dd></div>
+                        <div><dt className="text-slate-500">Ordine Shopify</dt><dd className="mt-1">{answers.invoice_shopify_order || "Da verificare"}</dd></div>
+                        <div><dt className="text-slate-500">Importo da fatturare</dt><dd className="mt-1">{answers.invoice_amount ? `${answers.invoice_amount} €` : "Da completare"}</dd></div>
+                      </dl>
+                      <p className="mt-5 text-xs leading-5 text-slate-500">Controlla i dati prima dell’invio. Puoi tornare alle sezioni precedenti senza perdere la compilazione.</p>
+                    </section>
+                  )}
+                  {selectedForm.description && currentActiveIndex === 0 && !isSelectedOrderForm && !isInvoiceWorkspace && (
                     <div className={cn(
                       "rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600",
                       isProfessionalWizardForm && "service-form-wizard-description"
@@ -2424,13 +2459,13 @@ export function StaffFormsViewer({
                     </div>
                   )}
 
-                  {visibleFields.length > 0 && (() => {
-                    const field = visibleFields[currentActiveIndex];
+                  {visibleFields.length > 0 && (isInvoiceWorkspace ? visibleFields.filter((field) => invoiceSectionFor(field.id) === invoiceSection && (invoiceSection !== 0 || field.id === "invoice_client_type" || Boolean(answers.invoice_client_type))) : [visibleFields[currentActiveIndex]]).map((field) => {
                     if (!field) return null;
 
                     return (
                       <div 
                         key={field.id} 
+                        id={`invoice-field-${field.id}`}
                         className="animate-in fade-in slide-in-from-right-5 duration-300"
                       >
                         <div className={cn(
@@ -2440,10 +2475,10 @@ export function StaffFormsViewer({
                         )}>
                           <div className="mb-5 space-y-2">
                             <span className="inline-flex rounded-full bg-slate-200/50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                              Campo {currentActiveIndex + 1}
+                              {isInvoiceWorkspace ? invoiceSections[invoiceSection] : `Campo ${currentActiveIndex + 1}`}
                             </span>
                             <label className="block text-xl font-black leading-tight text-slate-900 sm:text-2xl">
-                              {isCashClosingForm && field.id === "cash_withdrawn" ? "TOTALE CONTANTI DICHIARATO" : field.label} {field.required && <span className="text-[#A74758]">*</span>}
+                              {isInvoiceWorkspace && field.id === "invoice_client_type" ? "La fattura è per un privato o un’azienda?" : isCashClosingForm && field.id === "cash_withdrawn" ? "TOTALE CONTANTI DICHIARATO" : field.label} {field.required && <span className="text-[#A74758]">*</span>}
                             </label>
                             {field.description && (
                               <p className="text-sm leading-relaxed text-slate-500">
@@ -2561,10 +2596,14 @@ export function StaffFormsViewer({
                           )}
 
                           {field.type === "select" && (
-                            <div className="space-y-2.5 w-full">
+                            <div className={cn("space-y-2.5 w-full", field.id === "invoice_client_type" && "flex flex-col")}>
                               <>
                                 {field.id === "invoice_client_type" && pastCustomers.length > 0 && (
-                                  <div className="mb-5 space-y-2">
+                                  <div className="order-2 space-y-2 pt-3">
+                                    <button type="button" onClick={() => setCustomerSearchOpen((open) => !open)} aria-expanded={customerSearchOpen} aria-controls="invoice-client-search" className="inline-flex min-h-11 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800">
+                                      <Search className="size-4" /> {customerSearchOpen ? "Chiudi ricerca cliente" : "Cerca cliente"}
+                                    </button>
+                                    {customerSearchOpen && <div id="invoice-client-search" className="space-y-2 pt-2">
                                     <label className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">
                                       Cerca cliente registrato
                                     </label>
@@ -2575,11 +2614,11 @@ export function StaffFormsViewer({
                                         type="search"
                                         autoFocus
                                         value={customerSearchQuery}
-                                        onFocus={() => setShowPastCustomers(true)}
-                                        onClick={() => setShowPastCustomers(true)}
+                                        onFocus={() => setShowPastCustomers(Boolean(customerSearchQuery.trim()))}
+                                        onClick={() => setShowPastCustomers(Boolean(customerSearchQuery.trim()))}
                                         onChange={(e) => {
                                           setCustomerSearchQuery(e.target.value);
-                                          setShowPastCustomers(true);
+                                          setShowPastCustomers(Boolean(e.target.value.trim()));
                                         }}
                                         onKeyDown={(e) => {
                                           if (e.key === "Enter") e.preventDefault();
@@ -2589,7 +2628,7 @@ export function StaffFormsViewer({
                                           }
                                         }}
                                         placeholder="Nome, ragione sociale, Partita IVA o Codice Fiscale"
-                                        aria-expanded={showPastCustomers}
+                                        aria-expanded={showPastCustomers && Boolean(customerSearchQuery.trim())}
                                         aria-controls="invoice-customer-results"
                                         className="h-16 w-full rounded-2xl border border-[#A74758]/30 bg-white pl-12 pr-16 text-base font-bold text-slate-800 shadow-[0_10px_30px_rgba(167,71,88,0.08)] outline-none transition focus:border-[#A74758] focus:ring-4 focus:ring-[#A74758]/10"
                                       />
@@ -2598,7 +2637,7 @@ export function StaffFormsViewer({
                                       </span>
                                     </div>
 
-                                    {showPastCustomers && (
+                                    {showPastCustomers && customerSearchQuery.trim() && (
                                       <div id="invoice-customer-results" className={cn(
                                         "max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10",
                                         isProfessionalWizardForm && "service-form-wizard-customer-list"
@@ -2622,7 +2661,7 @@ export function StaffFormsViewer({
                                           }
                                           return filtered.map((cust) => (
                                             <button
-                                              key={`${cust.vatNumber || cust.fiscalCode || cust.name}-${cust.name}`}
+                                              key={`${cust.vatNumber ? "vat" : "cf"}-${cust.vatNumber || cust.fiscalCode || cust.name}-${cust.name}`}
                                               type="button"
                                               onClick={() => handleSelectCustomer(cust)}
                                               className={cn(
@@ -2645,11 +2684,7 @@ export function StaffFormsViewer({
                                       </div>
                                     )}
 
-                                    <div className="flex items-center gap-3 pt-2">
-                                      <div className="h-px flex-1 bg-slate-200" />
-                                      <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">oppure nuovo cliente</span>
-                                      <div className="h-px flex-1 bg-slate-200" />
-                                    </div>
+                                    </div>}
                                   </div>
                                 )}
 
@@ -3086,7 +3121,7 @@ export function StaffFormsViewer({
                         </div>
                       </div>
                     );
-                  })()}
+                  })}
                   </div>
 
                   {isCashClosingForm && currentActiveIndex > 0 && (
@@ -3212,6 +3247,12 @@ export function StaffFormsViewer({
                       type="button"
                       variant="soft"
                       onClick={() => {
+                        if (isInvoiceWorkspace) {
+                          setErrorMsg("");
+                          if (invoiceSection > 0) setInvoiceSection(invoiceSection - 1);
+                          else setSelectedForm(null);
+                          return;
+                        }
                         if (currentActiveIndex > 0) {
                           setErrorMsg("");
                           setActiveFieldIndex(currentActiveIndex - 1);
@@ -3242,7 +3283,7 @@ export function StaffFormsViewer({
                       Annulla
                     </Button>
 
-                    {currentActiveIndex < visibleFields.length - 1 ? (
+                    {(isInvoiceWorkspace ? invoiceSection < 2 : currentActiveIndex < visibleFields.length - 1) ? (
                       <Button
                         type="submit"
                         className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-[#A74758] px-5 py-2 text-sm font-extrabold text-white transition hover:scale-[1.02]"
@@ -3263,7 +3304,7 @@ export function StaffFormsViewer({
                             Invio in corso...
                           </>
                         ) : (
-                          "Invia Risposte"
+                          isInvoiceWorkspace ? "Invia richiesta fattura" : "Invia Risposte"
                         )}
                       </button>
                     )}
