@@ -40,15 +40,16 @@ test("blocks a different VAT number returned by Sibill", () => {
   );
 });
 
-test("blocks conflicting registered locations", () => {
-  assert.throws(
-    () => reconcileVatCompanyData(vies, {
+test("uses Sibill billing location and records differences with VIES", () => {
+  const company = reconcileVatCompanyData(vies, {
       company_name: "CILLO NUNZIA",
       vat_number: "02925550739",
       postal_code: "00100",
       city: "ROMA",
       province_code: "RM",
-    }),
-    (error) => error instanceof ItalianVatLookupError && error.message.includes("Sede aziendale diversa"),
-  );
+    });
+  assert.equal(company.postalCode, "00100");
+  assert.equal(company.city, "ROMA");
+  assert.equal(company.province, "RM");
+  assert.ok(company.warning?.includes("Indirizzo diverso"));
 });

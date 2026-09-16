@@ -72,12 +72,6 @@ export function reconcileVatCompanyData(
   ].some(([viesValue, sibillValue]) =>
     clean(sibillValue) && comparable(viesValue) !== comparable(sibillValue)
   );
-  if (conflictingLocation) {
-    throw new ItalianVatLookupError(
-      "Sede aziendale diversa tra VIES e Sibill. Controlla CAP, città e provincia prima di fatturare.",
-      409,
-    );
-  }
 
   const street = sibillStreet || vies.street;
   const postalCode = sibillPostalCode || vies.postalCode;
@@ -97,6 +91,7 @@ export function reconcileVatCompanyData(
     vat: vies.vat,
     taxNumber: clean(sibill.tax_number).toUpperCase(),
     source: "VIES + SIBILL",
+    ...(conflictingLocation ? { warning: `Indirizzo diverso tra VIES e Sibill. Per la fattura sono stati utilizzati i dati Sibill: ${street}, ${postalCode} ${city} (${province}). Indirizzo VIES: ${vies.address}.` } : {}),
   };
 }
 
