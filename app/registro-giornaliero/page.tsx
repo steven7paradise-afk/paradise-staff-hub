@@ -8,6 +8,8 @@ import { deriveAttendanceState } from "@/lib/attendance-state";
 import { attendanceActualMinutes, currentRomeMinutes, isClosedSchedule, isRestSchedule, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
 import { leaveCoversWholeShift } from "@/lib/register-leave";
+import { countedAttendanceTime } from "@/lib/work-hours";
+import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 
 export const dynamic = "force-dynamic";
 export default async function DailyRegisterPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
@@ -22,11 +24,12 @@ export default async function DailyRegisterPage({ searchParams }: { searchParams
   const day = valid ? candidate : today;
   const start = new Date(`${day}T00:00:00Z`);
   const end = new Date(start.getTime() + 86400000);
-  const [workers, logs, schedules, leaves] = await Promise.all([
+  const [workers, logs, schedules, leaves, clockRules] = await Promise.all([
     prisma.user.findMany({ where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } }, include: { location: true }, orderBy: { name: "asc" } }),
     prisma.attendanceLog.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { timestamp: "asc" } }),
     prisma.scheduleEntry.findMany({ where: { date: { gte: start, lt: end } }, include: { category: true, location: true } }),
     prisma.leaveRequest.findMany({ where: { status: "APPROVED", start_date: { lt: end }, end_date: { gte: start } } }),
+    prisma.setting.findMany({ where: { key: { startsWith: "clock_rule:" } }, select: { key: true, value: true } }),
   ]);
   const rows: RegisterRow[] = workers.filter(w => !/ex[\s-]*dipendent/i.test(`${w.mansione || ""} ${w.employee_status || ""}`)).map(worker => {
     const schedule = schedules.find(s => s.user_id === worker.id);
@@ -50,12 +53,17 @@ export default async function DailyRegisterPage({ searchParams }: { searchParams
     else if (schedule && (isRestSchedule(schedule.category.name, schedule.category.code) || isClosedSchedule(schedule.category.name, schedule.category.code))) { status = "REST"; detail = schedule.category.name; }
     else if (policy.deadlineMinutes !== null) { const overdue = day < today || day === today && currentRomeMinutes() > policy.deadlineMinutes; status = overdue ? "ABSENT" : "WAITING"; detail = overdue ? "Nessuna entrata · giustifica non registrata" : "Il turno deve ancora iniziare"; }
     const clock = (minutes: number | null) => minutes === null ? "—" : `${String(Math.floor(minutes / 60)).padStart(2,"0")}:${String(minutes % 60).padStart(2,"0")}`;
+    const actualEntry = clock(actual);
+    const countedEntry = entry ? countedAttendanceTime(entry) : "—";
+    const entryDisplay = actualEntry !== countedEntry ? `${actualEntry}\nConteggiata ${countedEntry}` : actualEntry;
+    const pauseRule = state.activePause ? parseClockRule(clockRules.find(rule => rule.key === clockRuleKey(state.activePause!.location_id))?.value) : null;
+    const pauseEndsAt = day === today && state.activePause && pauseRule ? new Date(state.activePause.timestamp.getTime() + pauseRule.breakDurationMinutes * 60000).toISOString() : null;
     const pause = state.breaks.map(pair => {
       const from = clock(attendanceActualMinutes(pair.pausa));
       const to = pair.rientro ? clock(attendanceActualMinutes(pair.rientro)) : pair.minutes !== undefined && state.lastExit ? clock(attendanceActualMinutes(state.lastExit)) : null;
       return to ? `${from} – ${to} (${pair.minutes ?? 0} min${pair.rientro ? "" : " · chiusa all’uscita"})` : `${from} · ${day < today ? "Rientro non registrato" : "In corso"}`;
     }).join("\n") || "—";
-    return { id: worker.id, name: worker.name, photoUrl: worker.photo_url, location, shift: plannedStart ? `${plannedStart} – ${plannedEnd || "—"}` : "—", entry: clock(actual), exit: state.lastExit ? new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(state.lastExit.timestamp) : "—", pause, lateMinutes: late, status, detail };
+    return { id: worker.id, name: worker.name, photoUrl: worker.photo_url, location, shift: plannedStart ? `${plannedStart} – ${plannedEnd || "—"}` : "—", entry: entryDisplay, exit: state.lastExit ? new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(state.lastExit.timestamp) : "—", pause, pauseEndsAt, lateMinutes: late, status, detail };
   });
   return <AppShell title="Registro giornaliero" hideHeader><DailyRegister key={day} date={day} rows={rows} updatedAt={new Date().toISOString()} /></AppShell>;
 }

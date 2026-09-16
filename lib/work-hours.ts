@@ -43,6 +43,16 @@ function roundToNearest30Minutes(date: Date): Date {
   return rounded;
 }
 
+export function countedAttendanceTimestamp(log: AttendancePoint): Date {
+  return log.type === "ENTRATA" && log.note?.includes(COUNT_FROM_ACTUAL_ENTRY_MARKER)
+    ? log.timestamp
+    : roundToNearest30Minutes(log.timestamp);
+}
+
+export function countedAttendanceTime(log: AttendancePoint): string {
+  return timeLabel(countedAttendanceTimestamp(log));
+}
+
 function canonicalWorkdayLogs(logs: AttendancePoint[]) {
   const ordered = [...logs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   const entry = ordered.find((log) => log.type === "ENTRATA") ?? null;
@@ -68,9 +78,7 @@ export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
   const lastExitLabel = [...orderedActual].reverse().find((log) => log.type === "USCITA")?.timestamp ?? null;
   const roundedLogs = orderedActual.map((log) => ({
     ...log,
-    timestamp: log.type === "ENTRATA" && log.note?.includes(COUNT_FROM_ACTUAL_ENTRY_MARKER)
-      ? log.timestamp
-      : roundToNearest30Minutes(log.timestamp),
+    timestamp: countedAttendanceTimestamp(log),
   }));
   const ordered = [...roundedLogs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   let enteredAt: Date | null = null;
