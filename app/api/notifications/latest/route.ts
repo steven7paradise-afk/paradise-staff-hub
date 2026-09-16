@@ -22,19 +22,20 @@ export async function GET() {
         orderBy: { created_at: "desc" },
         select: { id: true, title: true, message: true, action_url: true, created_at: true, read: true, type: true },
       }),
-      prisma.notification.findFirst({
+      prisma.notification.findMany({
         where: { user_id: session.user.id, type: "COMUNICAZIONE", OR: [
           { banner_expires_at: { gt: new Date() } },
           { banner_expires_at: null, created_at: { gt: new Date(Date.now() - BANNER_DEFAULT_DURATION_MS) } },
         ] },
         orderBy: { created_at: "desc" },
-        select: { id: true, title: true, message: true, created_at: true },
+        select: { id: true, title: true, message: true, created_at: true, banner_image_url: true },
       }),
     ]);
 
     return NextResponse.json({
       count,
-      communication: communication ? { id: communication.id, title: communication.title, message: communication.message, createdAt: communication.created_at.toISOString() } : null,
+      communication: communication[0] ? { id: communication[0].id, title: communication[0].title, message: communication[0].message, createdAt: communication[0].created_at.toISOString() } : null,
+      communications: communication.map((item) => ({ id: item.id, title: item.title, message: item.message, backgroundUrl: item.banner_image_url, createdAt: item.created_at.toISOString() })),
       latest: latest
         ? {
             id: latest.id,

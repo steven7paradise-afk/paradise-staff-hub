@@ -22,19 +22,27 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
   const [unreadCount, setUnreadCount] = useState(initialUnread);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fetching = useRef(false);
+  const [fetchError, setFetchError] = useState(false);
 
   async function fetchNotifications() {
+    if (fetching.current) return;
+    fetching.current = true;
     try {
-      const res = await fetch("/api/notifications/latest", { cache: "no-store" });
+      const res = await fetch("/api/notifications/latest", { cache: "no-store", signal: AbortSignal.timeout(10000) });
+      if (!res.ok) { setFetchError(true); return; }
       if (res.ok) {
         const data = await res.json();
+        setFetchError(false);
         setUnreadCount(data.count ?? 0);
         if (Array.isArray(data.items)) {
           setItems(data.items);
         }
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setFetchError(true);
+    } finally {
+      fetching.current = false;
     }
   }
 
@@ -147,6 +155,7 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
             )}
           </div>
 
+          {fetchError && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Impossibile aggiornare le notifiche. I dati già caricati restano disponibili.<button type="button" onClick={() => void fetchNotifications()} className="mt-2 block min-h-9 font-semibold underline">Riprova</button></div>}
           <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
             {items.length > 0 ? (
               items.map((item) => {

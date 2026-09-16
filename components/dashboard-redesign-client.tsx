@@ -1,4 +1,5 @@
 "use client";
+import { DashboardCommunicationBanner } from "./dashboard-communication-banner";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -198,7 +199,7 @@ export function DashboardRedesignClient({
   return (
     <div className="worker-dashboard min-h-screen bg-transparent text-[#171717] dark:text-white">
       <main className="mx-auto w-full max-w-[1420px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)]">
+        <DashboardCommunicationBanner><header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)]">
           <img src="/beta-login-hero.png" alt="" className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center" aria-hidden="true" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,8,21,0.88)_0%,rgba(78,20,48,0.62)_52%,rgba(66,14,39,0.18)_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(24,6,15,0.32),transparent_65%)]" />
@@ -219,7 +220,7 @@ export function DashboardRedesignClient({
             {communicationCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-white px-1.5 py-0.5 text-[10px] text-[#8f2857]">{communicationCount}</span>}
           </button>
           </div>
-        </header>
+        </header></DashboardCommunicationBanner>
 
         <section className="worker-dashboard-enter worker-dashboard-enter-delay-1 mt-5 grid overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)] lg:grid-cols-[1.35fr_0.65fr]">
           <div className="border-b border-[#ecc6dc] p-5 sm:p-7 lg:border-b-0 lg:border-r">

@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       read: false,
       created_at: createdAt,
       banner_expires_at: bannerExpiresAt,
+      banner_image_url: typeof payload.bannerImageUrl === "string" && payload.bannerImageUrl.startsWith("https://") ? payload.bannerImageUrl : null,
     })),
     {
       deliveryActionUrl: (notification) =>
