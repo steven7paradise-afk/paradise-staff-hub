@@ -20,9 +20,10 @@ FROM base AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-# Keep enough memory available for Docker/BuildKit on the deployment host.
-# Next is already configured to compile with one worker in next.config.ts.
-ENV NODE_OPTIONS="--max-old-space-size=640"
+# The deployment host has 8 GB RAM. Keep the build heap bounded while allowing
+# the full application (including monitoring) to compile without V8 heap OOM.
+# This limit applies only to the builder, not the production runtime.
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

@@ -47,6 +47,7 @@ const nextConfig: NextConfig = {
     parallelServerCompiles: false,
     parallelServerBuildTraces: false,
     webpackMemoryOptimizations: true,
+    webpackBuildWorker: true,
   },
   turbopack: {},
   webpack(config, { dev }) {
