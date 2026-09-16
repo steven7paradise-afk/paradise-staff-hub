@@ -1896,16 +1896,21 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
         <div ref={taskDetailPageRef} className="task-detail-page h-full w-full overflow-y-auto overscroll-contain bg-[#F8F3F6] text-[#17151A] dark:bg-[#111116] dark:text-white">
           <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5 sm:pt-4 md:pb-24 xl:px-7 xl:pt-3">
             <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm dark:border-white/10 dark:bg-[#1D1D22]">
-              <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
-                <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 dark:border-white/10 md:border-b-0 md:border-r">
+              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="col-span-full flex min-w-0 items-start gap-3 border-b border-black/5 p-4 dark:border-white/10">
                   <button onClick={() => void openTask(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm transition hover:bg-[#F2E8ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D85A91] dark:bg-white/10 dark:hover:bg-white/15"><ArrowLeft className="size-5" /></button>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h1 className="min-w-0 whitespace-normal break-words text-xl font-black leading-tight tracking-tight sm:text-2xl md:text-3xl">{selected.title}</h1>
+                      <h1 className="w-full min-w-0 whitespace-normal break-words text-xl font-bold leading-snug tracking-tight sm:text-2xl">{selected.title}</h1>
                       <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
                     </div>
                     <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-black/35 dark:text-white/45">{formatCategoryLabel(selected.category)}</p>
                   </div>
+                  {canAssign || selected.createdById === userId ? (
+                    <button aria-label="Modifica task" onClick={() => openEditTask(selected)} className="inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl bg-[#FAF7F9] px-3 text-sm font-semibold transition hover:bg-[#F2E8ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D85A91] dark:bg-white/10 dark:hover:bg-white/15">
+                      <Pencil className="size-4" /> <span className="hidden sm:inline">Modifica task</span>
+                    </button>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-3 border-b border-black/5 p-4 dark:border-white/10 md:border-b-0 md:border-r">
                   <CalendarDays className="size-5 shrink-0 text-black/45 dark:text-white/55" />
@@ -1938,13 +1943,6 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                         : selected.assignedToName || "Nessuno"}
                     </p>
                   </div>
-                </div>
-                <div className="flex items-center justify-end p-4">
-                  {canAssign || selected.createdById === userId ? (
-                    <button onClick={() => openEditTask(selected)} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#FAF7F9] px-4 text-sm font-black shadow-sm transition hover:bg-[#F2E8ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D85A91] dark:bg-white/10 dark:hover:bg-white/15">
-                      <Pencil className="size-4" /> <span className="hidden sm:inline">Modifica task</span>
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </div>
