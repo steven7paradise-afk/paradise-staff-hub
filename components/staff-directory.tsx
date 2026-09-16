@@ -421,14 +421,6 @@ export function StaffDirectory({
     if (!isEditing && !showCreateModal) setStaff(initialStaff);
   }, [initialStaff, isEditing, showCreateModal]);
 
-  useEffect(() => {
-    // Keep live attendance data fresh only while the directory is idle. A server
-    // refresh during creation can remount the route and interrupt a partially
-    // completed employee form.
-    if (isEditing || showCreateModal || submitting || contractPopupOpen) return;
-    const timer = window.setInterval(() => router.refresh(), 60_000);
-    return () => window.clearInterval(timer);
-  }, [contractPopupOpen, isEditing, router, showCreateModal, submitting]);
 
   useEffect(() => {
     if (isEditing && selectedEmployee?.id) {

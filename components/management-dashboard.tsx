@@ -227,10 +227,6 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   }, [data.hourlyClients]);
   const maxHourly = useMemo(() => Math.max(1, ...hourlyChartItems.map((item) => item.count)), [hourlyChartItems]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => router.refresh(), 60_000);
-    return () => window.clearInterval(timer);
-  }, [router]);
 
   useEffect(() => {
     let active = true;

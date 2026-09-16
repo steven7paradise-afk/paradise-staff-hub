@@ -168,17 +168,6 @@ export function ClientControlDashboard({
     setResponses(initialResponses);
   }, [initialResponses]);
 
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") router.refresh();
-    };
-    const interval = window.setInterval(refresh, 15000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [router]);
 
   const monthsList = [
     { value: 0, label: "Gennaio" },

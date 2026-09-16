@@ -1838,52 +1838,16 @@ export function AppointmentsBrowser({
   }
 
   useEffect(() => {
-    if (!isPC) return;
-
-    let inactivityTimer: number | undefined;
-    const returnToFullDayView = () => {
-      const day = localDateKey(anchorDate);
-      setSearchTerm("");
-      setShowCanceled(false);
-      setFilterStaff("all");
-      setFilterPayment("all");
-      setFilterStatus("all");
-      setSelectedBookingId(null);
-      setIsFilterModalOpen(false);
-      setIsDatePickerOpen(false);
-      setLayoutMode("board");
-      setView("day");
-      setDateFilter({ mode: "custom", from: day, to: day });
-
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("view", "day");
-      params.set("focus", day);
-      params.set("from", day);
-      params.set("to", day);
-      params.delete("scope");
-      params.delete("booking");
-      params.delete("order");
-      params.delete("worker");
-      params.delete("choose");
-      params.delete("refresh");
-      const targetSalon = salon !== "tutti" ? salon : initialSalon !== "tutti" ? initialSalon : null;
-      const base = navigationBasePath || appointmentSalonUrl(targetSalon);
-      router.replace(`${base}?${params.toString()}`, { scroll: false });
-    };
-    const restartTimer = () => {
-      if (inactivityTimer !== undefined) window.clearTimeout(inactivityTimer);
-      inactivityTimer = window.setTimeout(returnToFullDayView, 60_000);
-    };
-
-    const activityEvents: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "wheel"];
-    activityEvents.forEach((eventName) => window.addEventListener(eventName, restartTimer, { passive: true }));
-    restartTimer();
-
-    return () => {
-      if (inactivityTimer !== undefined) window.clearTimeout(inactivityTimer);
-      activityEvents.forEach((eventName) => window.removeEventListener(eventName, restartTimer));
-    };
-  }, [anchorDate, initialSalon, isPC, navigationBasePath, router, salon, searchParams]);
+    // Refresh data without resetting the operator's date, filters or open order.
+    if (selectedBookingId || isFilterModalOpen || isDatePickerOpen) return;
+    const timer = window.setInterval(() => {
+      if (document.hidden || document.querySelector('dialog[open], [role="dialog"]')) return;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && (focused.matches("input, textarea, select") || focused.isContentEditable)) return;
+      router.refresh();
+    }, 300_000);
+    return () => window.clearInterval(timer);
+  }, [selectedBookingId, isFilterModalOpen, isDatePickerOpen, router]);
 
   const [statusByBooking, setStatusByBooking] = useState<
     Record<string, AppointmentStatusValue>

@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
-export function AutoRefresh({ interval = 8000 }: { interval?: number }) {
+export function AutoRefresh({ interval = 300_000 }: { interval?: number }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    const timer = window.setInterval(() => router.refresh(), interval);
+    if (pathname !== "/appointments" && !pathname.startsWith("/appointments/")) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) router.refresh();
+    }, Math.max(interval, 300_000));
     return () => window.clearInterval(timer);
-  }, [interval, router]);
+  }, [interval, pathname, router]);
 
   return null;
 }

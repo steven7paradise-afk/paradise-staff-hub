@@ -42,12 +42,6 @@ export function DailyRegister({ date, rows, updatedAt }: { date: string; rows: R
   const [filter, setFilter] = useState<Filter>("ALL");
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
-  const liveDay = date === new Intl.DateTimeFormat("en-CA", { timeZone:"Europe/Rome" }).format(new Date(updatedAt));
-  useEffect(() => {
-    if (!liveDay) return;
-    const timer = window.setInterval(() => { if (!document.hidden) router.refresh(); },15000);
-    return () => window.clearInterval(timer);
-  }, [liveDay,router]);
   const working = rows.filter(r=>r.status !== "REST");
   const locations = [...new Set(working.map(r=>r.location))].sort();
   const scoped = working.filter(r=>!location || r.location===location);
