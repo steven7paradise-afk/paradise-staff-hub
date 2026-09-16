@@ -1,0 +1,18 @@
+.contract-history { container-type: inline-size; container-name: contract-history; min-width: 0; overflow-x: auto; }
+.contract-history table { width: 100%; min-width: 1000px; border-collapse: collapse; }
+.contract-history th { padding: 12px; white-space: nowrap; font-size: 10px; letter-spacing: .04em; }
+.contract-history td { padding: 14px 12px; vertical-align: top; line-height: 1.5; }
+.contract-history td:not(:nth-child(7)) { white-space: nowrap; }
+.contract-history td:nth-child(7) { min-width: 150px; overflow-wrap: anywhere; }
+.contract-history td:nth-child(4) > span { display: inline-flex; white-space: nowrap; }
+@container contract-history (max-width: 700px) {
+  .contract-history table { min-width: 0; display: block; }
+  .contract-history thead { display: none; }
+  .contract-history tbody { display: block; }
+  .contract-history tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; padding: 18px 0; }
+  .contract-history td { display: block; min-width: 0 !important; padding: 0; white-space: normal !important; text-align: left; }
+  .contract-history td::before { content: attr(data-label); display: block; margin-bottom: 5px; color: #737373; font-size: 10px; font-weight: 600; font-style: normal; }
+  .contract-history td:first-child, .contract-history td:nth-child(7), .contract-history td[colspan] { grid-column: 1 / -1; }
+  .contract-history td:last-child > div { justify-content: flex-start; }
+  .contract-history td[colspan]::before { display: none; }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureException } from "@sentry/nextjs";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { isRecoverableClientLoadError } from "@/lib/client-load-error";
 
@@ -14,6 +15,7 @@ export default function GlobalError({
   const recoverableLoadError = isRecoverableClientLoadError(error?.message || "");
 
   useEffect(() => {
+    captureException(error);
     console.error("App error captured by boundary:", error);
     if (!recoverableLoadError) return;
 

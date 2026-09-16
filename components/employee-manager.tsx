@@ -1,4 +1,5 @@
 "use client";
+import "./contract-history.css";
 
 import { useState, useEffect } from "react";
 import { 
@@ -1039,7 +1040,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                   <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Storico contratti e rinnovi</h2>
                 </div>
 
-                <div className="overflow-x-auto mt-4">
+                <div className="contract-history mt-4">
                   <table className="min-w-full divide-y divide-black/5 text-left text-xs">
                     <thead>
                       <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
@@ -1056,10 +1057,10 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                       {contracts.length > 0 ? (
                         contracts.map((c, idx) => (
                           <tr key={idx} className="hover:bg-neutral-50/50 transition">
-                            <td className="py-3 font-extrabold text-neutral-900">{c.tipo}</td>
-                            <td className="py-3">{c.inizio}</td>
-                            <td className="py-3">{c.fine}</td>
-                            <td className="py-3">
+                            <td data-label="Tipo" className="py-3 font-extrabold text-neutral-900">{c.tipo}</td>
+                            <td data-label="Data inizio" className="py-3">{c.inizio}</td>
+                            <td data-label="Data fine" className="py-3">{c.fine}</td>
+                            <td data-label="Stato" className="py-3">
                               <span className={cn(
                                 "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide",
                                 c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
@@ -1069,9 +1070,9 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                                 {c.stato}
                               </span>
                             </td>
-                            <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
-                            <td className="py-3 text-[#B85B68] font-bold">{c.scadenza}</td>
-                            <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
+                            <td data-label="Rinnovato il" className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
+                            <td data-label="Scadenza" className="py-3 text-[#B85B68] font-bold">{c.scadenza}</td>
+                            <td data-label="Note" className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
                           </tr>
                         ))
                       ) : (

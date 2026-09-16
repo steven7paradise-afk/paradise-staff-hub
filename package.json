@@ -30,6 +30,7 @@
   "dependencies": {
     "@netlify/plugin-nextjs": "^5.9.4",
     "@prisma/client": "^6.1.0",
+    "@sentry/nextjs": "^10.74.0",
     "@simplewebauthn/browser": "^9.0.1",
     "@simplewebauthn/server": "^9.0.3",
     "@supabase/supabase-js": "^2.106.2",

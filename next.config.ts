@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const appBuildVersion = process.env.DEPLOY_ID || process.env.COMMIT_REF || `local-${Date.now().toString(36)}`;
 
@@ -54,4 +55,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  telemetry: false,
+  silent: true,
+  sourcemaps: { disable: true },
+});
