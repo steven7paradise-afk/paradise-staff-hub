@@ -4,13 +4,7 @@ self.addEventListener("install", function (event) {
 
 self.addEventListener("activate", function (event) {
   event.waitUntil(
-    self.clients.claim().then(function () {
-      return self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    }).then(function (windowClients) {
-      return Promise.all(windowClients.map(function (client) {
-        return "navigate" in client ? client.navigate(client.url) : Promise.resolve();
-      }));
-    }),
+    self.clients.claim(),
   );
 });
 

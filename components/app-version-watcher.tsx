@@ -1,37 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const CHECK_INTERVAL_MS = 60_000;
-const REQUIRED_IDLE_MS = 10 * 60_000;
-const IDLE_CHECK_INTERVAL_MS = 5_000;
 
 export function AppVersionWatcher({ currentVersion }: { currentVersion: string }) {
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     let cancelled = false;
     let checking = false;
     let updatePending = false;
-    let reloading = false;
-    let lastActivityAt = Date.now();
-
-    const recordActivity = () => {
-      lastActivityAt = Date.now();
-    };
-
-    const reloadWhenIdle = () => {
-      if (
-        cancelled ||
-        reloading ||
-        !updatePending ||
-        Date.now() - lastActivityAt < REQUIRED_IDLE_MS
-      ) return;
-
-      reloading = true;
-      window.location.reload();
-    };
 
     async function checkForUpdate() {
-      if (cancelled || reloading || checking || updatePending || !navigator.onLine) return;
+      if (cancelled || checking || updatePending || !navigator.onLine) return;
       checking = true;
       try {
         const response = await fetch(`/api/app-version?t=${Date.now()}`, {
@@ -40,9 +22,9 @@ export function AppVersionWatcher({ currentVersion }: { currentVersion: string }
         });
         if (!response.ok) return;
         const data = await response.json() as { version?: string };
-        if (data.version && data.version !== "unknown" && data.version !== currentVersion) {
+        if (!cancelled && data.version && data.version !== "unknown" && data.version !== currentVersion) {
           updatePending = true;
-          reloadWhenIdle();
+          setUpdateAvailable(true);
         }
       } catch {
         // A temporary connection problem must not interrupt the app.
@@ -53,18 +35,9 @@ export function AppVersionWatcher({ currentVersion }: { currentVersion: string }
 
     const firstCheck = window.setTimeout(checkForUpdate, 10_000);
     const versionCheck = window.setInterval(checkForUpdate, CHECK_INTERVAL_MS);
-    const idleCheck = window.setInterval(reloadWhenIdle, IDLE_CHECK_INTERVAL_MS);
     const checkWhenActive = () => {
       if (document.visibilityState === "visible") void checkForUpdate();
     };
-    const activityEvents: Array<keyof WindowEventMap> = [
-      "pointerdown",
-      "keydown",
-      "touchstart",
-      "wheel",
-    ];
-
-    activityEvents.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }));
     document.addEventListener("visibilitychange", checkWhenActive);
     window.addEventListener("focus", checkWhenActive);
     window.addEventListener("online", checkWhenActive);
@@ -73,13 +46,23 @@ export function AppVersionWatcher({ currentVersion }: { currentVersion: string }
       cancelled = true;
       window.clearTimeout(firstCheck);
       window.clearInterval(versionCheck);
-      window.clearInterval(idleCheck);
-      activityEvents.forEach((eventName) => window.removeEventListener(eventName, recordActivity));
       document.removeEventListener("visibilitychange", checkWhenActive);
       window.removeEventListener("focus", checkWhenActive);
       window.removeEventListener("online", checkWhenActive);
     };
   }, [currentVersion]);
 
-  return null;
+  if (!updateAvailable || dismissed) return null;
+  return (
+    <aside role="status" className="fixed right-3 top-3 z-[90] w-[calc(100%-1.5rem)] max-w-sm rounded-xl border border-neutral-200 bg-white p-4 text-neutral-900 shadow-lg">
+      <p className="text-sm font-semibold">Aggiornamento disponibile</p>
+      <p className="mt-1 text-xs leading-5 text-neutral-600">Puoi continuare a lavorare. Salva prima di aggiornare.</p>
+      <div className="mt-3 flex justify-end gap-2">
+        <button type="button" onClick={() => setDismissed(true)} className="min-h-11 rounded-lg px-3 text-sm">Più tardi</button>
+        <button type="button" onClick={() => {
+          if (window.confirm("Hai salvato il lavoro? Aggiornando, i dati non salvati nella pagina potrebbero andare persi.")) window.location.reload();
+        }} className="min-h-11 rounded-lg bg-neutral-900 px-3 text-sm font-medium text-white">Aggiorna</button>
+      </div>
+    </aside>
+  );
 }

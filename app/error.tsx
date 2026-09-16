@@ -17,14 +17,6 @@ export default function GlobalError({
   useEffect(() => {
     captureException(error);
     console.error("App error captured by boundary:", error);
-    if (!recoverableLoadError) return;
-
-    const storageKey = "paradise:last-client-load-reload";
-    const previousReload = Number(window.sessionStorage.getItem(storageKey) || 0);
-    if (Date.now() - previousReload < 30_000) return;
-    window.sessionStorage.setItem(storageKey, String(Date.now()));
-    const reloadTimer = window.setTimeout(() => window.location.reload(), 1_500);
-    return () => window.clearTimeout(reloadTimer);
   }, [error, recoverableLoadError]);
 
   return (
@@ -38,7 +30,7 @@ export default function GlobalError({
         </h1>
         <p className="text-xs font-semibold text-neutral-500 leading-relaxed">
           {recoverableLoadError
-            ? "Il sito si sta aggiornando. La pagina verrà ricaricata automaticamente e i dati non saranno modificati."
+            ? "È disponibile una nuova versione. Premi Aggiorna quando sei pronto: la pagina non verrà ricaricata automaticamente."
             : "Impossibile caricare i dati in questo momento. Riprova tra qualche istante."}
         </p>
         {error?.message && !recoverableLoadError ? (
