@@ -2340,6 +2340,7 @@ export function StaffDirectory({
             >
               <UserPlus className="size-4" /> Candidati
             </Link>
+            {canManageContractRenewals ? <Link href="/staff/riepilogo" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs font-bold text-neutral-700 hover:text-[#a73568] dark:border-white/10 dark:bg-neutral-900 dark:text-white"><ClipboardList className="size-4" /> Riepilogo presenze</Link> : null}
             <Button
               type="button"
               variant={archiveMode ? "dark" : "soft"}
