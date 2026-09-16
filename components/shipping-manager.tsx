@@ -592,8 +592,8 @@ export function ShippingManager({
     : filteredOrders.filter((order) => order.status === activeStage);
   const mobileStage = activeStage === "OPEN" ? "UNFULFILLED" : activeStage;
   const mobileBoardOrders = query.trim()
-    ? filteredOrders
-    : filteredOrders.filter((order) => order.status === mobileStage);
+    ? visibleOrders
+    : visibleOrders.filter((order) => order.status === mobileStage);
   const stageLabels: Record<ShipmentOrder["status"], string> = {
     UNFULFILLED: "Da preparare",
     PACKING: "In preparazione",
@@ -799,11 +799,11 @@ export function ShippingManager({
             </div>
           </section>
         </div>
-        {/* Four-lane desktop warehouse board. */}
+        {/* Active work stays separate from the shipped archive. */}
         <div className="hidden lg:block" aria-label="Board delle spedizioni">
-        <div className={cn("grid items-start gap-3 rounded-2xl border border-black/[0.09] bg-[#F2F0F1] p-3", activeStage === "OPEN" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" : "grid-cols-1")}>
-          {statusColumns.filter((col) => activeStage === "OPEN" || col.id === activeStage).map((col) => {
-            const colOrders = (activeStage === "OPEN" && col.id === "SHIPPED" ? filteredOrders : visibleOrders).filter((o) => o.status === col.id);
+        <div className={cn("grid items-start gap-3 rounded-2xl border border-black/[0.09] bg-[#F2F0F1] p-3", activeStage === "OPEN" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1")}>
+          {statusColumns.filter((col) => activeStage === "OPEN" ? col.id !== "SHIPPED" : col.id === activeStage).map((col) => {
+            const colOrders = visibleOrders.filter((o) => o.status === col.id);
             return (
               <section key={col.id} className="min-h-40 overflow-hidden rounded-xl border border-black/[0.14] bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-black/[0.14] bg-[#FAF9F9] px-4 py-4">

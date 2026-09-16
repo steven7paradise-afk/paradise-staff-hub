@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 import { cacheShippingOrders, fetchRecentlyLabeledOrders, latestLabelFulfillment } from "@/lib/shipping-label-orders";
 import { shippingBarcodeMap } from "@/lib/shipping-product-barcodes";
+import { confirmedShippingFulfillment, reconcileLocalShippingOrders, shippingPendingItems } from "@/lib/shipping-pending-items";
 
 export async function GET(request: NextRequest) {
   try {
@@ -98,9 +99,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    cacheShippingOrders(shopifyOrders);
-    const productBarcodes = await shippingBarcodeMap(prisma, shopifyOrders);
-
     // Get all records from local DB
     const dbShipments = await prisma.shopifyShipment.findMany({
       include: {
@@ -111,27 +109,25 @@ export async function GET(request: NextRequest) {
     });
 
     const dbMap = new Map(dbShipments.map((s) => [s.shopify_order_id, s]));
-
-    const SERVICE_KEYWORDS_REGEX = /commission|pos|a rate|rate|acconto|caparra|pagamento|salone|trattamento|prenotazione/i;
+    const inactiveIds = await reconcileLocalShippingOrders(shopifyOrders, dbShipments, shop, token);
+    for (const order of shopifyOrders) {
+      if (!shippingPendingItems(order).length && !confirmedShippingFulfillment(order) && dbMap.get(String(order.id))?.status !== "SHIPPED") inactiveIds.add(String(order.id));
+    }
+    cacheShippingOrders(shopifyOrders);
+    const productBarcodes = await shippingBarcodeMap(prisma, shopifyOrders);
 
     // Format orders for the Shipping Hub UI
-    const formattedOrders = shopifyOrders.map((order: any) => {
+    const formattedOrders = shopifyOrders.filter(order => !inactiveIds.has(String(order.id))).map((order: any) => {
       const orderIdStr = String(order.id);
       const dbRecord = dbMap.get(orderIdStr);
+      const confirmedShipment = confirmedShippingFulfillment(order);
 
       const customerName = [
         String(order.customer?.first_name || "").trim(),
         String(order.customer?.last_name || "").trim(),
       ].filter(Boolean).join(" ") || "Cliente Shopify";
 
-      const lineItems = (Array.isArray(order.line_items) ? order.line_items : [])
-        .filter((item: any) => {
-          const title = String(item.title || "");
-          const sku = String(item.sku || "");
-          if (SERVICE_KEYWORDS_REGEX.test(title) || SERVICE_KEYWORDS_REGEX.test(sku)) return false;
-          if (item.requires_shipping === false) return false;
-          return true;
-        })
+      const lineItems = shippingPendingItems(order, dbRecord?.status === "SHIPPED" || Boolean(confirmedShipment))
         .map((item: any) => ({
           id: String(item.id),
           title: item.title || "Articolo",
@@ -157,7 +153,7 @@ export async function GET(request: NextRequest) {
       };
 
       const shippingMethod = order.shipping_lines?.[0]?.title || "Spedizione Standard";
-      const label = latestLabelFulfillment(order);
+      const label = confirmedShipment || latestLabelFulfillment(order);
 
       return {
         shopifyOrderId: orderIdStr,
@@ -166,7 +162,7 @@ export async function GET(request: NextRequest) {
         email: order.customer?.email || order.email || "",
         phone: order.customer?.phone || addressObj.phone || "",
         createdAt: order.created_at,
-        shippedAt: dbRecord?.shipped_at?.toISOString() || null,
+        shippedAt: dbRecord?.shipped_at?.toISOString() || confirmedShipment?.created_at || null,
         totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
         financialStatus: order.financial_status || "paid",
         fulfillmentStatus: order.fulfillment_status || "unfulfilled",
@@ -174,7 +170,7 @@ export async function GET(request: NextRequest) {
         shippingAddress,
         lineItems,
         // Status from DB if present, else default UNFULFILLED
-        status: dbRecord?.status || (label ? "PACKING" : "UNFULFILLED"),
+        status: confirmedShipment ? "SHIPPED" : dbRecord?.status || (label ? "PACKING" : "UNFULFILLED"),
         verifiedBarcodes: (dbRecord?.verified_barcodes as string[]) || [],
         photoUrl: dbRecord?.photo_url || null,
         proofPhotoUrl: dbRecord?.proof_photo_url || null,
@@ -188,6 +184,7 @@ export async function GET(request: NextRequest) {
     // Also include any DB records that might no longer be in the open unfulfilled list (e.g. recently SHIPPED)
     const existingIds = new Set(formattedOrders.map((o) => o.shopifyOrderId));
     for (const dbRec of dbShipments) {
+      if (inactiveIds.has(dbRec.shopify_order_id)) continue;
       if (!existingIds.has(dbRec.shopify_order_id)) {
         formattedOrders.push({
           shopifyOrderId: dbRec.shopify_order_id,

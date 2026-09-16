@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 import { cacheShippingOrders, fetchRecentlyLabeledOrders, latestLabelFulfillment } from "@/lib/shipping-label-orders";
 import { shippingBarcodeMap } from "@/lib/shipping-product-barcodes";
+import { confirmedShippingFulfillment, reconcileLocalShippingOrders, shippingPendingItems } from "@/lib/shipping-pending-items";
 
 export const dynamic = "force-dynamic";
 
@@ -109,9 +110,6 @@ export default async function ShippingPage({ searchParams }: { searchParams: Pro
     }
   }
 
-  cacheShippingOrders(shopifyOrders);
-  const productBarcodes = await shippingBarcodeMap(prisma, shopifyOrders);
-
   // Get local shipments records
   const dbShipments = await prisma.shopifyShipment.findMany({
     include: {
@@ -122,26 +120,24 @@ export default async function ShippingPage({ searchParams }: { searchParams: Pro
   }).catch(() => []);
 
   const dbMap = new Map(dbShipments.map((s) => [s.shopify_order_id, s]));
+  const inactiveIds = await reconcileLocalShippingOrders(shopifyOrders, dbShipments, shop, token);
+  for (const order of shopifyOrders) {
+    if (!shippingPendingItems(order).length && !confirmedShippingFulfillment(order) && dbMap.get(String(order.id))?.status !== "SHIPPED") inactiveIds.add(String(order.id));
+  }
+  cacheShippingOrders(shopifyOrders);
+  const productBarcodes = await shippingBarcodeMap(prisma, shopifyOrders);
 
-  const SERVICE_KEYWORDS_REGEX = /commission|pos|a rate|rate|acconto|caparra|pagamento|salone|trattamento|prenotazione/i;
-
-  const initialOrders = shopifyOrders.map((order: any) => {
+  const initialOrders = shopifyOrders.filter(order => !inactiveIds.has(String(order.id))).map((order: any) => {
     const orderIdStr = String(order.id);
     const dbRecord = dbMap.get(orderIdStr);
+    const confirmedShipment = confirmedShippingFulfillment(order);
 
     const customerName = [
       String(order.customer?.first_name || "").trim(),
       String(order.customer?.last_name || "").trim(),
     ].filter(Boolean).join(" ") || "Cliente Shopify";
 
-    const lineItems = (Array.isArray(order.line_items) ? order.line_items : [])
-      .filter((item: any) => {
-        const title = String(item.title || "");
-        const sku = String(item.sku || "");
-        if (SERVICE_KEYWORDS_REGEX.test(title) || SERVICE_KEYWORDS_REGEX.test(sku)) return false;
-        if (item.requires_shipping === false) return false;
-        return true;
-      })
+    const lineItems = shippingPendingItems(order, dbRecord?.status === "SHIPPED" || Boolean(confirmedShipment))
       .map((item: any) => ({
         id: String(item.id),
         title: item.title || "Articolo",
@@ -167,7 +163,7 @@ export default async function ShippingPage({ searchParams }: { searchParams: Pro
     };
 
     const shippingMethod = order.shipping_lines?.[0]?.title || "Spedizione Standard";
-    const label = latestLabelFulfillment(order);
+    const label = confirmedShipment || latestLabelFulfillment(order);
 
     return {
       shopifyOrderId: orderIdStr,
@@ -176,14 +172,14 @@ export default async function ShippingPage({ searchParams }: { searchParams: Pro
       email: order.customer?.email || order.email || "",
       phone: order.customer?.phone || addressObj.phone || "",
       createdAt: order.created_at,
-      shippedAt: dbRecord?.shipped_at?.toISOString() || null,
+      shippedAt: dbRecord?.shipped_at?.toISOString() || confirmedShipment?.created_at || null,
       totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
       financialStatus: order.financial_status || "paid",
       fulfillmentStatus: order.fulfillment_status || "unfulfilled",
       shippingMethod,
       shippingAddress,
       lineItems,
-      status: (dbRecord?.status as any) || (label ? "PACKING" : "UNFULFILLED"),
+      status: confirmedShipment ? "SHIPPED" : (dbRecord?.status as any) || (label ? "PACKING" : "UNFULFILLED"),
       verifiedBarcodes: (dbRecord?.verified_barcodes as string[]) || [],
       photoUrl: dbRecord?.photo_url || null,
       proofPhotoUrl: dbRecord?.proof_photo_url || null,
@@ -198,6 +194,7 @@ export default async function ShippingPage({ searchParams }: { searchParams: Pro
   // Manteniamo quindi visibili i record locali, compresa la loro data reale di spedizione.
   const existingIds = new Set(initialOrders.map((order) => order.shopifyOrderId));
   for (const dbRecord of dbShipments) {
+    if (inactiveIds.has(dbRecord.shopify_order_id)) continue;
     if (existingIds.has(dbRecord.shopify_order_id)) continue;
     initialOrders.push({
       shopifyOrderId: dbRecord.shopify_order_id,
