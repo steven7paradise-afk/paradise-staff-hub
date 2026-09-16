@@ -36,7 +36,7 @@ import {
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { resolveShippingScan, verifiedQuantity } from "@/lib/shipping-scan";
-import type { Html5Qrcode } from "html5-qrcode";
+import { ShippingCameraScanner } from "@/components/shipping-camera-scanner";
 
 type LineItem = {
   id: string;
@@ -165,9 +165,6 @@ export function ShippingManager({
   // Camera Barcode Scanner State
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraTarget, setCameraTarget] = useState<"TRACKING" | "BARCODE">("TRACKING");
-  const cameraScannerRef = useRef<Html5Qrcode | null>(null);
-  const cameraScanLockedRef = useRef(false);
-  const [cameraReady, setCameraReady] = useState(false);
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const trackingInputRef = useRef<HTMLInputElement>(null);
@@ -291,15 +288,12 @@ export function ShippingManager({
   }
 
   function startCameraScanner(target: "TRACKING" | "BARCODE") {
-    cameraScanLockedRef.current = false;
-    setCameraReady(false);
     setCameraTarget(target);
     setIsCameraActive(true);
     setSavingStatus("Inquadra il codice stampato sull’etichetta.");
   }
 
   function stopCameraScanner() {
-    setCameraReady(false);
     setIsCameraActive(false);
   }
 
@@ -316,47 +310,6 @@ export function ShippingManager({
     }
   }
 
-  useEffect(() => {
-    if (!isCameraActive) return;
-    let cancelled = false;
-    let scanner: Html5Qrcode | null = null;
-    void (async () => {
-      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
-      if (cancelled) return;
-      scanner = new Html5Qrcode("shipping-camera-reader", {
-        verbose: false,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.QR_CODE,
-        ],
-      });
-      cameraScannerRef.current = scanner;
-      await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 120 } }, (code) => {
-        if (cameraScanLockedRef.current) return;
-        cameraScanLockedRef.current = true;
-        handleScannedCodeFromCamera(code);
-      }, () => {});
-      if (cancelled) {
-        if (scanner.isScanning) await scanner.stop();
-      } else {
-        setCameraReady(true);
-      }
-    })().catch((error) => {
-      if (cancelled) return;
-      console.error("Camera scanner error:", error);
-      setSavingStatus("Fotocamera non disponibile. Usa il lettore o inserisci il codice manualmente.");
-      setIsCameraActive(false);
-    });
-    return () => {
-      cancelled = true;
-      if (scanner?.isScanning) void scanner.stop().catch(() => {});
-      if (cameraScannerRef.current === scanner) cameraScannerRef.current = null;
-    };
-  }, [isCameraActive, cameraTarget]);
 
   // Open Packing Modal for an order
   function openPackingModal(order: ShipmentOrder) {
@@ -945,17 +898,7 @@ export function ShippingManager({
 
             {/* Camera Viewfinder Overlay when scanning */}
             {isCameraActive && (
-              <section className="space-y-3 rounded-xl border border-black/[0.12] bg-white p-4 shadow-sm" aria-label="Scansione con fotocamera">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#A93469]">Lettura automatica</p>
-                    <h3 className="mt-1 text-base font-bold text-[#181719]">{cameraTarget === "TRACKING" ? "Inquadra il tracking del corriere" : "Inquadra il barcode del prodotto"}</h3>
-                  </div>
-                  <button type="button" onClick={stopCameraScanner} aria-label="Chiudi fotocamera" className="grid size-10 shrink-0 place-items-center rounded-lg border border-slate-200 text-[#181719] hover:bg-[#F5F3F4]"><X className="size-4" aria-hidden="true" /></button>
-                </div>
-                <div id="shipping-camera-reader" className="min-h-52 overflow-hidden rounded-lg bg-[#181719] text-white [&_video]:max-h-[310px] [&_video]:w-full [&_video]:object-cover" />
-                <p className="text-xs text-slate-500">{cameraReady ? "Lettore pronto: centra il codice nella finestra. La lettura è automatica." : "Avvio fotocamera in corso..."}</p>
-              </section>
+              <ShippingCameraScanner target={cameraTarget} onRead={handleScannedCodeFromCamera} onClose={stopCameraScanner}/>
             )}
 
             <div className="flex flex-col gap-5">
