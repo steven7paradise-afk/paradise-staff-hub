@@ -516,3 +516,22 @@ export async function getCowlendarBookingsForRange({
 export function hasCowlendarToken() {
   return Boolean(getCowlendarToken());
 }
+
+// Reporting must never silently truncate a month or use a stale partial cache.
+export async function getCompleteCowlendarBookingsForRange(startDate: string, endDate: string) {
+  const bookings = new Map<string, CowlendarBooking>();
+  const cursors = new Set<string>();
+  let cursor: string | null = null;
+  for (let page = 0; page < 200; page += 1) {
+    const query = new URLSearchParams({ start: startDate, end: endDate, limit: "100", sort: "start_date" });
+    if (cursor) query.set("cursor", cursor);
+    const result = await cowlendarFetch<CowlendarBooking>(`/bookings?${query}`);
+    for (const booking of result.data ?? []) bookings.set(booking.id, booking);
+    if (!result.pagination?.has_more) return Array.from(bookings.values());
+    const next = result.pagination.next_cursor;
+    if (!next || cursors.has(next) || !result.data?.length) throw new Error("Calendario incompleto");
+    cursors.add(next);
+    cursor = next;
+  }
+  throw new Error("Calendario incompleto: troppe pagine");
+}

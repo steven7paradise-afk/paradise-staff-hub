@@ -8,6 +8,7 @@ import { downloadTeamBonusReportPdf } from "@/lib/client-control-bonus-pdf";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import type { TeamBonusReport } from "@/lib/team-bonus-report";
 import { cn } from "@/lib/utils";
+import { PostoLampoSummary } from "./posto-lampo-summary";
 
 type Field = {
   id: string;
@@ -649,6 +650,15 @@ export function ClientControlDashboard({
           </div>
         </div>
       </section>
+
+      <PostoLampoSummary
+        month={selectedMonth + 1}
+        year={selectedYear}
+        salon={activeSalon}
+        dateFilter={dashboardDateFilter}
+        hourFilter={dashboardHourFilter}
+        revision={responses.map(response => `${response.id}:${response.updated_at}`).join("|")}
+      />
 
       <section className="grid gap-5 xl:grid-cols-[1fr_340px]">
         <div className="rounded-[28px] border border-black/10 bg-white p-5 shadow-sm">
