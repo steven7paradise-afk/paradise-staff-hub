@@ -6,6 +6,10 @@ export type StaffSummaryRow = {
   id: string; name: string; location: string; active: boolean; photoUrl?: string | null;
   late: number; lateMinutes: number; missing: number; unjustified: number; sickness: number; holidays: number; permits: number; rest: number; other: number; pending: number;
   events: SummaryEvent[];
+  clientDetails?: Array<{ clientName: string; date: string; products: string[]; postoLampo: boolean; note: string }>;
+  clientCount?: number;
+  productCount?: number;
+  postoLampoCount?: number;
 };
 type Employee = { id: string; name: string; active: boolean; photo_url?: string | null; location: { name: string } | null };
 type Schedule = { user_id: string; date: Date; start_time: string | null; end_time: string | null; category: { name: string; code: string; start_time: string | null; end_time: string | null }; location: { name: string } | null };

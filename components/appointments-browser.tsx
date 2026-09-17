@@ -475,7 +475,7 @@ const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
 const appointmentStatusClasses: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "border-sky-100 bg-sky-50 text-sky-700",
   NON_PRESENTATO: "border-red-100 bg-red-50 text-red-700",
-  INIZIATO: "border-yellow-200 bg-yellow-50 text-yellow-800",
+  INIZIATO: "border-[#C99B20] bg-[#E7C35B] text-[#473300]",
   IN_ATTESA: "border-amber-100 bg-amber-50 text-amber-700",
   COMPLETATO: "border-green-100 bg-green-50 text-green-700",
   ARRIVATO_IN_RITARDO: "border-orange-100 bg-orange-50 text-orange-700",
@@ -3295,7 +3295,7 @@ export function AppointmentsBrowser({
             ? "Verifiche salvate"
           : saveAsDraft
             ? "Bozza salvata"
-            : "✓ Controllo completato!",
+            : "Cliente salvata",
         teamSyncWarning ||
           (keepOpen
             ? "Le spunte sono state salvate automaticamente."
@@ -4091,8 +4091,10 @@ export function AppointmentsBrowser({
           ? ` Tempo trascorso: ${formatAppointmentTimer(Number(data?.status?.elapsedSeconds || optimisticTiming.elapsedSeconds || 0))}.`
           : "";
       showPushToast(
-        "Modifica salvata",
-        `Stato aggiornato: ${appointmentStatusLabels[nextStatus]}.${elapsedMessage}`,
+        nextStatus === "COMPLETATO" ? "Cliente salvata" : "Modifica salvata",
+        nextStatus === "COMPLETATO"
+          ? `La scheda cliente è stata verificata e completata.${elapsedMessage}`
+          : `Stato aggiornato: ${appointmentStatusLabels[nextStatus]}.${elapsedMessage}`,
       );
     } catch (error) {
       console.error("Failed to save appointment status:", error);
@@ -5049,24 +5051,26 @@ export function AppointmentsBrowser({
       {/* Floating Push Toast Notification Banner */}
       {toastNotification.show && (
         <div
-          className={`fixed top-5 right-5 sm:right-8 z-[200] flex items-center gap-3.5 rounded-2xl border px-5 py-4 text-white shadow-[0_20px_50px_rgba(0,0,0,0.25)] animate-in fade-in slide-in-from-top-5 duration-300 ${
+          role={toastNotification.type === "error" ? "alert" : "status"}
+          aria-live={toastNotification.type === "error" ? "assertive" : "polite"}
+          className={`fixed right-4 top-4 z-[200] flex max-w-[calc(100vw-2rem)] items-center gap-2.5 rounded-xl border px-3 py-2.5 text-white shadow-[0_14px_35px_rgba(0,0,0,0.22)] animate-in fade-in slide-in-from-top-3 duration-300 sm:right-6 ${
             toastNotification.type === "success"
               ? "border-emerald-400 bg-[#059669]"
               : "border-red-400 bg-red-600"
           }`}
         >
-          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/20">
+          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-white/20">
             {toastNotification.type === "success" ? (
-              <Check className="size-5 text-white" strokeWidth={3} />
+              <Check className="size-4 text-white" strokeWidth={3} />
             ) : (
-              <X className="size-5 text-white" strokeWidth={3} />
+              <X className="size-4 text-white" strokeWidth={3} />
             )}
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-wider text-white/90">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/90">
               {toastNotification.title}
             </p>
-            <p className="text-sm font-bold text-white">
+            <p className="text-xs font-bold text-white">
               {toastNotification.message}
             </p>
           </div>
@@ -7039,7 +7043,7 @@ export function AppointmentsBrowser({
                                     : status === "COMPLETATO"
                                     ? "border-[#B9DFC5] border-l-[#45A96A] bg-[#F1FAF4]"
                                     : status === "INIZIATO"
-                                      ? "border-[#F0D36A] border-l-[#D9AA18] bg-[#FFF9DB]"
+                                      ? "border-[#D3AA35] border-l-[#9B6D00] bg-[#F2D477]"
                                     : status === "IN_ATTESA"
                                       ? "border-[#EBD58B] border-l-[#D6A52D] bg-[#FFF9E5]"
                                     : "border-[#E1E3E7] border-l-[#D45B91] bg-white"

@@ -311,7 +311,15 @@ export function ClientControlDashboard({
     let totalReviews = 0;
     let totalNotePhoto = 0;
     let totalConsulenze = 0;
+    let totalPostoLampo = 0;
     const productsMap = new Map<string, number>();
+    const clientSheets: Array<{
+      response: ResponseItem;
+      clientName: string;
+      note: string;
+      products: string[];
+      postoLampo: boolean;
+    }> = [];
 
     dashboardFilteredResponses.forEach((response) => {
       const answers = response.answers ?? {};
@@ -339,6 +347,27 @@ export function ClientControlDashboard({
         totalNotePhoto += notePhotoCount;
 
         const prodList = String(answers[CLIENT_CONTROL_FIELD_IDS.productsList] || "").trim();
+        const products = prodList
+          .split(/[,;\n]+/)
+          .map((item) => item.trim())
+          .filter((item) => item && !["undefined", "null", "[object Object]"].includes(item));
+        const note = [
+          answers.client_control_notes_text,
+          answers.custom_note_text,
+          answers.customNoteText,
+          answers.custom_extra_note,
+          answers.client_control_shopify_order_note,
+        ].map((value) => String(value ?? "").trim()).filter(Boolean).join("\n");
+        const serviceText = [answers.service_title, answers.custom_services, note, prodList]
+          .flat().join(" ").toLowerCase();
+        clientSheets.push({
+          response,
+          clientName: String(answers[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente senza nome"),
+          note,
+          products,
+          postoLampo: /post[oi]\s*[- ]?\s*lamp[oi]/i.test(serviceText),
+        });
+        if (clientSheets[clientSheets.length - 1].postoLampo) totalPostoLampo++;
         if (prodList && prodList !== "undefined" && prodList !== "null") {
           prodList.split(",").forEach((item) => {
             const cleanItem = item.trim();
@@ -363,7 +392,9 @@ export function ClientControlDashboard({
       totalReviews,
       totalNotePhoto,
       totalConsulenze,
-      productsList
+      totalPostoLampo,
+      productsList,
+      clientSheets: clientSheets.sort((a, b) => new Date(b.response.created_at).getTime() - new Date(a.response.created_at).getTime()),
     };
   }, [dashboardFilteredResponses, selectedWorkerName, employeeNames]);
 
@@ -936,6 +967,7 @@ export function ClientControlDashboard({
                 { label: "Recensioni ricevute", value: workerReport.totalReviews },
                 { label: "Note e Foto fatte", value: workerReport.totalNotePhoto },
                 { label: "Consulenze fatte", value: workerReport.totalConsulenze },
+                { label: "Posti lampo", value: workerReport.totalPostoLampo },
               ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-black/[0.03] bg-white p-4 shadow-sm">
                   <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-neutral-400 leading-tight">{card.label}</p>
@@ -973,6 +1005,38 @@ export function ClientControlDashboard({
             ) : (
               <p className="text-xs text-neutral-400 italic">Nessun prodotto registrato per questo collaboratore nel mese selezionato.</p>
             )}
+
+            <div className="space-y-3 border-t border-black/[0.06] pt-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#C661A0]">Schede cliente</p>
+                  <p className="mt-1 text-xs font-semibold text-black/45">Note dichiarate, prodotti e Posto Lampo per ogni cliente.</p>
+                </div>
+                <span className="text-[11px] font-bold text-black/40">{workerReport.clientSheets.length} schede nel periodo</span>
+              </div>
+              {workerReport.clientSheets.length ? (
+                <div className="max-h-[30rem] space-y-2 overflow-y-auto pr-1">
+                  {workerReport.clientSheets.map((sheet) => {
+                    const date = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sheet.response.created_at));
+                    return (
+                      <article key={sheet.response.id} className="rounded-2xl border border-black/[0.07] bg-white p-3.5 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="truncate text-sm font-black text-[#211D20]">{sheet.clientName}</h4>
+                            <p className="mt-0.5 text-[11px] font-semibold text-black/40">{date} · {sheet.products.length} prodotti{sheet.postoLampo ? " · Posto Lampo" : ""}</p>
+                          </div>
+                          <button type="button" onClick={() => openResponse(sheet.response)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black/10 px-3 text-[11px] font-black text-black/60 transition hover:border-[#C661A0] hover:text-[#A43E70]">
+                            <Eye className="size-3.5" />Apri scheda
+                          </button>
+                        </div>
+                        {sheet.products.length ? <div className="mt-3 flex flex-wrap gap-1.5">{sheet.products.map((product, index) => <span key={`${sheet.response.id}-product-${index}`} className="rounded-full bg-[#FCEBF4] px-2.5 py-1 text-[10px] font-bold text-[#8C3B62]">{product}</span>)}</div> : null}
+                        {sheet.note ? <details className="mt-3 rounded-xl bg-[#FAF8F9] px-3 py-2"><summary className="cursor-pointer text-[11px] font-black text-black/55">Leggi tutte le note</summary><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-black/65">{sheet.note}</p></details> : <p className="mt-3 text-[11px] italic text-black/35">Nessuna nota testuale dichiarata.</p>}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : <p className="rounded-xl bg-white p-4 text-xs italic text-black/40">Nessuna scheda cliente per questo collaboratore nel periodo selezionato.</p>}
+            </div>
           </div>
         )}
 

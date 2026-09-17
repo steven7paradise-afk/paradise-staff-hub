@@ -311,12 +311,17 @@ export async function POST(request: NextRequest) {
       )
     : null;
   const detectedPaymentMethod = secondOrderDetails?.paymentMethod ?? "DA_VERIFICARE";
+  const isZeroTotalFinalOrder = Boolean(
+    secondOrderDetails && Number(secondOrderDetails.totalPrice) === 0,
+  );
   const submittedManualPaymentMethod = textValue(body?.manualPaymentMethod).toUpperCase();
   const manualPaymentMethod = (["CARTA", "SHOPIFY", "CONTANTI"] as const).find(
     (method) => method === submittedManualPaymentMethod,
   );
   const verifiedPaymentMethod = detectedPaymentMethod === "DA_VERIFICARE"
-    ? manualPaymentMethod ?? "DA_VERIFICARE"
+    ? isZeroTotalFinalOrder
+      ? "SHOPIFY"
+      : manualPaymentMethod ?? "DA_VERIFICARE"
     : detectedPaymentMethod;
   const verifiedPaymentStatus = String(secondOrderDetails?.financialStatus ?? "").toLowerCase();
   const submittedEmail = textValue(body?.email).toLowerCase();
@@ -357,7 +362,7 @@ export async function POST(request: NextRequest) {
     if (verifiedPaymentStatus !== "paid") {
       return NextResponse.json({ error: "Il secondo ordine Shopify non risulta pagato. Il controllo non può essere completato." }, { status: 400 });
     }
-    if (verifiedPaymentMethod === "DA_VERIFICARE") {
+    if (verifiedPaymentMethod === "DA_VERIFICARE" && !isZeroTotalFinalOrder) {
       return NextResponse.json({
         code: "PAYMENT_METHOD_REQUIRED",
         error: "Shopify non ha indicato chiaramente il metodo di pagamento. Seleziona il metodo usato dalla cliente.",

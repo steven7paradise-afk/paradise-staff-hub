@@ -8,12 +8,32 @@ export type TeamBonusWorker = {
   clients: number;
   photos: number;
   products: number;
+  postoLampo?: number;
+  sistemazioneFasce?: number;
   reviews: number;
   lateDays: number;
   lateMinutes: number;
   lateReturns: number;
   lateReturnMinutes: number;
+  pauseDays?: number;
+  pauseCount?: number;
+  pauseMinutes?: number;
+  shortPauseCount?: number;
+  missingPauseDays?: number;
+  lowActivityDays?: number;
+  targetDays?: number;
+  dailyCounts?: Record<string, number>;
+  dailySheets?: Record<string, number>;
+  clientDetails?: Array<{
+    date: string;
+    clientName: string;
+    products: string;
+    note: string;
+    postoLampo: boolean;
+    sistemazioneFasce: boolean;
+  }>;
   unjustifiedAbsences: number;
+  justifiedAbsences?: number;
   completedTasks: number;
 };
 

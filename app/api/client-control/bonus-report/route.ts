@@ -31,6 +31,54 @@ function names(value: unknown): string[] {
   return String(value ?? "").split(/[,;]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function answerStrings(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(answerStrings);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferred = record.title ?? record.name ?? record.label ?? record.value ?? record.service;
+    return preferred === undefined ? Object.values(record).flatMap(answerStrings) : answerStrings(preferred);
+  }
+  const text = String(value ?? "").trim();
+  return text && !["undefined", "null", "[object Object]"].includes(text) ? [text] : [];
+}
+
+function operationalText(answers: Record<string, unknown>) {
+  return [
+    answers.client_control_service_title,
+    answers.service_title,
+    answers.custom_services,
+    answers.custom_fasce,
+    answers.notes,
+    answers[CLIENT_CONTROL_FIELD_IDS.productsList],
+    answers.client_control_notes_text,
+    answers.custom_note_text,
+    answers.customNoteText,
+    answers.custom_extra_note,
+    answers.client_control_shopify_order_note,
+    answers.shopify_note_order,
+  ].flatMap(answerStrings).join(" ");
+}
+
+function detailNote(answers: Record<string, unknown>) {
+  return [
+    answers.client_control_notes_text,
+    answers.custom_note_text,
+    answers.customNoteText,
+    answers.custom_extra_note,
+    answers.client_control_shopify_order_note,
+    answers.shopify_note_order,
+  ].flatMap(answerStrings).join(" | ");
+}
+
+function romeDayKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 function minutes(value?: string | null) {
   if (!value) return null;
   const [hours, mins] = value.split(":").map(Number);
@@ -71,6 +119,25 @@ function pauseDelayMinutes(logs: { type: string; timestamp: Date }[], limit: num
   return delay;
 }
 
+function pauseSummary(logs: { type: string; timestamp: Date }[]) {
+  const ordered = [...logs].sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+  let pauseAt: Date | null = null;
+  let pauseMinutes = 0;
+  let pauseCount = 0;
+  let shortPauseCount = 0;
+  for (const log of ordered) {
+    if (log.type === "PAUSA") pauseAt = log.timestamp;
+    if (log.type === "RIENTRO" && pauseAt) {
+      const duration = Math.max(0, Math.round((log.timestamp.getTime() - pauseAt.getTime()) / 60_000));
+      pauseMinutes += duration;
+      pauseCount += 1;
+      if (duration < 20) shortPauseCount += 1;
+      pauseAt = null;
+    }
+  }
+  return { pauseMinutes, pauseCount, shortPauseCount };
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Accesso richiesto." }, { status: 401 });
@@ -99,6 +166,7 @@ export async function GET(request: NextRequest) {
 
   const workers = await prisma.user.findMany({
     where: {
+      active: true,
       role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       location: locationWhere,
       contract_start: { lt: periodEnd },
@@ -141,6 +209,7 @@ export async function GET(request: NextRequest) {
       const lateMinutes = firstEntry && plannedStart !== null ? Math.max(0, romeMinutes(firstEntry.timestamp) - plannedStart) : 0;
       const breakLimit = parseClockRule(clockSettings.find((setting) => setting.key === clockRuleKey(entry.location_id ?? worker.sede_id ?? ""))?.value).breakDurationMinutes;
       const pauseDelay = key >= PAUSE_LATENESS_START_KEY ? pauseDelayMinutes(dayLogs, breakLimit) : 0;
+      const dayPause = pauseSummary(dayLogs);
       const hasLeave = workerLeaves.some((leave) => key >= dayKey(leave.start_date) && key <= dayKey(leave.end_date));
       const noShow = key < todayKey && !firstEntry && !hasLeave;
       const clock = calculateClockHours(dayLogs);
@@ -152,9 +221,15 @@ export async function GET(request: NextRequest) {
       if (firstEntry) summary.days += 1;
       if (lateMinutes > 10) { summary.lateDays += 1; summary.lateMinutes += lateMinutes; }
       if (pauseDelay > 0) { summary.lateReturns += 1; summary.lateReturnMinutes += pauseDelay; }
+      if (dayPause.pauseCount > 0) summary.pauseDays += 1;
+      summary.pauseCount += dayPause.pauseCount;
+      summary.pauseMinutes += dayPause.pauseMinutes;
+      summary.shortPauseCount += dayPause.shortPauseCount;
+      if (firstEntry && key < todayKey && dayPause.pauseCount === 0) summary.missingPauseDays += 1;
       if (noShow) summary.unjustifiedAbsences += 1;
+      if (hasLeave && !firstEntry) summary.justifiedAbsences += 1;
       return summary;
-    }, { days: 0, hours: 0, lateDays: 0, lateMinutes: 0, lateReturns: 0, lateReturnMinutes: 0, unjustifiedAbsences: 0 });
+    }, { days: 0, hours: 0, lateDays: 0, lateMinutes: 0, lateReturns: 0, lateReturnMinutes: 0, unjustifiedAbsences: 0, justifiedAbsences: 0, pauseDays: 0, pauseCount: 0, pauseMinutes: 0, shortPauseCount: 0, missingPauseDays: 0 });
 
     const clientRows = validResponses.filter((response) => {
       const answers = response.answers as Record<string, unknown>;
@@ -173,6 +248,37 @@ export async function GET(request: NextRequest) {
       if (truthy(answers[CLIENT_CONTROL_FIELD_IDS.review])) summary.reviews += 1;
       return summary;
     }, { photos: 0, products: 0, reviews: 0 });
+    const controlsByDay = new Map<string, number>();
+    clientRows.forEach((response) => {
+      const key = romeDayKey(response.created_at);
+      controlsByDay.set(key, (controlsByDay.get(key) ?? 0) + 1);
+    });
+    const workedScheduleDays = Array.from(new Set(workerSchedules.map((entry) => dayKey(entry.date))))
+      .filter((key) => key < todayKey);
+    const lowActivityDays = workedScheduleDays.filter((key) => (controlsByDay.get(key) ?? 0) < 5).length;
+    const targetDays = workedScheduleDays.filter((key) => (controlsByDay.get(key) ?? 0) >= 5).length;
+    const postoLampo = clientRows.filter((response) => {
+      const answers = response.answers as Record<string, unknown>;
+      return /\bpost[oi]\s*[- ]?\s*lamp[oi]\b/i.test(operationalText(answers));
+    }).length;
+    const sistemazioneFasce = clientRows.filter((response) => {
+      const answers = response.answers as Record<string, unknown>;
+      return /\bsistemazione\s+fasc(?:e|ia)\b/i.test(operationalText(answers));
+    }).length;
+    const clientDetails = clientRows.map((response) => {
+      const answers = response.answers as Record<string, unknown>;
+      const products = answerStrings(answers[CLIENT_CONTROL_FIELD_IDS.productsList]).join(", ");
+      const note = detailNote(answers);
+      const detailText = operationalText(answers);
+      return {
+        date: response.created_at.toISOString(),
+        clientName: String(answers[CLIENT_CONTROL_FIELD_IDS.clientName] ?? "Cliente senza nome").trim(),
+        products: products || (truthy(answers[CLIENT_CONTROL_FIELD_IDS.products]) ? "Prodotto dichiarato" : "Nessun prodotto dichiarato"),
+        note: note || "Nessuna nota dichiarata",
+        postoLampo: /\bpost[oi]\s*[- ]?\s*lamp[oi]\b/i.test(detailText),
+        sistemazioneFasce: /\bsistemazione\s+fasc(?:e|ia)\b/i.test(detailText),
+      };
+    });
 
     return {
       name: worker.name,
@@ -184,11 +290,24 @@ export async function GET(request: NextRequest) {
       clients: clientRows.length,
       photos: client.photos,
       products: client.products,
+      postoLampo,
+      sistemazioneFasce,
       reviews: client.reviews,
       lateDays: attendance.lateDays,
       lateMinutes: attendance.lateMinutes,
       lateReturns: attendance.lateReturns,
       lateReturnMinutes: attendance.lateReturnMinutes,
+      pauseDays: attendance.pauseDays,
+      pauseCount: attendance.pauseCount,
+      pauseMinutes: attendance.pauseMinutes,
+      shortPauseCount: attendance.shortPauseCount,
+      missingPauseDays: attendance.missingPauseDays,
+      justifiedAbsences: attendance.justifiedAbsences,
+      lowActivityDays,
+      targetDays,
+      dailyCounts: Object.fromEntries(controlsByDay),
+      dailySheets: Object.fromEntries(controlsByDay),
+      clientDetails,
       unjustifiedAbsences: attendance.unjustifiedAbsences,
       completedTasks: tasks.filter((task) => task.status === "COMPLETED" && task.assignees.some((assignee) => assignee.id === worker.id)).length,
     };

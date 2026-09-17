@@ -55,6 +55,26 @@ export function createStaffSummaryPdf(rows: StaffSummaryRow[], label: string, fi
       doc.setFontSize(7); doc.setTextColor(...muted); doc.text(description, x + 3, y + 23);
     });
     y += 35;
+    const clientDetails = row.clientDetails || [];
+    text(`Clienti svolti: ${row.clientCount ?? clientDetails.length}   /   Prodotti: ${row.productCount ?? 0}   /   Posti Lampo: ${row.postoLampoCount ?? 0}`, 14, y, 8.5, true);
+    y += 6;
+    if (clientDetails.length) {
+      text("Schede cliente del mese", 14, y, 10, true); y += 4;
+      for (const detail of clientDetails) {
+        const date = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" }).format(new Date(detail.date));
+        const label = `${date} · ${detail.clientName}${detail.postoLampo ? " · Posto Lampo" : ""}${detail.products.length ? ` · Prodotti: ${detail.products.join(", ")}` : ""}`;
+        const lines: string[] = doc.splitTextToSize(label, 178);
+        if (y + lines.length * 3.5 + 5 > 270) { doc.addPage(); y = identity(row, header(), true); }
+        text(lines, 18, y, 7.5);
+        y += lines.length * 3.5;
+        if (detail.note) {
+          const noteLines: string[] = doc.splitTextToSize(`Nota: ${detail.note}`, 170);
+          text(noteLines.slice(0, 4), 22, y + 3, 7);
+          y += Math.min(4, noteLines.length) * 3.2 + 2;
+        } else y += 3;
+      }
+      y += 3;
+    }
     text(`Malattia: ${row.sickness}   /   Ferie: ${row.holidays}   /   Altre assenze: ${row.other}`, 14, y, 8.5);
     y += 6; text(`Permessi: ${row.permits}   /   Riposi: ${row.rest}   /   Richieste in attesa: ${row.pending}`, 14, y, 8.5);
     y += 10; text("Cronologia del mese", 14, y, 11, true); y += 5;
