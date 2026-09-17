@@ -11,6 +11,8 @@ import {
   ChevronRight,
   Clock3,
   CreditCard,
+  Eye,
+  EyeOff,
   Mail,
   MapPin,
   MessageSquare,
@@ -54,11 +56,38 @@ import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock"
 import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
+import { closestAppointmentPayment, canCorrectAppointmentClient } from "@/lib/appointment-payment-match";
 import {
   allowsMissingFinalPaymentOrder,
   CLIENT_CONTROL_SERVICE_OPTIONS,
   type ClientControlService,
 } from "@/lib/client-control-service-rules";
+
+// PII Masking Utilities for Client Privacy (Phone & Email only)
+function maskClientName(name?: string): string {
+  if (!name || !name.trim()) return "Cliente non indicata";
+  return name.trim();
+}
+
+function maskPhone(phone?: string): string {
+  if (!phone || !phone.trim()) return "Telefono non disponibile";
+  const cleaned = phone.trim();
+  const digits = cleaned.replace(/\D/g, "");
+  if (digits.length < 6) return cleaned;
+  const prefix = digits.slice(0, 3);
+  const suffix = digits.slice(-3);
+  const middle = "*".repeat(digits.length - 6);
+  return `${prefix}${middle}${suffix}`;
+}
+
+function maskEmail(email?: string): string {
+  if (!email || !email.trim() || !email.includes("@")) return email || "Email non disponibile";
+  const [user, domain] = email.trim().split("@");
+  if (user.length <= 3) return `${user[0]}***@${domain}`;
+  const prefix = user.slice(0, 2);
+  const suffix = user.slice(-2);
+  return `${prefix}***${suffix}@${domain}`;
+}
 
 type ViewMode = "day" | "week" | "month";
 type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
@@ -1994,6 +2023,7 @@ export function AppointmentsBrowser({
   const clientControlRequestRef = useRef<AbortController | null>(null);
 
   function closeClientControl() {
+    flushClientControlDraft();
     clientControlRequestRef.current?.abort();
     clientControlRequestRef.current = null;
     setClientControlOpen(false);
@@ -2092,6 +2122,7 @@ export function AppointmentsBrowser({
       review: false,
       bookingId: null,
     });
+  const [maskClientPrivacy, setMaskClientPrivacy] = useState(true);
   const finalPaymentOptional = allowsMissingFinalPaymentOrder([
     ...selectedServiceDetails,
     clientControlForm.serviceTitle,
@@ -2099,6 +2130,8 @@ export function AppointmentsBrowser({
   const clientControlFormRef = useRef(clientControlForm);
   const clientControlAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientControlAutoSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const clientControlPendingSaveRef = useRef<(() => Promise<void>) | null>(null);
+  const clientControlObservedDraftRef = useRef<string | null>(null);
 
   useEffect(() => {
     clientControlFormRef.current = clientControlForm;
@@ -2134,9 +2167,7 @@ export function AppointmentsBrowser({
   ]);
 
   useEffect(() => () => {
-    if (clientControlAutoSaveTimerRef.current) {
-      clearTimeout(clientControlAutoSaveTimerRef.current);
-    }
+    flushClientControlDraft();
   }, []);
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<{
@@ -2319,7 +2350,20 @@ export function AppointmentsBrowser({
   const [shopifyNoteFallbackToDeposit, setShopifyNoteFallbackToDeposit] = useState(false);
   const [showManualShopifyCorrection] = useState(false);
 
+  const paymentRefreshRef = useRef(fetchTodayShopifyOrders);
+  useEffect(() => { paymentRefreshRef.current = fetchTodayShopifyOrders; });
+  useEffect(() => {
+    if (!clientControlOpen || !clientControlForm.bookingId) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const form = clientControlFormRef.current;
+      void paymentRefreshRef.current({ clientName: form.clientName, email: form.email, phone: form.phone, shopifyOrder: form.shopifyOrder });
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [clientControlOpen, clientControlForm.bookingId]);
+
   async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string; shopifyOrder?: string }) {
+    const lookupBookingId = clientControlFormRef.current.bookingId;
     setLoadingTodayOrders(true);
     try {
       const params = new URLSearchParams({
@@ -2333,6 +2377,7 @@ export function AppointmentsBrowser({
         try {
           const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`, { cache: "no-store" });
           const data = await res.json().catch(() => null);
+          if (clientControlFormRef.current.bookingId !== lookupBookingId) return;
           if (res.ok && Array.isArray(data?.orders) && data.orders.length > 0) {
             setTodayOrdersList(data.orders);
             setShopifyNoteFallbackToDeposit(false);
@@ -2344,6 +2389,7 @@ export function AppointmentsBrowser({
       }
 
       if (lastLookupError) console.error("Failed to fetch client's Shopify orders:", lastLookupError);
+      if (clientControlFormRef.current.bookingId !== lookupBookingId) return;
       setTodayOrdersList([]);
       const depositOrder = String(
         identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
@@ -2354,6 +2400,7 @@ export function AppointmentsBrowser({
       }
     } catch (err) {
       console.error("Failed to prepare client's Shopify order search:", err);
+      if (clientControlFormRef.current.bookingId !== lookupBookingId) return;
       const depositOrder = String(
         identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
       ).trim().replace(/^#/, "");
@@ -2362,7 +2409,7 @@ export function AppointmentsBrowser({
         setShopifyNoteFallbackToDeposit(true);
       }
     } finally {
-      setLoadingTodayOrders(false);
+      if (clientControlFormRef.current.bookingId === lookupBookingId) setLoadingTodayOrders(false);
     }
   }
 
@@ -2501,14 +2548,9 @@ export function AppointmentsBrowser({
   }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, todayOrdersList]);
 
   const latestClientPaymentOrder = useMemo(() => {
-    return [...clientMatchingOrders]
-      .filter((order) => String(order.financialStatus || "").toLowerCase() === "paid")
-      .sort((a, b) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bTime - aTime;
-      })[0] || null;
-  }, [clientMatchingOrders]);
+    const booking = initialBookings.find((item) => item.id === clientControlForm.bookingId);
+    return closestAppointmentPayment(clientMatchingOrders, booking?.startDate, clientControlForm.shopifyOrder);
+  }, [clientMatchingOrders, initialBookings, clientControlForm.bookingId, clientControlForm.shopifyOrder]);
 
   // Suggested 1° Ordine (Acconto)
   const suggestedAccontoOrder = useMemo(() => {
@@ -2523,25 +2565,8 @@ export function AppointmentsBrowser({
 
   // Suggested 2° Ordine (Saldo Finale)
   const suggestedSaldoOrder = useMemo(() => {
-    if (!clientMatchingOrders.length) return null;
-    const isSaldoKey = (title?: string) => /saldo|salone|riapplicazione|pos|commissioni/i.test(title || "");
-    const isDifferentFromDeposit = (order: ShopifyClientOrder) =>
-      !suggestedAccontoOrder ||
-      (order.id !== suggestedAccontoOrder.id &&
-        order.orderName !== suggestedAccontoOrder.orderName);
-    const explicit = clientMatchingOrders.find(
-      (order) =>
-        order.totalPrice >= 60 &&
-        isDifferentFromDeposit(order) &&
-        isSaldoKey(order.serviceTitle),
-    );
-    if (explicit) return explicit;
-    return (
-      clientMatchingOrders.find(
-        (order) => order.totalPrice >= 60 && isDifferentFromDeposit(order),
-      ) || null
-    );
-  }, [clientMatchingOrders, suggestedAccontoOrder]);
+    return latestClientPaymentOrder;
+  }, [latestClientPaymentOrder]);
 
   const clientPaymentOrders = useMemo(() => {
     const uniqueOrders = new Map<string, ShopifyClientOrder>();
@@ -2605,15 +2630,11 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     const currentSecondOrder = String(clientControlForm.secondShopifyOrder || "").trim().replace(/^#/, "");
-    const currentDepositOrder = String(clientControlForm.shopifyOrder || "").trim().replace(/^#/, "");
-    const hasDistinctFinalOrder = Boolean(
-      currentSecondOrder && currentSecondOrder !== currentDepositOrder,
-    );
     if (
       !clientControlOpen ||
       !clientControlHistoryLoaded ||
       !suggestedSaldoOrder ||
-      hasDistinctFinalOrder
+      currentSecondOrder === suggestedSaldoOrder.orderName.replace(/^#/, "")
     ) {
       return;
     }
@@ -2622,19 +2643,16 @@ export function AppointmentsBrowser({
     setSecondOrderDetails(suggestedSaldoOrder);
     setSelectedShopifyNoteOrder(cleanOrderName);
     setShopifyNoteFallbackToDeposit(false);
-    setClientControlForm((current) => {
-      const currentSecond = String(current.secondShopifyOrder || "").trim().replace(/^#/, "");
-      const currentDeposit = String(current.shopifyOrder || "").trim().replace(/^#/, "");
-      if (currentSecond && currentSecond !== currentDeposit) return current;
-      return {
-        ...current,
-        secondShopifyOrder: cleanOrderName,
-        paid:
-          suggestedSaldoOrder.totalPrice != null
-            ? String(suggestedSaldoOrder.totalPrice)
-            : current.paid,
-      };
-    });
+    const nextForm = {
+      ...clientControlFormRef.current,
+      secondShopifyOrder: cleanOrderName,
+      paid: suggestedSaldoOrder.totalPrice != null
+        ? String(suggestedSaldoOrder.totalPrice)
+        : clientControlFormRef.current.paid,
+    };
+    clientControlFormRef.current = nextForm;
+    setClientControlForm(nextForm);
+    scheduleClientControlDraft(nextForm);
     void handleSecondShopifyOrderLookup(cleanOrderName);
     // L'ordine suggerito cambia solo dopo il caricamento dello storico cliente.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2828,6 +2846,7 @@ export function AppointmentsBrowser({
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
     setSelectedShopifyNoteOrder("");
+    setTodayOrdersList([]);
     setIsStaffDropdownOpen(false);
     setClientControlLastVisitAt(null);
     setClientControlHistoryLoaded(false);
@@ -3140,6 +3159,7 @@ export function AppointmentsBrowser({
     if (!saveAsDraft && clientControlAutoSaveTimerRef.current) {
       clearTimeout(clientControlAutoSaveTimerRef.current);
       clientControlAutoSaveTimerRef.current = null;
+      clientControlPendingSaveRef.current = null;
     }
     setClientControlMessage(null);
     if (
@@ -3176,6 +3196,8 @@ export function AppointmentsBrowser({
 
     setClientControlSubmitting(true);
     try {
+      // A queued older draft must finish before the explicit confirmation.
+      if (!saveAsDraft) await clientControlAutoSaveQueueRef.current.catch(() => undefined);
       const customGrammiVal = selectedGrammi === "custom" ? customGrammiInput : selectedGrammi;
       const customFasceVal = selectedFasce === "custom" ? customFasceInput : selectedFasce;
 
@@ -3191,6 +3213,7 @@ export function AppointmentsBrowser({
         customExtraNote: extraNoteText || "",
         customServices: selectedServiceDetails,
         saveAsDraft,
+        autoSave: saveAsDraft && keepOpen,
       };
 
       const response = await fetch("/api/client-control/tablet-submit", {
@@ -3265,7 +3288,7 @@ export function AppointmentsBrowser({
         }));
       }
 
-      showPushToast(
+      if (!keepOpen || teamSyncWarning) showPushToast(
         teamSyncWarning
           ? "Scheda salvata con avviso"
           : keepOpen
@@ -3286,7 +3309,7 @@ export function AppointmentsBrowser({
         text:
           teamSyncWarning ||
           (keepOpen
-            ? "Verifiche e controlli salvati automaticamente."
+            ? "Modifiche salvate automaticamente."
             : saveAsDraft
             ? "Bozza salvata. Puoi riprendere la compilazione in seguito."
             : savedOperation === "updated"
@@ -3329,16 +3352,57 @@ export function AppointmentsBrowser({
   }
 
   function scheduleClientControlDraft(nextForm = clientControlFormRef.current) {
-    if (!nextForm.bookingId || clientControlLoading || clientControlSubmitting) return;
+    if (!nextForm.bookingId || clientControlLoading || !clientControlHistoryLoaded) return;
     if (clientControlAutoSaveTimerRef.current) {
       clearTimeout(clientControlAutoSaveTimerRef.current);
     }
-    clientControlAutoSaveTimerRef.current = setTimeout(() => {
-      clientControlAutoSaveQueueRef.current = clientControlAutoSaveQueueRef.current
-        .catch(() => undefined)
-        .then(() => submitClientControlForm(undefined, true, nextForm, true));
-    }, 700);
+    clientControlPendingSaveRef.current = () => submitClientControlForm(undefined, true, nextForm, true);
+    clientControlAutoSaveTimerRef.current = setTimeout(flushClientControlDraft, 500);
   }
+
+  function flushClientControlDraft() {
+    if (clientControlAutoSaveTimerRef.current) {
+      clearTimeout(clientControlAutoSaveTimerRef.current);
+      clientControlAutoSaveTimerRef.current = null;
+    }
+    const save = clientControlPendingSaveRef.current;
+    clientControlPendingSaveRef.current = null;
+    if (!save) return;
+    clientControlAutoSaveQueueRef.current = clientControlAutoSaveQueueRef.current
+      .catch(() => undefined)
+      .then(save);
+  }
+
+  // Observe the complete editable draft, not only checkbox clicks or field blur.
+  useEffect(() => {
+    if (!clientControlOpen || clientControlLoading || !clientControlHistoryLoaded) {
+      clientControlObservedDraftRef.current = null;
+      return;
+    }
+    const signature = JSON.stringify({
+      form: clientControlForm,
+      selectedShopifyNoteOrder,
+      manualPaymentMethod,
+      selectedGrammi,
+      customGrammiInput,
+      selectedLunghezza,
+      selectedFasce,
+      customFasceInput,
+      selectedAtteggiamento,
+      extraNoteText,
+      selectedServiceDetails,
+    });
+    const previous = clientControlObservedDraftRef.current;
+    clientControlObservedDraftRef.current = signature;
+    if (previous !== null && previous !== signature) {
+      scheduleClientControlDraft(clientControlForm);
+    }
+    // Saving/submission state must not restart or suppress an edited draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientControlOpen, clientControlLoading, clientControlHistoryLoaded,
+    clientControlForm, selectedShopifyNoteOrder, manualPaymentMethod,
+    selectedGrammi, customGrammiInput, selectedLunghezza, selectedFasce,
+    customFasceInput, selectedAtteggiamento, extraNoteText, selectedServiceDetails]);
 
   function updateClientControlCheck(
     fieldKey: "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
@@ -3369,6 +3433,7 @@ export function AppointmentsBrowser({
     field: "clientName" | "email" | "phone",
     value: string,
   ) {
+    if (!canCorrectClientIdentity) return;
     const nextForm = {
       ...clientControlFormRef.current,
       [field]: value,
@@ -3378,6 +3443,7 @@ export function AppointmentsBrowser({
   }
 
   function saveClientIdentityAndSearchPayment() {
+    if (!canCorrectClientIdentity) return;
     const nextForm = clientControlFormRef.current;
     scheduleClientControlDraft(nextForm);
     setEditingClientIdentity(false);
@@ -3614,6 +3680,7 @@ export function AppointmentsBrowser({
       : null,
   );
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
+  const canCorrectClientIdentity = !isPC && canCorrectAppointmentClient(currentUser?.role);
 
   useEffect(() => {
     if (!isPC || !pcActiveWorker) return;
@@ -5014,20 +5081,31 @@ export function AppointmentsBrowser({
           >
             {/* Scrollable Content */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
-              <div className="mx-auto w-full max-w-[1480px] space-y-6 px-5 py-5 sm:px-8 lg:px-12">
-              {/* Riepilogo ordinato della card appuntamento */}
-              <section className="overflow-hidden rounded-[28px] border border-[#F0D4E2] bg-white shadow-[0_12px_34px_rgba(184,61,127,0.08)]">
-                <div className="flex flex-col gap-3 border-b border-[#F3E3EB] bg-[linear-gradient(100deg,#FFF4F9,#FCFAFF)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="mx-auto w-full max-w-[1480px] space-y-3.5 px-4 py-3 sm:px-6 lg:px-8">
+              {/* Riepilogo ordinato della card appuntamento (Compact Official View) */}
+              <section className="overflow-hidden rounded-[22px] border border-[#F0D4E2] bg-white shadow-[0_8px_30px_rgba(184,61,127,0.06)]">
+                <div className="flex flex-col gap-2 border-b border-[#F3E3EB] bg-[linear-gradient(100deg,#FFF4F9,#FCFAFF)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                   <div className="flex items-center gap-3">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#B83D7F] text-white shadow-sm">
-                      <CalendarCheck className="size-5" />
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#B83D7F] text-white shadow-md">
+                      <CalendarCheck className="size-4" />
                     </span>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">Nome cliente</p>
-                      <h3 className="mt-1 text-lg font-black text-[#1F1F1F]">
-                        {clientControlForm.clientName || "Cliente non indicata"}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[8px] font-black uppercase tracking-[0.24em] text-[#B83D7F] bg-[#FFF0F6] border border-[#F6C6DE] px-2 py-0.5 rounded-md">
+                          PARADISE HUB · OFFICIAL
+                        </span>
+                        {clientControlBookingStatus ? (
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black ${appointmentStatusClasses[clientControlBookingStatus]}`}
+                          >
+                            {appointmentStatusLabels[clientControlBookingStatus]}
+                          </span>
+                        ) : null}
+                      </div>
+                      <h3 className="mt-0.5 text-base font-black text-[#1F1F1F]">
+                        {maskClientPrivacy ? maskClientName(clientControlForm.clientName) : (clientControlForm.clientName || "Cliente non indicata")}
                       </h3>
-                      <p className="mt-1 text-xs font-bold text-black/50">
+                      <p className="text-[11px] font-bold text-black/50">
                         {clientControlLastVisitAt
                           ? `Ultima visita: ${formatDate(clientControlLastVisitAt)}`
                           : clientControlHistoryLoaded
@@ -5037,27 +5115,35 @@ export function AppointmentsBrowser({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 self-start sm:self-auto">
-                    {clientControlBookingStatus ? (
-                      <span
-                        className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${appointmentStatusClasses[clientControlBookingStatus]}`}
+                    {Boolean(
+                      salon === "ufficio" ||
+                        clientControlBooking?.inferredSalon === "ufficio" ||
+                        (clientControlForm.salon || "").toLowerCase().includes("ufficio"),
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={() => setMaskClientPrivacy((prev) => !prev)}
+                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#F0C4D7] bg-white px-3 text-[11px] font-black uppercase tracking-wider text-[#A93469] shadow-2xs transition hover:bg-[#FFF0F6]"
+                        title={maskClientPrivacy ? "Mostra dati completi cliente" : "Censura dati cliente"}
                       >
-                        {appointmentStatusLabels[clientControlBookingStatus]}
-                      </span>
+                        {maskClientPrivacy ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                        <span>{maskClientPrivacy ? "Rivela dati" : "Censura dati"}</span>
+                      </button>
                     ) : null}
                     <button
                       type="button"
                       onClick={closeClientControl}
-                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#A82E6C] bg-[#B83D7F] px-4 text-white shadow-[0_8px_18px_rgba(184,61,127,0.24)] transition hover:bg-[#A83273] hover:shadow-[0_10px_22px_rgba(184,61,127,0.3)] active:scale-95"
+                      className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#A82E6C] bg-[#B83D7F] px-3.5 text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)] transition hover:bg-[#A83273] active:scale-95"
                       aria-label="Torna agli appuntamenti"
                     >
-                      <X className="size-5" />
-                      <span className="text-xs font-black uppercase tracking-[0.14em]">Chiudi</span>
+                      <X className="size-4" />
+                      <span className="text-[11px] font-black uppercase tracking-[0.14em]">Chiudi</span>
                     </button>
                   </div>
                 </div>
 
                 <div className="grid gap-px bg-[#F1E7EC] sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="bg-white p-5">
+                  <div className="bg-white p-3.5">
                     <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
                       <Clock3 className="size-4 text-[#D96B94]" />
                       Data, ora e sede
@@ -5080,67 +5166,67 @@ export function AppointmentsBrowser({
                     </p>
                   </div>
 
-                  <div className="min-w-0 bg-white p-5">
+                  <div className="min-w-0 bg-white p-3 sm:p-3.5">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                        <User className="size-4 text-[#D96B94]" />
+                      <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-black/40">
+                        <User className="size-3.5 text-[#D96B94]" />
                         Cliente e contatti
                       </p>
-                      <button
+                      {canCorrectClientIdentity ? <button
                         type="button"
                         onClick={() => setEditingClientIdentity((current) => !current)}
                         aria-expanded={editingClientIdentity}
                         aria-controls="client-control-identity-editor"
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#F0C4D7] bg-[#FFF7FB] px-2.5 text-[9px] font-black uppercase tracking-wider text-[#A93469] transition hover:bg-[#FCE5F3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94]"
+                        className="inline-flex min-h-7 items-center gap-1 rounded-md border border-[#F0C4D7] bg-[#FFF7FB] px-2 text-[9px] font-black uppercase tracking-wider text-[#A93469] transition hover:bg-[#FCE5F3]"
                       >
-                        <Pencil className="size-3" />
+                        <Pencil className="size-2.5" />
                         {editingClientIdentity ? "Chiudi" : "Correggi"}
-                      </button>
+                      </button> : null}
                     </div>
-                    <p className="mt-3 truncate text-sm font-black text-[#1F1F1F]">
-                      {clientControlForm.clientName || "Cliente non indicata"}
+                    <p className="mt-1 truncate text-xs font-black text-[#1F1F1F]">
+                      {maskClientPrivacy ? maskClientName(clientControlForm.clientName) : (clientControlForm.clientName || "Cliente non indicata")}
                     </p>
-                    <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-bold text-black/55">
-                      <Phone className="size-3.5 shrink-0 text-[#D96B94]" />
-                      <span className="truncate">{clientControlForm.phone || "Telefono non disponibile"}</span>
+                    <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] font-bold text-black/55">
+                      <Phone className="size-3 shrink-0 text-[#D96B94]" />
+                      <span className="truncate">{maskClientPrivacy ? maskPhone(clientControlForm.phone) : (clientControlForm.phone || "Telefono non disponibile")}</span>
                     </p>
-                    <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-bold text-black/55">
-                      <Mail className="size-3.5 shrink-0 text-[#D96B94]" />
-                      <span className="truncate">{clientControlForm.email || "Email non disponibile"}</span>
+                    <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] font-bold text-black/55">
+                      <Mail className="size-3 shrink-0 text-[#D96B94]" />
+                      <span className="truncate">{maskClientPrivacy ? maskEmail(clientControlForm.email) : (clientControlForm.email || "Email non disponibile")}</span>
                     </p>
                   </div>
 
-                  {editingClientIdentity ? (
-                    <div id="client-control-identity-editor" className="order-last bg-[#FFF9FC] p-5 sm:col-span-2 xl:col-span-4">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
-                        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
+                  {editingClientIdentity && canCorrectClientIdentity ? (
+                    <div id="client-control-identity-editor" className="order-last bg-[#FFF9FC] p-3.5 sm:col-span-2 xl:col-span-4">
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+                        <div className="grid min-w-0 flex-1 gap-2.5 sm:grid-cols-3">
                           <label className="block min-w-0">
-                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Nome cliente</span>
+                            <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/50">Nome cliente</span>
                             <input
                               value={clientControlForm.clientName}
                               onChange={(event) => updateClientControlIdentity("clientName", event.target.value)}
-                              className="mt-1.5 h-11 w-full rounded-xl border border-[#E8C3D4] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/20"
-                              placeholder="Nome e cognome corretti"
+                              className="mt-1 h-9 w-full rounded-xl border border-[#E8C3D4] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F]"
+                              placeholder="Nome e cognome"
                             />
                           </label>
                           <label className="block min-w-0">
-                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Email</span>
+                            <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/50">Email</span>
                             <input
                               type="email"
                               value={clientControlForm.email}
                               onChange={(event) => updateClientControlIdentity("email", event.target.value)}
-                              className="mt-1.5 h-11 w-full rounded-xl border border-[#E8C3D4] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/20"
+                              className="mt-1 h-9 w-full rounded-xl border border-[#E8C3D4] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F]"
                               placeholder="email@esempio.com"
                             />
                           </label>
                           <label className="block min-w-0">
-                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Telefono</span>
+                            <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/50">Telefono</span>
                             <input
                               type="tel"
                               inputMode="tel"
                               value={clientControlForm.phone}
                               onChange={(event) => updateClientControlIdentity("phone", event.target.value)}
-                              className="mt-1.5 h-11 w-full rounded-xl border border-[#E8C3D4] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/20"
+                              className="mt-1 h-9 w-full rounded-xl border border-[#E8C3D4] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F]"
                               placeholder="Numero di telefono"
                             />
                           </label>
@@ -5149,30 +5235,27 @@ export function AppointmentsBrowser({
                           type="button"
                           onClick={saveClientIdentityAndSearchPayment}
                           disabled={loadingTodayOrders || (!clientControlForm.clientName.trim() && !clientControlForm.email.trim() && !clientControlForm.phone.trim())}
-                          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#B83D7F] px-5 text-xs font-black text-white shadow-[0_8px_18px_rgba(184,61,127,0.22)] transition hover:bg-[#A83273] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94] disabled:pointer-events-none disabled:opacity-45"
+                          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#B83D7F] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#A83273] disabled:opacity-45"
                         >
-                          {loadingTodayOrders ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                          {loadingTodayOrders ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
                           Salva e cerca pagamento
                         </button>
                       </div>
-                      <p className="mt-3 text-[11px] font-semibold text-black/45">
-                        Il pagamento viene cercato prima tramite email o telefono; il nome può essere diverso da quello inserito nella prenotazione.
-                      </p>
                     </div>
                   ) : null}
 
-                  <div className="min-w-0 bg-white p-5">
-                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                      <Sparkles className="size-4 text-[#D96B94]" />
+                  <div className="min-w-0 bg-white p-3 sm:p-3.5">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-black/40">
+                      <Sparkles className="size-3.5 text-[#D96B94]" />
                       Servizio
                     </p>
-                    <p className="mt-3 line-clamp-2 text-sm font-black uppercase leading-5 text-[#1F1F1F]">
+                    <p className="mt-1 line-clamp-2 text-xs font-black uppercase leading-4 text-[#1F1F1F]">
                       {clientControlForm.serviceTitle || "Servizio non indicato"}
                     </p>
-                    <p className="mt-2 text-xs font-bold text-black/50">
+                    <p className="mt-0.5 text-[11px] font-bold text-black/50">
                       {clientControlBooking?.bookingType || "Prenotazione regolare"}
                     </p>
-                    <p className="mt-2 text-sm font-black text-[#B83D7F]">
+                    <p className="mt-1 text-xs font-black text-[#B83D7F]">
                       {clientControlBooking
                         ? formatMoney(
                             clientControlBooking.priceAmount,
@@ -5184,12 +5267,12 @@ export function AppointmentsBrowser({
                     </p>
                   </div>
 
-                  <div className="min-w-0 bg-white p-5">
-                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                      <UsersRound className="size-4 text-[#D96B94]" />
+                  <div className="min-w-0 bg-white p-3 sm:p-3.5">
+                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-black/40">
+                      <UsersRound className="size-3.5 text-[#D96B94]" />
                       Collaboratrice e ordine
                     </p>
-                    <p className="mt-3 line-clamp-2 text-sm font-black text-[#1F1F1F]">
+                    <p className="mt-1 line-clamp-2 text-xs font-black text-[#1F1F1F]">
                       {clientControlBookingTeam.map((mate) => mate.name).join(", ") ||
                         filteredClientControlEmployees
                           .filter((employee) => clientControlForm.staffIds.includes(employee.id))
@@ -5197,94 +5280,58 @@ export function AppointmentsBrowser({
                           .join(", ") ||
                         "Non assegnata"}
                     </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-black/55">
-                      <Receipt className="size-3.5 shrink-0 text-[#D96B94]" />
-                      <span>
-                        {clientControlForm.shopifyOrder
-                          ? `Acconto #${clientControlForm.shopifyOrder}`
-                          : "Acconto da collegare"}
-                      </span>
-                      {clientControlForm.shopifyOrder ? (
-                        <a
-                          href={getShopifyAdminOrderUrl(
-                            clientControlForm.shopifyOrder,
-                            selectedOrderDetails?.id,
-                          )}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] font-black text-[#B83D7F] underline hover:text-black"
-                        >
-                          Vedi ↗
-                        </a>
-                      ) : null}
-                    </div>
                     {clientControlForm.secondShopifyOrder ? (
-                      <p className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-[#B83D7F]">
-                        <ShoppingBag className="size-3.5 shrink-0" />
-                        Saldo #{clientControlForm.secondShopifyOrder}
-                      </p>
+                      <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-[#B83D7F]">
+                        <ShoppingBag className="size-3 shrink-0" />
+                        <span>Saldo #{clientControlForm.secondShopifyOrder}</span>
+                      </div>
                     ) : null}
                   </div>
                 </div>
-
               </section>
 
               {/* 1° e 2° Ordine Shopify Card */}
-              <div className="rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_30px_rgba(17,17,17,0.04)]">
-                <div className="p-4 sm:p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F]">
-                      <ShoppingBag className="size-6" />
+              <div className={`rounded-2xl border shadow-sm transition-colors ${latestClientPaymentOrder ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+                <div className="p-3 sm:p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#FFF0F6] text-[#B83D7F]">
+                      <ShoppingBag className="size-4" />
                     </span>
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
-                        Ultimo pagamento della cliente
+                      <p className={`text-[10px] font-black uppercase tracking-[0.14em] ${latestClientPaymentOrder ? "text-emerald-800" : "text-amber-800"}`}>
+                        {latestClientPaymentOrder ? "Pagamento del giorno trovato" : "Pagamento del giorno da verificare"}
                       </p>
                       {loadingTodayOrders && !latestClientPaymentOrder ? (
-                        <p className="mt-2 text-sm font-bold text-black/50">Cerco l’ultimo pagamento…</p>
+                        <p className="mt-1 text-xs font-bold text-black/50">Cerco l’ultimo pagamento…</p>
                       ) : latestClientPaymentOrder ? (
-                        <div className="mt-1 flex flex-wrap items-end gap-x-5 gap-y-1">
+                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
                           <div>
-                            <p className="text-lg font-black text-[#1F1F1F]">
-                              {latestClientPaymentOrder.clientName || clientControlForm.clientName || "Cliente"}
-                            </p>
-                            <p className="text-sm font-bold text-black/45">
+                            <span className="text-sm font-black text-[#1F1F1F]">
+                              {maskClientPrivacy
+                                ? maskClientName(latestClientPaymentOrder.clientName || clientControlForm.clientName)
+                                : (latestClientPaymentOrder.clientName || clientControlForm.clientName || "Cliente")}
+                            </span>
+                            <span className="ml-2 text-xs font-semibold text-black/45">
                               #{latestClientPaymentOrder.orderName.replace(/^#/, "")} · {formatOrderDate(latestClientPaymentOrder.createdAt)}
-                            </p>
+                            </span>
                           </div>
-                          <p className="text-2xl font-black tracking-tight text-[#1F1F1F]">
+                          <p className="text-lg font-black tracking-tight text-[#1F1F1F]">
                             €{latestClientPaymentOrder.totalPrice.toFixed(2)}
                           </p>
                         </div>
                       ) : (
-                        <div className="mt-1">
-                          <p className="text-sm font-black text-[#1F1F1F]">Nessun pagamento trovato</p>
-                          <p className="mt-0.5 text-xs font-semibold text-black/45">Puoi cercare e collegare manualmente un ordine.</p>
+                        <div className="mt-0.5">
+                          <p className="text-xs font-black text-[#1F1F1F]">Nessun pagamento trovato</p>
+                          <p className="text-xs font-semibold text-amber-800/80">Cerco il pagamento dello stesso giorno più vicino all’appuntamento. Verifica automatica ogni 30 secondi.</p>
                         </div>
                       )}
                     </div>
 
                     <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-                      {latestClientPaymentOrder ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            selectShopifyOrderFromList(latestClientPaymentOrder, "second");
-                            setShowShopifyOrdersPanel(true);
-                            setShowTodayOrdersDropdown(true);
-                          }}
-                          className={`inline-flex min-h-12 items-center justify-center rounded-2xl px-5 text-sm font-black transition active:scale-[0.98] ${
-                            selectedShopifyNoteOrder.replace(/^#/, "") === latestClientPaymentOrder.orderName.replace(/^#/, "")
-                              ? "bg-emerald-600 text-white shadow-[0_8px_22px_rgba(5,150,105,0.22)]"
-                              : "bg-[#B83D7F] text-white shadow-[0_8px_22px_rgba(184,61,127,0.24)] hover:bg-[#A93472]"
-                          }`}
-                        >
-                          {selectedShopifyNoteOrder.replace(/^#/, "") === latestClientPaymentOrder.orderName.replace(/^#/, "")
-                            ? "Selezionato ✓"
-                            : "Seleziona →"}
-                        </button>
-                      ) : null}
+                      <button type="button" onClick={() => void fetchTodayShopifyOrders()} disabled={loadingTodayOrders} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/65 transition hover:bg-neutral-50 disabled:opacity-50">
+                        <RefreshCw className={`size-3.5 ${loadingTodayOrders ? "animate-spin" : ""}`} /> Verifica ora
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -5300,20 +5347,20 @@ export function AppointmentsBrowser({
                         }}
                         aria-expanded={showShopifyOrdersPanel}
                         aria-controls="client-control-shopify-orders"
-                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 text-xs font-black text-black/60 transition hover:border-[#F6C6DE] hover:bg-[#FFF7FB] hover:text-[#B83D7F] active:scale-[0.98]"
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-[#FAFAFA] px-3.5 text-xs font-bold text-black/60 transition hover:border-[#F6C6DE] hover:bg-[#FFF7FB] hover:text-[#B83D7F] active:scale-[0.98]"
                       >
                         {showShopifyOrdersPanel ? "Chiudi ricerca" : "Cerca altro ordine"}
-                        <ChevronDown className={`size-4 transition-transform ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
+                        <ChevronDown className={`size-3.5 transition-transform ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
                       </button>
                     </div>
                   </div>
 
-                  {selectedShopifyNoteOrder ? (
-                    <div className="mt-4 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black text-emerald-800">
-                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-emerald-600 text-[11px] text-white">✓</span>
-                      {shopifyNoteFallbackToDeposit
-                        ? `Dopo 2 tentativi senza risultato, la nota verrà salvata automaticamente nell’acconto #${selectedShopifyNoteOrder.replace(/^#/, "")}.`
-                        : `La nota Shopify verrà salvata solo nell’ordine #${selectedShopifyNoteOrder.replace(/^#/, "")}.`}
+                  {latestClientPaymentOrder && selectedShopifyNoteOrder === latestClientPaymentOrder.orderName.replace(/^#/, "") ? (
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs font-extrabold text-emerald-800">
+                      <span className="grid size-4 shrink-0 place-items-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>
+                      <span>
+                        {`Pagamento #${selectedShopifyNoteOrder.replace(/^#/, "")} selezionato automaticamente`}
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -5630,78 +5677,8 @@ export function AppointmentsBrowser({
                 ) : null}
               </div>
 
-              {/* Acconto e collaboratrice */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {(() => {
-                  const hasVerifiedDeposit = Boolean(
-                    clientControlForm.shopifyOrder && clientControlForm.depositPaid,
-                  );
-                  const rawDepositAmount = String(clientControlForm.depositPaid || "0")
-                    .replace(/[^\d,.-]/g, "");
-                  const depositAmount = Number(
-                    rawDepositAmount.includes(",")
-                      ? rawDepositAmount.replace(/\./g, "").replace(",", ".")
-                      : rawDepositAmount,
-                  );
-
-                  return (
-                    <div
-                      className={`rounded-2xl border p-4 shadow-2xs ${
-                        hasVerifiedDeposit
-                          ? "border-emerald-200 bg-emerald-50/70"
-                          : "border-amber-200 bg-amber-50/70"
-                      }`}
-                      aria-label={hasVerifiedDeposit ? "Acconto verificato su Shopify" : "Acconto da verificare"}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span
-                            className={`grid size-10 shrink-0 place-items-center rounded-xl ${
-                              hasVerifiedDeposit
-                                ? "bg-emerald-600 text-white"
-                                : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {hasVerifiedDeposit ? <Check className="size-5 stroke-[3]" /> : <Coins className="size-5" />}
-                          </span>
-                          <div className="min-w-0">
-                            <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${hasVerifiedDeposit ? "text-emerald-800" : "text-amber-800"}`}>
-                              {hasVerifiedDeposit ? "Acconto verificato" : "Acconto da verificare"}
-                            </p>
-                            <p className="mt-0.5 text-2xl font-black tabular-nums tracking-tight text-[#1F1F1F]">
-                              {clientControlForm.depositPaid && Number.isFinite(depositAmount)
-                                ? formatMoney(depositAmount)
-                                : "Importo non disponibile"}
-                            </p>
-                          </div>
-                        </div>
-                        {hasVerifiedDeposit ? (
-                          <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700">
-                            Shopify ✓
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3 text-[11px] font-bold ${hasVerifiedDeposit ? "border-emerald-200 text-emerald-900/70" : "border-amber-200 text-amber-900/70"}`}>
-                        <span>
-                          {clientControlForm.shopifyOrder
-                            ? `Ordine #${clientControlForm.shopifyOrder.replace(/^#/, "")}`
-                            : "Nessun ordine collegato"}
-                        </span>
-                        <span aria-hidden="true">•</span>
-                        <span>
-                          {formatOrderDate(selectedOrderDetails?.createdAt || suggestedAccontoOrder?.createdAt) || "Data non disponibile"}
-                        </span>
-                        {hasVerifiedDeposit ? (
-                          <span className="basis-full text-[10px] font-semibold text-emerald-800/70">
-                            Importato automaticamente: non è un valore inserito a mano.
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })()}
-
+              {/* Collaboratrice */}
+              <div>
                 <div className="relative block">
                   <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
                     <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE
@@ -5896,686 +5873,398 @@ export function AppointmentsBrowser({
                 </div>
               )}
 
-              {/* Nuova Sezione Dettagli Extension & Cliente */}
-              <section className="overflow-hidden rounded-[24px] border-2 border-[#D6A43B] bg-[#FFF9E7] shadow-[0_12px_32px_rgba(161,113,20,0.18)]">
-                <button
-                  type="button"
-                  onClick={() => setServiceDetailsModalOpen(true)}
-                  className="group flex min-h-20 w-full items-center justify-between gap-4 bg-[linear-gradient(100deg,#FFF3C4,#FFFCF1)] px-5 py-4 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-[#FFEDAE] active:scale-[0.995] sm:px-6"
-                >
-                  <span className="flex items-center gap-3">
-                    <span className="relative grid size-12 shrink-0 place-items-center">
-                      <span className="absolute inset-0 rounded-2xl bg-[#E4B84D]/35 motion-safe:animate-ping motion-reduce:animate-none" />
-                      <span className="relative grid size-12 place-items-center rounded-2xl bg-[#B7791F] text-white shadow-[0_8px_20px_rgba(183,121,31,0.28)]">
-                        <Pencil className="size-5" />
-                      </span>
+              {/* Sezione Dettagli del Servizio direttamente integrata nella schermata principale */}
+              <section className="overflow-hidden rounded-[24px] border-2 border-[#E5B9CE] bg-[#FCF8FA] shadow-[0_8px_28px_rgba(83,44,63,0.08)]">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EEC9DA] bg-[linear-gradient(110deg,#FFF0F6_0%,#FFFFFF_72%)] px-5 py-4 sm:px-6">
+                  <div className="flex items-center gap-3.5">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#B83D7F] text-white shadow-md">
+                      <Pencil className="size-5" />
                     </span>
-                    <span>
-                      <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#B7791F] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-white shadow-sm motion-safe:animate-pulse motion-reduce:animate-none">
-                        <span className="size-1.5 rounded-full bg-white" /> Tocca qui
-                      </span>
-                      <span className="block text-base font-black text-[#5C4216]">
-                        2. Dettagli del servizio
-                      </span>
-                      <span className="mt-1 block text-xs font-bold text-[#7A6536]">
-                        Tocca qui per inserire grammi, lunghezza, fasce e note
-                      </span>
-                    </span>
-                  </span>
-                  <span className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[#B7791F] bg-[#B7791F] px-4 py-3 text-xs font-black text-white shadow-[0_8px_20px_rgba(183,121,31,0.24)] transition group-hover:bg-[#96620E]">
-                    <span className="hidden sm:inline">Apri pop-up</span>
-                    <ChevronRight className="size-5 motion-safe:animate-pulse motion-reduce:animate-none" />
-                  </span>
-                </button>
-              </section>
-
-              <section className="overflow-hidden rounded-[24px] border border-[#EBC7D8] bg-white shadow-[0_8px_24px_rgba(83,44,63,0.05)]">
-                <div className="flex items-center justify-between gap-3 border-b border-[#F1DCE6] bg-[#FFF9FC] px-5 py-3.5 sm:px-6">
-                  <span className="inline-flex items-center gap-2 text-sm font-black text-[#1F1F1F]">
-                    <History className="size-4 text-[#D96B94]" />
-                    Cronologia note cliente
-                  </span>
-                  <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[10px] font-black text-[#A52E6B]">
-                    Shopify · {clientShopifyNoteHistory.length}
-                  </span>
-                </div>
-
-                {loadingTodayOrders ? (
-                  <div className="flex items-center gap-2 px-5 py-4 text-xs font-bold text-black/45 sm:px-6">
-                    <Loader2 className="size-4 animate-spin text-[#D96B94]" />
-                    Carico le note Shopify della cliente…
-                  </div>
-                ) : clientShopifyNoteHistory.length ? (
-                  <div className="divide-y-4 divide-[#F8EAF1]">
-                    {clientShopifyNoteGroups.map((group) => (
-                      <details key={`shopify-note-day-${group.dayKey}`} className="group/day">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-[#F1DCE6] bg-[#FFF3F8] px-5 py-3 marker:content-none transition hover:bg-[#FFEAF3] sm:px-6">
-                          <span className="text-[11px] font-black capitalize text-[#30252A]">
-                            {group.label}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black text-[#A52E6B] shadow-2xs">
-                            {group.orders.length} {group.orders.length === 1 ? "nota" : "note"}
-                            <ChevronDown className="size-3.5 transition-transform group-open/day:rotate-180" />
-                          </span>
-                        </summary>
-                        <div className="divide-y divide-[#F1E3EA]">
-                          {group.orders.map((order) => (
-                            <details key={`shopify-note-${order.id || order.orderName}`} className="group/note">
-                              <summary className="grid cursor-pointer list-none grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 text-left marker:content-none transition hover:bg-[#FFF9FC] sm:px-6">
-                                <span className="text-[11px] font-black tabular-nums text-[#655D61]">
-                                  {formatOrderTime(order.createdAt)}
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block truncate text-[11px] font-bold text-[#30252A]">
-                                    {order.serviceTitle || "Servizio Shopify"}
-                                  </span>
-                                  <span className="mt-0.5 block text-[9px] font-black text-[#B83D7F]">
-                                    {order.orderName ? `Ordine ${order.orderName}` : "Ordine Shopify"}
-                                  </span>
-                                </span>
-                                <span className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#F0BFD4] bg-[#FFF0F6] px-3 py-2 text-[10px] font-black text-[#B83D7F]">
-                                  Vedi nota
-                                  <ChevronDown className="size-3.5 transition-transform group-open/note:rotate-180" />
-                                </span>
-                              </summary>
-                              <div className="border-t border-[#F2E2E9] bg-[#FFFCFD] px-5 py-4 sm:px-6">
-                                <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[#A52E6B]">
-                                  Nota presa da Shopify
-                                </p>
-                                <p className="mt-2 whitespace-pre-wrap text-xs font-semibold leading-relaxed text-[#44353C]">
-                                  {order.note}
-                                </p>
-                              </div>
-                            </details>
-                          ))}
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="px-5 py-4 text-xs font-semibold text-black/40 sm:px-6">
-                    Nessuna nota Shopify trovata nello storico della cliente.
-                  </p>
-                )}
-              </section>
-
-              {serviceDetailsModalOpen ? (
-                <GlobalFullscreenLayer className="flex items-center justify-center overflow-hidden bg-[#21171D]/50 p-3 backdrop-blur-[3px] sm:p-6">
-                  <button
-                    type="button"
-                    onClick={() => setServiceDetailsModalOpen(false)}
-                    className="absolute inset-0 cursor-default"
-                    aria-label="Chiudi dettagli servizio"
-                  />
-                  <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="service-details-title"
-                    className="relative z-10 flex max-h-[calc(100dvh-24px)] w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-white/80 bg-[#FCF8FA] shadow-[0_32px_100px_rgba(55,26,42,0.32)] sm:max-h-[calc(100dvh-48px)] sm:rounded-[30px]"
-                  >
-                    <div className="flex items-start justify-between gap-4 border-b border-[#EEC9DA] bg-[linear-gradient(110deg,#FFF0F6_0%,#FFFFFF_72%)] px-5 py-4 sm:px-7 sm:py-5">
-                      <div className="flex min-w-0 items-center gap-3.5">
-                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#B7791F] text-white shadow-[0_8px_20px_rgba(183,121,31,0.28)] motion-safe:animate-pulse motion-reduce:animate-none">
-                          <Pencil className="size-5" />
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-black text-[#5C3246]">Dettagli del servizio</h3>
+                        <span className="rounded-full bg-[#F8E5EE] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#A52E6B]">
+                          Compilazione rapida
                         </span>
-                        <div className="min-w-0">
-                          <p className="inline-flex rounded-full bg-[#FFF1C2] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-[#8A5A0A]">
-                            Compilazione rapida · circa 1 minuto
-                          </p>
-                          <h3 id="service-details-title" className="mt-1 truncate text-xl font-black text-[#604415] sm:text-2xl">
-                            Dettagli del servizio
-                          </h3>
-                          <p className="mt-0.5 text-[11px] font-bold text-black/50 sm:text-xs">
-                            Tocca una risposta per ogni sezione. Il salvataggio è automatico.
-                          </p>
-                        </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={polishClientControlNote}
-                          disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                          className="hidden min-h-10 items-center gap-1.5 rounded-xl border border-[#E7B6CD] bg-white px-3 text-[10px] font-black text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95 disabled:opacity-45 sm:inline-flex"
-                        >
-                          <Sparkles className="size-3.5" />
-                          {clientControlPolishing ? "Sistemo..." : "Sistema nota"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setServiceDetailsModalOpen(false)}
-                          className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#E7B6CD] bg-white text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95"
-                          aria-label="Chiudi pop-up dettagli servizio"
-                        >
-                          <X className="size-5" />
-                        </button>
-                      </div>
+                      <p className="mt-0.5 text-xs font-bold text-black/50">
+                        Seleziona i dettagli del servizio. Il salvataggio è automatico.
+                      </p>
                     </div>
-
-                    <section className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-[#FCF8FA] p-4 sm:p-6 md:grid-cols-2">
-                <div className="flex items-center justify-end md:hidden">
+                  </div>
                   <button
                     type="button"
                     onClick={polishClientControlNote}
                     disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#D96B94] px-4 text-[11px] font-black text-white shadow-sm transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95 disabled:opacity-45"
                   >
-                    <Sparkles className="size-3.5" />
-                    {clientControlPolishing ? "Sistemo..." : "Sistema la nota"}
+                    <Sparkles className="size-4 text-[#D96B94]" />
+                    {clientControlPolishing ? "Sistemo..." : "Sistema nota"}
                   </button>
                 </div>
 
-                <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#B83D7F] text-[10px] text-white">1</span>
-                      Servizi eseguiti
+                <div className="grid grid-cols-1 gap-4 bg-[#FCF8FA] p-4 sm:p-6 md:grid-cols-2">
+                  <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                        <span className="grid size-6 place-items-center rounded-lg bg-[#B83D7F] text-[10px] text-white">1</span>
+                        Servizi eseguiti
+                      </span>
+                      <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[9px] font-black text-[#A52E6B]">
+                        Rilevati automaticamente dalla prenotazione
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {CLIENT_CONTROL_SERVICE_OPTIONS.map((service) => {
+                        const selected = selectedServiceDetails.includes(service);
+                        return (
+                          <button
+                            key={service}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => {
+                              const next = selected
+                                ? selectedServiceDetails.filter((item) => item !== service)
+                                : [...selectedServiceDetails, service];
+                              setSelectedServiceDetails(next);
+                              updateShopifyNote({ services: next });
+                            }}
+                            className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                              selected
+                                ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
+                                : "border-[#E8C3D4] bg-white text-[#8F2E61] hover:border-[#D96B94] hover:bg-[#FFF6FA]"
+                            }`}
+                          >
+                            {selected ? <Check className="size-4" /> : null}
+                            {service}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 1. Quanti grammi? */}
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
+                      Quanti grammi?
                     </span>
-                    <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[9px] font-black text-[#A52E6B]">
-                      Rilevati automaticamente dalla prenotazione
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {CLIENT_CONTROL_SERVICE_OPTIONS.map((service) => {
-                      const selected = selectedServiceDetails.includes(service);
-                      return (
-                        <button
-                          key={service}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => {
-                            const next = selected
-                              ? selectedServiceDetails.filter((item) => item !== service)
-                              : [...selectedServiceDetails, service];
-                            setSelectedServiceDetails(next);
-                            updateShopifyNote({ services: next });
-                          }}
-                          className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                            selected
-                              ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
-                              : "border-[#E8C3D4] bg-white text-[#8F2E61] hover:border-[#D96B94] hover:bg-[#FFF6FA]"
-                          }`}
-                        >
-                          {selected ? <Check className="size-4" /> : null}
-                          {service}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 1. Quanti grammi? */}
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
-                    Quanti grammi?
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {["100g", "150g", "200g"].map((gram) => {
-                      const selected = selectedGrammi === gram;
-                      return (
-                        <button
-                          key={gram}
-                          type="button"
-                          onClick={() => {
-                            const next = selected ? "" : gram;
-                            setSelectedGrammi(next);
-                            updateShopifyNote({ grammi: next });
-                          }}
-                          className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                            selected
-                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
-                          }`}
-                        >
-                          {gram}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const isCustom = selectedGrammi === "custom";
-                        const next = isCustom ? "" : "custom";
-                        setSelectedGrammi(next);
-                        updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
-                      }}
-                      className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                        selectedGrammi === "custom"
-                          ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                          : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
-                      }`}
-                    >
-                      Personalizzato
-                    </button>
-                    {selectedGrammi === "custom" && (
-                      <input
-                        type="text"
-                        value={customGrammiInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomGrammiInput(val);
-                          updateShopifyNote({ grammi: val });
+                    <div className="flex flex-wrap items-center gap-2">
+                      {["100g", "150g", "200g"].map((gram) => {
+                        const selected = selectedGrammi === gram;
+                        return (
+                          <button
+                            key={gram}
+                            type="button"
+                            onClick={() => {
+                              const next = selected ? "" : gram;
+                              setSelectedGrammi(next);
+                              updateShopifyNote({ grammi: next });
+                            }}
+                            className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                              selected
+                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                            }`}
+                          >
+                            {gram}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const isCustom = selectedGrammi === "custom";
+                          const next = isCustom ? "" : "custom";
+                          setSelectedGrammi(next);
+                          updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
                         }}
-                        placeholder="es. 250g"
-                        className="h-11 w-28 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. Lunghezza */}
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
-                    Lunghezza
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {["50cm", "55cm", "65cm", "75cm"].map((len) => {
-                      const selected = selectedLunghezza === len;
-                      return (
-                        <button
-                          key={len}
-                          type="button"
-                          onClick={() => {
-                            const next = selected ? "" : len;
-                            setSelectedLunghezza(next);
-                            updateShopifyNote({ lunghezza: next });
-                          }}
-                          className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                            selected
-                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
-                          }`}
-                        >
-                          {len}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 3. Quante fasce? */}
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
-                    Quante fasce?
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {["1", "2", "3", "4", "5"].map((num) => {
-                      const selected = selectedFasce === num;
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => {
-                            const next = selected ? "" : num;
-                            setSelectedFasce(next);
-                            updateShopifyNote({ fasce: next });
-                          }}
-                          className={`grid size-11 place-items-center rounded-xl border text-sm font-black transition active:scale-95 ${
-                            selected
-                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const isCustom = selectedFasce === "custom";
-                        const next = isCustom ? "" : "custom";
-                        setSelectedFasce(next);
-                        updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
-                      }}
-                      className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                        selectedFasce === "custom"
-                          ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                          : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
-                      }`}
-                    >
-                      Personalizzato
-                    </button>
-                    {selectedFasce === "custom" && (
-                      <input
-                        type="text"
-                        value={customFasceInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomFasceInput(val);
-                          updateShopifyNote({ fasce: val });
-                        }}
-                        placeholder="es. 6"
-                        className="h-11 w-24 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* 4. Come era la cliente? */}
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">5</span>
-                    Come era la cliente?
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: "Tranquilla", emoji: "😌" },
-                      { label: "Simpatica", emoji: "😊" },
-                      { label: "Esigente", emoji: "🧐" },
-                      { label: "Pretenziosa", emoji: "💅" },
-                    ].map((att) => {
-                      const selected = selectedAtteggiamento === att.label;
-                      return (
-                        <button
-                          key={att.label}
-                          type="button"
-                          onClick={() => {
-                            const next = selected ? "" : att.label;
-                            setSelectedAtteggiamento(next);
-                            updateShopifyNote({ atteggiamento: next });
-                          }}
-                          className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
-                            selected
-                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
-                          }`}
-                        >
-                          <span>{att.emoji}</span>
-                          <span>{att.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
-                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">6</span>
-                    Come ci hai conosciuti?
-                  </span>
-                  <select
-                    value={clientControlForm.discoverySource}
-                    onChange={(event) => updateClientControlDiscovery(event.target.value)}
-                    className="h-12 w-full rounded-xl border-2 border-[#E8C3D4] bg-white px-4 text-sm font-black text-[#7D2154] outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
-                    aria-label="Come ci hai conosciuti"
-                  >
-                    <option value="">Seleziona un canale</option>
-                    {CLIENT_CONTROL_DISCOVERY_OPTIONS.map((source) => (
-                      <option key={source} value={source}>{source}</option>
-                    ))}
-                  </select>
-                  {clientControlForm.discoverySource === "Altro" ? (
-                    <label className="mt-3 block">
-                      <span className="sr-only">Scrivi come ci hai conosciuti</span>
-                      <input
-                        type="text"
-                        value={clientControlForm.discoveryOther}
-                        onChange={(event) => updateClientControlDiscovery("Altro", event.target.value)}
-                        placeholder="Scrivi qui, per esempio Instagram o passaparola"
-                        className="h-11 w-full rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:ring-2 focus:ring-[#D96B94]/20"
-                      />
-                    </label>
-                  ) : null}
-                </div>
-
-                <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
-                  <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-end">
-                    <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-white px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:ring-2 focus-within:ring-[#D96B94]/25">
-                      <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
-                      <span className="min-w-0 flex-1">
+                        className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                          selectedGrammi === "custom"
+                            ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                            : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                        }`}
+                      >
+                        Personalizzato
+                      </button>
+                      {selectedGrammi === "custom" && (
                         <input
                           type="text"
-                          aria-label="Instagram cliente"
-                          value={clientControlForm.instagramTag}
-                          onChange={(event) =>
-                            setClientControlForm((prev) => ({
-                              ...prev,
-                              instagramTag: event.target.value,
-                            }))
-                          }
-                          placeholder="@usercliente"
-                          className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                          value={customGrammiInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomGrammiInput(val);
+                            updateShopifyNote({ grammi: val });
+                          }}
+                          placeholder="es. 250g"
+                          className="h-11 w-28 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
                         />
-                      </span>
-                    </label>
+                      )}
+                    </div>
+                  </div>
 
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
-                        Verifiche e controlli
-                      </span>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {[
-                          ["beforeMedia", "Prima foto/video"],
-                          ["afterMedia", "Dopo foto/video"],
-                          ["products", "Prodotti"],
-                          ["review", "Recensione"],
-                        ].map(([fieldKey, fieldLabel]) => {
-                          const checked = Boolean((clientControlForm as any)[fieldKey]);
-                          return (
-                            <label
-                              key={fieldKey}
-                              className={[
-                                "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
-                                checked
-                                  ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
-                                  : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
-                              ].join(" ")}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(event) =>
-                                  updateClientControlCheck(
-                                    fieldKey as "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
-                                    event.target.checked,
-                                  )
-                                }
-                                className="size-4 accent-[#D96B94]"
-                              />
-                              <span>{fieldLabel}</span>
-                            </label>
-                          );
-                        })}
+                  {/* 2. Lunghezza */}
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
+                      Lunghezza
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {["55cm", "65cm", "75cm"].map((len) => {
+                        const selected = selectedLunghezza === len;
+                        return (
+                          <button
+                            key={len}
+                            type="button"
+                            onClick={() => {
+                              const next = selected ? "" : len;
+                              setSelectedLunghezza(next);
+                              updateShopifyNote({ lunghezza: next });
+                            }}
+                            className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                              selected
+                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                            }`}
+                          >
+                            {len}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Quante fasce? */}
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
+                      Quante fasce?
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {["1", "2", "3", "4", "5"].map((num) => {
+                        const selected = selectedFasce === num;
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              const next = selected ? "" : num;
+                              setSelectedFasce(next);
+                              updateShopifyNote({ fasce: next });
+                            }}
+                            className={`grid size-11 place-items-center rounded-xl border text-sm font-black transition active:scale-95 ${
+                              selected
+                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const isCustom = selectedFasce === "custom";
+                          const next = isCustom ? "" : "custom";
+                          setSelectedFasce(next);
+                          updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
+                        }}
+                        className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                          selectedFasce === "custom"
+                            ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                            : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                        }`}
+                      >
+                        Personalizzato
+                      </button>
+                      {selectedFasce === "custom" && (
+                        <input
+                          type="text"
+                          value={customFasceInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomFasceInput(val);
+                            updateShopifyNote({ fasce: val });
+                          }}
+                          placeholder="es. 6"
+                          className="h-11 w-24 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4. Come era la cliente? */}
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">5</span>
+                      Come era la cliente?
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: "Tranquilla", emoji: "😌" },
+                        { label: "Simpatica", emoji: "😊" },
+                        { label: "Esigente", emoji: "🧐" },
+                        { label: "Pretenziosa", emoji: "💅" },
+                      ].map((att) => {
+                        const selected = selectedAtteggiamento === att.label;
+                        return (
+                          <button
+                            key={att.label}
+                            type="button"
+                            onClick={() => {
+                              const next = selected ? "" : att.label;
+                              setSelectedAtteggiamento(next);
+                              updateShopifyNote({ atteggiamento: next });
+                            }}
+                            className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                              selected
+                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                            }`}
+                          >
+                            <span>{att.emoji}</span>
+                            <span>{att.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">6</span>
+                      Come ci hai conosciuti?
+                    </span>
+                    <select
+                      value={clientControlForm.discoverySource}
+                      onChange={(event) => updateClientControlDiscovery(event.target.value)}
+                      className="h-12 w-full rounded-xl border-2 border-[#E8C3D4] bg-white px-4 text-sm font-black text-[#7D2154] outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
+                      aria-label="Come ci hai conosciuti"
+                    >
+                      <option value="">Seleziona un canale</option>
+                      {CLIENT_CONTROL_DISCOVERY_OPTIONS.map((source) => (
+                        <option key={source} value={source}>{source}</option>
+                      ))}
+                    </select>
+                    {clientControlForm.discoverySource === "Altro" ? (
+                      <label className="mt-3 block">
+                        <span className="sr-only">Scrivi come ci hai conosciuti</span>
+                        <input
+                          type="text"
+                          value={clientControlForm.discoveryOther}
+                          onChange={(event) => updateClientControlDiscovery("Altro", event.target.value)}
+                          placeholder="Scrivi qui, per esempio Instagram o passaparola"
+                          className="h-11 w-full rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:ring-2 focus:ring-[#D96B94]/20"
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                    <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-end">
+                      <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-white px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:ring-2 focus-within:ring-[#D96B94]/25">
+                        <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                        <span className="min-w-0 flex-1">
+                          <input
+                            type="text"
+                            aria-label="Instagram cliente"
+                            value={clientControlForm.instagramTag}
+                            onChange={(event) =>
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                instagramTag: event.target.value,
+                              }))
+                            }
+                            placeholder="@usercliente"
+                            className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                          />
+                        </span>
+                      </label>
+
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
+                          Verifiche e controlli
+                        </span>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[
+                            ["beforeMedia", "Prima foto/video"],
+                            ["afterMedia", "Dopo foto/video"],
+                            ["products", "Prodotti"],
+                            ["review", "Recensione"],
+                          ].map(([fieldKey, fieldLabel]) => {
+                            const checked = Boolean((clientControlForm as any)[fieldKey]);
+                            return (
+                              <label
+                                key={fieldKey}
+                                className={[
+                                  "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
+                                  checked
+                                    ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                                    : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
+                                ].join(" ")}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) =>
+                                    updateClientControlCheck(
+                                      fieldKey as "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
+                                      event.target.checked,
+                                    )
+                                  }
+                                  className="size-4 accent-[#D96B94]"
+                                />
+                                <span>{fieldLabel}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 5. Note Extra */}
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      Note extra <span className="text-black/35">· facoltative</span>
-                    </span>
-                    <span className="text-[10px] font-extrabold text-black/40">
-                      {extraNoteText.length}/600
-                    </span>
-                  </div>
-                  <textarea
-                    rows={3}
-                    maxLength={600}
-                    value={extraNoteText}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      setExtraNoteText(text);
-                      updateShopifyNote({ extraNote: text });
-                    }}
-                    className="mt-2 min-h-24 w-full resize-y rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 py-3 text-sm font-bold leading-relaxed text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
-                    placeholder="Scrivi qui eventuali note extra per la cliente..."
-                  />
-                </div>
-
-                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
-                    <FileText className="size-4 text-[#D96B94]" /> Nota Shopify compilata
-                  </span>
-                  <textarea
-                    value={clientControlForm.customNoteText}
-                    readOnly={true}
-                    rows={3}
-                    className="mt-2 w-full cursor-not-allowed select-none rounded-xl border border-[#F4D3E2] bg-[#FFF9FC] p-4 text-xs font-bold text-[#1F1F1F] outline-none"
-                    placeholder="La nota per Shopify viene generata automaticamente dalle selezioni del servizio."
-                  />
-                </div>
-                    </section>
-                    <div className="flex items-center justify-between gap-4 border-t border-[#EEC9DA] bg-white px-4 py-3 sm:px-7">
-                      <span className="hidden items-center gap-2 text-[10px] font-black text-emerald-700 sm:inline-flex">
-                        <Check className="size-4" />
-                        Selezioni salvate automaticamente
+                  {/* 5. Note Extra */}
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                        Note extra <span className="text-black/35">· facoltative</span>
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setServiceDetailsModalOpen(false)}
-                        className="h-12 w-full rounded-2xl bg-[#B83D7F] px-8 text-sm font-black text-white shadow-[0_8px_20px_rgba(184,61,127,0.22)] transition hover:bg-[#A93270] active:scale-[0.99] sm:w-auto sm:min-w-56"
-                      >
-                        Fatto · chiudi
-                      </button>
+                      <span className="text-[10px] font-extrabold text-black/40">
+                        {extraNoteText.length}/600
+                      </span>
                     </div>
+                    <textarea
+                      rows={3}
+                      maxLength={600}
+                      value={extraNoteText}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        setExtraNoteText(text);
+                        updateShopifyNote({ extraNote: text });
+                      }}
+                      className="mt-2 min-h-24 w-full resize-y rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 py-3 text-sm font-bold leading-relaxed text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
+                      placeholder="Scrivi qui eventuali note extra per la cliente..."
+                    />
                   </div>
-                </GlobalFullscreenLayer>
-              ) : null}
 
-              <details className="rounded-[24px] border border-[#EBC7D8] bg-[#FFF9FC] shadow-sm">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-black text-[#1F1F1F] marker:content-none">
-                  <span className="inline-flex items-center gap-2">
-                    <History className="size-4 text-[#D96B94]" />
-                    Storico e modifiche
-                  </span>
-                  <span className="rounded-full bg-[#F6D7E6] px-2.5 py-1 text-[10px] text-[#B83D7F]">
-                    {clientControlProcessComments.length + clientControlChangeComments.length}
-                  </span>
-                </summary>
-              <section className="border-t border-neutral-200 p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-4">
-                  <div>
-                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
-                      <Clock3 className="size-4 text-[#D96B94]" />
-                      Timeline del processo
+                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                      <FileText className="size-4 text-[#D96B94]" /> Nota Shopify compilata
                     </span>
-                    <p className="mt-1 text-[11px] font-semibold text-black/45">
-                      Stati, tempi, assegnazioni e modifiche in ordine cronologico.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.16em] text-black/45">
-                      Solo lettura
-                    </span>
-                    <span className="grid size-7 place-items-center rounded-full bg-[#FFF0F6] text-[10px] font-black text-[#B83D7F]">
-                      {clientControlProcessComments.length}
-                    </span>
+                    <textarea
+                      value={clientControlForm.customNoteText}
+                      readOnly={true}
+                      rows={3}
+                      className="mt-2 w-full cursor-not-allowed select-none rounded-xl border border-[#F4D3E2] bg-[#FFF9FC] p-4 text-xs font-bold text-[#1F1F1F] outline-none"
+                      placeholder="La nota per Shopify viene generata automaticamente dalle selezioni del servizio."
+                    />
                   </div>
                 </div>
-                {clientControlProcessComments.length ? (
-                  <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-neutral-200">
-                    {[...clientControlProcessComments].reverse().map((comment, index) => (
-                      <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
-                        <span
-                          className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-white shadow-[0_0_0_1px_rgba(217,107,148,0.28)] ${
-                            index === 0 ? "bg-[#D96B94]" : "bg-[#E8DDE3]"
-                          }`}
-                          aria-hidden="true"
-                        />
-                        <div className={`rounded-2xl border px-4 py-3 ${index === 0 ? "border-[#F0C4D7] bg-[#FFF8FB]" : "border-neutral-200 bg-[#FAFAFA]"}`}>
-                          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-                            <p className="min-w-0 text-[12px] font-bold leading-[1.55] text-[#332A2F]">
-                              {comment.message}
-                            </p>
-                            <time className="shrink-0 text-[9px] font-bold tabular-nums text-black/35">
-                              {formatDateTime(comment.created_at)}
-                            </time>
-                          </div>
-                          <p className="mt-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B607B]">
-                            {comment.user_name}
-                          </p>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-4 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 py-5 text-[11px] font-semibold text-black/40">
-                    Nessuna modifica registrata per questo appuntamento.
-                  </p>
-                )}
               </section>
-              <section className="border-t border-[#EBC7D8] p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3 border-b border-[#F0D6E2] pb-4">
-                  <div>
-                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
-                      <History className="size-4 text-[#D96B94]" />
-                      Cronologia modifiche
-                    </span>
-                    <p className="mt-1 text-[11px] font-semibold text-black/45">
-                      Variazioni salvate dopo la creazione del Controllo Cliente.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-[#EBC7D8] bg-white px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.16em] text-black/45">
-                      Solo lettura
-                    </span>
-                    <span className="grid size-7 place-items-center rounded-full bg-[#F6D7E6] text-[10px] font-black text-[#B83D7F]">
-                      {clientControlChangeComments.length}
-                    </span>
-                  </div>
-                </div>
-                {clientControlChangeComments.length ? (
-                  <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-[#E8C8D7]">
-                    {[...clientControlChangeComments].reverse().map((comment, index) => {
-                      const cleanMessage = comment.message
-                        .replace(/^BOZZA CONTROLLO CLIENTE SALVATA\s*[·:-]?\s*/i, "")
-                        .replace(/^MODIFICA CONTROLLO CLIENTE\s*[·:-]?\s*/i, "")
-                        .replace(/^CREAZIONE CONTROLLO CLIENTE\s*[·:-]?\s*/i, "")
-                        .replace(/^CONTROLLO CLIENTE (?:MODIFICATO|CREATO)(?: E SALVATO)?\.?\s*/i, "");
-                      const isDraftSave = /^BOZZA CONTROLLO CLIENTE/i.test(comment.message.trim());
-                      const isCreation = /^(CREAZIONE|CONTROLLO CLIENTE CREATO)/i.test(comment.message.trim());
-                      return (
-                        <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
-                          <span
-                            className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-[#FFF9FC] shadow-[0_0_0_1px_rgba(217,107,148,0.32)] ${
-                              index === 0 ? "bg-[#C83F82]" : "bg-[#DDB8CA]"
-                            }`}
-                            aria-hidden="true"
-                          />
-                          <div className={`rounded-2xl border px-4 py-3 ${index === 0 ? "border-[#E8B8CF] bg-white" : "border-[#EED5E1] bg-white/70"}`}>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.13em] text-[#A52E6B]">
-                                {isDraftSave ? "Bozza salvata" : isCreation ? "Creazione" : "Modifica salvata"}
-                              </span>
-                              <time className="shrink-0 text-[9px] font-bold tabular-nums text-black/35">
-                                {formatDateTime(comment.created_at)}
-                              </time>
-                            </div>
-                            <p className="mt-2 text-[11px] font-bold leading-[1.65] text-[#332A2F]">
-                              {cleanMessage || (isDraftSave ? "Bozza salvata senza altre modifiche." : "Controllo Cliente salvato.")}
-                            </p>
-                            <p className="mt-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B607B]">
-                              {comment.user_name}
-                            </p>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="mt-4 rounded-2xl border border-[#EED5E1] bg-white px-4 py-5 text-[11px] font-semibold text-black/40">
-                    Le modifiche successive al primo salvataggio compariranno qui.
-                  </p>
-                )}
-              </section>
-              </details>
 
               {clientControlMessage ? (
-                <p
-                  className={`rounded-2xl px-5 py-3.5 text-xs font-extrabold ${
-                    clientControlMessage.type === "success"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-red-50 text-red-700 border border-red-200"
-                  }`}
-                >
-                  {clientControlMessage.text}
-                </p>
+                <p role={clientControlMessage.type === "error" ? "alert" : "status"} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${clientControlMessage.type === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{clientControlMessage.text}</p>
               ) : null}
               </div>
             </div>

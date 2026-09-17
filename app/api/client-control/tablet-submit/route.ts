@@ -179,6 +179,7 @@ export async function POST(request: NextRequest) {
     customServices?: string[];
     manualPaymentMethod?: "CARTA" | "SHOPIFY" | "CONTANTI";
     saveAsDraft?: boolean;
+    autoSave?: boolean;
   } | null;
 
   const isFinito = !!body?.isFinito;
@@ -594,6 +595,10 @@ export async function POST(request: NextRequest) {
   let response: { id: string; created_at: Date };
 
   if (existingResponse) {
+    // Editing a confirmed card automatically must not turn it back into a draft.
+    if (body?.autoSave && previousAnswers?.client_control_is_draft === false) {
+      cleanAnswers.client_control_is_draft = false;
+    }
     const updatedAnswers = {
       ...(existingResponse.answers as Record<string, any>),
       ...cleanAnswers,
