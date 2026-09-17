@@ -60,19 +60,35 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
   pageTitle(doc, "Controllo Cliente: totale mensile e calendario", `${report.salon} - ${report.monthLabel}`);
   const totalCards = report.workers.reduce((sum, worker) => sum + worker.clients, 0);
   const totalPostoLampo = report.workers.reduce((sum, worker) => sum + (worker.postoLampo ?? 0), 0);
-  const cards = [["SCHEDE COMPLETATE", totalCards], ["POSTO LAMPO", totalPostoLampo], ["LAVORATORI ATTIVI", report.workers.length]] as const;
-  cards.forEach(([label, value], index) => {
-    const x = 15 + index * 89.5;
-    setFill(doc, index === 0 ? palette.greenSoft : index === 1 ? palette.amberSoft : palette.soft);
+  const totalLateEntries = report.workers.reduce((sum, worker) => sum + worker.lateDays, 0);
+  const totalLateEntryMinutes = report.workers.reduce((sum, worker) => sum + worker.lateMinutes, 0);
+  const totalLateReturns = report.workers.reduce((sum, worker) => sum + worker.lateReturns, 0);
+  const totalLateReturnMinutes = report.workers.reduce((sum, worker) => sum + worker.lateReturnMinutes, 0);
+  const cards = [
+    { label: "SCHEDE COMPLETATE", value: String(totalCards), detail: "totale mese", color: palette.greenSoft },
+    { label: "POSTO LAMPO", value: String(totalPostoLampo), detail: "totale mese", color: palette.amberSoft },
+    { label: "RITARDI ENTRATA", value: String(totalLateEntries), detail: `${totalLateEntryMinutes} min totali`, color: palette.amberSoft },
+    { label: "RITARDI PAUSA", value: String(totalLateReturns), detail: `${totalLateReturnMinutes} min totali`, color: palette.amberSoft },
+    { label: "LAVORATORI ATTIVI", value: String(report.workers.length), detail: "nel report", color: palette.soft },
+  ] as const;
+  const cardGap = 3;
+  const cardWidth = (267 - cardGap * (cards.length - 1)) / cards.length;
+  cards.forEach((card, index) => {
+    const x = 15 + index * (cardWidth + cardGap);
+    setFill(doc, card.color);
     doc.setDrawColor(...palette.line);
-    doc.roundedRect(x, 29, 84, 22, 1.5, 1.5, "FD");
+    doc.roundedRect(x, 29, cardWidth, 22, 1.5, 1.5, "FD");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
+    doc.setFontSize(5.4);
     doc.setTextColor(...palette.muted);
-    doc.text(label, x + 5, 36);
-    doc.setFontSize(14);
+    doc.text(card.label, x + 4, 35.5);
+    doc.setFontSize(12.5);
     doc.setTextColor(...palette.ink);
-    doc.text(String(value), x + 5, 46);
+    doc.text(card.value, x + 4, 44.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.2);
+    doc.setTextColor(...palette.muted);
+    doc.text(card.detail, x + cardWidth - 4, 44.5, { align: "right" });
   });
 
   const days = new Date(Date.UTC(report.year, report.month, 0)).getUTCDate();
@@ -82,7 +98,8 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
   const top = 61;
   const availableHeight = 127;
   const headerHeight = 8;
-  const rowHeight = Math.min(8.5, (availableHeight - headerHeight) / Math.max(1, report.workers.length));
+  const tableRows = Math.max(1, report.workers.length + 1);
+  const rowHeight = Math.min(8.5, (availableHeight - headerHeight) / tableRows);
   doc.setFillColor(...palette.ink);
   doc.rect(15, top, totalWidth, headerHeight, "F");
   doc.setTextColor(255, 255, 255);
@@ -115,6 +132,19 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
       doc.text(String(count), cellX + dayWidth / 2, y + rowHeight / 2 + 1.25, { align: "center" });
     }
   });
+  const totalRowY = top + headerHeight + report.workers.length * rowHeight;
+  setFill(doc, palette.wine);
+  doc.rect(15, totalRowY, totalWidth, rowHeight, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(Math.max(4, Math.min(5.8, rowHeight - 1.5)));
+  doc.text("TOTALE GIORNO", 17, totalRowY + rowHeight / 2 + 1.5);
+  for (let day = 1; day <= days; day += 1) {
+    const key = `${report.year}-${String(report.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const total = report.workers.reduce((sum, worker) => sum + (worker.dailyCounts?.[key] ?? worker.dailySheets?.[key] ?? 0), 0);
+    const cellX = 15 + nameWidth + (day - 1) * dayWidth;
+    doc.text(String(total), cellX + dayWidth / 2, totalRowY + rowHeight / 2 + 1.25, { align: "center" });
+  }
   doc.setFontSize(6.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...palette.muted);
@@ -277,12 +307,17 @@ function detailsPage(doc: jsPDF, report: TeamBonusReport) {
 }
 
 export function downloadTeamBonusReportPdf(report: TeamBonusReport) {
+  const doc = buildTeamBonusReportPdf(report);
+  const safeSalon = report.salon.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const safeMonth = report.monthLabel.toLowerCase().replace(/\s+/g, "-");
+  doc.save(`report_bonus_${safeSalon}_${safeMonth}.pdf`);
+}
+
+export function buildTeamBonusReportPdf(report: TeamBonusReport) {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   calendarPage(doc, report);
   workersPage(doc, report);
   comparisonPage(doc, report);
   detailsPage(doc, report);
-  const safeSalon = report.salon.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const safeMonth = report.monthLabel.toLowerCase().replace(/\s+/g, "-");
-  doc.save(`report_bonus_${safeSalon}_${safeMonth}.pdf`);
+  return doc;
 }

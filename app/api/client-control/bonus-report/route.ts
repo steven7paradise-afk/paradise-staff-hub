@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { attendanceReportDayKeys, summarizeLateBreakReturns } from "@/lib/attendance-break-summary";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
@@ -10,8 +11,6 @@ import { scoreTeamBonusWorkers, type TeamBonusWorker } from "@/lib/team-bonus-re
 import { calculateClockHours } from "@/lib/work-hours";
 
 export const dynamic = "force-dynamic";
-
-const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
 function dayKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -104,21 +103,6 @@ function isWorkCategory(category: { code: string; name: string }) {
   return !excludedCodes.includes(code) && !excludedNames.some((word) => name.includes(word));
 }
 
-function pauseDelayMinutes(logs: { type: string; timestamp: Date }[], limit: number) {
-  const ordered = [...logs].sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
-  let pausedAt: Date | null = null;
-  let delay = 0;
-  for (const log of ordered) {
-    if (log.type === "PAUSA") pausedAt = log.timestamp;
-    if (log.type === "RIENTRO" && pausedAt) {
-      delay += Math.max(0, Math.round((log.timestamp.getTime() - pausedAt.getTime()) / 60_000) - limit);
-      pausedAt = null;
-    }
-    if ((log.type === "ENTRATA" || log.type === "USCITA") && pausedAt) pausedAt = null;
-  }
-  return delay;
-}
-
 function pauseSummary(logs: { type: string; timestamp: Date }[]) {
   const ordered = [...logs].sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
   let pauseAt: Date | null = null;
@@ -200,34 +184,47 @@ export async function GET(request: NextRequest) {
     workerLogs.forEach((log) => logsByDay.set(dayKey(log.date), [...(logsByDay.get(dayKey(log.date)) ?? []), log]));
     const workerLeaves = leaves.filter((leave) => leave.user_id === worker.id);
     const workerSchedules = schedules.filter((entry) => entry.user_id === worker.id && isWorkCategory(entry.category));
+    const schedulesByDay = new Map(workerSchedules.map((entry) => [dayKey(entry.date), entry]));
     const recordsByDay = new Map(records.filter((record) => record.user_id === worker.id).map((record) => [dayKey(record.date), record]));
-    const attendance = workerSchedules.reduce((summary, entry) => {
-      const key = dayKey(entry.date);
+    const attendanceDays = attendanceReportDayKeys(
+      workerSchedules.map((entry) => entry.date),
+      workerLogs.map((log) => log.date),
+    );
+    const attendance = attendanceDays.reduce((summary, key) => {
+      const entry = schedulesByDay.get(key);
       const dayLogs = logsByDay.get(key) ?? [];
       const firstEntry = dayLogs.find((log) => log.type === "ENTRATA");
-      const plannedStart = minutes(entry.start_time ?? entry.category.start_time);
+      const plannedStart = entry ? minutes(entry.start_time ?? entry.category.start_time) : null;
       const lateMinutes = firstEntry && plannedStart !== null ? Math.max(0, romeMinutes(firstEntry.timestamp) - plannedStart) : 0;
-      const breakLimit = parseClockRule(clockSettings.find((setting) => setting.key === clockRuleKey(entry.location_id ?? worker.sede_id ?? ""))?.value).breakDurationMinutes;
-      const pauseDelay = key >= PAUSE_LATENESS_START_KEY ? pauseDelayMinutes(dayLogs, breakLimit) : 0;
+      const attendanceLocationId = entry?.location_id
+        ?? dayLogs.find((log) => log.type === "RIENTRO")?.location_id
+        ?? dayLogs[0]?.location_id
+        ?? worker.sede_id
+        ?? "";
+      const breakLimit = parseClockRule(clockSettings.find((setting) => setting.key === clockRuleKey(attendanceLocationId))?.value).breakDurationMinutes;
+      const pauseDelay = summarizeLateBreakReturns(dayLogs, breakLimit);
       const dayPause = pauseSummary(dayLogs);
       const hasLeave = workerLeaves.some((leave) => key >= dayKey(leave.start_date) && key <= dayKey(leave.end_date));
-      const noShow = key < todayKey && !firstEntry && !hasLeave;
+      const noShow = Boolean(entry) && key < todayKey && !firstEntry && !hasLeave;
       const clock = calculateClockHours(dayLogs);
       const record = recordsByDay.get(key);
-      const scheduledHours = entry.category.paid_hours ?? Math.max(0, ((minutes(entry.end_time ?? entry.category.end_time) ?? 0) - (plannedStart ?? 0)) / 60);
+      const scheduledHours = entry
+        ? entry.category.paid_hours ?? Math.max(0, ((minutes(entry.end_time ?? entry.category.end_time) ?? 0) - (plannedStart ?? 0)) / 60)
+        : 0;
       const automaticHours = record?.paid_break ? clock.grossHours : clock.netHours;
-      const closedHours = isClosedSchedule(entry.category.name, entry.category.code) ? scheduledHours : 0;
+      const closedHours = entry && isClosedSchedule(entry.category.name, entry.category.code) ? scheduledHours : 0;
       summary.hours += record?.manual_override ? record.hours : Math.max(automaticHours, closedHours);
       if (firstEntry) summary.days += 1;
       if (lateMinutes > 10) { summary.lateDays += 1; summary.lateMinutes += lateMinutes; }
-      if (pauseDelay > 0) { summary.lateReturns += 1; summary.lateReturnMinutes += pauseDelay; }
+      summary.lateReturns += pauseDelay.lateCount;
+      summary.lateReturnMinutes += pauseDelay.lateMinutes;
       if (dayPause.pauseCount > 0) summary.pauseDays += 1;
       summary.pauseCount += dayPause.pauseCount;
       summary.pauseMinutes += dayPause.pauseMinutes;
       summary.shortPauseCount += dayPause.shortPauseCount;
       if (firstEntry && key < todayKey && dayPause.pauseCount === 0) summary.missingPauseDays += 1;
       if (noShow) summary.unjustifiedAbsences += 1;
-      if (hasLeave && !firstEntry) summary.justifiedAbsences += 1;
+      if (entry && hasLeave && !firstEntry) summary.justifiedAbsences += 1;
       return summary;
     }, { days: 0, hours: 0, lateDays: 0, lateMinutes: 0, lateReturns: 0, lateReturnMinutes: 0, unjustifiedAbsences: 0, justifiedAbsences: 0, pauseDays: 0, pauseCount: 0, pauseMinutes: 0, shortPauseCount: 0, missingPauseDays: 0 });
 
