@@ -94,7 +94,9 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
   const days = new Date(Date.UTC(report.year, report.month, 0)).getUTCDate();
   const nameWidth = 39;
   const totalWidth = 267;
-  const dayWidth = (totalWidth - nameWidth) / days;
+  const monthTotalWidth = 17;
+  const monthTotalX = 15 + totalWidth - monthTotalWidth;
+  const dayWidth = (totalWidth - nameWidth - monthTotalWidth) / days;
   const top = 61;
   const availableHeight = 127;
   const headerHeight = 8;
@@ -109,6 +111,7 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
   for (let day = 1; day <= days; day += 1) {
     doc.text(String(day), 15 + nameWidth + (day - 0.5) * dayWidth, top + 5.3, { align: "center" });
   }
+  doc.text("TOTALE MESE", monthTotalX + monthTotalWidth / 2, top + 5.3, { align: "center" });
   report.workers.forEach((worker, rowIndex) => {
     const y = top + headerHeight + rowIndex * rowHeight;
     setFill(doc, rowIndex % 2 ? palette.soft : [255, 255, 255]);
@@ -131,6 +134,11 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
       doc.setFontSize(Math.max(3.3, Math.min(5.2, dayWidth * 0.9)));
       doc.text(String(count), cellX + dayWidth / 2, y + rowHeight / 2 + 1.25, { align: "center" });
     }
+    setFill(doc, palette.soft);
+    doc.rect(monthTotalX + 0.15, y + 0.15, monthTotalWidth - 0.3, Math.max(0.4, rowHeight - 0.3), "F");
+    doc.setTextColor(...palette.wine);
+    doc.setFontSize(Math.max(4.2, Math.min(6.2, rowHeight - 1.5)));
+    doc.text(String(worker.clients), monthTotalX + monthTotalWidth / 2, y + rowHeight / 2 + 1.25, { align: "center" });
   });
   const totalRowY = top + headerHeight + report.workers.length * rowHeight;
   setFill(doc, palette.wine);
@@ -145,6 +153,7 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
     const cellX = 15 + nameWidth + (day - 1) * dayWidth;
     doc.text(String(total), cellX + dayWidth / 2, totalRowY + rowHeight / 2 + 1.25, { align: "center" });
   }
+  doc.text(String(totalCards), monthTotalX + monthTotalWidth / 2, totalRowY + rowHeight / 2 + 1.25, { align: "center" });
   doc.setFontSize(6.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...palette.muted);
@@ -155,8 +164,8 @@ function calendarPage(doc: jsPDF, report: TeamBonusReport) {
 function workersPage(doc: jsPDF, report: TeamBonusReport) {
   doc.addPage();
   pageTitle(doc, "Totali mensili di tutti i lavoratori attivi", `${report.salon} - ${report.monthLabel}`);
-  const headers = ["Collaboratore", "Ruolo", "Schede", "Posto Lampo", "Ritardi entrata", "Rientri pausa tardi", "Sistemazione fasce"];
-  const widths = [55, 42, 26, 30, 36, 42, 36];
+  const headers = ["Collaboratore", "Ruolo", "Schede", "Posto Lampo", "Ritardi entrata", "Rientri pausa tardi"];
+  const widths = [65, 45, 30, 35, 44, 48];
   const top = 31;
   const headerHeight = 10;
   const rowHeight = Math.min(11, 150 / Math.max(1, report.workers.length));
@@ -176,7 +185,7 @@ function workersPage(doc: jsPDF, report: TeamBonusReport) {
     doc.rect(15, y, 267, rowHeight, "F");
     doc.setDrawColor(...palette.line);
     doc.line(15, y + rowHeight, 282, y + rowHeight);
-    const values = [worker.name, worker.role, String(worker.clients), String(worker.postoLampo ?? 0), `${worker.lateDays} (${worker.lateMinutes} min)`, `${worker.lateReturns} (${worker.lateReturnMinutes} min)`, String(worker.sistemazioneFasce ?? 0)];
+    const values = [worker.name, worker.role, String(worker.clients), String(worker.postoLampo ?? 0), `${worker.lateDays} (${worker.lateMinutes} min)`, `${worker.lateReturns} (${worker.lateReturnMinutes} min)`];
     x = 15;
     values.forEach((value, column) => {
       doc.setTextColor(...palette.ink);
@@ -277,7 +286,7 @@ function detailsPage(doc: jsPDF, report: TeamBonusReport) {
     doc.rect(15, y, 267, rowHeight, "F");
     doc.setDrawColor(...palette.line);
     doc.line(15, y + rowHeight, 282, y + rowHeight);
-    const service = [detail.postoLampo ? "Posto Lampo" : "", detail.sistemazioneFasce ? "Sistemazione fasce" : ""].filter(Boolean).join(", ") || "-";
+    const service = detail.postoLampo ? "Posto Lampo" : "-";
     const date = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" }).format(new Date(detail.date));
     const values = [`${worker} - ${detail.clientName}`, date, service, detail.products, detail.note];
     x = 15;
