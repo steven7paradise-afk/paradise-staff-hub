@@ -730,8 +730,8 @@ function AppointmentNotePreviews({
           data-appointment-note={note.key}
           className={isShopify
             ? compact
-              ? "appointment-note-preview rounded-lg border border-[#E85A9B] bg-[#FFF0F7] px-2.5 py-2 text-[10px] font-bold leading-snug text-[#64183C] shadow-sm"
-              : "appointment-note-preview rounded-xl border border-[#E85A9B] bg-[#FFF0F7] px-3 py-2.5 text-xs font-black leading-relaxed text-[#64183C] shadow-sm"
+              ? "appointment-note-preview rounded-lg border border-emerald-700 bg-emerald-50 px-2.5 py-2 text-[10px] font-bold leading-snug text-emerald-900 shadow-sm"
+              : "appointment-note-preview rounded-xl border border-emerald-700 bg-emerald-50 px-3 py-2.5 text-xs font-black leading-relaxed text-emerald-900 shadow-sm"
             : isCompleted
             ? compact
               ? "appointment-note-preview rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[9px] font-semibold leading-snug text-emerald-900"
@@ -740,7 +740,7 @@ function AppointmentNotePreviews({
               ? "appointment-note-preview rounded-lg border border-[#F5DCE5] bg-[#FFF7FA] px-2.5 py-2 text-[9px] font-semibold leading-snug text-[#7E4353]"
               : "appointment-note-preview rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
         >
-          <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${isShopify ? "text-[#C02F73]" : isCompleted ? "text-emerald-700" : "text-[#B9476D]"}`}>
+          <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${isShopify ? "text-emerald-800" : isCompleted ? "text-emerald-700" : "text-[#B9476D]"}`}>
             {isCompleted ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
           </span>
           <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
