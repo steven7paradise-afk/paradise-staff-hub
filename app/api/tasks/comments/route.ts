@@ -71,11 +71,6 @@ export async function POST(request: NextRequest) {
           active: true,
           employee_status: { not: "Ex dipendente" },
           role: { not: "ZERO" },
-          OR: [
-            { role: "SUPER_ADMIN" },
-            { role: "ADMIN" },
-            { sede_id: task.location_id },
-          ],
         },
         select: { id: true, name: true },
       }).then((users) => users.filter((user) => mentionTags.includes(mentionSlug(user.name))))

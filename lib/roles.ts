@@ -22,7 +22,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/programmazione-responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN"],
-  "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/registro-giornaliero": ["SUPER_ADMIN"],

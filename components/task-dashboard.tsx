@@ -539,8 +539,7 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
 }
 
 export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
-  const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
-  const canAssignAcrossTeam = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManageEveryTask = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   // The server filters this list with the same rule enforced by the API.
   // Do not show recipients that would be rejected after submission.
   const initialAllowedWorkers = workers;
@@ -560,7 +559,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const taskDetailPageRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
   const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">(
-    role === "RESPONSABILE" ? "ASSIGNED_BY_ME" : "ASSIGNED_TO_ME",
+    role === "RESPONSABILE"
+      ? "ASSIGNED_BY_ME"
+      : role === "DIPENDENTE" || role === "MAGAZZINO"
+        ? "ALL"
+        : "ASSIGNED_TO_ME",
   );
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -604,6 +607,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const [commentUploading, setCommentUploading] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
   const [commentError, setCommentError] = useState("");
+  const [workerSearch, setWorkerSearch] = useState("");
   const [todayAttendanceLogs, setTodayAttendanceLogs] = useState<TodayAttendanceLog[]>([]);
   const [completion, setCompletion] = useState({ note: "", link: "", files: [] as CompletionFile[] });
   const [form, setForm] = useState({
@@ -619,6 +623,19 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     photoUrl: "",
     checklistItems: [""],
   });
+  const visibleRecipientWorkers = useMemo(() => {
+    const query = workerSearch.trim().toLowerCase();
+    return initialAllowedWorkers
+      .filter((worker) => !query || [worker.name, worker.mansione, worker.locationName, worker.role]
+        .some((value) => value?.toLowerCase().includes(query)))
+      .sort((a, b) => {
+        const aSelected = form.assignedToIds.includes(a.id) ? 0 : 1;
+        const bSelected = form.assignedToIds.includes(b.id) ? 0 : 1;
+        if (aSelected !== bSelected) return aSelected - bSelected;
+        const locationComparison = (a.locationName ?? "").localeCompare(b.locationName ?? "", "it");
+        return locationComparison || a.name.localeCompare(b.name, "it");
+      });
+  }, [form.assignedToIds, initialAllowedWorkers, workerSearch]);
 
   useEffect(() => {
     if (!selected?.id) return;
@@ -634,15 +651,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     void openTask(linkedTask);
   }, [initialTaskId, initialTasks]);
 
-  const baseTasks = useMemo(() => {
-    return canAssign 
-      ? tasks 
-      : tasks.filter((task) => 
-          task.assignedToId === userId || 
-          task.assignees?.some((a) => a.id === userId) ||
-          task.createdById === userId
-        );
-  }, [tasks, canAssign, userId]);
+  const baseTasks = tasks;
 
   const personalTasks = useMemo(() => {
     if (assignmentFilter === "ASSIGNED_TO_ME") {
@@ -670,11 +679,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
   const timerAttendance = attendanceTimerState(todayAttendanceLogs);
   const activeMentionQuery = getActiveMentionQuery(commentText);
-  const allowedMentionUsers = mentionableUsers.filter((worker) =>
-    worker.role === "SUPER_ADMIN"
-    || worker.role === "ADMIN"
-    || Boolean(selected?.locationId && worker.locationId === selected.locationId)
-  );
+  const allowedMentionUsers = mentionableUsers;
   const mentionSuggestions = activeMentionQuery && activeMentionQuery.length > 0
     ? allowedMentionUsers
         .filter((worker) => worker.name.toLowerCase().includes(activeMentionQuery.toLowerCase()) || workerMentionSlug(worker.name).toLowerCase().includes(activeMentionQuery.toLowerCase()))
@@ -920,6 +925,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     setFormStatus(`Task inviata a ${data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno"}. Notifica creata.`);
     setTimeout(() => {
       setForm({ title: "", description: "", assignedToId: "", assignedToIds: [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
+      setWorkerSearch("");
       setFormStatus("");
       setOpen(false);
     }, 900);
@@ -927,6 +933,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
   function resetTaskForm() {
     setForm({ title: "", description: "", assignedToId: "", assignedToIds: [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
+    setWorkerSearch("");
     setEditingTaskId(null);
     setFormStatus("");
     setOpen(false);
@@ -935,6 +942,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   function openEditTask(task: Task) {
     setEditingTaskId(task.id);
     setFormStatus("");
+    setWorkerSearch("");
     setForm({
       title: task.title,
       description: task.description,
@@ -1494,7 +1502,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             <p className="mt-2 text-sm text-black/50">{view === "HOME" ? "Ecco cosa c'e da fare oggi." : "Gestisci e organizza tutte le attivita del team."}</p>
           </div>
           <div className="flex items-center gap-3">
-            {canAssign || role === "DIPENDENTE" ? (
+            {role ? (
               <button
                 type="button"
                 onClick={() => setOpen(true)}
@@ -1826,7 +1834,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     </button>
                   ))}
                 </div>
-                {canAssign || role === "DIPENDENTE" ? (
+                {role ? (
                   <button type="button" onClick={() => setOpen(true)} className={`mt-4 inline-flex items-center gap-2 text-sm font-bold ${column.text}`}>
                     <Plus className="size-4" /> Nuova task
                   </button>
@@ -1943,7 +1951,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     </div>
                     <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-black/35 dark:text-white/45">{formatCategoryLabel(selected.category)}</p>
                   </div>
-                  {canAssign || selected.createdById === userId ? (
+                  {canManageEveryTask || selected.createdById === userId || selected.assignees.some((assignee) => assignee.id === userId) ? (
                     <button aria-label="Modifica task" onClick={() => openEditTask(selected)} className="inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl bg-[#FAF7F9] px-3 text-sm font-semibold transition hover:bg-[#F2E8ED] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D85A91] dark:bg-white/10 dark:hover:bg-white/15">
                       <Pencil className="size-4" /> <span className="hidden sm:inline">Modifica task</span>
                     </button>
@@ -2481,12 +2489,36 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Priorità</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
                 <div className="space-y-2 md:col-span-2">
-                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">
-                    {editingTaskId ? "Scambia assegnazione" : "Assegna a"}
-                    <span className="normal-case tracking-normal text-black/40"> · {canAssignAcrossTeam ? "seleziona una o più persone" : "Ufficio o responsabili autorizzati"}</span>
-                  </span>
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">
+                      {editingTaskId ? "Scambia assegnazione" : "Assegna a"}
+                      <span className="normal-case tracking-normal text-black/40"> · seleziona una o più persone dello staff</span>
+                    </span>
+                    <span className="inline-flex min-h-7 items-center gap-2 rounded-full bg-[#FBE5EE] px-3 text-[10px] font-black uppercase tracking-[0.08em] text-[#8D3453]">
+                      {form.assignedToIds.length} selezionat{form.assignedToIds.length === 1 ? "a" : "i"}
+                    </span>
+                  </div>
+                  <div className="flex min-h-12 items-center gap-3 rounded-2xl border border-black/10 bg-white px-4 shadow-sm focus-within:border-[#D96B94] focus-within:ring-4 focus-within:ring-[#D96B94]/15">
+                    <Search className="size-4 shrink-0 text-black/35" />
+                    <input
+                      type="search"
+                      value={workerSearch}
+                      onChange={(event) => setWorkerSearch(event.target.value)}
+                      placeholder="Cerca nome, mansione o sede"
+                      className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-black/30"
+                    />
+                    {form.assignedToIds.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setForm((current) => ({ ...current, assignedToId: "", assignedToIds: [] }))}
+                        className="shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#A74758] hover:underline"
+                      >
+                        Deseleziona tutti
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-sm sm:grid-cols-2">
-                    {initialAllowedWorkers.map((worker) => {
+                    {visibleRecipientWorkers.map((worker) => {
                       const isSelected = form.assignedToIds.includes(worker.id);
                       return (
                         <button
@@ -2511,12 +2543,20 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                           <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-7" />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate">{worker.name}</span>
-                            <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-[0.08em] opacity-55">{workerMentionRoleLabel(worker)}</span>
+                            <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-[0.08em] opacity-55">
+                              {workerMentionRoleLabel(worker)}{worker.locationName ? ` · ${worker.locationName}` : ""}
+                            </span>
                           </span>
                           {isSelected ? <Check className="size-4 shrink-0" /> : null}
                         </button>
                       );
                     })}
+                    {visibleRecipientWorkers.length === 0 ? (
+                      <div className="col-span-full rounded-xl bg-[#F8F6F7] px-4 py-6 text-center">
+                        <p className="text-sm font-bold text-black/60">Nessun membro dello staff trovato</p>
+                        <p className="mt-1 text-xs text-black/40">Prova con un altro nome, mansione o sede.</p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

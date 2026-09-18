@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
+import { canViewAllTasks, hasTaskAccess, isTaskOfficeUser, taskParticipantWhere, taskWorkerWhere } from "@/lib/task-access";
 import { canDecideTaskCompletion, canRequestTaskCompletion } from "@/lib/task-completion-workflow";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -163,14 +163,12 @@ export async function GET(request: NextRequest) {
       });
   if (!task) return NextResponse.json({ error: "Task non trovata" }, { status: 404 });
 
-  const canSeeAllLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
-  const canSeeAllTasks = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role) || canSeeAllLocations;
-  const isAssignee = task.assignees.some((user) => user.id === session.user.id);
-  const isCreator = task.created_by_id === session.user.id;
-  const locationAllowed = canSeeAllLocations || task.location_id === currentUser.sede_id || isCreator || isAssignee;
-  const taskAllowed = canSeeAllTasks || task.created_by_id === session.user.id || isAssignee;
-  if (!locationAllowed || !taskAllowed) {
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  if (!canViewAllTasks(session.user.role, currentUser.mansione, currentUser.location?.name)) {
+    const participantTask = await prisma.staffTask.findFirst({
+      where: { AND: [{ id }, taskParticipantWhere(session.user.id, session.user.name)] },
+      select: { id: true },
+    });
+    if (!participantTask) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
   return NextResponse.json(task);
@@ -208,18 +206,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Inserisci titolo, descrizione e almeno un lavoratore." }, { status: 400 });
   }
 
-  const canAssignAcrossLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
-  const assignmentWhere = canAssignAcrossLocations
-    ? taskWorkerWhere()
-    : taskEscalationRecipientWhere(currentUser.sede_id);
+  const assignmentWhere = taskWorkerWhere();
   const workers = await prisma.user.findMany({
     where: { ...assignmentWhere, id: { in: workerIds } },
   });
   if (workers.length !== workerIds.length) {
-    return NextResponse.json({ error: "Puoi assegnare la task soltanto all’Ufficio o ai Responsabili autorizzati." }, { status: 403 });
+    return NextResponse.json({ error: "Puoi assegnare la task soltanto a membri attivi dello staff." }, { status: 403 });
   }
 
-  const firstLocationId = canAssignAcrossLocations ? workers[0]?.sede_id : currentUser.sede_id;
+  const firstLocationId = workers[0]?.sede_id ?? currentUser.sede_id;
   if (!firstLocationId) {
     return NextResponse.json({ error: "I lavoratori selezionati devono essere assegnati a un salone." }, { status: 400 });
   }
@@ -469,14 +464,12 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Puoi modificare soltanto le task create da te o assegnate a te." }, { status: 403 });
   }
 
-  const assignmentWhere = canAssignAcrossLocations
-    ? taskWorkerWhere()
-    : taskEscalationRecipientWhere(currentUser.sede_id);
+  const assignmentWhere = taskWorkerWhere();
   const workers = await prisma.user.findMany({
     where: { ...assignmentWhere, id: { in: workerIds } },
   });
   if (workers.length !== workerIds.length) {
-    return NextResponse.json({ error: "Puoi assegnare la task soltanto all’Ufficio o ai Responsabili autorizzati." }, { status: 403 });
+    return NextResponse.json({ error: "Puoi assegnare la task soltanto a membri attivi dello staff." }, { status: 403 });
   }
 
   if (!canAssignAcrossLocations && currentUser.sede_id !== task.location_id && task.created_by_id !== session.user.id && !isAssignee) {

@@ -5,7 +5,7 @@ import { TaskDashboard } from "@/components/task-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
-import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
+import { canViewAllTasks, hasTaskAccess, isTaskOfficeUser, taskParticipantWhere, taskWorkerWhere } from "@/lib/task-access";
 import { normalizeTaskView } from "@/lib/task-view";
 
 export const dynamic = "force-dynamic";
@@ -22,34 +22,17 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   });
   if (!hasTaskAccess(role, currentUser?.mansione, currentUser?.location?.name)) redirect("/dashboard");
 
-  const canSeeAllTaskLocations = isTaskOfficeUser(role, currentUser?.mansione, currentUser?.location?.name);
-  const canSeeAllTasks = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || canSeeAllTaskLocations;
-  const taskLocationFilter = canSeeAllTaskLocations ? {} : { location_id: currentUser?.sede_id ?? undefined };
-  const workerWhere =
-    canSeeAllTaskLocations
-      ? taskWorkerWhere()
-      : taskEscalationRecipientWhere(currentUser?.sede_id);
-  const taskWhere = canSeeAllTasks
-    ? taskLocationFilter
-    : {
-        OR: [
-          { created_by_id: session.user.id },
-          { assignees: { some: { id: session.user.id } } },
-        ],
-      };
+  const seesAllTasks = canViewAllTasks(role, currentUser?.mansione, currentUser?.location?.name);
+  const canManageAllTasks = isTaskOfficeUser(role, currentUser?.mansione, currentUser?.location?.name);
+  const workerWhere = taskWorkerWhere();
+  const taskWhere: Prisma.StaffTaskWhereInput = seesAllTasks
+    ? {}
+    : taskParticipantWhere(session.user.id, session.user.name);
 
   const mentionUserWhere: Prisma.UserWhereInput = {
     active: true,
     employee_status: { not: "Ex dipendente" },
     role: { not: "ZERO" },
-    ...(canSeeAllTaskLocations ? {} : {
-      OR: [
-        { role: { in: ["SUPER_ADMIN", "ADMIN"] } },
-        { sede_id: currentUser?.sede_id ?? undefined },
-        { mansione: { contains: "ufficio", mode: "insensitive" } },
-        { location: { name: { contains: "ufficio", mode: "insensitive" } } },
-      ],
-    }),
   };
   const taskListSelect = {
     id: true,
@@ -85,7 +68,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     prisma.staffTask.findMany({
       where: taskWhere,
       select: taskListSelect,
-      orderBy: { created_at: "desc" },
+      orderBy: { updated_at: "desc" },
       take: 120,
     }),
     prisma.setting.findUnique({ where: { key: "task_categories" } }),
@@ -125,7 +108,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         userId={session.user.id}
         userName={session.user.name ?? "Paradise"}
         currentUserLocationId={currentUser?.sede_id ?? null}
-        canManageTasks={canSeeAllTasks}
+        canManageTasks={canManageAllTasks}
         initialView={normalizeTaskView(currentUser?.default_task_view)}
         initialTaskId={requestedTaskId}
         categories={taskCategories}
