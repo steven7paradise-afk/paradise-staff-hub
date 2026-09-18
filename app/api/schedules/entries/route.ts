@@ -4,7 +4,6 @@ import { deleteScheduleEventFromGoogleCalendar, syncScheduleEntryToGoogleCalenda
 import { prisma } from "@/lib/prisma";
 import { canEditForUser } from "@/lib/roles";
 
-const planningRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function normalizeTime(value: unknown) {
@@ -242,14 +241,14 @@ export async function PUT(request: NextRequest) {
 
   if (!categoryId) {
     const existing = await prisma.scheduleEntry.findFirst({
-      where: { user_id: userId, date, location_id: locationId },
+      where: { user_id: userId, date: utcDate, location_id: locationId },
       include: { user: true },
     });
     let targetCalendarId = undefined;
     if (existing?.user?.google_calendar_id && existing.user.google_calendar_sync) {
       targetCalendarId = existing.user.google_calendar_id;
     }
-    await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date, location_id: locationId } });
+    await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date: utcDate, location_id: locationId } });
     
     await syncUserSickness(userId, session.user.id);
 
@@ -266,13 +265,19 @@ export async function PUT(request: NextRequest) {
   }
 
   const entry = await prisma.scheduleEntry.upsert({
-    where: { user_id_date: { user_id: userId, date } },
+    where: { user_id_date: { user_id: userId, date: utcDate } },
     update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
-    create: { user_id: userId, category_id: categoryId, location_id: locationId, date, start_time: startTime, end_time: endTime },
+    create: { user_id: userId, category_id: categoryId, location_id: locationId, date: utcDate, start_time: startTime, end_time: endTime },
   });
 
   await syncUserSickness(userId, session.user.id);
 
-  const calendarSync = await syncScheduleEntryToGoogleCalendar(entry.id);
+  // Il planning è la fonte primaria: un problema temporaneo di Google Calendar
+  // non deve far sembrare fallito (e quindi sparire nell'interfaccia) un turno
+  // che è già stato salvato correttamente nel database.
+  const [calendarResult] = await Promise.allSettled([syncScheduleEntryToGoogleCalendar(entry.id)]);
+  const calendarSync = calendarResult.status === "fulfilled"
+    ? calendarResult.value
+    : { attempted: true, failed: true };
   return NextResponse.json({ ...entry, calendarSync });
 }

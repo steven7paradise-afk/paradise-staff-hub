@@ -281,11 +281,9 @@ export function applySystemazioneAppointmentsToSheet({
     }
 
     const previousStaff = previousApplicationStaff(previous);
-    const recordedSystemazioneStaff = previousApplicationStaff(systemazioneControl);
-    const assignedStaff = appointment.teammates
-      .map((mate) => mate.name.trim())
-      .filter((name) => name && !normalized(name).includes("staff disponibile"));
-    const currentStaff = recordedSystemazioneStaff || [...new Set(assignedStaff)].join(", ");
+    // "Sistemazione" indica chi ha dichiarato di aver svolto il servizio nel
+    // Controllo Cliente completato, non chi era soltanto assegnato in agenda.
+    const currentStaff = previousApplicationStaff(systemazioneControl);
     const previousPhoto = attachmentFromAnswer(
       systemazioneControl?.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto]
       ?? previous?.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto],
@@ -300,7 +298,10 @@ export function applySystemazioneAppointmentsToSheet({
     setTextIfBlank(values, orderColumn, order);
     if (previousStaff) updateAutoValue(values, previousColumn, previousStaff);
     else setTextIfBlank(values, previousColumn, VERIFY_PREVIOUS_STAFF_LABEL);
-    updateAutoValue(values, systemazioneColumn, currentStaff);
+    if (currentStaff) updateAutoValue(values, systemazioneColumn, currentStaff);
+    else if (!existing || existing.id.startsWith(AUTO_ROW_PREFIX)) {
+      setTextIfBlank(values, systemazioneColumn, VERIFY_PREVIOUS_STAFF_LABEL);
+    }
     if (photoColumn && previousPhoto && !values[photoColumn.id]) values[photoColumn.id] = previousPhoto;
 
     const nextRow: AssistanceTableRow = {

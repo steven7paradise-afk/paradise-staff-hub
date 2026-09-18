@@ -73,8 +73,8 @@ export default async function SchedulesPage() {
 
   return (
     <AppShell
-      title="Planning mensile"
-      subtitle="Organizza i turni come un foglio mensile: dipendenti sulle righe, giorni sulle colonne, categorie colorate e stampa PDF."
+      title="Planning turni"
+      subtitle="Crea e controlla i turni dello staff, salone per salone."
     >
       <MonthlySchedulePlanner
         initialWorkersOrder={Array.isArray(workersOrderSetting?.value) ? (workersOrderSetting.value as string[]) : []}

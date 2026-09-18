@@ -1,8 +1,27 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { CalendarDays, Download, Pencil, Plus, Sparkles, Users, X, Share2, ChevronUp, ChevronDown } from "lucide-react";
-import { Button, Card, Field } from "@/components/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Download,
+  Info,
+  MapPin,
+  Pencil,
+  Plus,
+  Printer,
+  Share2,
+  Sparkles,
+  UserPlus,
+  Users,
+  WandSparkles,
+  X,
+} from "lucide-react";
+import { Button, Field } from "@/components/ui";
 
 type ScheduleCategory = {
   id: string;
@@ -61,6 +80,11 @@ type CategoryMenu = {
   y: number;
 } | null;
 
+type DragCell = {
+  workerIndex: number;
+  day: number;
+};
+
 const monthNames = [
   "GENNAIO",
   "FEBBRAIO",
@@ -77,6 +101,7 @@ const monthNames = [
 ];
 
 const weekdayShort = ["D", "L", "M", "M", "G", "V", "S"];
+const weekdayLong = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
 const emptyCategoryForm: CategoryForm = {
   name: "",
   code: "",
@@ -252,6 +277,15 @@ export function MonthlySchedulePlanner({
   const [categoryMenu, setCategoryMenu] = useState<CategoryMenu>(null);
   const [newCategory, setNewCategory] = useState<CategoryForm>(emptyCategoryForm);
   const [workersOrderList, setWorkersOrderList] = useState<string[]>(initialWorkersOrder);
+  const [cellSaveStates, setCellSaveStates] = useState<Record<string, "saving" | "error">>({});
+  const [dragSelection, setDragSelection] = useState<Set<string>>(() => new Set());
+  const dragStartRef = useRef<DragCell | null>(null);
+  const dragSelectionRef = useRef<Set<string>>(new Set());
+  const dragMovedRef = useRef(false);
+  const suppressCellClickRef = useRef(false);
+  const [selectedDay, setSelectedDay] = useState(
+    today.getFullYear() === initialPlannerYear && today.getMonth() === initialPlannerMonth ? today.getDate() : 1,
+  );
 
   const saveWorkersOrder = async (newOrder: string[]) => {
     try {
@@ -435,49 +469,218 @@ export function MonthlySchedulePlanner({
     const useCellTime = categoryAllowsTimeEdit(category);
     const startTime = useCellTime ? (next.startTime || category.startTime || "") : (category.startTime || "");
     const endTime = useCellTime ? (next.endTime || category.endTime || "") : (category.endTime || "");
+    setCellSaveStates((current) => ({ ...current, [key]: "saving" }));
     setAssignments((current) => ({
       ...current,
       [key]: { categoryId: next.categoryId, startTime, endTime, locationId: selectedLocationId },
     }));
     const date = new Date(Date.UTC(year, month, next.day));
-    const response = await fetch("/api/schedules/entries", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: next.workerId, locationId: selectedLocationId, categoryId: next.categoryId, date: date.toISOString(), startTime, endTime }),
-    });
-    if (!response.ok) {
-      setAssignments((current) => {
+    try {
+      const response = await fetch("/api/schedules/entries", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: next.workerId, locationId: selectedLocationId, categoryId: next.categoryId, date: date.toISOString(), startTime, endTime }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        // Gli errori di validazione sono certi e ripristinano il valore prima
+        // della modifica. Sugli errori temporanei manteniamo invece il turno
+        // visibile, così la compilazione non "cancella" ciò che l'utente ha
+        // appena inserito e può essere ritentato dalla stessa cella.
+        if (response.status < 500) {
+          setAssignments((current) => {
+            const copy = { ...current };
+            if (previous) copy[key] = previous;
+            else delete copy[key];
+            return copy;
+          });
+        }
+        setCellSaveStates((current) => ({ ...current, [key]: "error" }));
+        setPlannerMessage(data.error ?? "Turno non confermato. Tocca di nuovo la cella per riprovare.");
+        return;
+      }
+      const savedEntry = await response.json();
+      const normalizedEntry = scheduleEntryFromApi(savedEntry, {
+        userId: next.workerId,
+        locationId: selectedLocationId,
+        categoryId: next.categoryId,
+        date: date.toISOString(),
+        startTime,
+        endTime,
+      });
+      setAssignments((current) => ({
+        ...current,
+        [key]: {
+          categoryId: normalizedEntry.categoryId,
+          startTime: normalizedEntry.startTime,
+          endTime: normalizedEntry.endTime,
+          locationId: normalizedEntry.locationId ?? selectedLocationId,
+        },
+      }));
+      setScheduleEntries((current) => replaceScheduleEntry(current, normalizedEntry));
+      setCellSaveStates((current) => {
         const copy = { ...current };
-        if (previous) copy[key] = previous;
-        else delete copy[key];
+        delete copy[key];
         return copy;
       });
-      const data = await response.json();
-      setPlannerMessage(data.error ?? "Turno non salvato.");
-      return;
+      setCellEditor(null);
+      setPlannerMessage(`Turno salvato per il ${next.day} ${monthNames[month].toLowerCase()}.`);
+    } catch {
+      setCellSaveStates((current) => ({ ...current, [key]: "error" }));
+      setPlannerMessage("Connessione interrotta: il turno resta visibile. Toccalo e salva di nuovo per confermarlo.");
     }
-    const savedEntry = await response.json();
-    const normalizedEntry = scheduleEntryFromApi(savedEntry, {
-      userId: next.workerId,
-      locationId: selectedLocationId,
-      categoryId: next.categoryId,
-      date: date.toISOString(),
-      startTime,
-      endTime,
-    });
-    setAssignments((current) => ({
-      ...current,
-      [key]: {
-        categoryId: normalizedEntry.categoryId,
-        startTime: normalizedEntry.startTime,
-        endTime: normalizedEntry.endTime,
-        locationId: normalizedEntry.locationId ?? selectedLocationId,
-      },
-    }));
-    setScheduleEntries((current) => replaceScheduleEntry(current, normalizedEntry));
-    setCellEditor(null);
-    setPlannerMessage("Planning aggiornato.");
   }
+
+  function updateDragSelection(end: DragCell) {
+    const start = dragStartRef.current;
+    if (!start) return;
+    if (start.workerIndex !== end.workerIndex || start.day !== end.day) dragMovedRef.current = true;
+
+    const firstWorker = Math.min(start.workerIndex, end.workerIndex);
+    const lastWorker = Math.max(start.workerIndex, end.workerIndex);
+    const firstDay = Math.min(start.day, end.day);
+    const lastDay = Math.max(start.day, end.day);
+    const nextSelection = new Set<string>();
+
+    for (let workerIndex = firstWorker; workerIndex <= lastWorker; workerIndex += 1) {
+      const worker = activeWorkers[workerIndex];
+      if (!worker) continue;
+      for (let day = firstDay; day <= lastDay; day += 1) {
+        const key = assignmentKey(worker.id, day);
+        const current = assignments[key];
+        // Gli impegni appartenenti a un altro salone rimangono protetti.
+        if (current?.locationId && current.locationId !== selectedLocationId) continue;
+        nextSelection.add(key);
+      }
+    }
+
+    dragSelectionRef.current = nextSelection;
+    setDragSelection(nextSelection);
+  }
+
+  function beginDragSelection(event: React.PointerEvent<HTMLTableCellElement>, workerIndex: number, day: number) {
+    if (event.pointerType !== "mouse" || event.button !== 0 || !canEditPlanning || !activeCategory) return;
+    event.preventDefault();
+    dragStartRef.current = { workerIndex, day };
+    dragMovedRef.current = false;
+    const key = assignmentKey(activeWorkers[workerIndex]?.id ?? "", day);
+    const current = assignments[key];
+    const nextSelection = current?.locationId && current.locationId !== selectedLocationId ? new Set<string>() : new Set([key]);
+    dragSelectionRef.current = nextSelection;
+    setDragSelection(nextSelection);
+  }
+
+  async function finishDragSelection() {
+    if (!dragStartRef.current) return;
+    const shouldSave = dragMovedRef.current;
+    const selectedKeys = [...dragSelectionRef.current];
+    dragStartRef.current = null;
+    dragMovedRef.current = false;
+    dragSelectionRef.current = new Set();
+    setDragSelection(new Set());
+
+    if (!shouldSave || !activeCategory || selectedKeys.length === 0) return;
+    suppressCellClickRef.current = true;
+    window.setTimeout(() => {
+      suppressCellClickRef.current = false;
+    }, 0);
+
+    const selectedKeySet = new Set(selectedKeys);
+    const previousAssignments = Object.fromEntries(selectedKeys.map((key) => [key, assignments[key]]));
+    const payload = activeWorkers.flatMap((worker) =>
+      monthDays.flatMap((day) => {
+        const key = assignmentKey(worker.id, day);
+        if (!selectedKeySet.has(key)) return [];
+        return [{
+          userId: worker.id,
+          locationId: selectedLocationId,
+          categoryId: activeCategory.id,
+          date: new Date(Date.UTC(year, month, day)).toISOString(),
+          startTime: activeCategory.startTime ?? null,
+          endTime: activeCategory.endTime ?? null,
+        }];
+      }),
+    );
+    if (!payload.length) return;
+
+    setCellSaveStates((current) => ({
+      ...current,
+      ...Object.fromEntries(selectedKeys.map((key) => [key, "saving" as const])),
+    }));
+    setAssignments((current) => {
+      const copy = { ...current };
+      payload.forEach((item) => {
+        const day = new Date(item.date).getUTCDate();
+        copy[assignmentKey(item.userId, day)] = {
+          categoryId: item.categoryId,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          locationId: item.locationId,
+        };
+      });
+      return copy;
+    });
+    setPlannerMessage(`Salvataggio di ${payload.length} celle…`);
+
+    try {
+      const response = await fetch("/api/schedules/entries", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        if (response.status < 500) {
+          setAssignments((current) => {
+            const copy = { ...current };
+            selectedKeys.forEach((key) => {
+              const previous = previousAssignments[key];
+              if (previous) copy[key] = previous;
+              else delete copy[key];
+            });
+            return copy;
+          });
+        }
+        setCellSaveStates((current) => ({
+          ...current,
+          ...Object.fromEntries(selectedKeys.map((key) => [key, "error" as const])),
+        }));
+        setPlannerMessage(data.error ?? "Selezione non confermata. Trascina di nuovo per riprovare.");
+        return;
+      }
+
+      setScheduleEntries((current) =>
+        payload.reduce<ScheduleEntry[]>((nextEntries, item) => replaceScheduleEntry(nextEntries, {
+          userId: item.userId,
+          locationId: item.locationId,
+          categoryId: item.categoryId,
+          date: item.date,
+          startTime: item.startTime,
+          endTime: item.endTime,
+        }), current),
+      );
+      setCellSaveStates((current) => {
+        const copy = { ...current };
+        selectedKeys.forEach((key) => delete copy[key]);
+        return copy;
+      });
+      setPlannerMessage(`${payload.length} celle salvate.`);
+    } catch {
+      setCellSaveStates((current) => ({
+        ...current,
+        ...Object.fromEntries(selectedKeys.map((key) => [key, "error" as const])),
+      }));
+      setPlannerMessage("Connessione interrotta: le celle restano visibili e possono essere confermate di nuovo.");
+    }
+  }
+
+  useEffect(() => {
+    function handlePointerUp() {
+      if (dragStartRef.current) void finishDragSelection();
+    }
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => window.removeEventListener("pointerup", handlePointerUp);
+  });
 
   async function clearCellAssignment() {
     if (!cellEditor) return;
@@ -682,11 +885,6 @@ export function MonthlySchedulePlanner({
     setPlannerMessage(editingCategoryId ? "Categoria aggiornata." : "Nuova categoria salvata.");
   }
 
-  function resetMonth() {
-    const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
-  }
-
   function setScheduleYear(nextYear: number) {
     if (!isAllowedMonth(month, nextYear)) {
       setPlannerMessage("Questo anno non e ancora visibile per i collaboratori.");
@@ -785,7 +983,7 @@ export function MonthlySchedulePlanner({
         )
       );
       setPlannerMessage(`Salvati con successo ${payload.length} turni.`);
-    } catch (e) {
+    } catch {
       setPlannerMessage("Errore di connessione.");
     }
   }
@@ -860,7 +1058,7 @@ export function MonthlySchedulePlanner({
         )
       );
       setPlannerMessage(`Svuotate con successo ${payload.length} celle.`);
-    } catch (e) {
+    } catch {
       setPlannerMessage("Errore di connessione.");
     }
   }
@@ -1039,259 +1237,291 @@ export function MonthlySchedulePlanner({
   const editorAssignment = cellEditor ? assignments[assignmentKey(cellEditor.workerId, cellEditor.day)] : undefined;
   const editorIsExternalCommitment = Boolean(editorAssignment?.locationId && editorAssignment.locationId !== selectedLocationId);
   const editorCanChangeTime = !editorIsExternalCommitment && categoryAllowsTimeEdit(editorCategory);
+  const mobileSelectedDay = Math.min(selectedDay, days);
+  const assignedShiftCount = activeWorkers.reduce(
+    (total, worker) => total + monthDays.filter((day) => Boolean(assignments[assignmentKey(worker.id, day)])).length,
+    0,
+  );
+  const selectedDayShiftCount = activeWorkers.filter((worker) => Boolean(assignments[assignmentKey(worker.id, mobileSelectedDay)])).length;
+  const selectedDayDate = new Date(year, month, mobileSelectedDay);
+  const controlClass = "min-h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold text-black outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:border-white/10 dark:bg-neutral-800 dark:text-white";
 
   return (
-    <div className="space-y-6">
-      <div className="no-print grid gap-4">
-        {!canEditPlanning ? (
-          <div className="rounded-[22px] border border-paradise-pink/25 bg-paradise-softPink/35 px-5 py-4 text-sm font-semibold text-[#8F4051]">
-            Vista sola lettura: puoi consultare la turnistica e scaricare PDF, ma non modificare celle, categorie o assegnazioni.
-          </div>
-        ) : null}
-        <Card className="p-0">
-          <div className="border-b border-black/5 px-6 py-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-black/40"><Sparkles className="size-4" /> Planner operativo</p>
-                <h2 className="mt-2 text-2xl font-semibold">Turnistica mensile</h2>
+    <div className="space-y-5 pb-20 sm:pb-8">
+      <section className="no-print overflow-hidden rounded-[28px] border border-[#eadde3] bg-white shadow-[0_18px_55px_rgba(89,52,68,0.08)] dark:border-white/10 dark:bg-neutral-900">
+        <div className="bg-gradient-to-br from-[#fff8fb] via-white to-[#f8edf2] px-4 py-5 sm:px-6 sm:py-6 dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-800">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-xl">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#9a667b] dark:text-paradise-pink">
+                <CalendarDays className="size-4" />
+                Planning mensile
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-2xl bg-paradise-nude/70 px-4 py-2">
-                  <p className="text-xs text-black/45">Salone</p>
-                  <p className="font-semibold">{selectedLocation?.name ?? "Da creare"}</p>
-                </div>
-                <div className="rounded-2xl bg-paradise-nude/70 px-4 py-2">
-                  <p className="text-xs text-black/45">Staff</p>
-                  <p className="font-semibold">{activeWorkers.length} attivi</p>
-                </div>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-[#2f2429] sm:text-3xl dark:text-white">
+                {monthNames[month]} {year}
+              </h2>
+              <p className="mt-2 text-sm text-black/55 dark:text-white/55">Scegli salone e periodo, poi seleziona un turno e assegnalo allo staff.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[390px]">
+              <div className="rounded-2xl border border-black/5 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-white/5">
+                <MapPin className="size-4 text-[#b85b80]" />
+                <p className="mt-2 truncate text-xs text-black/45 dark:text-white/45">Salone</p>
+                <p className="truncate text-sm font-bold">{selectedLocation?.name ?? "—"}</p>
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-white/5">
+                <Users className="size-4 text-[#b85b80]" />
+                <p className="mt-2 text-xs text-black/45 dark:text-white/45">Persone</p>
+                <p className="text-sm font-bold">{activeWorkers.length}</p>
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-white/5">
+                <CheckCircle2 className="size-4 text-emerald-600" />
+                <p className="mt-2 text-xs text-black/45 dark:text-white/45">Turni inseriti</p>
+                <p className="text-sm font-bold">{assignedShiftCount}</p>
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="grid gap-5 px-6 py-5 lg:grid-cols-[1fr_1fr_120px_auto] lg:items-end">
-            <label className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Salone</span>
-              <select
-                className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/90 px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                value={selectedLocationId}
-                onChange={(event) => setScheduleLocation(event.target.value)}
-              >
-                {activeLocations.length === 0 ? <option value="">Nessun salone attivo</option> : null}
-                {activeLocations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Mese</span>
-              <select
-                className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/90 px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                value={hasMonthRestriction ? `${month}-${year}` : String(month)}
-                onChange={(event) => {
-                  if (hasMonthRestriction) {
-                    const [nextMonth, nextYear] = event.target.value.split("-").map(Number);
-                    setScheduleMonth(nextMonth, nextYear);
-                    return;
-                  }
-                  setScheduleMonth(Number(event.target.value));
-                }}
-              >
-                {hasMonthRestriction
-                  ? allowedMonths?.map((item) => (
-                      <option key={`${item.year}-${item.month}`} value={`${item.month}-${item.year}`}>
-                        {monthNames[item.month]} {item.year}
-                      </option>
-                    ))
-                  : monthNames.map((name, index) => (
-                      <option key={name} value={index}>
-                        {name}
-                      </option>
-                    ))}
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Anno</span>
-              <Field value={year} onChange={(event) => setScheduleYear(Number(event.target.value))} type="number" disabled={hasMonthRestriction} />
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={downloadPdf} disabled={exporting || !selectedLocationId}>
-                <Download className="size-4" />
-                {exporting ? "Creazione..." : "PDF"}
-              </Button>
+        <div className="grid grid-cols-2 gap-3 border-t border-black/5 px-4 py-5 sm:px-6 lg:grid-cols-[1.2fr_1fr_140px_auto] lg:items-end dark:border-white/10">
+          <label className="col-span-2 space-y-2 lg:col-span-1">
+            <span className="text-xs font-bold text-black/55 dark:text-white/55">Salone</span>
+            <select className={controlClass} value={selectedLocationId} onChange={(event) => setScheduleLocation(event.target.value)}>
+              {activeLocations.length === 0 ? <option value="">Nessun salone attivo</option> : null}
+              {activeLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-bold text-black/55 dark:text-white/55">Mese</span>
+            <select
+              className={controlClass}
+              value={hasMonthRestriction ? `${month}-${year}` : String(month)}
+              onChange={(event) => {
+                if (hasMonthRestriction) {
+                  const [nextMonth, nextYear] = event.target.value.split("-").map(Number);
+                  setScheduleMonth(nextMonth, nextYear);
+                  return;
+                }
+                setScheduleMonth(Number(event.target.value));
+              }}
+            >
+              {hasMonthRestriction
+                ? allowedMonths?.map((item) => <option key={`${item.year}-${item.month}`} value={`${item.month}-${item.year}`}>{monthNames[item.month]} {item.year}</option>)
+                : monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-bold text-black/55 dark:text-white/55">Anno</span>
+            <Field value={year} onChange={(event) => setScheduleYear(Number(event.target.value))} type="number" disabled={hasMonthRestriction} />
+          </label>
+          <Button className="col-span-2 w-full lg:col-span-1 lg:w-auto" onClick={downloadPdf} disabled={exporting || !selectedLocationId}>
+            <Download className="size-4" />
+            {exporting ? "Creazione..." : "Scarica PDF"}
+          </Button>
+        </div>
+      </section>
+
+      {!canEditPlanning ? (
+        <div className="no-print flex items-start gap-3 rounded-2xl border border-paradise-pink/25 bg-paradise-softPink/25 px-4 py-3 text-sm font-semibold text-[#8f405f] dark:text-paradise-pink">
+          <Info className="mt-0.5 size-4 shrink-0" />
+          Puoi consultare e scaricare il planning. Le modifiche sono riservate a chi gestisce i turni.
+        </div>
+      ) : null}
+
+      <section className="no-print rounded-[28px] border border-black/10 bg-white p-4 shadow-[0_14px_45px_rgba(89,52,68,0.06)] sm:p-6 dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#2f2429] text-sm font-black text-white dark:bg-white dark:text-black">1</span>
+            <div>
+              <h3 className="text-lg font-black">Scegli il turno da assegnare</h3>
+              <p className="mt-1 text-sm text-black/50 dark:text-white/50">Il turno selezionato verrà usato quando tocchi una persona o una cella.</p>
             </div>
           </div>
-
-          <div className="border-t border-black/5 px-6 py-4">
-            <div className="flex flex-wrap items-end gap-3 rounded-3xl bg-[#fbf7f9] p-3">
-              <label className="min-w-[260px] flex-1 space-y-2">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Stampa due saloni nello stesso foglio</span>
-                <select
-                  className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/90 px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                  value={secondPrintLocationId}
-                  onChange={(event) => setSecondPrintLocationId(event.target.value)}
-                >
-                  <option value="">Seleziona secondo salone</option>
-                  {activeLocations
-                    .filter((location) => location.id !== selectedLocationId)
-                    .map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <Button onClick={downloadTwoSalonsPdf} disabled={exporting || !selectedLocationId || activeLocations.length < 2}>
-                <Download className="size-4" />
-                {exporting ? "Creazione..." : "PDF 2 saloni"}
-              </Button>
-            </div>
-          </div>
-
-          <div className="border-t border-black/5 px-6 py-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Categorie e orari</p>
-                <p className="mt-1 text-xs text-black/45">Seleziona una categoria e clicca sulle celle. Click destro su una categoria per modificarla.</p>
-              </div>
-              {canManageCategories ? (
-                <Button type="button" onClick={openNewCategoryForm} className="min-h-10 px-4">
-                  <Plus className="size-4" />
-                  Nuova categoria
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-            {visibleCategories.map((category) => (
-              <button
-                key={category.id}
-                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                  activeCategoryId === category.id ? "border-black shadow-soft ring-4 ring-black/5" : "border-black/10 hover:border-black/25"
-                }`}
-                style={{ backgroundColor: category.color, color: category.textColor }}
-                onClick={() => setActiveCategoryId(category.id)}
-                onContextMenu={(event) => {
-                  if (!canManageCategories) return;
-                  event.preventDefault();
-                  setCategoryMenu({ categoryId: category.id, x: event.clientX, y: event.clientY });
-                }}
-              >
-                <span className="grid size-6 place-items-center rounded-full bg-white/45 text-[11px] font-black">{category.code}</span>
-                {category.name}
-                {category.startTime && category.endTime ? ` ${category.startTime}-${category.endTime}` : ""}
-              </button>
-            ))}
-            {visibleCategories.length === 0 ? <p className="rounded-2xl bg-paradise-nude px-4 py-3 text-sm text-black/55">Nessuna categoria per questo salone. Crea il primo orario dal pulsante “Nuova categoria”.</p> : null}
-            </div>
-            {canEditPlanning && availableExternalWorkers.length > 0 ? (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-black/5 bg-white/70 p-3">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Aggiungi da altro salone</span>
-                <select
-                  className="min-h-10 min-w-[260px] rounded-2xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                  value=""
-                  onChange={(event) => {
-                    if (!event.target.value) return;
-                    void addExternalWorker(event.target.value);
+          {canManageCategories ? (
+            <Button type="button" variant="soft" onClick={openNewCategoryForm} className="w-full sm:w-auto">
+              <Plus className="size-4" /> Nuovo turno
+            </Button>
+          ) : null}
+        </div>
+        <div className="mt-5 grid max-h-[310px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:max-h-none sm:flex sm:flex-wrap sm:overflow-visible sm:pr-0">
+          {visibleCategories.map((category) => {
+            const isActive = activeCategoryId === category.id;
+            return (
+              <div key={category.id} className="relative min-w-0">
+                <button
+                  type="button"
+                  aria-pressed={isActive}
+                  className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-bold transition sm:w-auto ${isActive ? "border-[#2f2429] shadow-md ring-4 ring-black/5 dark:border-white" : "border-black/10 hover:border-black/25 dark:border-white/10"}`}
+                  style={{ backgroundColor: category.color, color: category.textColor }}
+                  onClick={() => setActiveCategoryId(category.id)}
+                  onContextMenu={(event) => {
+                    if (!canManageCategories) return;
+                    event.preventDefault();
+                    setCategoryMenu({ categoryId: category.id, x: event.clientX, y: event.clientY });
                   }}
                 >
-                  <option value="">Seleziona lavoratore...</option>
-                  {availableExternalWorkers.map((worker) => (
-                    <option key={worker.id} value={worker.id}>
-                      {worker.name}
-                    </option>
-                  ))}
-                </select>
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/55 text-xs font-black shadow-sm">{category.code}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">{category.name}</span>
+                    <span className="mt-0.5 block text-[11px] font-semibold opacity-65">{category.startTime && category.endTime ? `${category.startTime}–${category.endTime}` : "Senza orario"}</span>
+                  </span>
+                </button>
+                {canManageCategories ? (
+                  <button type="button" onClick={() => openEditCategoryForm(category)} className="absolute right-1 top-1 grid size-7 place-items-center rounded-full bg-white/80 text-black/55 shadow-sm sm:hidden" aria-label={`Modifica ${category.name}`}>
+                    <Pencil className="size-3" />
+                  </button>
+                ) : null}
               </div>
-            ) : null}
-            {selectedExtraWorkerIds.length > 0 ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {selectedExtraWorkerIds.map((workerId) => {
-                  const worker = employees.find((item) => item.id === workerId);
-                  if (!worker) return null;
-                  const workerLocation = locations.find((location) => location.id === worker.locationId);
-                  return (
-                    <span key={workerId} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-black/70">
-                      {worker.name}
-                      <span className="text-black/35">{workerLocation?.name}</span>
-                      {canEditPlanning ? <button className="grid size-6 place-items-center rounded-full bg-paradise-nude text-black hover:bg-paradise-pink/40" onClick={() => removeExternalWorker(workerId)} type="button" aria-label={`Rimuovi ${worker.name}`}>
-                        <X className="size-3" />
-                      </button> : null}
-                    </span>
-                  );
-                })}
-              </div>
-            ) : null}
-            {canEditPlanning && (
-              <div className="mt-5 border-t border-black/5 pt-5">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-black/45 mb-3">Assegnazione Rapida (Massa)</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
-                  <label className="space-y-2">
-                    <span className="text-xs text-black/45">Dipendente</span>
-                    <select
-                      className="min-h-10 w-full rounded-2xl border border-black/10 bg-white px-3 text-xs font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                      value={bulkWorkerId}
-                      onChange={(e) => setBulkWorkerId(e.target.value)}
-                    >
-                      <option value="all">Tutti i dipendenti</option>
-                      {activeWorkers.map((worker) => (
-                        <option key={worker.id} value={worker.id}>
-                          {worker.name.toUpperCase()}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  
-                  <label className="space-y-2">
-                    <span className="text-xs text-black/45">Giorni</span>
-                    <select
-                      className="min-h-10 w-full rounded-2xl border border-black/10 bg-white px-3 text-xs font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                      value={bulkDaysMode}
-                      onChange={(e) => setBulkDaysMode(e.target.value)}
-                    >
-                      <option value="mon-sat">Dal Lunedì al Sabato</option>
-                      <option value="mon-fri">Dal Lunedì al Venerdì</option>
-                      <option value="all">Tutti i giorni (incluso Domenica)</option>
-                    </select>
-                  </label>
-
-                  <label className="space-y-2">
-                    <span className="text-xs text-black/45">Celle</span>
-                    <select
-                      className="min-h-10 w-full rounded-2xl border border-black/10 bg-white px-3 text-xs font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                      value={bulkOverwriteMode}
-                      onChange={(e) => setBulkOverwriteMode(e.target.value)}
-                    >
-                      <option value="empty">Solo celle vuote</option>
-                      <option value="overwrite">Tutte (sovrascrivi esistenti)</option>
-                    </select>
-                  </label>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={applyBulkAssignment}
-                      className="min-h-10 flex-1 rounded-2xl bg-paradise-pink text-black hover:bg-paradise-pink/80 px-4 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
-                      type="button"
-                    >
-                      <Sparkles className="size-3.5 animate-pulse-soft" />
-                      Applica
-                    </button>
-                    <button
-                      onClick={clearBulkAssignment}
-                      className="min-h-10 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 px-3 text-xs font-bold transition flex items-center justify-center"
-                      type="button"
-                      title="Svuota celle nel mese"
-                    >
-                      Svuota
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            );
+          })}
+        </div>
+        {visibleCategories.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-black/15 bg-[#fbf7f9] px-4 py-5 text-sm text-black/55 dark:border-white/15 dark:bg-white/5 dark:text-white/55">
+            Non ci sono ancora turni per questo salone. Crea il primo turno per iniziare a compilare il planning.
           </div>
-        </Card>
+        ) : null}
+      </section>
+
+      <section className="no-print rounded-[28px] border border-black/10 bg-white p-4 shadow-[0_14px_45px_rgba(89,52,68,0.06)] md:hidden dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#2f2429] text-sm font-black text-white dark:bg-white dark:text-black">2</span>
+          <div>
+            <h3 className="text-lg font-black">Assegna i turni</h3>
+            <p className="mt-1 text-sm text-black/50 dark:text-white/50">Scegli il giorno e tocca una persona.</p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#f8f2f5] p-2 dark:bg-white/5">
+          <button type="button" onClick={() => setSelectedDay(Math.max(1, mobileSelectedDay - 1))} disabled={mobileSelectedDay === 1} className="grid size-11 place-items-center rounded-xl bg-white shadow-sm disabled:opacity-30 dark:bg-neutral-800" aria-label="Giorno precedente">
+            <ChevronLeft className="size-5" />
+          </button>
+          <div className="text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#9a667b]">{weekdayLong[selectedDayDate.getDay()]}</p>
+            <p className="mt-0.5 text-lg font-black">{mobileSelectedDay} {monthNames[month].toLowerCase()}</p>
+            <p className="text-xs text-black/45 dark:text-white/45">{selectedDayShiftCount} su {activeWorkers.length} assegnati</p>
+          </div>
+          <button type="button" onClick={() => setSelectedDay(Math.min(days, mobileSelectedDay + 1))} disabled={mobileSelectedDay === days} className="grid size-11 place-items-center rounded-xl bg-white shadow-sm disabled:opacity-30 dark:bg-neutral-800" aria-label="Giorno successivo">
+            <ChevronRight className="size-5" />
+          </button>
+        </div>
+
+        <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-2" aria-label="Seleziona giorno">
+          {monthDays.map((day) => {
+            const date = new Date(year, month, day);
+            const isSelected = day === mobileSelectedDay;
+            const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+            return (
+              <button key={day} type="button" onClick={() => setSelectedDay(day)} className={`min-w-14 rounded-2xl border px-2 py-2.5 text-center transition ${isSelected ? "border-[#2f2429] bg-[#2f2429] text-white dark:border-white dark:bg-white dark:text-black" : "border-black/10 bg-white dark:border-white/10 dark:bg-neutral-800"}`}>
+                <span className="block text-[10px] font-bold uppercase opacity-60">{weekdayShort[date.getDay()]}</span>
+                <span className="mt-0.5 block text-base font-black">{day}</span>
+                {isToday ? <span className="mx-auto mt-1 block size-1.5 rounded-full bg-paradise-pink" /> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {activeWorkers.map((worker) => {
+            const key = assignmentKey(worker.id, mobileSelectedDay);
+            const assignment = assignments[key];
+            const category = categories.find((item) => item.id === assignment?.categoryId);
+            const shownStart = assignment?.startTime ?? category?.startTime;
+            const shownEnd = assignment?.endTime ?? category?.endTime;
+            const isExternal = Boolean(assignment?.locationId && assignment.locationId !== selectedLocationId);
+            const saveState = cellSaveStates[key];
+            return (
+              <button
+                key={worker.id}
+                type="button"
+                onClick={() => openCellEditor(worker.id, mobileSelectedDay)}
+                className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-black/10 bg-white p-3 text-left transition active:scale-[0.99] dark:border-white/10 dark:bg-neutral-800"
+              >
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl text-sm font-black" style={{ backgroundColor: category?.color ?? "#f5eef1", color: category?.textColor ?? "#5f4b54" }}>
+                  {category?.code ?? worker.name.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black">{worker.name}</span>
+                  <span className="mt-1 block truncate text-xs text-black/50 dark:text-white/50">
+                    {category ? `${category.name}${shownStart && shownEnd ? ` · ${shownStart}–${shownEnd}` : ""}` : canEditPlanning ? "Tocca per assegnare" : "Nessun turno"}
+                  </span>
+                </span>
+                {saveState === "saving" ? <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">Salvo…</span> : saveState === "error" ? <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">Da confermare</span> : isExternal ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Altro salone</span> : <ChevronRight className="size-4 shrink-0 text-black/25 dark:text-white/25" />}
+              </button>
+            );
+          })}
+          {activeWorkers.length === 0 ? <p className="rounded-2xl bg-[#fbf7f9] px-4 py-8 text-center text-sm text-black/50 dark:bg-white/5 dark:text-white/50">Nessuna persona assegnata a questo salone.</p> : null}
+        </div>
+      </section>
+
+      <div className="no-print grid gap-3 lg:grid-cols-3">
+        {canEditPlanning ? (
+          <details className="group rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900">
+            <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 font-bold marker:hidden">
+              <span className="grid size-10 place-items-center rounded-xl bg-paradise-softPink/45 text-[#a84f73]"><WandSparkles className="size-5" /></span>
+              <span className="flex-1">Assegnazione rapida<span className="block text-xs font-normal text-black/45 dark:text-white/45">Compila più giorni insieme</span></span>
+              <ChevronDown className="size-4 transition group-open:rotate-180" />
+            </summary>
+            <div className="space-y-3 border-t border-black/5 p-4 dark:border-white/10">
+              <label className="block space-y-1.5"><span className="text-xs font-bold text-black/50 dark:text-white/50">Personale</span><select className={controlClass} value={bulkWorkerId} onChange={(event) => setBulkWorkerId(event.target.value)}><option value="all">Tutto lo staff</option>{activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}</select></label>
+              <label className="block space-y-1.5"><span className="text-xs font-bold text-black/50 dark:text-white/50">Giorni</span><select className={controlClass} value={bulkDaysMode} onChange={(event) => setBulkDaysMode(event.target.value)}><option value="mon-sat">Da lunedì a sabato</option><option value="mon-fri">Da lunedì a venerdì</option><option value="all">Tutti i giorni</option></select></label>
+              <label className="block space-y-1.5"><span className="text-xs font-bold text-black/50 dark:text-white/50">Celle da modificare</span><select className={controlClass} value={bulkOverwriteMode} onChange={(event) => setBulkOverwriteMode(event.target.value)}><option value="empty">Solo quelle vuote</option><option value="overwrite">Tutte, sostituendo i turni</option></select></label>
+              <div className="grid grid-cols-2 gap-2"><Button onClick={applyBulkAssignment}><Sparkles className="size-4" />Applica</Button><Button variant="soft" onClick={clearBulkAssignment}>Svuota</Button></div>
+            </div>
+          </details>
+        ) : null}
+
+        <details className="group rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900">
+          <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 font-bold marker:hidden">
+            <span className="grid size-10 place-items-center rounded-xl bg-[#f1ecff] text-[#7054a8]"><UserPlus className="size-5" /></span>
+            <span className="flex-1">Staff di altri saloni<span className="block text-xs font-normal text-black/45 dark:text-white/45">Aggiungi collaboratori esterni</span></span>
+            <ChevronDown className="size-4 transition group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-black/5 p-4 dark:border-white/10">
+            {canEditPlanning && availableExternalWorkers.length > 0 ? (
+              <select className={controlClass} value="" onChange={(event) => { if (event.target.value) void addExternalWorker(event.target.value); }}>
+                <option value="">Seleziona una persona…</option>
+                {availableExternalWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
+              </select>
+            ) : null}
+            <div className="mt-3 space-y-2">
+              {selectedExtraWorkerIds.map((workerId) => {
+                const worker = employees.find((item) => item.id === workerId);
+                if (!worker) return null;
+                const workerLocation = locations.find((location) => location.id === worker.locationId);
+                return <div key={workerId} className="flex items-center gap-2 rounded-xl bg-[#faf7f8] px-3 py-2 text-sm dark:bg-white/5"><span className="min-w-0 flex-1 truncate font-bold">{worker.name}<span className="ml-2 font-normal text-black/40 dark:text-white/40">{workerLocation?.name}</span></span>{canEditPlanning ? <button type="button" onClick={() => removeExternalWorker(workerId)} className="grid size-8 place-items-center rounded-full bg-white text-black/45 shadow-sm dark:bg-neutral-800" aria-label={`Rimuovi ${worker.name}`}><X className="size-4" /></button> : null}</div>;
+              })}
+              {selectedExtraWorkerIds.length === 0 ? <p className="text-sm text-black/45 dark:text-white/45">Nessuna persona aggiunta da altri saloni.</p> : null}
+            </div>
+          </div>
+        </details>
+
+        <details className="group rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900">
+          <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 font-bold marker:hidden">
+            <span className="grid size-10 place-items-center rounded-xl bg-[#eef7f3] text-emerald-700"><Printer className="size-5" /></span>
+            <span className="flex-1">Stampa due saloni<span className="block text-xs font-normal text-black/45 dark:text-white/45">Un unico PDF comparativo</span></span>
+            <ChevronDown className="size-4 transition group-open:rotate-180" />
+          </summary>
+          <div className="space-y-3 border-t border-black/5 p-4 dark:border-white/10">
+            <select className={controlClass} value={secondPrintLocationId} onChange={(event) => setSecondPrintLocationId(event.target.value)}>
+              <option value="">Seleziona il secondo salone</option>
+              {activeLocations.filter((location) => location.id !== selectedLocationId).map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </select>
+            <Button className="w-full" onClick={downloadTwoSalonsPdf} disabled={exporting || !selectedLocationId || activeLocations.length < 2}><Download className="size-4" />{exporting ? "Creazione..." : "Scarica PDF doppio"}</Button>
+          </div>
+        </details>
       </div>
-      {plannerMessage ? <p className="no-print rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm font-medium dark:text-white">{plannerMessage}</p> : null}
+
+      {plannerMessage ? <p role="status" aria-live="polite" className="no-print flex items-start gap-2 rounded-2xl border border-black/5 bg-paradise-nude px-4 py-3 text-sm font-semibold dark:border-white/10 dark:bg-neutral-850 dark:text-white"><Info className="mt-0.5 size-4 shrink-0" />{plannerMessage}</p> : null}
+
+      {canEditPlanning && activeCategory ? (
+        <div className="no-print hidden items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm md:flex dark:border-white/10 dark:bg-neutral-900">
+          <span className="flex items-center gap-2 text-black/60 dark:text-white/60">
+            <WandSparkles className="size-4 text-[#a84f73]" />
+            Trascina sulle celle per assegnare più giorni, come in Excel.
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black" style={{ backgroundColor: activeCategory.color, color: activeCategory.textColor }}>
+            {activeCategory.code} · {activeCategory.name}
+          </span>
+        </div>
+      ) : null}
 
       {categoryMenu ? (
         <div className="no-print fixed inset-0 z-40" onClick={() => setCategoryMenu(null)} onContextMenu={(event) => event.preventDefault()}>
@@ -1360,7 +1590,7 @@ export function MonthlySchedulePlanner({
         </div>
       ) : null}
  
-      <div ref={tableRef} className="print-surface overflow-hidden rounded-[26px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-soft">
+      <div ref={tableRef} className="schedule-desktop-view print-surface hidden overflow-hidden rounded-[26px] border border-black/10 bg-white shadow-soft md:block dark:border-white/10 dark:bg-neutral-900">
         <div className="schedule-title border-b border-black/10 dark:border-white/10 bg-[#F4D8E5] px-6 py-5 text-[#523E48]">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -1376,10 +1606,11 @@ export function MonthlySchedulePlanner({
         </div>
         <div className="schedule-scroll overflow-x-auto">
           <table
-            className="schedule-table border-collapse bg-white dark:bg-neutral-900 text-black dark:text-white"
+            className="schedule-table select-none border-collapse bg-white text-black dark:bg-neutral-900 dark:text-white"
             style={{
               tableLayout: "fixed",
-              width: `${220 + 65 + (days * 32)}px`,
+              width: "100%",
+              minWidth: `${220 + 65 + (days * 32)}px`,
             }}
           >
             <thead>
@@ -1450,22 +1681,35 @@ export function MonthlySchedulePlanner({
                   </th>
                   <td className="border border-black/10 dark:border-white/10 bg-[#fbfaf9] dark:bg-neutral-800 px-2 text-center text-sm font-black w-[65px] min-w-[65px] max-w-[65px]">{formatHours(workerTotalMinutes(worker.id))}</td>
                   {monthDays.map((day) => {
-                    const assignment = assignments[assignmentKey(worker.id, day)];
+                    const key = assignmentKey(worker.id, day);
+                    const assignment = assignments[key];
                     const category = categories.find((item) => item.id === assignment?.categoryId);
                     const shownStart = assignment?.startTime ?? category?.startTime;
                     const shownEnd = assignment?.endTime ?? category?.endTime;
+                    const saveState = cellSaveStates[key];
                     return (
                       <td
                         key={`${worker.id}-${day}`}
-                        className={`schedule-cell h-8 w-8 min-w-[32px] max-w-[32px] border border-black/10 dark:border-white/10 text-center text-[10px] font-bold transition ${canEditPlanning ? "cursor-pointer hover:ring-2 hover:ring-paradise-pink/60" : ""}`}
+                        className={`schedule-cell relative h-8 w-8 min-w-[32px] max-w-[32px] border border-black/10 text-center text-[10px] font-bold transition dark:border-white/10 ${canEditPlanning ? "cursor-crosshair hover:z-10 hover:ring-2 hover:ring-paradise-pink/60" : ""} ${dragSelection.has(key) ? "z-10 ring-2 ring-inset ring-[#2f2429] dark:ring-white" : ""} ${saveState === "error" ? "ring-2 ring-red-500" : ""}`}
                         style={{
                           backgroundColor: category?.color ?? "#FFFFFF",
                           color: category?.textColor ?? "#1F1F1F",
                         }}
-                        onClick={() => openCellEditor(worker.id, day)}
+                        onPointerDown={(event) => beginDragSelection(event, idx, day)}
+                        onPointerEnter={() => {
+                          if (dragStartRef.current) updateDragSelection({ workerIndex: idx, day });
+                        }}
+                        onClick={() => {
+                          if (suppressCellClickRef.current) {
+                            suppressCellClickRef.current = false;
+                            return;
+                          }
+                          void openCellEditor(worker.id, day);
+                        }}
                         title={category ? `${worker.name}: ${category.name}${shownStart && shownEnd ? ` ${shownStart}-${shownEnd}` : ""}` : `${worker.name}: vuoto`}
                       >
                         {category?.code ?? ""}
+                        {saveState === "saving" ? <span className="absolute inset-x-1 bottom-0.5 h-0.5 animate-pulse rounded-full bg-blue-600" /> : null}
                       </td>
                     );
                   })}

@@ -92,6 +92,34 @@ test("usa la scheda della stessa giornata per chi ha svolto la sistemazione", ()
   assert.equal(previousApplicationStaff(control), "Claudia Saltini");
 });
 
+test("non usa la semplice assegnazione in agenda come lavoro svolto", () => {
+  const result = applySystemazioneAppointmentsToSheet({
+    sheet: sheet(),
+    appointments: [appointment],
+    responses: [response()],
+  });
+  assert.equal(result.sheet.rows[0].values.current, "Da verificare");
+});
+
+test("ignora un controllo cliente della sistemazione ancora in bozza", () => {
+  const draftControl = response({
+    id: "draft-systemazione",
+    createdAt: "2026-09-18T15:00:00.000Z",
+    answers: {
+      client_control_service_title: "Sistemazione fasce",
+      client_control_shopify_order: "#1234",
+      client_control_service_staff: ["Claudia Saltini"],
+      client_control_is_draft: true,
+    },
+  });
+  const result = applySystemazioneAppointmentsToSheet({
+    sheet: sheet(),
+    appointments: [appointment],
+    responses: [response(), draftControl],
+  });
+  assert.equal(result.sheet.rows[0].values.current, "Da verificare");
+});
+
 test("compila la riga, aggiunge Numero ordine e non crea doppioni", () => {
   const first = applySystemazioneAppointmentsToSheet({
     sheet: sheet(),
@@ -105,7 +133,7 @@ test("compila la riga, aggiunge Numero ordine e non crea doppioni", () => {
   assert.equal(first.rows.length, 1);
   assert.equal(first.rows[0].values.client, "Maria Rossi");
   assert.equal(first.rows[0].values.previous, "Angelica Pasculli");
-  assert.equal(first.rows[0].values.current, "Sara Campani");
+  assert.equal(first.rows[0].values.current, "Da verificare");
   assert.equal(first.rows[0].values[orderColumn.id], "#1234");
 
   const secondResult = applySystemazioneAppointmentsToSheet({

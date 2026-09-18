@@ -1794,6 +1794,16 @@ textarea {
   background: #ffffff !important;
 }
 
+/* Il planning mensile usa una vista giornaliera su mobile. Durante la
+   generazione PDF la griglia desktop deve comunque essere misurabile, anche
+   se il download parte da un telefono. */
+.schedule-pdf-mode.schedule-desktop-view {
+  display: block !important;
+  position: fixed !important;
+  left: -10000px !important;
+  top: 0 !important;
+}
+
 .schedule-pdf-mode .schedule-title {
   padding: 14px 18px !important;
 }
