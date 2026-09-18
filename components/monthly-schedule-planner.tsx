@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronUp,
   Download,
+  Eye,
   Info,
   MapPin,
   Pencil,
@@ -16,6 +17,7 @@ import {
   Printer,
   Share2,
   Sparkles,
+  Trash2,
   UserPlus,
   Users,
   WandSparkles,
@@ -279,6 +281,8 @@ export function MonthlySchedulePlanner({
   const [workersOrderList, setWorkersOrderList] = useState<string[]>(initialWorkersOrder);
   const [cellSaveStates, setCellSaveStates] = useState<Record<string, "saving" | "error">>({});
   const [dragSelection, setDragSelection] = useState<Set<string>>(() => new Set());
+  const [selectionSaving, setSelectionSaving] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const dragStartRef = useRef<DragCell | null>(null);
   const dragSelectionRef = useRef<Set<string>>(new Set());
   const dragMovedRef = useRef(false);
@@ -376,6 +380,17 @@ export function MonthlySchedulePlanner({
   );
 
   const hasMonthRestriction = Boolean(allowedMonths?.length);
+  const editingEnabled = canEditPlanning && editMode;
+
+  function setPlanningEditMode(enabled: boolean) {
+    setEditMode(enabled);
+    setDragSelection(new Set());
+    setCellEditor(null);
+    setCategoryFormOpen(false);
+    setCategoryMenu(null);
+    if (!enabled) setPlannerMessage("Modalità solo visualizzazione attiva.");
+    else setPlannerMessage("Modifica attiva: puoi trascinare, cambiare o eliminare i turni.");
+  }
 
   function isAllowedMonth(nextMonth: number, nextYear: number) {
     return !hasMonthRestriction || allowedMonths?.some((item) => item.month === nextMonth && item.year === nextYear);
@@ -388,12 +403,14 @@ export function MonthlySchedulePlanner({
     }
     setMonth(nextMonth);
     setYear(nextYear);
+    setDragSelection(new Set());
     const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(scheduleEntries, nextYear, nextMonth, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
   function setScheduleLocation(locationId: string) {
     setSelectedLocationId(locationId);
+    setDragSelection(new Set());
     const locationWorkers = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role));
     const locationExtraWorkerIds = extraWorkerIdsByLocation[locationId] ?? [];
     setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, locationWorkers.map((worker) => worker.id), locationId, locationExtraWorkerIds));
@@ -402,14 +419,15 @@ export function MonthlySchedulePlanner({
   }
 
   async function openCellEditor(workerId: string, day: number) {
-    if (!canEditPlanning) {
-      setPlannerMessage("Vista sola lettura: il responsabile puo visualizzare il planning, ma non modificarlo.");
+    if (!editingEnabled) {
+      setPlannerMessage(canEditPlanning ? "Attiva Modifica per cambiare questo turno." : "Vista sola lettura: puoi consultare il planning, ma non modificarlo.");
       return;
     }
     if (!activeCategoryId || !activeCategory) {
       setPlannerMessage("Seleziona o crea una categoria per questo salone.");
       return;
     }
+    setDragSelection(new Set());
     const key = assignmentKey(workerId, day);
     const previous = assignments[key];
     const previousCategory = categories.find((item) => item.id === previous?.categoryId);
@@ -459,6 +477,7 @@ export function MonthlySchedulePlanner({
   }
 
   async function saveCellAssignment(next: CellEditor) {
+    if (!editingEnabled) return;
     const category = visibleCategories.find((item) => item.id === next.categoryId);
     if (!category) {
       setPlannerMessage("Categoria non valida per questo salone.");
@@ -559,7 +578,7 @@ export function MonthlySchedulePlanner({
   }
 
   function beginDragSelection(event: React.PointerEvent<HTMLTableCellElement>, workerIndex: number, day: number) {
-    if (event.pointerType !== "mouse" || event.button !== 0 || !canEditPlanning || !activeCategory) return;
+    if (event.pointerType !== "mouse" || event.button !== 0 || !editingEnabled || !activeCategory) return;
     event.preventDefault();
     dragStartRef.current = { workerIndex, day };
     dragMovedRef.current = false;
@@ -570,21 +589,7 @@ export function MonthlySchedulePlanner({
     setDragSelection(nextSelection);
   }
 
-  async function finishDragSelection() {
-    if (!dragStartRef.current) return;
-    const shouldSave = dragMovedRef.current;
-    const selectedKeys = [...dragSelectionRef.current];
-    dragStartRef.current = null;
-    dragMovedRef.current = false;
-    dragSelectionRef.current = new Set();
-    setDragSelection(new Set());
-
-    if (!shouldSave || !activeCategory || selectedKeys.length === 0) return;
-    suppressCellClickRef.current = true;
-    window.setTimeout(() => {
-      suppressCellClickRef.current = false;
-    }, 0);
-
+  async function applyCategoryToSelection(selectedKeys: string[], category: ScheduleCategory) {
     const selectedKeySet = new Set(selectedKeys);
     const previousAssignments = Object.fromEntries(selectedKeys.map((key) => [key, assignments[key]]));
     const payload = activeWorkers.flatMap((worker) =>
@@ -594,15 +599,16 @@ export function MonthlySchedulePlanner({
         return [{
           userId: worker.id,
           locationId: selectedLocationId,
-          categoryId: activeCategory.id,
+          categoryId: category.id,
           date: new Date(Date.UTC(year, month, day)).toISOString(),
-          startTime: activeCategory.startTime ?? null,
-          endTime: activeCategory.endTime ?? null,
+          startTime: category.startTime ?? null,
+          endTime: category.endTime ?? null,
         }];
       }),
     );
     if (!payload.length) return;
 
+    setSelectionSaving(true);
     setCellSaveStates((current) => ({
       ...current,
       ...Object.fromEntries(selectedKeys.map((key) => [key, "saving" as const])),
@@ -620,7 +626,7 @@ export function MonthlySchedulePlanner({
       });
       return copy;
     });
-    setPlannerMessage(`Salvataggio di ${payload.length} celle…`);
+    setPlannerMessage(`Aggiornamento di ${payload.length} turni…`);
 
     try {
       const response = await fetch("/api/schedules/entries", {
@@ -664,13 +670,117 @@ export function MonthlySchedulePlanner({
         selectedKeys.forEach((key) => delete copy[key]);
         return copy;
       });
-      setPlannerMessage(`${payload.length} celle salvate.`);
+      setPlannerMessage(`${payload.length} turni aggiornati. La selezione resta attiva per altre modifiche.`);
     } catch {
       setCellSaveStates((current) => ({
         ...current,
         ...Object.fromEntries(selectedKeys.map((key) => [key, "error" as const])),
       }));
       setPlannerMessage("Connessione interrotta: le celle restano visibili e possono essere confermate di nuovo.");
+    } finally {
+      setSelectionSaving(false);
+    }
+  }
+
+  async function finishDragSelection() {
+    if (!dragStartRef.current) return;
+    const shouldSave = dragMovedRef.current;
+    const selectedKeys = [...dragSelectionRef.current];
+    dragStartRef.current = null;
+    dragMovedRef.current = false;
+    dragSelectionRef.current = new Set();
+
+    if (!shouldSave || !activeCategory || selectedKeys.length === 0) {
+      setDragSelection(new Set());
+      return;
+    }
+    suppressCellClickRef.current = true;
+    window.setTimeout(() => {
+      suppressCellClickRef.current = false;
+    }, 0);
+    setDragSelection(new Set(selectedKeys));
+    await applyCategoryToSelection(selectedKeys, activeCategory);
+  }
+
+  async function changeSelectedTurns() {
+    if (!editingEnabled || !activeCategory || dragSelection.size === 0 || selectionSaving) return;
+    await applyCategoryToSelection([...dragSelection], activeCategory);
+  }
+
+  async function deleteSelectedTurns() {
+    if (!editingEnabled || dragSelection.size === 0 || selectionSaving) return;
+    const selectedKeys = [...dragSelection];
+    const selectedKeySet = new Set(selectedKeys);
+    const existingKeys = selectedKeys.filter((key) => Boolean(assignments[key]));
+    if (existingKeys.length === 0) {
+      setDragSelection(new Set());
+      setPlannerMessage("Nella selezione non ci sono turni da eliminare.");
+      return;
+    }
+    if (!window.confirm(`Eliminare ${existingKeys.length} turni selezionati?`)) return;
+
+    const previousAssignments = Object.fromEntries(existingKeys.map((key) => [key, assignments[key]]));
+    const payload = activeWorkers.flatMap((worker) =>
+      monthDays.flatMap((day) => {
+        const key = assignmentKey(worker.id, day);
+        if (!selectedKeySet.has(key) || !assignments[key]) return [];
+        return [{
+          userId: worker.id,
+          locationId: selectedLocationId,
+          categoryId: null,
+          date: new Date(Date.UTC(year, month, day)).toISOString(),
+        }];
+      }),
+    );
+    if (!payload.length) return;
+
+    setSelectionSaving(true);
+    setCellSaveStates((current) => ({
+      ...current,
+      ...Object.fromEntries(existingKeys.map((key) => [key, "saving" as const])),
+    }));
+    setAssignments((current) => {
+      const copy = { ...current };
+      existingKeys.forEach((key) => delete copy[key]);
+      return copy;
+    });
+    setPlannerMessage(`Eliminazione di ${payload.length} turni…`);
+
+    try {
+      const response = await fetch("/api/schedules/entries", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setAssignments((current) => ({ ...current, ...previousAssignments }));
+        setCellSaveStates((current) => ({
+          ...current,
+          ...Object.fromEntries(existingKeys.map((key) => [key, "error" as const])),
+        }));
+        setPlannerMessage(data.error ?? "Turni non eliminati. Riprova dalla selezione.");
+        return;
+      }
+
+      setScheduleEntries((current) => payload.reduce<ScheduleEntry[]>((nextEntries, item) =>
+        removeScheduleEntry(nextEntries, item.userId, item.date, selectedLocationId), current));
+      setCellSaveStates((current) => {
+        const copy = { ...current };
+        existingKeys.forEach((key) => delete copy[key]);
+        return copy;
+      });
+      setDragSelection(new Set());
+      setPlannerMessage(`${payload.length} turni eliminati.`);
+    } catch {
+      setAssignments((current) => ({ ...current, ...previousAssignments }));
+      setCellSaveStates((current) => ({
+        ...current,
+        ...Object.fromEntries(existingKeys.map((key) => [key, "error" as const])),
+      }));
+      setPlannerMessage("Connessione interrotta: i turni non sono stati eliminati.");
+    } finally {
+      setSelectionSaving(false);
     }
   }
 
@@ -683,7 +793,14 @@ export function MonthlySchedulePlanner({
   });
 
   async function clearCellAssignment() {
-    if (!cellEditor) return;
+    if (!editingEnabled || !cellEditor) return;
+    const key = assignmentKey(cellEditor.workerId, cellEditor.day);
+    if (!assignments[key]) {
+      setCellEditor(null);
+      return;
+    }
+    const workerName = employees.find((worker) => worker.id === cellEditor.workerId)?.name ?? "questa persona";
+    if (!window.confirm(`Eliminare il turno di ${workerName} del ${cellEditor.day} ${monthNames[month].toLowerCase()}?`)) return;
     await clearCellAssignmentFor(cellEditor.workerId, cellEditor.day);
   }
 
@@ -709,7 +826,8 @@ export function MonthlySchedulePlanner({
     }
     setScheduleEntries((current) => removeScheduleEntry(current, workerId, date.toISOString(), selectedLocationId));
     setCellEditor(null);
-    setPlannerMessage("Cella svuotata.");
+    setDragSelection(new Set());
+    setPlannerMessage("Turno eliminato.");
   }
 
   function workerTotalMinutes(workerId: string) {
@@ -896,7 +1014,7 @@ export function MonthlySchedulePlanner({
   }
 
   async function applyBulkAssignment() {
-    if (!canEditPlanning) return;
+    if (!editingEnabled) return;
     if (!activeCategoryId || !activeCategory) {
       setPlannerMessage("Seleziona una categoria da applicare dal pannello 'Categorie e orari'.");
       return;
@@ -989,7 +1107,7 @@ export function MonthlySchedulePlanner({
   }
 
   async function clearBulkAssignment() {
-    if (!canEditPlanning) return;
+    if (!editingEnabled) return;
     const confirmed = window.confirm("Sei sicuro di voler svuotare le celle selezionate nel mese per il personale indicato?");
     if (!confirmed) return;
 
@@ -1259,7 +1377,7 @@ export function MonthlySchedulePlanner({
               <h2 className="mt-2 text-2xl font-black tracking-tight text-[#2f2429] sm:text-3xl dark:text-white">
                 {monthNames[month]} {year}
               </h2>
-              <p className="mt-2 text-sm text-black/55 dark:text-white/55">Scegli salone e periodo, poi seleziona un turno e assegnalo allo staff.</p>
+              <p className="mt-2 text-sm text-black/55 dark:text-white/55">{editingEnabled ? "Scegli un turno e assegnalo allo staff, anche trascinando più celle." : "Consulta turni, giorni e ore. Attiva Modifica solo quando devi intervenire."}</p>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:min-w-[390px]">
               <div className="rounded-2xl border border-black/5 bg-white/80 px-3 py-3 dark:border-white/10 dark:bg-white/5">
@@ -1319,14 +1437,39 @@ export function MonthlySchedulePlanner({
         </div>
       </section>
 
-      {!canEditPlanning ? (
+      {canEditPlanning ? (
+        <div className={`no-print flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${editMode ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-black/10 bg-white text-[#4e4147] dark:border-white/10 dark:bg-neutral-900 dark:text-white"}`}>
+          <div className="flex items-start gap-3">
+            <span className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl ${editMode ? "bg-emerald-600 text-white" : "bg-[#f2e9ed] text-[#7d5d6a] dark:bg-white/10 dark:text-white/70"}`}>
+              {editMode ? <Pencil className="size-4" /> : <Eye className="size-4" />}
+            </span>
+            <span>
+              <strong className="block text-sm">{editMode ? "Modifica attiva" : "Solo visualizzazione"}</strong>
+              <span className="mt-0.5 block text-xs opacity-65">{editMode ? "Puoi assegnare, cambiare ed eliminare i turni." : "Il planning è protetto da modifiche accidentali."}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={editMode}
+            onClick={() => setPlanningEditMode(!editMode)}
+            className={`inline-flex min-h-12 w-full shrink-0 items-center justify-between gap-3 rounded-2xl px-4 text-sm font-black transition sm:w-auto ${editMode ? "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700" : "bg-[#2f2429] text-white hover:bg-black dark:bg-white dark:text-black"}`}
+          >
+            <span>{editMode ? "Disattiva modifica" : "Attiva modifica"}</span>
+            <span className={`relative h-7 w-12 rounded-full transition ${editMode ? "bg-white/25" : "bg-white/20 dark:bg-black/15"}`} aria-hidden="true">
+              <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${editMode ? "left-6" : "left-1 dark:bg-black"}`} />
+            </span>
+          </button>
+        </div>
+      ) : (
         <div className="no-print flex items-start gap-3 rounded-2xl border border-paradise-pink/25 bg-paradise-softPink/25 px-4 py-3 text-sm font-semibold text-[#8f405f] dark:text-paradise-pink">
           <Info className="mt-0.5 size-4 shrink-0" />
           Puoi consultare e scaricare il planning. Le modifiche sono riservate a chi gestisce i turni.
         </div>
-      ) : null}
+      )}
 
-      <section className="no-print rounded-[28px] border border-black/10 bg-white p-4 shadow-[0_14px_45px_rgba(89,52,68,0.06)] sm:p-6 dark:border-white/10 dark:bg-neutral-900">
+      {editingEnabled ? (
+        <section className="no-print rounded-[28px] border border-black/10 bg-white p-4 shadow-[0_14px_45px_rgba(89,52,68,0.06)] sm:p-6 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#2f2429] text-sm font-black text-white dark:bg-white dark:text-black">1</span>
@@ -1335,7 +1478,7 @@ export function MonthlySchedulePlanner({
               <p className="mt-1 text-sm text-black/50 dark:text-white/50">Il turno selezionato verrà usato quando tocchi una persona o una cella.</p>
             </div>
           </div>
-          {canManageCategories ? (
+          {canManageCategories && editingEnabled ? (
             <Button type="button" variant="soft" onClick={openNewCategoryForm} className="w-full sm:w-auto">
               <Plus className="size-4" /> Nuovo turno
             </Button>
@@ -1348,12 +1491,13 @@ export function MonthlySchedulePlanner({
               <div key={category.id} className="relative min-w-0">
                 <button
                   type="button"
-                  aria-pressed={isActive}
-                  className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-bold transition sm:w-auto ${isActive ? "border-[#2f2429] shadow-md ring-4 ring-black/5 dark:border-white" : "border-black/10 hover:border-black/25 dark:border-white/10"}`}
+                  aria-pressed={isActive && editingEnabled}
+                  disabled={!editingEnabled}
+                  className={`flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-bold transition sm:w-auto ${isActive && editingEnabled ? "border-[#2f2429] shadow-md ring-4 ring-black/5 dark:border-white" : "border-black/10 dark:border-white/10"} ${editingEnabled ? "hover:border-black/25" : "cursor-default opacity-75"}`}
                   style={{ backgroundColor: category.color, color: category.textColor }}
                   onClick={() => setActiveCategoryId(category.id)}
                   onContextMenu={(event) => {
-                    if (!canManageCategories) return;
+                    if (!canManageCategories || !editingEnabled) return;
                     event.preventDefault();
                     setCategoryMenu({ categoryId: category.id, x: event.clientX, y: event.clientY });
                   }}
@@ -1364,7 +1508,7 @@ export function MonthlySchedulePlanner({
                     <span className="mt-0.5 block text-[11px] font-semibold opacity-65">{category.startTime && category.endTime ? `${category.startTime}–${category.endTime}` : "Senza orario"}</span>
                   </span>
                 </button>
-                {canManageCategories ? (
+                {canManageCategories && editingEnabled ? (
                   <button type="button" onClick={() => openEditCategoryForm(category)} className="absolute right-1 top-1 grid size-7 place-items-center rounded-full bg-white/80 text-black/55 shadow-sm sm:hidden" aria-label={`Modifica ${category.name}`}>
                     <Pencil className="size-3" />
                   </button>
@@ -1378,14 +1522,15 @@ export function MonthlySchedulePlanner({
             Non ci sono ancora turni per questo salone. Crea il primo turno per iniziare a compilare il planning.
           </div>
         ) : null}
-      </section>
+        </section>
+      ) : null}
 
       <section className="no-print rounded-[28px] border border-black/10 bg-white p-4 shadow-[0_14px_45px_rgba(89,52,68,0.06)] md:hidden dark:border-white/10 dark:bg-neutral-900">
         <div className="flex gap-3">
           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#2f2429] text-sm font-black text-white dark:bg-white dark:text-black">2</span>
           <div>
-            <h3 className="text-lg font-black">Assegna i turni</h3>
-            <p className="mt-1 text-sm text-black/50 dark:text-white/50">Scegli il giorno e tocca una persona.</p>
+            <h3 className="text-lg font-black">{editingEnabled ? "Assegna i turni" : "Turni del giorno"}</h3>
+            <p className="mt-1 text-sm text-black/50 dark:text-white/50">{editingEnabled ? "Scegli il giorno e tocca una persona." : "Scorri i giorni per consultare il planning."}</p>
           </div>
         </div>
 
@@ -1431,8 +1576,9 @@ export function MonthlySchedulePlanner({
               <button
                 key={worker.id}
                 type="button"
-                onClick={() => openCellEditor(worker.id, mobileSelectedDay)}
-                className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-black/10 bg-white p-3 text-left transition active:scale-[0.99] dark:border-white/10 dark:bg-neutral-800"
+                onClick={() => void openCellEditor(worker.id, mobileSelectedDay)}
+                disabled={!editingEnabled}
+                className={`flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-black/10 bg-white p-3 text-left transition dark:border-white/10 dark:bg-neutral-800 ${editingEnabled ? "active:scale-[0.99]" : "cursor-default"}`}
               >
                 <span className="grid size-11 shrink-0 place-items-center rounded-2xl text-sm font-black" style={{ backgroundColor: category?.color ?? "#f5eef1", color: category?.textColor ?? "#5f4b54" }}>
                   {category?.code ?? worker.name.slice(0, 1).toUpperCase()}
@@ -1440,10 +1586,10 @@ export function MonthlySchedulePlanner({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black">{worker.name}</span>
                   <span className="mt-1 block truncate text-xs text-black/50 dark:text-white/50">
-                    {category ? `${category.name}${shownStart && shownEnd ? ` · ${shownStart}–${shownEnd}` : ""}` : canEditPlanning ? "Tocca per assegnare" : "Nessun turno"}
+                    {category ? `${category.name}${shownStart && shownEnd ? ` · ${shownStart}–${shownEnd}` : ""}` : editingEnabled ? "Tocca per assegnare" : "Nessun turno"}
                   </span>
                 </span>
-                {saveState === "saving" ? <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">Salvo…</span> : saveState === "error" ? <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">Da confermare</span> : isExternal ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Altro salone</span> : <ChevronRight className="size-4 shrink-0 text-black/25 dark:text-white/25" />}
+                {saveState === "saving" ? <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">Salvo…</span> : saveState === "error" ? <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">Da confermare</span> : isExternal ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Altro salone</span> : editingEnabled ? <ChevronRight className="size-4 shrink-0 text-black/25 dark:text-white/25" /> : <Eye className="size-4 shrink-0 text-black/25 dark:text-white/25" />}
               </button>
             );
           })}
@@ -1452,7 +1598,7 @@ export function MonthlySchedulePlanner({
       </section>
 
       <div className="no-print grid gap-3 lg:grid-cols-3">
-        {canEditPlanning ? (
+        {editingEnabled ? (
           <details className="group rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-neutral-900">
             <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 font-bold marker:hidden">
               <span className="grid size-10 place-items-center rounded-xl bg-paradise-softPink/45 text-[#a84f73]"><WandSparkles className="size-5" /></span>
@@ -1475,7 +1621,7 @@ export function MonthlySchedulePlanner({
             <ChevronDown className="size-4 transition group-open:rotate-180" />
           </summary>
           <div className="border-t border-black/5 p-4 dark:border-white/10">
-            {canEditPlanning && availableExternalWorkers.length > 0 ? (
+            {editingEnabled && availableExternalWorkers.length > 0 ? (
               <select className={controlClass} value="" onChange={(event) => { if (event.target.value) void addExternalWorker(event.target.value); }}>
                 <option value="">Seleziona una persona…</option>
                 {availableExternalWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
@@ -1486,7 +1632,7 @@ export function MonthlySchedulePlanner({
                 const worker = employees.find((item) => item.id === workerId);
                 if (!worker) return null;
                 const workerLocation = locations.find((location) => location.id === worker.locationId);
-                return <div key={workerId} className="flex items-center gap-2 rounded-xl bg-[#faf7f8] px-3 py-2 text-sm dark:bg-white/5"><span className="min-w-0 flex-1 truncate font-bold">{worker.name}<span className="ml-2 font-normal text-black/40 dark:text-white/40">{workerLocation?.name}</span></span>{canEditPlanning ? <button type="button" onClick={() => removeExternalWorker(workerId)} className="grid size-8 place-items-center rounded-full bg-white text-black/45 shadow-sm dark:bg-neutral-800" aria-label={`Rimuovi ${worker.name}`}><X className="size-4" /></button> : null}</div>;
+                return <div key={workerId} className="flex items-center gap-2 rounded-xl bg-[#faf7f8] px-3 py-2 text-sm dark:bg-white/5"><span className="min-w-0 flex-1 truncate font-bold">{worker.name}<span className="ml-2 font-normal text-black/40 dark:text-white/40">{workerLocation?.name}</span></span>{editingEnabled ? <button type="button" onClick={() => removeExternalWorker(workerId)} className="grid size-8 place-items-center rounded-full bg-white text-black/45 shadow-sm dark:bg-neutral-800" aria-label={`Rimuovi ${worker.name}`}><X className="size-4" /></button> : null}</div>;
               })}
               {selectedExtraWorkerIds.length === 0 ? <p className="text-sm text-black/45 dark:text-white/45">Nessuna persona aggiunta da altri saloni.</p> : null}
             </div>
@@ -1511,7 +1657,7 @@ export function MonthlySchedulePlanner({
 
       {plannerMessage ? <p role="status" aria-live="polite" className="no-print flex items-start gap-2 rounded-2xl border border-black/5 bg-paradise-nude px-4 py-3 text-sm font-semibold dark:border-white/10 dark:bg-neutral-850 dark:text-white"><Info className="mt-0.5 size-4 shrink-0" />{plannerMessage}</p> : null}
 
-      {canEditPlanning && activeCategory ? (
+      {editingEnabled && activeCategory ? (
         <div className="no-print hidden items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm md:flex dark:border-white/10 dark:bg-neutral-900">
           <span className="flex items-center gap-2 text-black/60 dark:text-white/60">
             <WandSparkles className="size-4 text-[#a84f73]" />
@@ -1589,6 +1735,54 @@ export function MonthlySchedulePlanner({
           </div>
         </div>
       ) : null}
+
+      {editingEnabled && dragSelection.size > 0 ? (
+        <div className="no-print fixed inset-x-4 bottom-5 z-40 mx-auto hidden max-w-4xl items-center gap-3 rounded-[24px] border border-black/10 bg-[#241D21]/95 p-3 text-white shadow-[0_24px_80px_rgba(36,29,33,0.32)] backdrop-blur-xl md:flex">
+          <div className="flex min-w-40 items-center gap-3 px-2">
+            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-sm font-black text-[#241D21]">{dragSelection.size}</span>
+            <span>
+              <strong className="block text-sm">Turni selezionati</strong>
+              <span className="block text-[11px] text-white/60">Puoi cambiarli o eliminarli insieme</span>
+            </span>
+          </div>
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Nuovo turno per la selezione</span>
+            <select
+              value={activeCategoryId}
+              disabled={selectionSaving}
+              onChange={(event) => setActiveCategoryId(event.target.value)}
+              className="min-h-11 w-full rounded-2xl border border-white/15 bg-white/10 px-3 text-sm font-bold text-white outline-none transition focus:border-paradise-pink focus:ring-2 focus:ring-paradise-pink/30 disabled:opacity-50"
+            >
+              {visibleCategories.map((category) => <option key={category.id} value={category.id} className="bg-[#241D21] text-white">{category.code} · {category.name}{category.startTime && category.endTime ? ` (${category.startTime}–${category.endTime})` : ""}</option>)}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => void changeSelectedTurns()}
+            disabled={selectionSaving || !activeCategory}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-[#F4D8E5] px-4 text-xs font-black text-[#523E48] transition hover:bg-white disabled:cursor-wait disabled:opacity-50"
+          >
+            <Pencil className="size-4" /> {selectionSaving ? "Salvo…" : "Applica turno"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void deleteSelectedTurns()}
+            disabled={selectionSaving}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-red-300/30 bg-red-500/15 px-4 text-xs font-black text-red-100 transition hover:bg-red-500/30 disabled:cursor-wait disabled:opacity-50"
+          >
+            <Trash2 className="size-4" /> Elimina
+          </button>
+          <button
+            type="button"
+            onClick={() => setDragSelection(new Set())}
+            disabled={selectionSaving}
+            className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/15 text-white/75 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+            aria-label="Annulla selezione turni"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : null}
  
       <div ref={tableRef} className="schedule-desktop-view print-surface hidden overflow-hidden rounded-[26px] border border-black/10 bg-white shadow-soft md:block dark:border-white/10 dark:bg-neutral-900">
         <div className="schedule-title border-b border-black/10 dark:border-white/10 bg-[#F4D8E5] px-6 py-5 text-[#523E48]">
@@ -1644,7 +1838,7 @@ export function MonthlySchedulePlanner({
                   <th className="worker-cell sticky left-0 z-10 w-[220px] min-w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 px-3 py-2 text-left text-sm font-semibold" title={worker.name}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {canEditPlanning && (
+                        {editingEnabled && (
                           <div className="flex flex-col gap-0.5 shrink-0">
                             <button
                               type="button"
@@ -1690,7 +1884,7 @@ export function MonthlySchedulePlanner({
                     return (
                       <td
                         key={`${worker.id}-${day}`}
-                        className={`schedule-cell relative h-8 w-8 min-w-[32px] max-w-[32px] border border-black/10 text-center text-[10px] font-bold transition dark:border-white/10 ${canEditPlanning ? "cursor-crosshair hover:z-10 hover:ring-2 hover:ring-paradise-pink/60" : ""} ${dragSelection.has(key) ? "z-10 ring-2 ring-inset ring-[#2f2429] dark:ring-white" : ""} ${saveState === "error" ? "ring-2 ring-red-500" : ""}`}
+                        className={`schedule-cell relative h-8 w-8 min-w-[32px] max-w-[32px] border border-black/10 text-center text-[10px] font-bold transition dark:border-white/10 ${editingEnabled ? "cursor-crosshair hover:z-10 hover:ring-2 hover:ring-paradise-pink/60" : "cursor-default"} ${dragSelection.has(key) ? "z-10 ring-2 ring-inset ring-[#2f2429] dark:ring-white" : ""} ${saveState === "error" ? "ring-2 ring-red-500" : ""}`}
                         style={{
                           backgroundColor: category?.color ?? "#FFFFFF",
                           color: category?.textColor ?? "#1F1F1F",
@@ -1704,7 +1898,7 @@ export function MonthlySchedulePlanner({
                             suppressCellClickRef.current = false;
                             return;
                           }
-                          void openCellEditor(worker.id, day);
+                          if (editingEnabled) void openCellEditor(worker.id, day);
                         }}
                         title={category ? `${worker.name}: ${category.name}${shownStart && shownEnd ? ` ${shownStart}-${shownEnd}` : ""}` : `${worker.name}: vuoto`}
                       >
@@ -1732,7 +1926,7 @@ export function MonthlySchedulePlanner({
       {cellEditor ? (
         <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/35 dark:bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[28px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 p-6 shadow-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/40 dark:text-white/40">Modifica cella</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/40 dark:text-white/40">Gestisci turno</p>
             <h3 className="mt-2 text-2xl font-semibold dark:text-white">
               {employees.find((worker) => worker.id === cellEditor.workerId)?.name ?? "Lavoratore"} · {cellEditor.day} {monthNames[month].toLowerCase()}
             </h3>
@@ -1794,22 +1988,24 @@ export function MonthlySchedulePlanner({
               ) : !editorCanChangeTime && editorCategory?.startTime && editorCategory?.endTime ? (
                 <p className="text-xs font-medium text-black/45 dark:text-white/45">Questa categoria usa sempre l'orario fisso. Attiva la modifica orario quando crei una categoria nuova.</p>
               ) : !editorCanChangeTime ? (
-                <p className="text-xs font-medium text-black/45 dark:text-white/45">Questa categoria non conta ore. Per eliminarla dalla cella usa Svuota.</p>
+                <p className="text-xs font-medium text-black/45 dark:text-white/45">Questa categoria non conta ore. Puoi comunque sostituire o eliminare il turno.</p>
               ) : null}
               <p className="rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm text-black/60 dark:text-white/60">
                 Ore cella: <strong>{formatHours(minutesBetween(cellEditor.startTime, cellEditor.endTime))}</strong>
               </p>
             </div>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
+            <div className="mt-6 grid grid-cols-2 gap-2">
               <Button variant="soft" onClick={() => setCellEditor(null)}>
-                Chiudi
+                Annulla
               </Button>
               {!editorIsExternalCommitment ? (
                 <>
-                  <Button variant="soft" onClick={clearCellAssignment}>
-                    Svuota
-                  </Button>
-                  <Button onClick={() => saveCellAssignment(cellEditor)}>Salva turno</Button>
+                  {editorAssignment ? (
+                    <button type="button" onClick={() => void clearCellAssignment()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 transition hover:bg-red-100">
+                      <Trash2 className="size-4" /> Elimina turno
+                    </button>
+                  ) : null}
+                  <Button className={editorAssignment ? "col-span-2" : ""} onClick={() => saveCellAssignment(cellEditor)}><CheckCircle2 className="size-4" /> {editorAssignment ? "Salva modifiche" : "Assegna turno"}</Button>
                 </>
               ) : null}
             </div>
