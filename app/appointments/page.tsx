@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
@@ -14,6 +15,7 @@ import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey } from "@/lib/appointment-date";
+import { syncSystemazioneFasceTable } from "@/lib/systemazione-fasce-table";
 
 export const dynamic = "force-dynamic";
 
@@ -647,6 +649,14 @@ export default async function AppointmentsPage({
       };
     })
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+  after(async () => {
+    try {
+      await syncSystemazioneFasceTable(serializedBookings);
+    } catch (error) {
+      console.error("Sincronizzazione tabella Sistemazione fasce non riuscita", error);
+    }
+  });
 
   return (
     <AppShell
