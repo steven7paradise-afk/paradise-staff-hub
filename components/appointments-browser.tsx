@@ -4261,6 +4261,66 @@ export function AppointmentsBrowser({
     }
   }
 
+  async function toggleClientControlStaff(employeeId: string) {
+    const currentForm = clientControlFormRef.current;
+    const booking = currentForm.bookingId
+      ? initialBookings.find((item) => item.id === currentForm.bookingId)
+      : null;
+
+    if (!booking) {
+      showPushToast(
+        "Appuntamento non trovato",
+        "Chiudi e riapri la scheda prima di modificare la collaboratrice.",
+        "error",
+      );
+      return;
+    }
+    if (savingTeamId === booking.id) return;
+
+    const isSelected = currentForm.staffIds.includes(employeeId);
+    const nextEmployeeIds = isSelected
+      ? currentForm.staffIds.filter((id) => id !== employeeId)
+      : [...currentForm.staffIds, employeeId];
+
+    if (!nextEmployeeIds.length) {
+      showPushToast(
+        "Collaboratrice richiesta",
+        "Seleziona prima la nuova collaboratrice, poi puoi rimuovere quella precedente.",
+        "error",
+      );
+      return;
+    }
+
+    const selectedEmployees = clientControlEmployeeOptions.filter((employee) =>
+      nextEmployeeIds.includes(employee.id),
+    );
+    const teammateIds = selectedEmployees
+      .map((employee) => {
+        const normalizedName = normalizeSearchValue(employee.name);
+        return corsoTeamOptions.find(
+          (option) =>
+            option.id === employee.id ||
+            normalizeSearchValue(option.name) === normalizedName,
+        )?.id;
+      })
+      .filter((id): id is string => Boolean(id));
+
+    if (teammateIds.length !== selectedEmployees.length) {
+      showPushToast(
+        "Profilo staff non collegato",
+        "Una collaboratrice non è collegata al personale del Salone Corso.",
+        "error",
+      );
+      return;
+    }
+
+    await executeTeamChange(
+      booking,
+      teammateIds,
+      isPC ? pcActiveWorker?.name : undefined,
+    );
+  }
+
   async function selectCollaboratorAndOpenControl(
     booking: AppointmentRecord,
     teammate: Pick<BookingTeammate, "id" | "name" | "photoUrl">,
@@ -5746,70 +5806,88 @@ export function AppointmentsBrowser({
                             : "Seleziona collaboratrice"}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-bold text-black/45">
-                          {clientControlForm.staffIds.length
+                          {savingTeamId === clientControlForm.bookingId
+                            ? "Salvataggio staff in corso…"
+                            : clientControlForm.staffIds.length
                             ? `${clientControlForm.staffIds.length} ${clientControlForm.staffIds.length === 1 ? "persona selezionata" : "persone selezionate"}`
                             : "Tocca per vedere le foto del personale"}
                         </span>
                       </span>
                     </span>
-                    <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
+                    {savingTeamId === clientControlForm.bookingId ? (
+                      <Loader2 className="size-5 shrink-0 animate-spin text-[#B83D7F]" />
+                    ) : (
+                      <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
+                    )}
                   </button>
 
                   {/* Dropdown Popover */}
                   {isStaffDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-[102px] z-50 max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-[#F0D4E2] bg-white p-2.5 shadow-[0_18px_50px_rgba(58,30,44,0.18)]">
-                      {filteredClientControlEmployees.map((employee) => {
-                        const selected = clientControlForm.staffIds.includes(employee.id);
-                        return (
-                          <button
-                            key={employee.id}
-                            type="button"
-                            onClick={() =>
-                              setClientControlForm((prev) => ({
-                                ...prev,
-                                staffIds: selected
-                                  ? prev.staffIds.filter((id) => id !== employee.id)
-                                  : [...prev.staffIds, employee.id],
-                              }))
-                            }
-                            className={[
-                              "flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition",
-                              selected
-                                ? "bg-[#FCE5F3] text-[#8F315F] ring-1 ring-[#EDB2CE]"
-                                : "text-black/75 hover:bg-[#FFF9FC]",
-                            ].join(" ")}
-                          >
-                            <span className="flex min-w-0 items-center gap-3">
-                              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm">
-                                {employee.photoUrl ? (
-                                  <img
-                                    src={resolveDrivePhotoUrl(employee.photoUrl)}
-                                    alt={employee.name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  getInitials(employee.name) || "?"
-                                )}
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block truncate text-xs font-black">{employee.name}</span>
-                                <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-black/40">
-                                  {employee.locationName || "Personale"}
+                    <div className="absolute left-0 right-0 top-[102px] z-50 overflow-hidden rounded-2xl border border-[#F0D4E2] bg-white p-2.5 shadow-[0_18px_50px_rgba(58,30,44,0.18)]">
+                      <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+                        {filteredClientControlEmployees.map((employee) => {
+                          const selected = clientControlForm.staffIds.includes(employee.id);
+                          return (
+                            <button
+                              key={employee.id}
+                              type="button"
+                              disabled={savingTeamId === clientControlForm.bookingId}
+                              onClick={() => void toggleClientControlStaff(employee.id)}
+                              className={[
+                                "flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition disabled:pointer-events-none disabled:opacity-55",
+                                selected
+                                  ? "bg-[#FCE5F3] text-[#8F315F] ring-1 ring-[#EDB2CE]"
+                                  : "text-black/75 hover:bg-[#FFF9FC]",
+                              ].join(" ")}
+                            >
+                              <span className="flex min-w-0 items-center gap-3">
+                                <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm">
+                                  {employee.photoUrl ? (
+                                    <img
+                                      src={resolveDrivePhotoUrl(employee.photoUrl)}
+                                      alt={employee.name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    getInitials(employee.name) || "?"
+                                  )}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-xs font-black">{employee.name}</span>
+                                  <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-black/40">
+                                    {employee.locationName || "Personale"}
+                                  </span>
                                 </span>
                               </span>
-                            </span>
-                            <span
-                              className={`grid size-6 shrink-0 place-items-center rounded-full border ${
-                                selected
-                                  ? "border-[#B83D7F] bg-[#B83D7F] text-white"
-                                  : "border-black/20 bg-white"
-                              }`}
-                            >
-                              {selected && <Check className="size-3.5" strokeWidth={3} />}
-                            </span>
-                          </button>
-                        );
-                      })}
+                              <span
+                                className={`grid size-6 shrink-0 place-items-center rounded-full border ${
+                                  selected
+                                    ? "border-[#B83D7F] bg-[#B83D7F] text-white"
+                                    : "border-black/20 bg-white"
+                                }`}
+                              >
+                                {selected && <Check className="size-3.5" strokeWidth={3} />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div
+                        aria-live="polite"
+                        className="mt-2 flex items-center gap-2 rounded-xl border border-[#F0D4E2] bg-[#FFF9FC] px-3 py-2 text-[10px] font-bold text-black/50"
+                      >
+                        {savingTeamId === clientControlForm.bookingId ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-[#B83D7F]" />
+                            Salvataggio della collaboratrice…
+                          </>
+                        ) : (
+                          <>
+                            <Check className="size-3.5 text-emerald-600" />
+                            Ogni modifica viene salvata automaticamente
+                          </>
+                        )}
+                      </div>
                     </div>
                   ) : null}
                 </div>
