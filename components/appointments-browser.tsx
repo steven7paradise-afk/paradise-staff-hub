@@ -3679,6 +3679,7 @@ export function AppointmentsBrowser({
       ? { id: "kiosk-selected-worker", name: initialPcWorkerName, locationName: "", status: "IN" }
       : null,
   );
+  const effectivePcWorkerName = pcActiveWorker?.name || initialPcWorkerName;
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
   const canCorrectClientIdentity = !isPC && canCorrectAppointmentClient(currentUser?.role);
 
@@ -4642,8 +4643,8 @@ export function AppointmentsBrowser({
       };
     });
 
-    const selectedWorkerColumn = initialPcWorkerName
-      ? workerColumns.find((column) => staffNamesReferToSamePerson(column.name, initialPcWorkerName)) || null
+    const selectedWorkerColumn = effectivePcWorkerName
+      ? workerColumns.find((column) => staffNamesReferToSamePerson(column.name, effectivePcWorkerName)) || null
       : null;
     const bookedWorkerColumns = workerColumns.filter(
       (column) => column.bookings.length > 0 && column.id !== selectedWorkerColumn?.id,
@@ -4671,7 +4672,7 @@ export function AppointmentsBrowser({
     // Sul PC del salone la persona selezionata resta sempre la prima colonna e
     // gli appuntamenti da assegnare sono subito accanto. Le colonne vuote vanno
     // in fondo e possono essere nascoste dalla board.
-    const columns = initialPcWorkerName
+    const columns = effectivePcWorkerName
       ? [
           ...(selectedWorkerColumn ? [selectedWorkerColumn] : []),
           ...(unassignedColumn ? [unassignedColumn] : []),
@@ -4685,14 +4686,14 @@ export function AppointmentsBrowser({
         ];
 
     return columns;
-  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, initialPcWorkerName, normalizedSearch, teamByBooking]);
+  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, filteredBookings, normalizedSearch, teamByBooking]);
   const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
     (column) =>
       column.id !== "unassigned" &&
       column.bookings.length === 0 &&
       column.status !== "IN" &&
       column.status !== "BREAK" &&
-      !staffNamesReferToSamePerson(column.name, initialPcWorkerName),
+      !staffNamesReferToSamePerson(column.name, effectivePcWorkerName),
   ).length;
   const visibleAppointmentBoardColumns = useMemo(() => {
     if (showEmptyBoardWorkers) return appointmentBoardColumns;
@@ -4702,10 +4703,10 @@ export function AppointmentsBrowser({
         column.bookings.length > 0 ||
         column.status === "IN" ||
         column.status === "BREAK" ||
-        staffNamesReferToSamePerson(column.name, initialPcWorkerName),
+        staffNamesReferToSamePerson(column.name, effectivePcWorkerName),
     );
     return visibleColumns.length ? visibleColumns : appointmentBoardColumns;
-  }, [appointmentBoardColumns, initialPcWorkerName, showEmptyBoardWorkers]);
+  }, [appointmentBoardColumns, effectivePcWorkerName, showEmptyBoardWorkers]);
   const boardBookingCount = new Set(
     visibleAppointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
   ).size;

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
   ASSISTANCE_TABLES_KEY,
@@ -15,6 +16,7 @@ const SYSTEMAZIONE_SHEET_NAME = "sistemazione fasce";
 const ORDER_COLUMN_LABEL = "Numero ordine";
 const AUTO_ROW_PREFIX = "sistemazione-fasce:";
 const VERIFY_PREVIOUS_STAFF_LABEL = "Da verificare";
+const SYSTEMAZIONE_SYNC_STATE_KEY = "systemazione_fasce_sync_state";
 
 export type SystemazioneFasceAppointment = {
   id: string | number;
@@ -350,9 +352,10 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
   ));
   if (!targets.length) return { createdRows: 0, updatedRows: 0 };
 
-  const [tableSetting, forms] = await Promise.all([
+  const [tableSetting, forms, syncStateSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: ASSISTANCE_TABLES_KEY } }),
     prisma.serviceForm.findMany({ select: { id: true, name: true, category: true } }),
+    prisma.setting.findUnique({ where: { key: SYSTEMAZIONE_SYNC_STATE_KEY } }),
   ]);
   const sheets = normalizeAssistanceSheets(tableSetting?.value);
   const sheetIndex = sheets.findIndex((sheet) => normalized(sheet.name) === SYSTEMAZIONE_SHEET_NAME);
@@ -361,6 +364,33 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
   const formIds = forms
     .filter((form) => isClientControlFormName(form.name, form.category))
     .map((form) => form.id);
+  const latestControl = formIds.length
+    ? await prisma.serviceFormResponse.aggregate({
+        where: { form_id: { in: formIds } },
+        _max: { updated_at: true },
+      })
+    : null;
+  const fingerprintForSheet = (sheetUpdatedAt: string) => createHash("sha256")
+    .update(JSON.stringify({
+      sheetUpdatedAt,
+      latestControlAt: latestControl?._max.updated_at?.toISOString() ?? null,
+      appointments: targets
+        .map((appointment) => ({
+          id: String(appointment.id),
+          order: appointment.bookingStr || appointment.shopifyOrderId || "",
+          startDate: appointment.startDate,
+          teammates: appointment.teammates.map((mate) => mate.name).sort(),
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    }))
+    .digest("hex");
+  const currentFingerprint = fingerprintForSheet(sheets[sheetIndex].updatedAt);
+  const previousSyncState = syncStateSetting?.value && typeof syncStateSetting.value === "object" && !Array.isArray(syncStateSetting.value)
+    ? syncStateSetting.value as { fingerprint?: unknown }
+    : null;
+  if (previousSyncState?.fingerprint === currentFingerprint) {
+    return { createdRows: 0, updatedRows: 0 };
+  }
   const rawResponses = formIds.length
     ? await prisma.serviceFormResponse.findMany({
         where: {
@@ -381,14 +411,25 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
     appointments: targets,
     responses,
   });
-  if (!result.changed) return { createdRows: 0, updatedRows: 0 };
-
   const nextSheets = [...sheets];
-  nextSheets[sheetIndex] = result.sheet;
+  if (result.changed) {
+    nextSheets[sheetIndex] = result.sheet;
+    await prisma.setting.upsert({
+      where: { key: ASSISTANCE_TABLES_KEY },
+      create: { key: ASSISTANCE_TABLES_KEY, value: nextSheets as unknown as Prisma.InputJsonValue },
+      update: { value: nextSheets as unknown as Prisma.InputJsonValue },
+    });
+  }
+  const finalFingerprint = fingerprintForSheet(result.sheet.updatedAt);
   await prisma.setting.upsert({
-    where: { key: ASSISTANCE_TABLES_KEY },
-    create: { key: ASSISTANCE_TABLES_KEY, value: nextSheets as unknown as Prisma.InputJsonValue },
-    update: { value: nextSheets as unknown as Prisma.InputJsonValue },
+    where: { key: SYSTEMAZIONE_SYNC_STATE_KEY },
+    create: {
+      key: SYSTEMAZIONE_SYNC_STATE_KEY,
+      value: { fingerprint: finalFingerprint, checkedAt: new Date().toISOString() },
+    },
+    update: {
+      value: { fingerprint: finalFingerprint, checkedAt: new Date().toISOString() },
+    },
   });
   return { createdRows: result.createdRows, updatedRows: result.updatedRows };
 }
