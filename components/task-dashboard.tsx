@@ -559,7 +559,9 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const initialTaskOpenedRef = useRef(false);
   const taskDetailPageRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
-  const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ASSIGNED_TO_ME");
+  const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">(
+    role === "RESPONSABILE" ? "ASSIGNED_BY_ME" : "ASSIGNED_TO_ME",
+  );
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -654,6 +656,9 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
   const assignedToMeCount = baseTasks.filter((task) => task.assignedToId === userId || task.assignees?.some((a) => a.id === userId)).length;
   const assignedByMeCount = baseTasks.filter((task) => task.createdById === userId).length;
+  const completionRequestsToReview = baseTasks
+    .filter((task) => task.createdById === userId && isCompletionRequestedTask(task))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   const activeTasks = personalTasks.filter(isActiveTask);
   const completedTasks = personalTasks.filter(isCompletedTask);
@@ -1580,6 +1585,28 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             </button>
           </div>
         </div>
+
+        {completionRequestsToReview.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => void openTask(completionRequestsToReview[0])}
+            className="mt-4 flex w-full items-center gap-4 rounded-[22px] border border-sky-200 bg-sky-50 px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-sky-700 shadow-sm">
+              <CheckCircle2 className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-black uppercase tracking-[0.14em] text-sky-700">Da confermare</span>
+              <span className="mt-1 block truncate text-sm font-bold text-sky-950">
+                {completionRequestsToReview.length === 1
+                  ? `${completionRequestsToReview[0].assignedToName} ha concluso una task`
+                  : `${completionRequestsToReview.length} task attendono la tua conferma`}
+              </span>
+            </span>
+            <span className="hidden text-xs font-black text-sky-800 sm:inline">Controlla ora</span>
+            <ChevronRight className="size-5 shrink-0 text-sky-700" />
+          </button>
+        ) : null}
 
         <div className="mt-7 grid grid-cols-5 gap-1.5 sm:gap-4 md:gap-6">
           {metrics.map((metric) => {
