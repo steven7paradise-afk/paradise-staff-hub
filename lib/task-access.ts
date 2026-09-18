@@ -47,9 +47,13 @@ export function taskWorkerWhere(): Prisma.UserWhereInput {
 export function taskEscalationRecipientWhere(locationId?: string | null): Prisma.UserWhereInput {
   return {
     active: true,
+    employee_status: { not: "Ex dipendente" },
+    role: { not: "ZERO" },
     OR: [
       { role: "SUPER_ADMIN" as const },
       { role: "ADMIN" as const },
+      { mansione: { contains: "ufficio", mode: "insensitive" as const } },
+      { location: { name: { contains: "ufficio", mode: "insensitive" as const } } },
       { role: "RESPONSABILE" as const, ...(locationId ? { sede_id: locationId } : {}) },
       {
         ...(locationId ? { sede_id: locationId } : {}),

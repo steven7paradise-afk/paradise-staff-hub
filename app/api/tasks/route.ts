@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
     where: { ...assignmentWhere, id: { in: workerIds } },
   });
   if (workers.length !== workerIds.length) {
-    return NextResponse.json({ error: "Puoi assegnare la task solo agli Admin o ai Responsabili autorizzati." }, { status: 403 });
+    return NextResponse.json({ error: "Puoi assegnare la task soltanto all’Ufficio o ai Responsabili autorizzati." }, { status: 403 });
   }
 
   const firstLocationId = canAssignAcrossLocations ? workers[0]?.sede_id : currentUser.sede_id;
@@ -471,7 +471,7 @@ export async function PUT(request: NextRequest) {
     where: { ...assignmentWhere, id: { in: workerIds } },
   });
   if (workers.length !== workerIds.length) {
-    return NextResponse.json({ error: "Puoi assegnare la task solo agli Admin o ai Responsabili autorizzati." }, { status: 403 });
+    return NextResponse.json({ error: "Puoi assegnare la task soltanto all’Ufficio o ai Responsabili autorizzati." }, { status: 403 });
   }
 
   if (!canAssignAcrossLocations && currentUser.sede_id !== task.location_id) {

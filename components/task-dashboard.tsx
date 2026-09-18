@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { TASK_VIEW_OPTIONS, type TaskViewPreference } from "@/lib/task-view";
 
-type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
+type Worker = { id: string; name: string; locationId: string | null; locationName?: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
 type ChecklistItem = { text: string; done: boolean; completedBy?: string | null; completedAt?: string | null };
 type CompletionFile = { name: string; url?: string | null };
 type FreeNoteBlock =
@@ -519,6 +519,9 @@ function workerMentionSlug(name: string) {
 }
 
 function workerMentionRoleLabel(worker: Worker) {
+  const job = worker.mansione?.toLowerCase() ?? "";
+  const location = worker.locationName?.toLowerCase() ?? "";
+  if (job.includes("ufficio") || location.includes("ufficio")) return "Ufficio";
   if (worker.role === "SUPER_ADMIN") return "Super Admin";
   if (worker.role === "ADMIN") return "Admin";
   if (worker.role === "RESPONSABILE" || worker.mansione?.toLowerCase().includes("responsabile")) return "Responsabile";
@@ -538,7 +541,9 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
 export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
   const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const canAssignAcrossTeam = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
-  const initialAllowedWorkers = canAssignAcrossTeam ? workers : mentionableUsers;
+  // The server filters this list with the same rule enforced by the API.
+  // Do not show recipients that would be rejected after submission.
+  const initialAllowedWorkers = workers;
 
   const [tasks, setTasks] = useState(initialTasks);
   const [view, setView] = useState<TaskView>(initialView);
@@ -944,6 +949,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   async function saveTaskEdit() {
     if (!editingTaskId) return;
     setSaving(true);
+    setFormStatus("Salvataggio e aggiornamento assegnazione...");
     const response = await fetch("/api/tasks", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -951,11 +957,15 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     });
     const data = await response.json();
     setSaving(false);
-    if (!response.ok) return;
+    if (!response.ok) {
+      setFormStatus(data.error ?? "Task non aggiornata. Controlla gli assegnatari e riprova.");
+      return;
+    }
     const mapped = mapApiTask(data);
     setTasks((current) => current.map((task) => task.id === editingTaskId ? mapped : task));
     if (selected?.id === editingTaskId) setSelected(mapped);
-    resetTaskForm();
+    setFormStatus("Task aggiornata e assegnatari avvisati.");
+    window.setTimeout(resetTaskForm, 700);
   }
 
   async function attachPhoto(file: File | undefined) {
@@ -2430,8 +2440,8 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
           <section className="ml-auto grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#F8F6F7] text-[#17151A] shadow-[-24px_0_80px_rgba(31,17,24,0.18)] sm:max-w-3xl sm:border-l sm:border-white/70">
             <header className="flex items-center justify-between gap-4 border-b border-black/[0.08] bg-white/90 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl sm:px-8 sm:py-5">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#A74758]">{editingTaskId ? "Modifica task" : "Nuova task"}</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{editingTaskId ? "Aggiorna task" : "Crea task"}</h2>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#A74758]">{editingTaskId ? "Modifica e scambia" : "Nuova task"}</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{editingTaskId ? "Aggiorna o riassegna" : "Crea task"}</h2>
               </div>
               <button type="button" onClick={resetTaskForm} className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/70 shadow-sm transition hover:bg-black hover:text-white" aria-label="Chiudi creazione task"><X className="size-5" /></button>
             </header>
@@ -2444,7 +2454,10 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Priorità</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
                 <div className="space-y-2 md:col-span-2">
-                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">Assegna a <span className="normal-case tracking-normal text-black/40">· {canAssignAcrossTeam ? "seleziona una o più persone" : "Admin o Responsabile"}</span></span>
+                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">
+                    {editingTaskId ? "Scambia assegnazione" : "Assegna a"}
+                    <span className="normal-case tracking-normal text-black/40"> · {canAssignAcrossTeam ? "seleziona una o più persone" : "Ufficio o responsabili autorizzati"}</span>
+                  </span>
                   <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-sm sm:grid-cols-2">
                     {initialAllowedWorkers.map((worker) => {
                       const isSelected = form.assignedToIds.includes(worker.id);
@@ -2468,8 +2481,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                               : "bg-[#F8F6F7] text-black/65 ring-1 ring-black/[0.06] hover:bg-white hover:text-black"
                           }`}
                         >
-                          <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-6" />
-                          <span className="min-w-0 flex-1 truncate">{worker.name}</span>
+                          <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-7" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">{worker.name}</span>
+                            <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-[0.08em] opacity-55">{workerMentionRoleLabel(worker)}</span>
+                          </span>
                           {isSelected ? <Check className="size-4 shrink-0" /> : null}
                         </button>
                       );
