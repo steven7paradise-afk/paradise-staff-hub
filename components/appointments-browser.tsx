@@ -1195,12 +1195,17 @@ function PcStaffLockScreen({
 
   function addPinDigit(digit: string) {
     if (!selectedWorkerId || selectingWorkerId) return;
-    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 2));
+    const nextPinPrefix = `${pinPrefix}${digit}`.replace(/\D/g, "").slice(0, 2);
+    setPinPrefix(nextPinPrefix);
     setError("");
+    if (nextPinPrefix.length === 2 && selectedPcWorker) {
+      setSelectingWorkerId(selectedPcWorker.id);
+      window.setTimeout(() => void unlockWithWorker(selectedPcWorker, nextPinPrefix), 80);
+    }
   }
 
-  async function unlockWithWorker(worker: ActivePcWorker) {
-    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
+  async function unlockWithWorker(worker: ActivePcWorker, enteredPinPrefix = pinPrefix) {
+    const cleanPinPrefix = enteredPinPrefix.replace(/\D/g, "").slice(0, 2);
     if (!/^\d{2}$/.test(cleanPinPrefix)) {
       setError("Inserisci le prime 2 cifre del PIN.");
       return;
@@ -3694,6 +3699,16 @@ export function AppointmentsBrowser({
     const timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
     return () => window.clearTimeout(timeout);
   }, [isPC, pcActiveWorker?.id]);
+
+  useEffect(() => {
+    if (!isPC) return;
+    const showProfileChoice = () => {
+      setPcActiveWorker(null);
+      setPcScreenLocked(true);
+    };
+    window.addEventListener("appointments:choose-profile", showProfileChoice);
+    return () => window.removeEventListener("appointments:choose-profile", showProfileChoice);
+  }, [isPC]);
 
   function handlePcUnlock(worker: ActivePcWorker) {
     setPcActiveWorker(worker);
@@ -6336,7 +6351,8 @@ export function AppointmentsBrowser({
                       <button
                         type="button"
                         onClick={() => {
-                          window.location.href = `${appointmentSalonUrl(salon !== "tutti" ? salon : initialSalon !== "tutti" ? initialSalon : null)}?choose=1`;
+                          setPcActiveWorker(null);
+                          setPcScreenLocked(true);
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 transition hover:bg-emerald-100"
                         title="Cambia profilo"

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { CalendarDays, FileText, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -87,7 +88,15 @@ export function TopControls({
   userId?: string;
   profileHref?: string;
 }) {
+  const pathname = usePathname();
   const [activeWorkers, setActiveWorkers] = useState<Array<{ id: string; name: string; photo_url: string | null; status: string }>>([]);
+
+  function choosePcProfile(event?: React.MouseEvent<HTMLElement>) {
+    if (userId !== "PC_CASSA" || !pathname?.startsWith("/appointments")) return false;
+    event?.preventDefault();
+    window.dispatchEvent(new CustomEvent("appointments:choose-profile"));
+    return true;
+  }
 
   useEffect(() => {
     if (userId !== "PC_CASSA") return;
@@ -112,6 +121,7 @@ export function TopControls({
   }, [userId]);
 
   async function handleLogout() {
+    if (choosePcProfile()) return;
     if (userId === "PC_CASSA") {
       window.location.replace(profileHref);
       return;
@@ -133,6 +143,7 @@ export function TopControls({
               <Link
                 key={worker.id}
                 href={profileHref}
+                onClick={(event) => choosePcProfile(event)}
                 title={`Cambia profilo: ${worker.name}`}
                 className="relative block size-9 rounded-full ring-2 ring-white hover:ring-[#C66170] dark:ring-neutral-900 transition-all duration-300 hover:scale-110 hover:z-10 overflow-hidden bg-paradise-softPink"
               >
@@ -156,7 +167,7 @@ export function TopControls({
       <NotificationsPopover initialUnread={unread} />
       <ThemeToggleButton />
       <div className="group relative">
-        <Link href={profileHref} className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
+        <Link href={profileHref} onClick={(event) => choosePcProfile(event)} className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
           <span className="grid size-12 place-items-center overflow-hidden rounded-full bg-[#C66170]">
             {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="size-full object-cover" /> : name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
           </span>
@@ -168,11 +179,11 @@ export function TopControls({
               <p className="truncate text-sm font-bold text-black dark:text-white">{name}</p>
               <p className="text-xs text-black/45 dark:text-white/45">Account staff</p>
             </div>
-            <Link href={profileHref} className="mt-2 flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
+            <Link href={profileHref} onClick={(event) => choosePcProfile(event)} className="mt-2 flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
               <UserRound className="size-4" />
               {userId === "PC_CASSA" ? "Cambia profilo" : "Profilo"}
             </Link>
-            <Link href={userId === "PC_CASSA" ? profileHref : "/my-shifts"} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
+            <Link href={userId === "PC_CASSA" ? profileHref : "/my-shifts"} onClick={(event) => choosePcProfile(event)} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
               <CalendarDays className="size-4" />
               {userId === "PC_CASSA" ? "Cambia profilo" : "Turni"}
             </Link>

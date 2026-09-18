@@ -58,6 +58,13 @@ export function MobileMenuDrawer({
     setIsOpen(true);
   }
 
+  function handlePcProfileChoice(event: React.MouseEvent<HTMLElement>) {
+    if (!logoutSkipSignOut || !pathname?.startsWith("/appointments")) return;
+    event.preventDefault();
+    setIsOpen(false);
+    window.dispatchEvent(new CustomEvent("appointments:choose-profile"));
+  }
+
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
     return folder?.labels?.[href] || fallback;
@@ -127,7 +134,7 @@ export function MobileMenuDrawer({
           </Link>
           <span className="min-w-0 flex-1" aria-hidden="true" />
           <div className="relative size-11 shrink-0">
-            <Link href={profileHref} className="block size-11 overflow-hidden rounded-full border border-black/10 bg-[#f8edf2] dark:border-white/15" aria-label={`Apri il profilo di ${userName}`}>
+            <Link href={profileHref} onClick={handlePcProfileChoice} className="block size-11 overflow-hidden rounded-full border border-black/10 bg-[#f8edf2] dark:border-white/15" aria-label={`Apri il profilo di ${userName}`}>
               {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" /> : <span className="grid size-full place-items-center text-xs font-black text-[#8c3f60]">{userName.slice(0, 2).toUpperCase()}</span>}
             </Link>
             <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-emerald-400 dark:border-[#1d1d22]" aria-hidden="true" />

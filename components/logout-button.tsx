@@ -31,6 +31,10 @@ export function LogoutButton({
     }
 
     if (redirectTo) {
+      if (skipSignOut && pathname?.startsWith("/appointments")) {
+        window.dispatchEvent(new CustomEvent("appointments:choose-profile"));
+        return;
+      }
       if (!skipSignOut) {
         await signOut({ redirect: false });
       }
