@@ -32,7 +32,6 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const taskWhere = canSeeAllTasks
     ? taskLocationFilter
     : {
-        ...taskLocationFilter,
         OR: [
           { created_by_id: session.user.id },
           { assignees: { some: { id: session.user.id } } },

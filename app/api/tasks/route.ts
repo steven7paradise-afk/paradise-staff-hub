@@ -166,7 +166,8 @@ export async function GET(request: NextRequest) {
   const canSeeAllLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
   const canSeeAllTasks = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role) || canSeeAllLocations;
   const isAssignee = task.assignees.some((user) => user.id === session.user.id);
-  const locationAllowed = canSeeAllLocations || task.location_id === currentUser.sede_id;
+  const isCreator = task.created_by_id === session.user.id;
+  const locationAllowed = canSeeAllLocations || task.location_id === currentUser.sede_id || isCreator || isAssignee;
   const taskAllowed = canSeeAllTasks || task.created_by_id === session.user.id || isAssignee;
   if (!locationAllowed || !taskAllowed) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
@@ -357,7 +358,11 @@ export async function PATCH(request: NextRequest) {
         : isEvaluation
           ? managerRoles.has(session.user.role)
           : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
-  if (!canEdit || (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== task.location_id)) {
+  const canAccessTaskLocation = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name)
+    || currentUser.sede_id === task.location_id
+    || task.created_by_id === session.user.id
+    || isAssignee;
+  if (!canEdit || !canAccessTaskLocation) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
 
@@ -474,7 +479,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Puoi assegnare la task soltanto all’Ufficio o ai Responsabili autorizzati." }, { status: 403 });
   }
 
-  if (!canAssignAcrossLocations && currentUser.sede_id !== task.location_id) {
+  if (!canAssignAcrossLocations && currentUser.sede_id !== task.location_id && task.created_by_id !== session.user.id && !isAssignee) {
     return NextResponse.json({ error: "Puoi modificare task solo nel tuo salone." }, { status: 403 });
   }
 
