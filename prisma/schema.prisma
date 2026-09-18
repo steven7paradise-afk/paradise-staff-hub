@@ -83,6 +83,7 @@ model User {
   sede_id               String?
   pin_hash              String?
   pin_lookup            String?   @unique
+  pin_prefix_lookup     String?
   nfc_badge_hash        String?   @unique
   nfc_badge_enabled     Boolean   @default(false)
   nfc_badge_enrolled_at DateTime?

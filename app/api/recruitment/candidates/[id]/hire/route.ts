@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import bcrypt from "bcryptjs";
-import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { isPinAlreadyAssigned, pinLookup, pinPrefixLookup } from "@/lib/pin";
 import { formatPersonName } from "@/lib/person-name";
 import { UserRole } from "@prisma/client";
 
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         password_hash: await bcrypt.hash(password, 12),
         pin_hash: await bcrypt.hash(pin, 12),
         pin_lookup: pinLookup(pin),
+        pin_prefix_lookup: pinPrefixLookup(pin),
         role: role as UserRole,
         sede_id: sede_id || null,
         whatsapp_phone: whatsapp_phone || null,

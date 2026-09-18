@@ -34,4 +34,8 @@ else
   done
 fi
 
+# The cashier only asks for the first two PIN digits. Keep a keyed lookup for
+# that prefix so profile access never brute-forces up to one million PINs.
+node ./scripts/backfill-pin-prefix-lookups.mjs
+
 exec ./node_modules/.bin/next start

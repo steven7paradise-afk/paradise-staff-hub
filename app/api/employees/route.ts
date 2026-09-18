@@ -4,7 +4,7 @@ import { UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { createNotifications } from "@/lib/notifications";
-import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { isPinAlreadyAssigned, pinLookup, pinPrefixLookup } from "@/lib/pin";
 import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
 
@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
         password_hash: await bcrypt.hash(password, 12),
         pin_hash: await bcrypt.hash(pin, 12),
         pin_lookup: pinLookup(pin),
+        pin_prefix_lookup: pinPrefixLookup(pin),
         role,
         sede_id: data.sedeId ? String(data.sedeId) : null,
         birth_date: birthDate,

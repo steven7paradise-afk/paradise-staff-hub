@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       id: true,
       name: true,
       sede_id: true,
-      pin_lookup: true,
+      pin_prefix_lookup: true,
       attendance_logs: {
         where: { date: { gte: today, lt: tomorrow } },
         select: { type: true, timestamp: true },
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
 
-  const isPinValid = isPinPrefixValidForUser(pinPrefix, worker.pin_lookup);
+  const isPinValid = isPinPrefixValidForUser(pinPrefix, worker.pin_prefix_lookup);
 
   if (!isPinValid) {
     return NextResponse.json({ error: "Le prime 2 cifre non corrispondono a questo profilo." }, { status: 403 });

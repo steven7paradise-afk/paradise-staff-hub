@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { isPinAlreadyAssigned, pinLookup, pinPrefixLookup } from "@/lib/pin";
 import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
 import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS, resolveEmployeeActive } from "@/lib/former-employee";
@@ -122,7 +122,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,
       last_edited_by_id: session.user.id,
       last_edited_at: new Date(),
-      ...(pin ? { pin_hash: await bcrypt.hash(pin, 12), pin_lookup: pinLookup(pin) } : {}),
+      ...(pin ? {
+        pin_hash: await bcrypt.hash(pin, 12),
+        pin_lookup: pinLookup(pin),
+        pin_prefix_lookup: pinPrefixLookup(pin),
+      } : {}),
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {}),
     };
 

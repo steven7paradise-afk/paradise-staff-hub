@@ -47,6 +47,7 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts/start-production.sh ./scripts/start-production.sh
+COPY --from=builder /app/scripts/backfill-pin-prefix-lookups.mjs ./scripts/backfill-pin-prefix-lookups.mjs
 
 EXPOSE 3000
 

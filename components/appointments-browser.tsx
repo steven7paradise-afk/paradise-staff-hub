@@ -1212,18 +1212,34 @@ function PcStaffLockScreen({
     }
     setSelectingWorkerId(worker.id);
     setError("");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
     try {
       const response = await fetch("/api/appointments/pc/select-worker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workerId: worker.id, salone: salon, pinPrefix: cleanPinPrefix }),
+        signal: controller.signal,
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Impossibile accedere con questo profilo.");
+      }
+
+      // The response headers already contain the worker cookie. Do not wait
+      // for any secondary page refresh before opening the operational view.
       onUnlock(worker);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
+      setError(
+        err instanceof DOMException && err.name === "AbortError"
+          ? "Accesso troppo lento. Riprova: non serve ricaricare la pagina."
+          : err instanceof Error
+            ? err.message
+            : "Impossibile accedere con questo profilo.",
+      );
       setSelectingWorkerId("");
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 

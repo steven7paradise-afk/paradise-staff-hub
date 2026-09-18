@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient, UserRole } from "@prisma/client";
-import { pinLookup } from "../lib/pin";
+import { pinLookup, pinPrefixLookup } from "../lib/pin";
 
 const prisma = new PrismaClient();
 
@@ -52,6 +52,7 @@ async function main() {
         sede_id: user.sede_id,
         pin_hash: await bcrypt.hash(user.pin, 12),
         pin_lookup: pinLookup(user.pin),
+        pin_prefix_lookup: pinPrefixLookup(user.pin),
         birth_date: user.birth_date ? new Date(user.birth_date) : null,
         fiscal_code: user.fiscal_code ?? null,
         contract_start: user.contract_start ? new Date(user.contract_start) : null,
@@ -68,6 +69,7 @@ async function main() {
         sede_id: user.sede_id,
         pin_hash: await bcrypt.hash(user.pin, 12),
         pin_lookup: pinLookup(user.pin),
+        pin_prefix_lookup: pinPrefixLookup(user.pin),
         birth_date: user.birth_date ? new Date(user.birth_date) : null,
         fiscal_code: user.fiscal_code ?? null,
         contract_start: user.contract_start ? new Date(user.contract_start) : null,
