@@ -109,6 +109,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         userName={session.user.name ?? "Paradise"}
         currentUserLocationId={currentUser?.sede_id ?? null}
         canManageTasks={canManageAllTasks}
+        canViewAllTasks={seesAllTasks}
         initialView={normalizeTaskView(currentUser?.default_task_view)}
         initialTaskId={requestedTaskId}
         categories={taskCategories}

@@ -538,7 +538,7 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
+export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, canViewAllTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; canViewAllTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
   const canManageEveryTask = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   // The server filters this list with the same rule enforced by the API.
   // Do not show recipients that would be rejected after submission.
@@ -623,18 +623,22 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     photoUrl: "",
     checklistItems: [""],
   });
+  const selectedRecipientWorkers = useMemo(() => form.assignedToIds
+    .map((id) => initialAllowedWorkers.find((worker) => worker.id === id))
+    .filter((worker): worker is Worker => Boolean(worker)), [form.assignedToIds, initialAllowedWorkers]);
+  const recipientSearchReady = workerSearch.trim().length >= 2;
   const visibleRecipientWorkers = useMemo(() => {
     const query = workerSearch.trim().toLowerCase();
+    if (query.length < 2) return [];
     return initialAllowedWorkers
-      .filter((worker) => !query || [worker.name, worker.mansione, worker.locationName, worker.role]
+      .filter((worker) => !form.assignedToIds.includes(worker.id))
+      .filter((worker) => [worker.name, worker.mansione, worker.locationName, worker.role]
         .some((value) => value?.toLowerCase().includes(query)))
       .sort((a, b) => {
-        const aSelected = form.assignedToIds.includes(a.id) ? 0 : 1;
-        const bSelected = form.assignedToIds.includes(b.id) ? 0 : 1;
-        if (aSelected !== bSelected) return aSelected - bSelected;
         const locationComparison = (a.locationName ?? "").localeCompare(b.locationName ?? "", "it");
         return locationComparison || a.name.localeCompare(b.name, "it");
-      });
+      })
+      .slice(0, 12);
   }, [form.assignedToIds, initialAllowedWorkers, workerSearch]);
 
   useEffect(() => {
@@ -1589,7 +1593,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                   : "text-black/50 hover:text-black hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5"
               }`}
             >
-              Tutte le task ({baseTasks.length})
+              {canViewAllTasks ? "Tutte le task" : "Coinvolgono me"} ({baseTasks.length})
             </button>
           </div>
         </div>
@@ -2504,7 +2508,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                       type="search"
                       value={workerSearch}
                       onChange={(event) => setWorkerSearch(event.target.value)}
-                      placeholder="Cerca nome, mansione o sede"
+                      placeholder="Scrivi almeno 2 lettere per cercare"
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={recipientSearchReady}
+                      aria-controls="task-recipient-results"
                       className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-black/30"
                     />
                     {form.assignedToIds.length > 0 ? (
@@ -2517,47 +2525,65 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                       </button>
                     ) : null}
                   </div>
-                  <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-sm sm:grid-cols-2">
-                    {visibleRecipientWorkers.map((worker) => {
-                      const isSelected = form.assignedToIds.includes(worker.id);
-                      return (
+                  {selectedRecipientWorkers.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 rounded-2xl border border-[#E8B8C9] bg-[#FFF8FB] p-3" aria-label="Destinatari selezionati">
+                      {selectedRecipientWorkers.map((worker) => (
+                        <span key={worker.id} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl bg-white py-1.5 pl-2 pr-1.5 text-xs font-black text-[#70243F] shadow-sm ring-1 ring-[#D96B94]/25">
+                          <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-7" />
+                          <span className="min-w-0">
+                            <span className="block max-w-44 truncate">{worker.name}</span>
+                            {worker.locationName ? <span className="block max-w-44 truncate text-[9px] uppercase tracking-[0.08em] text-black/40">{worker.locationName}</span> : null}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setForm((current) => {
+                              const newIds = current.assignedToIds.filter((id) => id !== worker.id);
+                              return { ...current, assignedToIds: newIds, assignedToId: newIds[0] ?? "" };
+                            })}
+                            className="grid size-8 shrink-0 place-items-center rounded-lg text-[#A74758] transition hover:bg-[#FBE5EE]"
+                            aria-label={`Rimuovi ${worker.name}`}
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-1 text-xs font-semibold text-black/40">Nessun destinatario selezionato. Cerca una persona per nome, mansione o sede.</p>
+                  )}
+                  {recipientSearchReady ? (
+                    <div id="task-recipient-results" className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-lg sm:grid-cols-2" aria-label="Risultati ricerca destinatari">
+                      {visibleRecipientWorkers.map((worker) => (
                         <button
                           key={worker.id}
                           type="button"
                           onClick={() => {
-                            const newIds = isSelected
-                              ? form.assignedToIds.filter((id) => id !== worker.id)
-                              : [...form.assignedToIds, worker.id];
-                            setForm({ 
-                              ...form, 
-                              assignedToIds: newIds, 
-                              assignedToId: newIds[0] ?? "" 
-                            });
+                            const newIds = [...form.assignedToIds, worker.id];
+                            setForm({ ...form, assignedToIds: newIds, assignedToId: newIds[0] ?? "" });
+                            setWorkerSearch("");
                           }}
-                          className={`flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-bold transition-all ${
-                            isSelected 
-                              ? "bg-[#FBE5EE] text-[#7F2945] ring-2 ring-[#D96B94]/45"
-                              : "bg-[#F8F6F7] text-black/65 ring-1 ring-black/[0.06] hover:bg-white hover:text-black"
-                          }`}
+                          className="flex min-h-14 items-center gap-3 rounded-xl bg-[#F8F6F7] px-3 py-2 text-left text-xs font-bold text-black/70 ring-1 ring-black/[0.06] transition hover:bg-[#FBE5EE] hover:text-[#7F2945] hover:ring-[#D96B94]/35"
                         >
-                          <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-7" />
+                          <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-8" />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate">{worker.name}</span>
                             <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-[0.08em] opacity-55">
                               {workerMentionRoleLabel(worker)}{worker.locationName ? ` · ${worker.locationName}` : ""}
                             </span>
                           </span>
-                          {isSelected ? <Check className="size-4 shrink-0" /> : null}
+                          <Plus className="size-4 shrink-0" />
                         </button>
-                      );
-                    })}
-                    {visibleRecipientWorkers.length === 0 ? (
-                      <div className="col-span-full rounded-xl bg-[#F8F6F7] px-4 py-6 text-center">
-                        <p className="text-sm font-bold text-black/60">Nessun membro dello staff trovato</p>
-                        <p className="mt-1 text-xs text-black/40">Prova con un altro nome, mansione o sede.</p>
-                      </div>
-                    ) : null}
-                  </div>
+                      ))}
+                      {visibleRecipientWorkers.length === 0 ? (
+                        <div className="col-span-full rounded-xl bg-[#F8F6F7] px-4 py-6 text-center">
+                          <p className="text-sm font-bold text-black/60">Nessuna persona trovata</p>
+                          <p className="mt-1 text-xs text-black/40">Controlla il nome oppure cerca per mansione o sede.</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : workerSearch.trim().length === 1 ? (
+                    <p className="px-1 text-xs font-bold text-[#9A5A70]">Scrivi ancora una lettera per avviare la ricerca.</p>
+                  ) : null}
                 </div>
               </div>
               <fieldset className="space-y-3">
