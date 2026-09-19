@@ -102,7 +102,7 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
     try {
       const date = new Date(iso);
       if (isNaN(date.getTime())) return "";
-      return date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
     } catch {
       return "";
     }

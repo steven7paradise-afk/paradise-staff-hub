@@ -60,7 +60,7 @@ export function DashboardNewResponses({
               <div className="min-w-0">
                 <p className="text-sm font-bold text-black dark:text-white truncate">{r.form?.name || "Modulo"}</p>
                 <p className="text-xs text-black/55 dark:text-white/40 mt-0.5 truncate">
-                  Inviato da <strong className="text-black/75 dark:text-white/70">{r.user?.name || "Dipendente"}</strong> il {new Date(r.created_at).toLocaleDateString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  Inviato da <strong className="text-black/75 dark:text-white/70">{r.user?.name || "Dipendente"}</strong> il {new Date(r.created_at).toLocaleDateString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}
                 </p>
               </div>
             </div>

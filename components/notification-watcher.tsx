@@ -30,6 +30,45 @@ function playNotificationSound() {
   });
 }
 
+function readLastShownNotificationId() {
+  try {
+    return window.localStorage.getItem("last_shown_notification_id");
+  } catch {
+    return null;
+  }
+}
+
+function rememberLastShownNotificationId(id: string) {
+  try {
+    window.localStorage.setItem("last_shown_notification_id", id);
+  } catch {
+    // Notifications still work when storage is unavailable or restricted.
+  }
+}
+
+function showSystemNotification(notification: LatestNotification) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const browserNotification = new Notification(notification.title, {
+      body: notification.message,
+      tag: notification.id,
+      icon: "/favicon.png",
+    });
+    browserNotification.onclick = () => {
+      window.focus();
+      if (notification.type === "TIMBRATURA") {
+        const pauseExceeded = /pausa.*superat|superamento.*pausa/i.test(`${notification.title} ${notification.message}`);
+        window.alert(`${pauseExceeded ? "Attenzione: pausa superata" : "Avviso timbratura"}\n\n${notification.message}`);
+        return;
+      }
+      window.location.href = notification.actionUrl || "/notifications";
+    };
+  } catch {
+    // Some mobile browsers expose Notification.permission but only support
+    // service-worker notifications. The in-app notification remains available.
+  }
+}
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
@@ -107,7 +146,7 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      lastId.current = localStorage.getItem("last_shown_notification_id");
+      lastId.current = readLastShownNotificationId();
     }
   }, []);
 
@@ -119,34 +158,20 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
       if (!response?.ok || cancelled) return;
       const data = (await response.json()) as { count: number; latest: LatestNotification | null; communication?: Pick<LatestNotification, "id" | "title" | "message"> | null };
       if (cancelled) return;
-      const latestId = data.latest?.id ?? null;
-      const lastShownId = typeof window !== "undefined" ? localStorage.getItem("last_shown_notification_id") : null;
+      const latest = data.latest;
+      const latestId = latest?.id ?? null;
+      const lastShownId = typeof window !== "undefined" ? readLastShownNotificationId() : null;
 
       const hasNew = latestId && latestId !== lastId.current && latestId !== lastShownId && data.count > 0;
 
-      if (hasNew && data.latest) {
+      if (hasNew && latest) {
         if (typeof window !== "undefined") {
-          localStorage.setItem("last_shown_notification_id", data.latest.id);
+          rememberLastShownNotificationId(latest.id);
         }
-        lastId.current = data.latest.id;
+        lastId.current = latest.id;
 
-        playNotificationSound();
-        if ("Notification" in window && Notification.permission === "granted") {
-          const browserNotification = new Notification(data.latest.title, {
-            body: data.latest.message,
-            tag: data.latest.id,
-            icon: "/favicon.png",
-          });
-          browserNotification.onclick = () => {
-            window.focus();
-            if (data.latest?.type === "TIMBRATURA") {
-              const pauseExceeded = /pausa.*superat|superamento.*pausa/i.test(`${data.latest.title} ${data.latest.message}`);
-              window.alert(`${pauseExceeded ? "Attenzione: pausa superata" : "Avviso timbratura"}\n\n${data.latest.message}`);
-              return;
-            }
-            window.location.href = data.latest?.actionUrl || "/notifications";
-          };
-        }
+        try { playNotificationSound(); } catch { /* Audio can be blocked by the browser. */ }
+        showSystemNotification(latest);
       }
       lastCount.current = data.count;
     }

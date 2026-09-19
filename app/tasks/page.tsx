@@ -104,6 +104,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   return (
     <AppShell title="Task" role={role} hideHeader>
       <TaskDashboard
+        initialNow={new Date().toISOString()}
         role={role}
         userId={session.user.id}
         userName={session.user.name ?? "Paradise"}

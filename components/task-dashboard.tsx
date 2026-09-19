@@ -143,10 +143,10 @@ function renderTextWithLinks(text: string) {
   });
 }
 
-function isTodayTask(task: Task) {
+function isTodayTask(task: Task, now: number) {
   const source = taskCalendarDate(task);
   const date = new Date(source);
-  const today = new Date();
+  const today = new Date(now);
   return date.toDateString() === today.toDateString();
 }
 
@@ -420,14 +420,14 @@ function formatTimerWithDays(seconds: number) {
   return days > 0 ? `${days}g ${time}` : time;
 }
 
-function totalTaskDays(task: Task) {
+function totalTaskDays(task: Task, now: number) {
   const start = new Date(task.startedAt ?? task.createdAt);
-  const end = task.completedAt ? new Date(task.completedAt) : new Date();
+  const end = task.completedAt ? new Date(task.completedAt) : new Date(now);
   if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) return 1;
   return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
 }
 
-function activeWorkSecondsSince(startedAt: string, logs: TodayAttendanceLog[]) {
+function activeWorkSecondsSince(startedAt: string, logs: TodayAttendanceLog[], now: number) {
   const started = new Date(startedAt).getTime();
   const ordered = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   let activeFrom: number | null = null;
@@ -444,7 +444,7 @@ function activeWorkSecondsSince(startedAt: string, logs: TodayAttendanceLog[]) {
     }
   });
 
-  if (activeFrom !== null) total += Math.max(0, Date.now() - activeFrom);
+  if (activeFrom !== null) total += Math.max(0, now - activeFrom);
   return Math.floor(total / 1000);
 }
 
@@ -456,9 +456,9 @@ function attendanceTimerState(logs: TodayAttendanceLog[]) {
   return { isWorking: true, label: `Timer attivo dalle timbrature: ultima ${latest.type.toLowerCase()} alle ${latest.time}.`, tone: "work" as const };
 }
 
-function getTaskCurrentSeconds(task: Task, attendanceLogs: TodayAttendanceLog[] = []) {
+function getTaskCurrentSeconds(task: Task, attendanceLogs: TodayAttendanceLog[] = [], now: number) {
   if (task.status === "ACTIVE" && task.startedAt) {
-    return Math.max(0, task.timerSeconds + activeWorkSecondsSince(task.startedAt, attendanceLogs));
+    return Math.max(0, task.timerSeconds + activeWorkSecondsSince(task.startedAt, attendanceLogs, now));
   }
   return task.timerSeconds;
 }
@@ -538,13 +538,14 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, canViewAllTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; canViewAllTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
+export function TaskDashboard({ initialNow, role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, canViewAllTasks = false, initialTaskId = null, initialView = "HOME" }: { initialNow: string; role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; canViewAllTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
   const canManageEveryTask = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   // The server filters this list with the same rule enforced by the API.
   // Do not show recipients that would be rejected after submission.
   const initialAllowedWorkers = workers;
 
   const [tasks, setTasks] = useState(initialTasks);
+  const [currentTime, setCurrentTime] = useState(() => new Date(initialNow).getTime());
   const [view, setView] = useState<TaskView>(initialView);
   const [defaultView, setDefaultView] = useState<TaskView>(initialView);
   const [defaultViewStatus, setDefaultViewStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -678,7 +679,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const newTasks = personalTasks.filter(isNewTask);
   const waitingTasks = personalTasks.filter(isWaitingTask);
   const openTasks = personalTasks.filter((task) => !isCompletedTask(task));
-  const todayTasks = openTasks.filter(isTodayTask);
+  const todayTasks = openTasks.filter((task) => isTodayTask(task, currentTime));
   const visibleTasks = filter === "TODAY" ? todayTasks : filter === "COMPLETED" ? completedTasks : filter === "WAITING" ? waitingTasks : filter === "NEW" ? newTasks : activeTasks;
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
   const timerAttendance = attendanceTimerState(todayAttendanceLogs);
@@ -1050,19 +1051,18 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     }
   }
 
-  const [ticker, setTicker] = useState(0);
   useEffect(() => {
     const hasActiveTask = tasks.some(t => t.status === "ACTIVE");
-    if (!hasActiveTask || !timerAttendance.isWorking) return;
+    setCurrentTime(Date.now());
     const interval = window.setInterval(() => {
-      setTicker((t) => t + 1);
-    }, 1000);
+      setCurrentTime(Date.now());
+    }, hasActiveTask && timerAttendance.isWorking ? 1000 : 60_000);
     return () => window.clearInterval(interval);
   }, [tasks, timerAttendance.isWorking]);
 
   async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING" | "COMPLETION_REQUESTED", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[]; completionAction?: "REQUEST" | "APPROVE" | "REJECT" }) {
     const isCompletionDecision = extra?.completionAction === "APPROVE" || extra?.completionAction === "REJECT";
-    const currentSeconds = isCompletionDecision ? task.timerSeconds : getTaskCurrentSeconds(task, todayAttendanceLogs);
+    const currentSeconds = isCompletionDecision ? task.timerSeconds : getTaskCurrentSeconds(task, todayAttendanceLogs, currentTime);
     const nextTask = { 
       ...task, 
       status, 
@@ -1469,7 +1469,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     { id: "CALENDAR", label: "Calendario", icon: CalendarDays },
     { id: "LIST", label: "Lista", icon: ListChecks },
   ];
-  const today = new Date();
+  const today = new Date(currentTime);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const calendarStart = calendarMode === "WEEK" ? startOfWeek(today) : monthStart;
   const calendarCells = Array.from({ length: calendarMode === "WEEK" ? 7 : 42 }, (_, index) => {
@@ -2295,7 +2295,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                       Cronometro lavorativo
                     </p>
                     <p className="mt-2 text-3xl font-black tabular-nums tracking-tight text-black dark:text-white md:text-4xl">
-                      {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs))}
+                      {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs, currentTime))}
                     </p>
                     <p className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold ${timerAttendance.tone === "work" ? "bg-emerald-50 text-emerald-700" : timerAttendance.tone === "pause" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/45"}`}>
                       {timerAttendance.label}
@@ -2304,7 +2304,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                   <div className="grid grid-cols-2 gap-2 sm:min-w-60">
                     <div className="rounded-2xl bg-[#FAF7F9] p-3 dark:bg-white/[0.06] md:p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35 dark:text-white/45">Giorni totali</p>
-                      <p className="mt-1 text-2xl font-black">{totalTaskDays(selected)}</p>
+                      <p className="mt-1 text-2xl font-black">{totalTaskDays(selected, currentTime)}</p>
                     </div>
                     <div className="rounded-2xl bg-[#FAF7F9] p-3 dark:bg-white/[0.06] md:p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35 dark:text-white/45">Stato task</p>
@@ -2419,7 +2419,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">{completionTarget.createdById === userId ? "Completamento" : "Richiesta di completamento"}</p>
                 <h2 className="mt-2 text-2xl font-semibold">{completionTarget.createdById === userId ? "Completa la task" : "Invia la prova"}</h2>
                 <p className="mt-1 font-semibold text-black/70">{completionTarget.title}</p>
-                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(completionTarget, todayAttendanceLogs))}</p>
+                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(completionTarget, todayAttendanceLogs, currentTime))}</p>
               </div>
               <button onClick={() => setCompletionTarget(null)} disabled={completionSaving} className="grid size-11 place-items-center rounded-full border border-black/10 disabled:opacity-40" aria-label="Chiudi completamento"><X className="size-5" /></button>
             </div>
