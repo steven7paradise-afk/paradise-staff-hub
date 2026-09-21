@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const planning = normalizePlanningAccess(planningSetting?.value);
   const window = employeeScheduleWindow(now, planning.nextMonthVisible);
 
-  const [schedules, logs, notifications, documents, clockRuleSetting] = await Promise.all([
+  const [schedules, logs, notifications, documents, tasks, clockRuleSetting] = await Promise.all([
     prisma.scheduleEntry.findMany({
       where: { user_id: user.id, date: { gte: window.start, lt: window.end } },
       include: { category: true, location: true },
@@ -42,6 +42,27 @@ export async function GET(request: NextRequest) {
       where: { user_id: user.id },
       select: { id: true, title: true, type: true, month: true, year: true, document_date: true, created_at: true },
       orderBy: { created_at: "desc" },
+    }),
+    prisma.staffTask.findMany({
+      where: { assignees: { some: { id: user.id } } },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        category: true,
+        checklist: true,
+        due_date: true,
+        started_at: true,
+        completed_at: true,
+        created_at: true,
+        updated_at: true,
+        created_by: { select: { name: true } },
+        location: { select: { name: true } },
+      },
+      orderBy: [{ due_date: "asc" }, { updated_at: "desc" }],
+      take: 80,
     }),
     user.sede_id
       ? prisma.setting.findUnique({ where: { key: clockRuleKey(user.sede_id) } }).catch(() => null)
@@ -95,6 +116,22 @@ export async function GET(request: NextRequest) {
       documentDate: document.document_date?.toISOString() ?? null,
       createdAt: document.created_at.toISOString(),
       downloadPath: `/api/mobile/documents/${document.id}/download`,
+    })),
+    tasks: tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      category: task.category,
+      checklist: task.checklist,
+      dueDate: task.due_date?.toISOString() ?? null,
+      startedAt: task.started_at?.toISOString() ?? null,
+      completedAt: task.completed_at?.toISOString() ?? null,
+      createdAt: task.created_at.toISOString(),
+      updatedAt: task.updated_at.toISOString(),
+      createdByName: task.created_by.name,
+      locationName: task.location.name,
     })),
   });
 }
