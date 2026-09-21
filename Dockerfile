@@ -27,11 +27,13 @@ ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# Builds run on the same Coolify host as production. Keep compilation at a
+# lower CPU priority so a deploy cannot make the live staff app sluggish.
+RUN nice -n 10 npm run build
 
 FROM deps AS production-deps
 
-RUN npm prune --omit=dev --no-audit --no-fund
+RUN nice -n 10 npm prune --omit=dev --no-audit --no-fund
 
 FROM base AS runner
 
