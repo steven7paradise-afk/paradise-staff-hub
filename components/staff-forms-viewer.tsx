@@ -323,6 +323,7 @@ export function StaffFormsViewer({
   canClosePastDays = false,
   autoFillFormId,
   autoFillFormName,
+  autoOpenTool,
   pastCustomers = [],
 }: {
   forms: FormTemplate[];
@@ -334,6 +335,7 @@ export function StaffFormsViewer({
   canClosePastDays?: boolean;
   autoFillFormId?: string;
   autoFillFormName?: string;
+  autoOpenTool?: string;
   pastCustomers?: Array<{
     name: string;
     type: string;
@@ -1230,6 +1232,26 @@ export function StaffFormsViewer({
       }
     }
   }, [autoFillFormId, autoFillFormName, forms]);
+
+  React.useEffect(() => {
+    switch (autoOpenTool) {
+      case "cash":
+        setShowPosTerminal(true);
+        break;
+      case "pickup":
+        setPickupMessage(null);
+        setPickupSelectedOrder(null);
+        setPickupQuery("");
+        setShowPickupModal(true);
+        break;
+      case "payment-link":
+        setShowPaymentLink(true);
+        break;
+      case "daily-close":
+        void openDailyClosing();
+        break;
+    }
+  }, [autoOpenTool]);
 
   const handleTextChange = (fieldId: string, value: string) => {
     if (fieldId === "order_shopify_order" || fieldId === "invoice_shopify_order") {

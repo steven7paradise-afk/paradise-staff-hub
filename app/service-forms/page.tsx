@@ -29,10 +29,11 @@ function isInternalFotoOrderForm(form?: { name?: string | null; category?: strin
   return name === "FOTO ORDINI" || (category === "FOTO" && name.includes("FOTO"));
 }
 
-export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string; remoteTarget?: string }> }) {
+export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string; tool?: string; remoteTarget?: string }> }) {
   const searchParams = await props.searchParams;
   const fillId = searchParams.fillId;
   const fill = searchParams.fill;
+  const tool = searchParams.tool;
   const remoteTarget = typeof searchParams.remoteTarget === "string" ? searchParams.remoteTarget.trim() : "";
   const session = await auth();
   let sessionUser = session?.user;
@@ -327,6 +328,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         canClosePastDays={Boolean(session?.user?.role && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role))}
         autoFillFormId={fillId}
         autoFillFormName={fill}
+        autoOpenTool={tool}
         pastCustomers={pastCustomers}
       />
     </AppShell>
