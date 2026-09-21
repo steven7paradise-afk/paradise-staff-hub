@@ -353,7 +353,25 @@ export default async function AppointmentsPage({
 
   if (!canView) redirect("/dashboard");
 
-  const [localUsers, locations] = await Promise.all([
+  const bookingsPromise: Promise<Awaited<ReturnType<typeof getCowlendarBookingsForRange>>> = hasCowlendarToken()
+    ? resolveWithin(
+        getCowlendarBookingsForRange({
+          startDate: appointmentDayBoundaryIso(appointmentRange.start),
+          endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
+          limit: resolvedSearchParams.scope === "all" ? 5000 : 1500,
+          forceRefresh,
+        }),
+        [],
+        6_000,
+      ).catch((error) => {
+        console.error("Errore nel caricamento appuntamenti:", error);
+        return [];
+      })
+    : Promise.resolve([]);
+
+  // These reads are independent. Starting Cowlendar together with the local
+  // lookups saves an entire network round-trip on every appointments load.
+  const [localUsers, locations, bookings] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
       select: { id: true, name: true, role: true, photo_url: true, mansione: true, location: { select: { name: true } } },
@@ -362,30 +380,12 @@ export default async function AppointmentsPage({
       where: { active: true },
       select: { id: true, name: true },
     }),
+    bookingsPromise,
   ]);
   const pcSalon = isPC
     ? appointmentSalonSlugFromName(locations.find((location) => location.id === pcLocationId)?.name)
     : null;
   const initialSalon = requestedSalon || pcSalon || "tutti";
-
-  let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
-
-  if (hasCowlendarToken()) {
-    try {
-      bookings = await resolveWithin(
-        getCowlendarBookingsForRange({
-          startDate: appointmentDayBoundaryIso(appointmentRange.start),
-          endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
-          limit: 5000,
-          forceRefresh,
-        }),
-        [],
-        9_000,
-      );
-    } catch (error) {
-      console.error("Errore nel caricamento appuntamenti:", error);
-    }
-  }
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
 
@@ -450,7 +450,11 @@ export default async function AppointmentsPage({
       4_000,
     ),
     prisma.setting.findMany({
-      where: { key: { startsWith: "appointment_office_note:" } },
+      where: {
+        key: {
+          in: safeBookings.map((booking) => `appointment_office_note:${booking.id}`),
+        },
+      },
       select: { key: true, value: true },
     }).catch(() => []),
   ]);

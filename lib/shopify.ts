@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
+const SHOPIFY_MISSING_RETRY_MS = 5 * 60 * 1000;
+const missingOrderRetryAfter = new Map<string, number>();
+const bulkNameLookupsInFlight = new Map<string, Promise<Map<string, string>>>();
+
 /**
  * Normalizza i riferimenti che vengono normalmente incollati da Shopify:
  * #27159, 27159, "ordine #27159" oppure l'URL dell'ordine nell'Admin.
@@ -124,7 +128,10 @@ export async function getShopifyOrderNamesBulk(orderIds: (string | number | null
     }
 
     // 2. Identify missing IDs
-    const missingIds = cleanIds.filter((id) => !resultMap.has(id));
+    const now = Date.now();
+    const missingIds = cleanIds.filter((id) =>
+      !resultMap.has(id) && (missingOrderRetryAfter.get(id) ?? 0) <= now
+    );
 
     if (missingIds.length > 0) {
       // 3. Fetch missing IDs from Shopify in chunks of 50 to avoid API limits.
@@ -135,51 +142,63 @@ export async function getShopifyOrderNamesBulk(orderIds: (string | number | null
       const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
       if (shop && token && idsToFetch.length > 0) {
-        const chunkSize = 50;
-        const chunks: string[][] = [];
-        for (let i = 0; i < idsToFetch.length; i += chunkSize) {
-          chunks.push(idsToFetch.slice(i, i + chunkSize));
+        const lookupKey = [...idsToFetch].sort().join(",");
+        let lookup = bulkNameLookupsInFlight.get(lookupKey);
+        if (!lookup) {
+          lookup = (async () => {
+            const resolved = new Map<string, string>();
+            const chunks: string[][] = [];
+            for (let i = 0; i < idsToFetch.length; i += 50) {
+              chunks.push(idsToFetch.slice(i, i + 50));
+            }
+
+            console.log(`Resolving ${idsToFetch.length} missing Shopify order names in ${chunks.length} chunks...`);
+            await Promise.all(chunks.map(async (chunk) => {
+              try {
+                const url = `https://${shop}/admin/api/2024-04/orders.json?ids=${chunk.join(",")}&fields=id,name`;
+                const res = await fetchWithTimeout(url, {
+                  headers: {
+                    "X-Shopify-Access-Token": token,
+                    "Content-Type": "application/json",
+                  },
+                }, 900);
+
+                if (!res.ok) {
+                  console.error(`Failed to fetch Shopify orders chunk: ${res.status} ${res.statusText}`);
+                  return;
+                }
+
+                const data = await res.json();
+                for (const order of data?.orders || []) {
+                  const id = String(order.id);
+                  const name = String(order.name || "").trim();
+                  if (id && name) resolved.set(id, name);
+                }
+              } catch (error) {
+                console.error("Error resolving Shopify orders chunk:", error);
+              }
+            }));
+
+            if (resolved.size > 0) {
+              await prisma.shopifyOrderCache.createMany({
+                data: [...resolved].map(([order_id, order_name]) => ({ order_id, order_name })),
+                skipDuplicates: true,
+              }).catch((error) => console.error("Prisma bulk cache insert failed:", error));
+            }
+
+            const retryAfter = Date.now() + SHOPIFY_MISSING_RETRY_MS;
+            for (const id of idsToFetch) {
+              if (resolved.has(id)) missingOrderRetryAfter.delete(id);
+              else missingOrderRetryAfter.set(id, retryAfter);
+            }
+            if (missingOrderRetryAfter.size > 2_000) missingOrderRetryAfter.clear();
+            return resolved;
+          })().finally(() => bulkNameLookupsInFlight.delete(lookupKey));
+          bulkNameLookupsInFlight.set(lookupKey, lookup);
         }
 
-        console.log(`Resolving ${idsToFetch.length} missing Shopify order names in ${chunks.length} chunks...`);
-
-        const fetchPromises = chunks.map(async (chunk) => {
-          try {
-            const url = `https://${shop}/admin/api/2024-04/orders.json?ids=${chunk.join(",")}&fields=id,name`;
-            const res = await fetchWithTimeout(url, {
-              headers: {
-                "X-Shopify-Access-Token": token,
-                "Content-Type": "application/json",
-              },
-            }, 1500);
-
-            if (res.ok) {
-              const data = await res.json();
-              const orders = data?.orders || [];
-
-              for (const order of orders) {
-                const idStr = String(order.id);
-                const orderName = order.name;
-                if (orderName) {
-                  resultMap.set(idStr, orderName);
-                  // Cache it
-                  await prisma.shopifyOrderCache.upsert({
-                    where: { order_id: idStr },
-                    update: { order_name: orderName },
-                    create: { order_id: idStr, order_name: orderName },
-                  }).catch((err) => console.error("Prisma bulk upsert failed:", err));
-                }
-              }
-            } else {
-              console.error(`Failed to fetch Shopify orders chunk: ${res.status} ${res.statusText}`);
-            }
-          } catch (e) {
-            console.error(`Error resolving Shopify orders chunk:`, e);
-          }
-        });
-
-        // Resolve concurrently
-        await Promise.all(fetchPromises);
+        const resolved = await lookup;
+        for (const [id, name] of resolved) resultMap.set(id, name);
       }
     }
   } catch (error) {
