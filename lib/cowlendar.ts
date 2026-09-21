@@ -93,6 +93,13 @@ interface CacheData<T> {
   data: T;
 }
 
+// Server components for the dashboard, tablet and appointment pages can ask
+// for the same range at the same time. Without request coalescing every caller
+// downloads and keeps its own copy (up to 5,000 bookings), causing avoidable
+// memory spikes. These entries only live until the shared request settles.
+const rangeRequestsInFlight = new Map<string, Promise<CowlendarBooking[]>>();
+let cacheCleanupInFlight: Promise<void> | null = null;
+
 async function getCache<T>(key: string): Promise<CacheData<T> | null> {
   try {
     const record = await prisma.setting.findUnique({
@@ -119,10 +126,15 @@ async function setCache<T>(key: string, data: T): Promise<void> {
       update: { value: value as any },
     });
     
-    // Clean up older caches asynchronously to avoid blocking the user request
-    cleanOldCowlendarCaches().catch((err) =>
-      console.error("Failed to clean old cowlendar caches:", err)
-    );
+    // Clean up older caches asynchronously. Coalesce cleanup as well: several
+    // ranges may finish together after a dashboard refresh.
+    if (!cacheCleanupInFlight) {
+      cacheCleanupInFlight = cleanOldCowlendarCaches()
+        .catch((err) => console.error("Failed to clean old cowlendar caches:", err))
+        .finally(() => {
+          cacheCleanupInFlight = null;
+        });
+    }
   } catch (err) {
     console.error(`Error writing cowlendar cache for key ${key}:`, err);
   }
@@ -474,6 +486,25 @@ async function fetchAndCacheCowlendarRange(
   return finalData;
 }
 
+function fetchCowlendarRangeOnce(
+  startDate: string,
+  endDate: string,
+  safeLimit: number,
+  cacheKey: string,
+) {
+  const activeRequest = rangeRequestsInFlight.get(cacheKey);
+  if (activeRequest) return activeRequest;
+
+  const request = fetchAndCacheCowlendarRange(startDate, endDate, safeLimit, cacheKey)
+    .finally(() => {
+      if (rangeRequestsInFlight.get(cacheKey) === request) {
+        rangeRequestsInFlight.delete(cacheKey);
+      }
+    });
+  rangeRequestsInFlight.set(cacheKey, request);
+  return request;
+}
+
 export async function getCowlendarBookingsForRange({
   startDate,
   endDate,
@@ -490,7 +521,7 @@ export async function getCowlendarBookingsForRange({
   
   if (forceRefresh) {
     console.log(`Cowlendar range cache bypass: forceRefresh is active for ${cacheKey}`);
-    return fetchAndCacheCowlendarRange(startDate, endDate, safeLimit, cacheKey);
+    return fetchCowlendarRangeOnce(startDate, endDate, safeLimit, cacheKey);
   }
 
   const cached = await getCache<CowlendarBooking[]>(cacheKey);
@@ -503,14 +534,14 @@ export async function getCowlendarBookingsForRange({
     } else {
       // Stale cache: return immediately and update in background
       console.log(`Cowlendar range cache stale for ${cacheKey}. Revalidating in background...`);
-      fetchAndCacheCowlendarRange(startDate, endDate, safeLimit, cacheKey).catch((err) => {
+      fetchCowlendarRangeOnce(startDate, endDate, safeLimit, cacheKey).catch((err) => {
         console.error(`Cowlendar background revalidation failed for ${cacheKey}:`, err);
       });
       return cached.data;
     }
   }
 
-  return fetchAndCacheCowlendarRange(startDate, endDate, safeLimit, cacheKey);
+  return fetchCowlendarRangeOnce(startDate, endDate, safeLimit, cacheKey);
 }
 
 export function hasCowlendarToken() {
