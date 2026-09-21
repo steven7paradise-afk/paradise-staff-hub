@@ -3544,11 +3544,13 @@ export function AppointmentsBrowser({
   }, [initialBookings, paradiseNotes, shopifyNotesByBooking, teamByBooking]);
 
   const filteredBookings = useMemo(() => {
-    const statusScoped = showCanceled
-      ? (initialBookings || []).filter((booking) => booking.isCanceled)
-      : filterStatus === "all"
-        ? (initialBookings || [])
-        : (initialBookings || []).filter((booking) => !booking.isCanceled);
+    const statusScoped = normalizedSearch
+      ? (initialBookings || [])
+      : showCanceled
+        ? (initialBookings || []).filter((booking) => booking.isCanceled)
+        : filterStatus === "all"
+          ? (initialBookings || [])
+          : (initialBookings || []).filter((booking) => !booking.isCanceled);
     const base =
       salon === "tutti" || normalizedSearch
         ? statusScoped
@@ -3605,7 +3607,7 @@ export function AppointmentsBrowser({
           });
 
     const appointmentStatusScoped =
-      filterStatus === "all"
+      normalizedSearch || filterStatus === "all"
         ? paymentScoped
         : paymentScoped.filter((booking) => {
             const status = getBookingStatus(booking);
@@ -6853,6 +6855,12 @@ export function AppointmentsBrowser({
                 <div className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
                   {filteredBookings.slice(0, 30).map((booking) => {
                     const status = getBookingStatus(booking);
+                    const selectableStatus =
+                      status === "ARRIVATO_IN_RITARDO"
+                        ? "IN_ATTESA"
+                        : status === "PAGATO"
+                          ? "PRENOTATO"
+                          : status;
                     const officeNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
                     const notePreviews = getBookingNotePreviews(
                       booking,
@@ -6861,11 +6869,9 @@ export function AppointmentsBrowser({
                       shopifyNotesByBooking[booking.id],
                     );
                     return (
-                      <button
+                      <article
                         key={`instant-${booking.id}`}
-                        type="button"
-                        onClick={() => void openClientControlForBooking(booking)}
-                        className="rounded-2xl border border-[#E8DCE2] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#D86B9B] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F7D9E7]"
+                        className="rounded-2xl border border-[#E8DCE2] bg-white p-4 text-left shadow-sm transition hover:border-[#D86B9B] hover:shadow-md"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -6885,7 +6891,61 @@ export function AppointmentsBrowser({
                           {booking.customerPhone ? <span>{booking.customerPhone}</span> : null}
                         </div>
                         <AppointmentNotePreviews notes={notePreviews} />
-                      </button>
+                        <div className="mt-4 flex flex-col gap-3 border-t border-[#F0E5EA] pt-3 sm:flex-row sm:items-end sm:justify-between">
+                          <label className="min-w-0 flex-1">
+                            <span className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.15em] text-[#806774]">
+                              Stato cliente
+                            </span>
+                            <span className="relative block">
+                              <select
+                                aria-label={`Cambia stato di ${booking.customerName}`}
+                                value={selectableStatus}
+                                disabled={booking.isCanceled || savingStatusId === booking.id}
+                                onChange={(event) =>
+                                  handleStatusChange(
+                                    booking.id,
+                                    event.target.value as AppointmentStatusValue,
+                                  )
+                                }
+                                className={`h-11 w-full appearance-none rounded-xl border px-3 pr-10 text-xs font-black outline-none transition focus:ring-4 focus:ring-[#F7D9E7] disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  booking.isCanceled
+                                    ? "border-red-100 bg-red-50 text-red-700"
+                                    : appointmentStatusClasses[status]
+                                }`}
+                              >
+                                {booking.isCanceled ? (
+                                  <option value={selectableStatus}>Annullato</option>
+                                ) : (
+                                  appointmentStatusOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                              {savingStatusId === booking.id ? (
+                                <Loader2
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin"
+                                />
+                              ) : (
+                                <ChevronDown
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2"
+                                />
+                              )}
+                            </span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => void openClientControlForBooking(booking)}
+                            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#211A1E] px-4 text-xs font-black text-white transition hover:bg-[#A93469] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F7D9E7]"
+                          >
+                            Apri scheda
+                            <ChevronRight aria-hidden="true" className="size-4" />
+                          </button>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
