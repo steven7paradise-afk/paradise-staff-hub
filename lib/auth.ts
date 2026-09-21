@@ -13,6 +13,7 @@ import { consumePasskeyGrant } from "@/lib/passkey";
 function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/login" || pathname === "/login/") return true;
   if (pathname.startsWith("/api/auth/")) return true;
+  if (pathname.startsWith("/api/mobile/")) return true;
   if (pathname === "/api/health") return true;
   if (pathname === "/appointments/register" || pathname.startsWith("/appointments/register/")) return true;
   if (pathname === "/tablet-clock" || pathname.startsWith("/tablet-clock/")) return true;

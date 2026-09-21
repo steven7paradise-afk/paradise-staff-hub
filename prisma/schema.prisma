@@ -79,6 +79,7 @@ model User {
   name                  String
   email                 String    @unique
   password_hash         String
+  must_change_password  Boolean   @default(false)
   role                  UserRole  @default(DIPENDENTE)
   sede_id               String?
   pin_hash              String?
@@ -128,6 +129,7 @@ model User {
   documents                 Document[]                 @relation("UserDocuments")
   uploadedDocuments         Document[]                 @relation("DocumentUploader")
   notifications             Notification[]
+  mobile_sessions           MobileSession[]
   sent_internal_emails      InternalEmail[]            @relation("InternalEmailSender")
   received_internal_emails  InternalEmailRecipient[]   @relation("InternalEmailRecipientUser")
   schedule_entries          ScheduleEntry[]
@@ -161,6 +163,22 @@ model User {
   barcode_collections       BarcodeLabelCollection[]   @relation("BarcodeCollectionCreator")
 
   @@map("users")
+}
+
+model MobileSession {
+  id           String    @id @default(cuid())
+  user_id      String
+  token_hash   String    @unique
+  device_name  String?
+  created_at   DateTime  @default(now())
+  expires_at   DateTime
+  last_used_at DateTime  @default(now())
+  revoked_at   DateTime?
+  user         User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([expires_at])
+  @@map("mobile_sessions")
 }
 
 model WebAuthnCredential {

@@ -19,6 +19,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Password attuale non corretta." }, { status: 400 });
   }
 
-  await prisma.user.update({ where: { id: session.user.id }, data: { password_hash: await bcrypt.hash(newPassword, 12) } });
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { password_hash: await bcrypt.hash(newPassword, 12), must_change_password: false },
+  });
   return NextResponse.json({ success: true });
 }
