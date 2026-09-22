@@ -29,3 +29,13 @@ export function normalizeAppointmentSalonSlug(value?: string | string[] | null):
 export function appointmentSalonUrl(slug?: AppointmentSalonSlug | null) {
   return slug ? `/appointments/${slug}` : "/appointments";
 }
+
+export function isSameAppointmentDestination(currentHref: string, destination: string) {
+  try {
+    const current = new URL(currentHref, "https://staff-paradise.local");
+    const next = new URL(destination, current.origin);
+    return current.pathname === next.pathname && current.search === next.search;
+  } catch {
+    return false;
+  }
+}

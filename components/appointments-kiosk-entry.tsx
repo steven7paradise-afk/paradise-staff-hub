@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, X } from "lucide-react";
-import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import {
+  appointmentSalonUrl,
+  isSameAppointmentDestination,
+  type AppointmentSalonSlug,
+} from "@/lib/appointment-salon-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { RemoteControlBridge } from "@/components/remote-control-bridge";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
@@ -47,6 +51,13 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
   const [pinPrefix, setPinPrefix] = useState("");
   const [now, setNow] = useState(Date.now());
+  const navigationFallbackRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (navigationFallbackRef.current !== null) {
+      window.clearTimeout(navigationFallbackRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -125,21 +136,48 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
     }
     setSelectingWorkerId(worker.id);
     setError("");
+    const controller = new AbortController();
+    const requestTimeout = window.setTimeout(() => controller.abort(), 8_000);
     try {
       const response = await fetch("/api/appointments/pc/select-worker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workerId: worker.id, salone, pinPrefix: cleanPinPrefix }),
+        signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
       const destination = data?.appointmentUrl || appointmentSalonUrl(salone);
       // Keep the root layout mounted so an active screen-share stream survives
       // the transition from profile selection to the appointments board.
-      router.replace(destination);
+      if (isSameAppointmentDestination(window.location.href, destination)) {
+        // The worker cookie changed even though the URL did not. A normal
+        // replace would be ignored, so explicitly request fresh server data.
+        router.refresh();
+      } else {
+        router.replace(destination);
+      }
+
+      // If an interrupted RSC navigation ever remains pending, recover
+      // automatically instead of asking the salon to reload the page.
+      navigationFallbackRef.current = window.setTimeout(() => {
+        if (isSameAppointmentDestination(window.location.href, destination)) {
+          window.location.reload();
+          return;
+        }
+        window.location.replace(destination);
+      }, 8_000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
+      setError(
+        err instanceof DOMException && err.name === "AbortError"
+          ? "Accesso troppo lento. Riprova: non serve ricaricare la pagina."
+          : err instanceof Error
+            ? err.message
+            : "Impossibile accedere con questo profilo.",
+      );
       setSelectingWorkerId("");
+    } finally {
+      window.clearTimeout(requestTimeout);
     }
   }
 

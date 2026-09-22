@@ -1,7 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import AppointmentsPage from "../page";
-import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 import { prisma } from "@/lib/prisma";
@@ -50,6 +50,9 @@ export default async function SalonAppointmentsPage({
     isAlwaysActiveAppointmentStaff(selectedWorkerCandidate.name, selectedWorkerCandidate.id)
   ) ? selectedWorkerCandidate : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
+  const requestedWorker = typeof resolvedSearchParams.worker === "string"
+    ? resolvedSearchParams.worker.trim()
+    : "";
 
   if (isAdministratorSession && !remoteTarget) {
     return await AppointmentsPage({
@@ -77,6 +80,10 @@ export default async function SalonAppointmentsPage({
 
   if (isAdminRemote && forceProfileChoice) {
     return <AppointmentsKioskEntry salone={salone} pcName="Controllo remoto Admin" remoteTarget={remoteTarget} />;
+  }
+
+  if (pcAuth && !selectedWorkerRecord && !forceProfileChoice && requestedWorker && !remoteTarget) {
+    redirect(appointmentSalonUrl(salone));
   }
 
   if (!selectedWorker || !selectedWorkerRecord || forceProfileChoice) {
