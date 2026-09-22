@@ -96,9 +96,9 @@ function eventText(event: ShopifyOrderDetail["events"][number]) {
 
 function DetailCard({ title, icon, children, className }: { title: string; icon: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-2xl border border-black/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,.05)]", className)}>
-      <div className="flex items-center gap-2 border-b border-black/[0.07] px-5 py-4 text-[#202223]">{icon}<h3 className="font-bold">{title}</h3></div>
-      <div className="p-5">{children}</div>
+    <section className={cn("rounded-2xl border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,.05)]", className)}>
+      <div className="flex items-center gap-2.5 border-b border-black/[0.07] px-6 py-5 text-[#202223]">{icon}<h3 className="font-bold">{title}</h3></div>
+      <div className="p-6">{children}</div>
     </section>
   );
 }
@@ -347,7 +347,7 @@ export function ShopifyOrdersConsole({ initialData, initialError }: { initialDat
       {selected ? (
         <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#f1f1f1]" role="dialog" aria-modal="true" aria-label={`Dettaglio ordine ${selected.name}`}>
           <header className="shrink-0 border-b border-black/10 bg-white shadow-sm">
-            <div className="mx-auto flex min-h-[72px] w-full max-w-[1540px] items-center justify-between gap-4 px-4 sm:px-6">
+            <div className="mx-auto flex min-h-[78px] w-full max-w-[1680px] items-center justify-between gap-5 px-5 sm:px-8">
               <div className="flex min-w-0 items-center gap-3">
                 <button type="button" onClick={closeDetail} className="grid size-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-white transition hover:bg-[#f6f6f7]" aria-label="Torna agli ordini"><ArrowLeft className="size-5" /></button>
                 <div className="min-w-0">
@@ -363,22 +363,22 @@ export function ShopifyOrdersConsole({ initialData, initialError }: { initialDat
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <main className="mx-auto w-full max-w-[1540px] px-3 py-4 sm:px-6 sm:py-6">
+            <main className="mx-auto w-full max-w-[1680px] px-5 py-6 sm:px-8 sm:py-8">
               {detailLoading ? (
                 <div className="grid min-h-[60vh] place-items-center"><div className="text-center"><RefreshCw className="mx-auto size-8 animate-spin text-[#008060]" /><p className="mt-3 font-semibold text-[#616161]">Carico tutte le informazioni dell’ordine…</p></div></div>
               ) : detailError ? (
                 <div className="mx-auto mt-12 max-w-lg rounded-2xl border border-[#ffc4c4] bg-white p-6 text-center shadow-sm"><p className="font-bold text-[#8e1f0b]">Dettaglio non disponibile</p><p className="mt-2 text-sm text-[#616161]">{detailError}</p><button type="button" onClick={() => openOrder(selected)} className="mt-5 h-10 rounded-xl bg-[#303030] px-5 text-sm font-bold text-white">Riprova</button></div>
               ) : detail ? (
-                <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
-                  <div className="space-y-5">
+                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_410px]">
+                  <div className="space-y-6">
                     <DetailCard title={detail.fulfillmentStatus === "FULFILLED" ? "Evaso" : "Evasione"} icon={<Truck className="size-5 text-[#008060]" />}>
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black/[0.08] bg-[#fafafa] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-black/[0.08] bg-[#fafafa] p-5">
                         <div><p className="font-bold">{detail.fulfillments[0]?.name || detail.name}</p><p className="mt-1 text-sm text-[#616161]">{detail.fulfillments[0]?.createdAt ? dateLabel(detail.fulfillments[0].createdAt) : "In attesa di evasione"}</p></div>
                         <div className="text-left sm:text-right"><StatusPill kind="fulfillment" value={detail.fulfillmentStatus} /><p className="mt-2 text-sm text-[#616161]">{detail.fulfillments[0]?.locationName || detail.locationName || (detail.sourceName.toLowerCase() === "pos" ? "In negozio" : "Sede non indicata")}</p></div>
                       </div>
-                      <div className="mt-4 divide-y divide-black/[0.07] rounded-xl border border-black/[0.08]">
+                      <div className="mt-5 divide-y divide-black/[0.07] rounded-xl border border-black/[0.08]">
                         {detail.lineItems.map((item) => (
-                          <div key={item.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                          <div key={item.id} className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                             <div><p className="font-bold text-[#202223]">{item.title}</p>{item.variantTitle ? <p className="mt-1 text-sm text-[#616161]">{item.variantTitle}</p> : null}{item.sku ? <p className="mt-1 text-xs text-[#8c9196]">SKU {item.sku}</p> : null}{item.staff.length ? <p className="mt-1 text-xs font-semibold text-[#008060]">Staff: {item.staff.join(", ")}</p> : null}{item.properties.length ? <div className="mt-2 flex flex-wrap gap-1.5">{item.properties.map((property) => <span key={`${property.name}-${property.value}`} className="rounded-lg bg-[#f1f1f1] px-2 py-1 text-xs">{property.name}: {property.value}</span>)}</div> : null}</div>
                             <p className="whitespace-nowrap font-semibold">{money(item.unitPrice, detail.currency)} <span className="text-[#8c9196]">× {item.quantity}</span> <span className="ml-4 text-[#202223]">{money(item.lineTotal, detail.currency)}</span></p>
                           </div>
@@ -404,7 +404,7 @@ export function ShopifyOrdersConsole({ initialData, initialError }: { initialDat
                     </DetailCard>
                   </div>
 
-                  <aside className="space-y-5 xl:sticky xl:top-0">
+                  <aside className="space-y-6 xl:sticky xl:top-0">
                     <DetailCard title="Riepilogo" icon={<CircleDollarSign className="size-5 text-[#008060]" />}>
                       <p className="text-3xl font-bold tracking-[-0.04em] text-[#202223]">{money(detail.total, detail.currency)}</p><div className="mt-4 flex flex-wrap gap-2"><StatusPill kind="financial" value={detail.financialStatus} /><StatusPill kind="fulfillment" value={detail.fulfillmentStatus} /></div>
                       <dl className="mt-5 space-y-3 border-t border-black/10 pt-4 text-sm"><div className="flex justify-between gap-3"><dt className="text-[#6d7175]">Canale</dt><dd className="font-semibold">{sourceLabel(detail.sourceName)}</dd></div>{detail.confirmationNumber ? <div className="flex justify-between gap-3"><dt className="text-[#6d7175]">Conferma</dt><dd className="font-semibold">#{detail.confirmationNumber}</dd></div> : null}<div className="flex justify-between gap-3"><dt className="text-[#6d7175]">Ordine</dt><dd className="font-semibold">{detail.name}</dd></div></dl>
