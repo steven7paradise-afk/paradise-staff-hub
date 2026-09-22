@@ -42,6 +42,7 @@ export function isPcCassaProxyAllowedPath(pathname: string) {
     pathname.startsWith("/service-forms/");
 
   const isOperationalServiceFormsApi =
+    pathname === "/api/service-forms" ||
     pathname === "/api/service-forms/submit" ||
     pathname.startsWith("/api/service-forms/responses/");
   const isCashClosingReferenceApi =
