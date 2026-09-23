@@ -6,6 +6,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { RefundRowActions } from "@/components/refund-row-actions";
+import { refundStates } from "@/lib/refund-status";
 import {
   CircleDollarSign,
   Undo2,
@@ -97,7 +98,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
 
   const refundCount = responses.length;
   const refundTotal = responses.reduce((sum, res) => {
-    if (res.status !== "REFUNDED") return sum;
+    if (refundStates(res.status, res.internal_notes).payment !== "REFUNDED") return sum;
     const val = parseFloat(String(answer(res, "refund_amount") || "0").replace(",", "."));
     return sum + (isNaN(val) ? 0 : val);
   }, 0);
@@ -201,7 +202,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
                     <th className="px-5 py-4">Motivazione / Note Staff</th>
                     <th className="px-5 py-4">Canale / Metodo</th>
                     <th className="px-5 py-4 text-right">Importo</th>
-                    <th className="px-5 py-4">Stato / Responsabile / Note</th>
+                    <th className="px-5 py-4">Approvazione / Pagamento / Responsabili</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/5 dark:divide-white/5 bg-white dark:bg-[#121212]">

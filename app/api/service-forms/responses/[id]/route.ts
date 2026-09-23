@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getOperationalUser } from "@/lib/operational-session";
 import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
-import { canChangeRefundStatus } from "@/lib/refund-status";
+import { refundStates, validRefundStates } from "@/lib/refund-status";
 import { canAccessForUser } from "@/lib/roles";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -67,12 +67,38 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       if (!accessUser || !await canAccessForUser(prisma, "/refunds", accessUser)) {
         return NextResponse.json({ error: "Non hai i permessi per gestire i rimborsi." }, { status: 403 });
       }
-      if (status !== undefined && (typeof status !== "string" || !canChangeRefundStatus(response.status, status))) {
+      const current = refundStates(response.status, response.internal_notes);
+      const approval = status === undefined ? current.approval : status;
+      const payment = body.paymentStatus === undefined ? current.payment : body.paymentStatus;
+      if (typeof approval !== "string" || typeof payment !== "string" || !validRefundStates(approval, payment)) {
         return NextResponse.json({ error: "Passaggio non consentito. Approva la richiesta prima di lavorarla o registrarla come rimborsata." }, { status: 400 });
       }
-      if (body.expectedStatus !== undefined && body.expectedStatus !== response.status) {
+      if ((body.expectedStatus !== undefined && body.expectedStatus !== current.approval) ||
+          (body.expectedPaymentStatus !== undefined && body.expectedPaymentStatus !== current.payment)) {
         return NextResponse.json({ error: "Lo stato è cambiato. Ricarica la pagina prima di riprovare." }, { status: 409 });
       }
+      if (current.payment === "REFUNDED" && (approval !== current.approval || payment !== current.payment)) {
+        return NextResponse.json({ error: "Un rimborso registrato come eseguito non può essere riaperto da questo pannello." }, { status: 400 });
+      }
+      const metadata = response.internal_notes && typeof response.internal_notes === "object" && !Array.isArray(response.internal_notes)
+        ? { ...response.internal_notes } : { text: typeof response.internal_notes === "string" ? response.internal_notes : "" };
+      if (internalNotes !== undefined && (typeof internalNotes?.text !== "string" || internalNotes.text.length > 10000)) {
+        return NextResponse.json({ error: "Nota non valida (massimo 10.000 caratteri)." }, { status: 400 });
+      }
+      const log = Array.isArray(response.activity_log) ? [...response.activity_log] : [];
+      const stamp = { by: user.name || "Staff", byId: user.id, at: new Date().toISOString() };
+      if (approval !== current.approval) log.push({ type: "STATUS_CHANGE", from: current.approval, to: approval, ...stamp });
+      if (payment !== current.payment) log.push({ type: "REFUND_PAYMENT_CHANGE", from: current.payment, to: payment, ...stamp });
+      const result = await prisma.serviceFormResponse.updateMany({
+        where: { id, updated_at: response.updated_at },
+        data: {
+          status: approval,
+          internal_notes: { ...metadata, ...(internalNotes === undefined ? {} : { text: internalNotes.text }), refundPaymentStatus: payment },
+          activity_log: log,
+        },
+      });
+      if (!result.count) return NextResponse.json({ error: "La pratica è stata aggiornata da un'altra persona. Ricarica e riprova." }, { status: 409 });
+      return NextResponse.json(await prisma.serviceFormResponse.findUnique({ where: { id } }));
     }
 
     const dataToUpdate: any = {};
@@ -144,18 +170,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         }
       }
       dataToUpdate.answers = answers; // JSON object of answers
-    }
-
-    if (isRefund) {
-      // Optimistic concurrency preserves the approval history when two people act together.
-      const saved = await prisma.serviceFormResponse.updateMany({
-        where: { id, updated_at: response.updated_at },
-        data: dataToUpdate,
-      });
-      if (!saved.count) return NextResponse.json({ error: "La pratica è stata aggiornata da un'altra persona. Ricarica e riprova." }, { status: 409 });
-      const savedRefund = await prisma.serviceFormResponse.findUnique({ where: { id } });
-      // These are administrative records: never trigger a Shopify payment or order-status sync.
-      return NextResponse.json(savedRefund);
     }
 
     const updatedResponse = await prisma.serviceFormResponse.update({

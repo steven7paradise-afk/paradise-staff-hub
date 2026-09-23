@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { jsPDF } from "jspdf";
-import { REFUND_STATUS_LABELS } from "@/lib/refund-status";
+import { refundStates, REFUND_STATUS_LABELS, REFUND_PAYMENT_LABELS } from "@/lib/refund-status";
 
 type DownloadRefundPdfButtonProps = {
   refund: {
@@ -23,7 +23,7 @@ function parseNoteText(notes: any): string {
   if (!notes) return "";
   if (typeof notes === "string") return notes;
   if (typeof notes === "object") {
-    return notes.text || notes.note || JSON.stringify(notes);
+    return notes.text || notes.note || "";
   }
   return String(notes);
 }
@@ -48,7 +48,8 @@ export function DownloadRefundPdfButton({ refund }: DownloadRefundPdfButtonProps
       const notes = refund.answers.refund_notes || "";
       const internalNotes = parseNoteText(refund.internal_notes);
       
-      const statusLabel = (REFUND_STATUS_LABELS[refund.status] || refund.status).toUpperCase();
+      const states = refundStates(refund.status, refund.internal_notes);
+      const statusLabel = (REFUND_STATUS_LABELS[states.approval] || states.approval).toUpperCase();
 
       const dateStr = new Date(refund.created_at).toLocaleDateString("it-IT", {
         day: "2-digit",
@@ -165,13 +166,14 @@ export function DownloadRefundPdfButton({ refund }: DownloadRefundPdfButtonProps
 
       doc.setFillColor(254, 252, 232); // Light yellow box
       doc.setDrawColor(254, 240, 138);
-      doc.rect(15, currentY, 180, 25, "DF");
+      doc.rect(15, currentY, 180, 32, "DF");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
-      doc.text("Stato Pratica:", 20, currentY + 7);
-      doc.text("Note Interne:", 20, currentY + 15);
+      doc.text("Approvazione:", 20, currentY + 7);
+      doc.text("Pagamento:", 20, currentY + 14);
+      doc.text("Note Interne:", 20, currentY + 22);
 
       doc.setFont("helvetica", "bold");
       if (refund.status === "APPROVED") {
@@ -182,11 +184,12 @@ export function DownloadRefundPdfButton({ refund }: DownloadRefundPdfButtonProps
         doc.setTextColor(245, 158, 11); // Amber 500
       }
       doc.text(statusLabel, 50, currentY + 7);
+      doc.text(REFUND_PAYMENT_LABELS[states.payment], 50, currentY + 14);
 
       doc.setFont("helvetica", "normal");
       doc.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
       const wrappedIntNotes = doc.splitTextToSize(internalNotes || "Nessuna nota amministrativa inserita.", 130);
-      doc.text(wrappedIntNotes, 50, currentY + 15);
+      doc.text(wrappedIntNotes, 50, currentY + 22);
 
       // Footer disclaimer
       doc.setTextColor(148, 163, 184); // Slate 400

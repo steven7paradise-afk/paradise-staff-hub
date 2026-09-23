@@ -1,25 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canChangeRefundStatus, refundStatusHistory, REFUND_STATUS_LABELS } from "../lib/refund-status";
+import { refundStates, validRefundStates, refundStatusHistory } from "../lib/refund-status";
 
 test("refunds require approval before processing or completion", () => {
-  assert.equal(canChangeRefundStatus("NEW", "REFUNDED"), false);
-  assert.equal(canChangeRefundStatus("REJECTED", "IN_PROGRESS"), false);
-  assert.equal(canChangeRefundStatus("NEW", "APPROVED"), true);
-  assert.equal(canChangeRefundStatus("APPROVED", "IN_PROGRESS"), true);
-  assert.equal(canChangeRefundStatus("IN_PROGRESS", "REFUNDED"), true);
-  assert.equal(canChangeRefundStatus("APPROVED", "REFUNDED"), true);
+  assert.equal(validRefundStates("NEW", "REFUNDED"), false);
+  assert.equal(validRefundStates("REJECTED", "IN_PROGRESS"), false);
+  assert.equal(validRefundStates("APPROVED", "PENDING"), true);
+  assert.equal(validRefundStates("APPROVED", "IN_PROGRESS"), true);
+  assert.equal(validRefundStates("APPROVED", "REFUNDED"), true);
 });
-test("completed refunds cannot silently reopen and unknown states are rejected", () => {
-  assert.equal(canChangeRefundStatus("REFUNDED", "NEW"), false);
-  assert.equal(canChangeRefundStatus("NEW", "PAID"), false);
-  assert.equal(canChangeRefundStatus("NEW", "toString"), false);
-  assert.equal(REFUND_STATUS_LABELS.REFUNDED, "Rimborsato");
+test("legacy combined states retain both meanings", () => {
+  assert.deepEqual(refundStates("REFUNDED", null), { approval: "APPROVED", payment: "REFUNDED" });
+  assert.deepEqual(refundStates("IN_PROGRESS", null), { approval: "APPROVED", payment: "IN_PROGRESS" });
+  assert.deepEqual(refundStates("APPROVED", { text: "già rimborsato" }), { approval: "APPROVED", payment: "PENDING" });
+  assert.deepEqual(refundStates("APPROVED", { refundPaymentStatus: "REFUNDED" }), { approval: "APPROVED", payment: "REFUNDED" });
+  assert.equal(validRefundStates("APPROVED", "toString"), false);
 });
 test("historical approval identity is preserved separately from completion", () => {
   const history = refundStatusHistory([
     { type: "STATUS_CHANGE", to: "APPROVED", by: "Anna", at: "2026-09-23T10:00:00Z" },
-    { type: "STATUS_CHANGE", to: "REFUNDED", by: "Laura", at: "2026-09-23T11:00:00Z" },
+    { type: "REFUND_PAYMENT_CHANGE", to: "REFUNDED", by: "Laura", at: "2026-09-23T11:00:00Z" },
     { type: "STATUS_CHANGE", to: "APPROVED", by: "Invalid", at: "invalid" },
     null,
   ]);

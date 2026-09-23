@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Loader2, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { canChangeRefundStatus, refundStatusHistory, REFUND_STATUS_LABELS } from "@/lib/refund-status";
+import { refundStates, validRefundStates, refundStatusHistory, REFUND_STATUS_LABELS, REFUND_PAYMENT_LABELS } from "@/lib/refund-status";
 import { cn } from "@/lib/utils";
 import { DownloadRefundPdfButton } from "@/components/download-refund-pdf-button";
 
@@ -37,14 +37,15 @@ function parseNoteText(notes: any): string {
   if (!notes) return "";
   if (typeof notes === "string") return notes;
   if (typeof notes === "object") {
-    return notes.text || notes.note || JSON.stringify(notes);
+    return notes.text || notes.note || "";
   }
   return String(notes);
 }
 
 export function RefundRowActions({ responseId, initialStatus, initialNotes, initialActivityLog, refund }: RefundRowActionsProps) {
   const router = useRouter();
-  const [status, setStatus] = useState(initialStatus);
+  const [status, setStatus] = useState(() => refundStates(initialStatus, initialNotes).approval);
+  const [paymentStatus, setPaymentStatus] = useState(() => refundStates(initialStatus, initialNotes).payment);
   const [history, setHistory] = useState(() => refundStatusHistory(initialActivityLog));
   const [error, setError] = useState("");
   const [noteText, setNoteText] = useState(() => parseNoteText(initialNotes));
@@ -52,7 +53,7 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes, init
   const [updatingNotes, setUpdatingNotes] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const handleStatusChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleStatusChange = async (e: React.ChangeEvent<HTMLSelectElement>, field: "status" | "paymentStatus" = "status") => {
     const newStatus = e.target.value;
     if (newStatus === "REFUNDED" && !window.confirm("Confermi che il rimborso è già stato eseguito? Questa azione registra il rimborso, ma non trasferisce denaro.")) return;
     setUpdatingStatus(true);
@@ -61,11 +62,13 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes, init
       const res = await fetch(`/api/service-forms/responses/${responseId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, expectedStatus: status }),
+        body: JSON.stringify({ [field]: newStatus, expectedStatus: status, expectedPaymentStatus: paymentStatus }),
       });
       const saved = await res.json();
       if (!res.ok) throw new Error(saved.error || "Errore durante l'aggiornamento");
-      setStatus(saved.status);
+      const states = refundStates(saved.status, saved.internal_notes);
+      setStatus(states.approval);
+      setPaymentStatus(states.payment);
       setHistory(refundStatusHistory(saved.activity_log));
       router.refresh();
     } catch (err) {
@@ -101,21 +104,22 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes, init
   const currentConfig = REFUND_STATUSES.find(s => s.value === status) || REFUND_STATUSES[0];
   const approvedBy = [...history].reverse().find((event) => event.to === "APPROVED");
   const latest = history.at(-1);
+  const paymentBy = [...history].reverse().find(event => event.type === "REFUND_PAYMENT_CHANGE" || ["IN_PROGRESS", "REFUNDED"].includes(event.to));
   const dateLabel = (at: string) => new Date(at).toLocaleString("it-IT", { timeZone: "Europe/Rome", dateStyle: "short", timeStyle: "short" });
 
   return (
     <div className="flex flex-col gap-3 min-w-[260px] max-w-sm">
       {/* Status Selector */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-black uppercase tracking-wider text-black/45 dark:text-white/45">Stato:</span>
+        <span className="text-[10px] font-black uppercase tracking-wider text-black/60 dark:text-white/60">Approvazione:</span>
         <div className="relative inline-flex items-center gap-1.5">
           {updatingStatus && (
             <Loader2 className="size-3.5 animate-spin text-cyan-600 dark:text-cyan-400" />
           )}
           <select
-            aria-label="Stato della richiesta di rimborso"
+            aria-label="Approvazione della richiesta"
             value={status}
-            onChange={handleStatusChange}
+            onChange={(event) => handleStatusChange(event)}
             disabled={updatingStatus || updatingNotes}
             className={cn(
               "appearance-none rounded-full px-3 py-1 text-xs font-black border transition cursor-pointer outline-none pr-8 relative",
@@ -130,7 +134,7 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes, init
           >
             {!Object.hasOwn(REFUND_STATUS_LABELS, status) && <option value={status}>Stato precedente: {status}</option>}
             {Object.entries(REFUND_STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value} disabled={!canChangeRefundStatus(status, value)} className="bg-white dark:bg-[#121212] text-black dark:text-white">
+              <option key={value} value={value} disabled={!validRefundStates(value, paymentStatus)} className="bg-white dark:bg-[#121212] text-black dark:text-white">
                 {label}
               </option>
             ))}
@@ -138,9 +142,19 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes, init
         </div>
       </div>
 
-      <p className="text-xs text-black/60 dark:text-white/60">Lo stato registra il rimborso; non esegue pagamenti.</p>
+      <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-black/70 dark:text-white/70">
+        Stato del rimborso:
+        <select aria-label="Stato del pagamento del rimborso" value={paymentStatus}
+          onChange={(event) => handleStatusChange(event, "paymentStatus")}
+          disabled={updatingStatus || updatingNotes || status !== "APPROVED" || paymentStatus === "REFUNDED"}
+          className="min-h-9 rounded-lg border border-black/20 bg-white px-2 text-black disabled:opacity-60 dark:border-white/20 dark:bg-neutral-900 dark:text-white">
+          {Object.entries(REFUND_PAYMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <p className="text-xs text-black/60 dark:text-white/60">{status !== "APPROVED" ? "Il pagamento si abilita dopo l’approvazione. " : ""}Registra il rimborso, senza trasferire denaro.</p>
       <div className="space-y-1 text-xs text-black/70 dark:text-white/70">
         <p><strong>Approvato da:</strong> {approvedBy ? `${approvedBy.by} · ${dateLabel(approvedBy.at)}` : "Non registrato"}</p>
+        <p><strong>Pagamento aggiornato da:</strong> {paymentBy ? `${paymentBy.by} · ${dateLabel(paymentBy.at)}` : "Non registrato"}</p>
         <p><strong>Ultimo aggiornamento:</strong> {latest ? `${latest.by} · ${dateLabel(latest.at)}` : "Non registrato"}</p>
       </div>
       {error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{error}</p>}
@@ -188,7 +202,7 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes, init
           refund={{
             ...refund,
             status,
-            internal_notes: { text: noteText }
+            internal_notes: { text: noteText, refundPaymentStatus: paymentStatus }
           }} 
         />
       </div>
