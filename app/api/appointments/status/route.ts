@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { saveAppointmentChange } from "@/lib/appointment-realtime";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
@@ -144,11 +145,11 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    await prisma.setting.upsert({
+    await saveAppointmentChange((tx) => tx.setting.upsert({
       where: { key: SETTING_KEY },
       update: { value: updatedMap },
       create: { key: SETTING_KEY, value: updatedMap },
-    });
+    }));
 
     const previousLabel = previousStatus && allowedStatuses.has(previousStatus)
       ? statusLabels[previousStatus as CowlendarAppointmentStatus]

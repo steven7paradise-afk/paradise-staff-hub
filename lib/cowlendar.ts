@@ -461,7 +461,7 @@ async function fetchAndCacheCowlendarRange(
       continue;
     } catch (error) {
       if (error instanceof Error && error.message === "Cowlendar 400") {
-        const fallbackBookings = await getCowlendarBookings(safeLimit);
+        const fallbackBookings = await getCowlendarBookings(safeLimit, true);
         const rangeStartMs = new Date(startDate).getTime();
         const rangeEndMs = new Date(endDate).getTime();
 
@@ -521,6 +521,9 @@ export async function getCowlendarBookingsForRange({
   
   if (forceRefresh) {
     console.log(`Cowlendar range cache bypass: forceRefresh is active for ${cacheKey}`);
+    // A webhook may arrive while an older snapshot is still being fetched.
+    // Do not acknowledge that event with a pre-event request.
+    await rangeRequestsInFlight.get(cacheKey)?.catch(() => undefined);
     return fetchCowlendarRangeOnce(startDate, endDate, safeLimit, cacheKey);
   }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { saveAppointmentChange } from "@/lib/appointment-realtime";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { appendShopifyOrderNote } from "@/lib/shopify";
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
       orderName: orderName || null,
     };
 
-    await prisma.setting.upsert({
+    await saveAppointmentChange((tx) => tx.setting.upsert({
       where: { key: SETTING_KEY },
       update: {
         value: {
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest) {
           [bookingId]: nextOverride,
         },
       },
-    });
+    }));
 
     if (sourceTeammates.length === 1 && teammates.length === 1 && !isGenericStaffPlaceholder(sourceTeammates[0].name)) {
       const source = sourceTeammates[0];
