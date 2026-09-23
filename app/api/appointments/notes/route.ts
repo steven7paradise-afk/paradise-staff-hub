@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
 import { prisma } from "@/lib/prisma";
 import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
+import { saveAppointmentChange } from "@/lib/appointment-realtime";
 
 const NOTE_KEY_PREFIX = "appointment_office_note:";
 
@@ -40,11 +41,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "La nota può contenere al massimo 1000 caratteri" }, { status: 400 });
     }
 
-    await prisma.setting.upsert({
+    await saveAppointmentChange((tx) => tx.setting.upsert({
       where: { key: `${NOTE_KEY_PREFIX}${bookingId}` },
       create: { key: `${NOTE_KEY_PREFIX}${bookingId}`, value: { text } },
       update: { value: { text } },
-    });
+    }));
 
     return NextResponse.json({ bookingId, text });
   } catch (error) {

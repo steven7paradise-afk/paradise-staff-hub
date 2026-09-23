@@ -85,9 +85,19 @@ export async function GET(request: NextRequest) {
 
   const workerByName = new Map(workers.map((worker) => [normalize(worker.name), worker]));
   const workerLocations = new Map(workers.map((worker) => [normalize(worker.name), worker.location?.name || ""]));
+  const salonBookings = bookings.filter((booking) => isBuenosAiresBooking(booking, workerLocations));
+  // Read the same shared office notes used by the online appointments board.
+  const officeNoteSettings = salonBookings.length ? await prisma.setting.findMany({
+    where: { key: { in: salonBookings.map((booking) => `appointment_office_note:${booking.id}`) } },
+    select: { key: true, value: true },
+  }) : [];
+  const officeNotes = new Map(officeNoteSettings.map(({ key, value }) => {
+    const text = value && typeof value === "object" && !Array.isArray(value) &&
+      "text" in value && typeof value.text === "string" ? value.text.trim() : "";
+    return [key.slice("appointment_office_note:".length), text];
+  }));
 
-  const appointments = bookings
-    .filter((booking) => isBuenosAiresBooking(booking, workerLocations))
+  const appointments = salonBookings
     .map((booking) => {
       const overriddenTeam = teamOverrides[booking.id]?.teammates
         ?.map((mate) => ({
@@ -136,6 +146,7 @@ export async function GET(request: NextRequest) {
         financialStatus: booking.financial_status || null,
         isCanceled: Boolean(booking.is_canceled),
         notes: note || null,
+        officeNote: officeNotes.get(booking.id) || null,
         orderId: booking.order_id ? String(booking.order_id) : null,
       };
     })
