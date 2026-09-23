@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { jsPDF } from "jspdf";
+import { REFUND_STATUS_LABELS } from "@/lib/refund-status";
 
 type DownloadRefundPdfButtonProps = {
   refund: {
@@ -47,12 +48,7 @@ export function DownloadRefundPdfButton({ refund }: DownloadRefundPdfButtonProps
       const notes = refund.answers.refund_notes || "";
       const internalNotes = parseNoteText(refund.internal_notes);
       
-      const statusLabels: Record<string, string> = {
-        NEW: "IN ATTESA",
-        APPROVED: "APPROVATO",
-        REJECTED: "NON APPROVATO"
-      };
-      const statusLabel = statusLabels[refund.status] || "IN ATTESA";
+      const statusLabel = (REFUND_STATUS_LABELS[refund.status] || refund.status).toUpperCase();
 
       const dateStr = new Date(refund.created_at).toLocaleDateString("it-IT", {
         day: "2-digit",

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getOperationalUser } from "@/lib/operational-session";
 import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
+import { canChangeRefundStatus } from "@/lib/refund-status";
+import { canAccessForUser } from "@/lib/roles";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -49,10 +51,28 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const response = await prisma.serviceFormResponse.findUnique({
       where: { id },
+      include: { form: { select: { name: true } } },
     });
 
     if (!response) {
       return NextResponse.json({ error: "Risposta non trovata" }, { status: 404 });
+    }
+
+    const isRefund = response.form.name.toLowerCase().includes("rimborso");
+    if (isRefund) {
+      const accessUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { id: true, role: true, mansione: true, access_list: true },
+      });
+      if (!accessUser || !await canAccessForUser(prisma, "/refunds", accessUser)) {
+        return NextResponse.json({ error: "Non hai i permessi per gestire i rimborsi." }, { status: 403 });
+      }
+      if (status !== undefined && (typeof status !== "string" || !canChangeRefundStatus(response.status, status))) {
+        return NextResponse.json({ error: "Passaggio non consentito. Approva la richiesta prima di lavorarla o registrarla come rimborsata." }, { status: 400 });
+      }
+      if (body.expectedStatus !== undefined && body.expectedStatus !== response.status) {
+        return NextResponse.json({ error: "Lo stato è cambiato. Ricarica la pagina prima di riprovare." }, { status: 409 });
+      }
     }
 
     const dataToUpdate: any = {};
@@ -73,6 +93,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         to: status,
         note: statusNote || "",
         by: user.name || "Staff",
+        byId: user.id,
         at: new Date().toISOString(),
       };
       dataToUpdate.activity_log = [...currentLog, newLogEntry];
@@ -123,6 +144,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         }
       }
       dataToUpdate.answers = answers; // JSON object of answers
+    }
+
+    if (isRefund) {
+      // Optimistic concurrency preserves the approval history when two people act together.
+      const saved = await prisma.serviceFormResponse.updateMany({
+        where: { id, updated_at: response.updated_at },
+        data: dataToUpdate,
+      });
+      if (!saved.count) return NextResponse.json({ error: "La pratica è stata aggiornata da un'altra persona. Ricarica e riprova." }, { status: 409 });
+      const savedRefund = await prisma.serviceFormResponse.findUnique({ where: { id } });
+      // These are administrative records: never trigger a Shopify payment or order-status sync.
+      return NextResponse.json(savedRefund);
     }
 
     const updatedResponse = await prisma.serviceFormResponse.update({

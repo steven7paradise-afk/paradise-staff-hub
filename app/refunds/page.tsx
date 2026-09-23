@@ -97,6 +97,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
 
   const refundCount = responses.length;
   const refundTotal = responses.reduce((sum, res) => {
+    if (res.status !== "REFUNDED") return sum;
     const val = parseFloat(String(answer(res, "refund_amount") || "0").replace(",", "."));
     return sum + (isNaN(val) ? 0 : val);
   }, 0);
@@ -158,6 +159,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
                 <p className="mt-3 text-2xl font-black text-white tracking-tight leading-none">
                   {formatMoney(refundTotal)}
                 </p>
+                <p className="mt-2 text-xs text-rose-100/80">Solo pratiche segnate come Rimborsato</p>
               </div>
 
               <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-br from-amber-500/10 to-amber-500/2 text-amber-200 p-5 flex flex-col justify-between transition hover:scale-[1.02] duration-300">
@@ -199,7 +201,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
                     <th className="px-5 py-4">Motivazione / Note Staff</th>
                     <th className="px-5 py-4">Canale / Metodo</th>
                     <th className="px-5 py-4 text-right">Importo</th>
-                    <th className="px-5 py-4">Approvazione / Note Interne</th>
+                    <th className="px-5 py-4">Stato / Responsabile / Note</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/5 dark:divide-white/5 bg-white dark:bg-[#121212]">
@@ -264,6 +266,7 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
                             responseId={res.id}
                             initialStatus={res.status}
                             initialNotes={res.internal_notes}
+                            initialActivityLog={res.activity_log}
                             refund={{
                               id: res.id,
                               created_at: res.created_at.toISOString(),
