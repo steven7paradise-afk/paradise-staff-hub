@@ -553,24 +553,42 @@ function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: {
         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[8px] font-black uppercase text-[#16883a]">{staff.length} staff</span>
       </div>
       <div className="space-y-3">
-        {staff.map((person) => (
-          <article key={person.id} className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
-            <header className="flex items-center gap-3 border-b border-black/[0.06] bg-[#fbfcfb] px-3.5 py-3">
-              <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-black/35">{person.photoUrl ? <img src={person.photoUrl} alt="" className="size-full object-cover" /> : <UserRound className="size-4" />}</span>
-              <div className="min-w-0"><h3 className="truncate text-xs font-black text-[#202124]">{person.name}</h3><p className="mt-0.5 truncate text-[9px] text-[#5f6368]">{person.role} · {person.shiftTime}</p></div>
-            </header>
-            <div className="divide-y divide-black/[0.06] px-3.5">
+        {staff.map((person) => {
+          const hasClockIn = Boolean(person.clockIn);
+          const isLate = typeof person.delayMinutes === "number" && person.delayMinutes > 0;
+          return (
+          <article key={person.id} className="grid overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_6px_20px_rgba(47,28,38,0.04)] lg:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+            <div className="flex min-w-0 flex-col justify-center gap-3 px-4 py-4 sm:px-5 lg:border-r lg:border-black/[0.06]">
+              <div className="flex items-center gap-3">
+                <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-black/35 ring-2 ring-white shadow-sm">{person.photoUrl ? <img src={person.photoUrl} alt="" className="size-full object-cover" /> : <UserRound className="size-5" />}</span>
+                <div className="min-w-0"><h3 className="truncate text-sm font-black text-[#202124]">{person.name}</h3><p className="mt-0.5 truncate text-[10px] text-[#5f6368]">{person.role} · Orario: {person.shiftTime}</p></div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
+                {person.attendanceStatus === "FERIE" ? <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-sky-800">🏖️ In ferie</span>
+                  : person.attendanceStatus === "MALATTIA" ? <span className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-rose-800">🤒 In malattia</span>
+                    : person.attendanceStatus === "RIPOSO" ? <span className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-800">Riposo / Permesso</span>
+                      : hasClockIn ? <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 ${isLate ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}>{isLate ? "⚠" : "✓"} Entrata: {person.clockIn}{isLate ? ` · +${person.delayMinutes} min` : " · In orario"}</span>
+                        : <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">⚠ Non ancora timbrato</span>}
+                {person.attendanceStatus !== "FERIE" && person.attendanceStatus !== "MALATTIA" && person.attendanceStatus !== "RIPOSO" ? <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-purple-900">☕ {person.pauseSummary || "Nessuna pausa"}</span> : null}
+                {person.workedHoursFormatted ? <span className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-100 px-2 py-1 text-slate-800">⏱ Ore fatte: {person.workedHoursFormatted}</span> : null}
+              </div>
+            </div>
+            <div className="border-t border-black/[0.06] bg-[#fbfcfb] px-4 py-3 sm:px-5 lg:border-t-0">
+              <p className="mb-2 text-[8px] font-black uppercase tracking-[0.12em] text-black/35">Controlli per {person.name.split(" ")[0]}</p>
+              <div className={mode === "CHECKBOXES" ? "grid gap-2 sm:grid-cols-2" : "divide-y divide-black/[0.06]"}>
               {criteria.map((criterion) => {
                 const value = responses[person.id]?.[criterion];
                 if (mode === "CHECKBOXES") {
                   const checked = value === "CHECKED";
-                  return <button key={criterion} type="button" onClick={() => setResponse(person.id, criterion, checked ? "UNCHECKED" : "CHECKED")} aria-pressed={checked} className="flex min-h-12 w-full items-center gap-3 py-2.5 text-left"><span className={`grid size-6 shrink-0 place-items-center rounded-md border ${checked ? "border-[#2ed65d] bg-[#2ed65d] text-white" : "border-black/20 bg-white text-transparent"}`}><Check className="size-4" strokeWidth={3} /></span><span className="text-[10px] font-semibold leading-snug text-[#3c4043]">{criterion}</span></button>;
+                  return <button key={criterion} type="button" onClick={() => setResponse(person.id, criterion, checked ? "UNCHECKED" : "CHECKED")} aria-pressed={checked} className={`flex min-h-11 w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${checked ? "border-[#2ed65d] bg-[#f0fcf4] text-[#16883a] shadow-sm" : "border-black/[0.08] bg-white text-[#3c4043] hover:border-[#2ed65d]/40"}`}><span className={`grid size-5 shrink-0 place-items-center rounded-md border ${checked ? "border-[#2ed65d] bg-[#2ed65d] text-white" : "border-black/20 bg-white text-transparent"}`}><Check className="size-3.5" strokeWidth={3} /></span><span className="text-[10px] font-bold leading-snug">{criterion}</span></button>;
                 }
                 return <div key={criterion} className="grid min-h-14 gap-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-center"><p className="text-[10px] font-semibold leading-snug text-[#3c4043]">{criterion}</p><div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => setResponse(person.id, criterion, "YES")} aria-pressed={value === "YES"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "YES" ? "border-[#2ed65d] bg-[#f0fcf4] text-[#16883a]" : "border-black/10 bg-white text-black/45"}`}>Sì</button><button type="button" onClick={() => setResponse(person.id, criterion, "NO")} aria-pressed={value === "NO"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "NO" ? "border-[#dc6b7f] bg-[#fff1f3] text-[#a12f45]" : "border-black/10 bg-white text-black/45"}`}>No</button></div></div>;
               })}
+              </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {!isComplete ? <p className="mr-auto text-[9px] font-bold text-[#a76a00]">Completa tutte le risposte Sì/No prima di salvare.</p> : null}

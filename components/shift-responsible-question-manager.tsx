@@ -56,7 +56,7 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
   const [followUps, setFollowUps] = useState<Record<string, string>>({});
   const [yesLabel, setYesLabel] = useState("Sì");
   const [noLabel, setNoLabel] = useState("No");
-  const [staffResponseMode, setStaffResponseMode] = useState<"YES_NO" | "CHECKBOXES">("YES_NO");
+  const [staffResponseMode, setStaffResponseMode] = useState<"YES_NO" | "CHECKBOXES">("CHECKBOXES");
   const [status, setStatus] = useState("");
   const [isPending, startTransition] = useTransition();
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -87,12 +87,13 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
     setFollowUps({});
     setYesLabel("Sì");
     setNoLabel("No");
-    setStaffResponseMode("YES_NO");
+    setStaffResponseMode("CHECKBOXES");
   }
 
   function openStaffChecklist() {
     openNew();
     setAnswerType("STAFF_CHECKLIST");
+    setStaffResponseMode("CHECKBOXES");
     setTitle("Controllo individuale dello staff");
     setDescription("Compila il controllo separatamente per ogni persona presente nel turno.");
     setOptions(["", ""]);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeShiftFollowUps, normalizeShiftResponsibleQuestions, type ShiftResponsibleQuestion } from "../lib/shift-responsible-questions";
+import { activeShiftFollowUps, DEFAULT_STAFF_PRESENTABILITY_CHECKS, normalizeShiftResponsibleQuestions, type ShiftResponsibleQuestion } from "../lib/shift-responsible-questions";
 import { buildShiftTaskCommentContext } from "../lib/shift-task-comment";
 
 function question(overrides: Partial<ShiftResponsibleQuestion>): ShiftResponsibleQuestion {
@@ -79,6 +79,18 @@ test("mantiene i controlli separati per lo staff e la modalità di risposta", ()
   assert.equal(item.answerType, "STAFF_CHECKLIST");
   assert.equal(item.staffResponseMode, "CHECKBOXES");
   assert.deepEqual(item.options, ["Postazione ordinata", "Divisa corretta"]);
+});
+
+test("converte la vecchia presentabilità staff in multi-check per ogni lavoratore", () => {
+  const [item] = normalizeShiftResponsibleQuestions([{
+    id: "q-presentability",
+    title: "PRESENTABILITÀ STAFF",
+    answerType: "STAFF_NOTE",
+    options: [],
+  }]);
+  assert.equal(item.answerType, "STAFF_CHECKLIST");
+  assert.equal(item.staffResponseMode, "CHECKBOXES");
+  assert.deepEqual(item.options, DEFAULT_STAFF_PRESENTABILITY_CHECKS);
 });
 
 test("salva etichette personalizzate mantenendo Sì e No come valori interni", () => {

@@ -1,6 +1,12 @@
 import { SHIFT_ANSWER_PAYLOAD_LIMIT } from "./shift-note-limits";
 export const SHIFT_RESPONSIBLE_QUESTIONS_KEY = "shift_responsible_questions";
 export const SHIFT_RESPONSIBLE_ANSWERS_KEY = "shift_responsible_answers";
+export const DEFAULT_STAFF_PRESENTABILITY_CHECKS = [
+  "Divisa pulita e completa",
+  "Capelli ordinati",
+  "Aspetto personale curato",
+  "Postazione in ordine",
+];
 
 export type ShiftResponsibleQuestion = {
   id: string;
@@ -33,10 +39,12 @@ export function normalizeShiftResponsibleQuestions(value: unknown): ShiftRespons
     if (!title) return [];
     const supportedTypes = new Set<ShiftResponsibleQuestion["answerType"]>(["YES_NO", "SHORT_TEXT", "TEXT", "MULTI_TEXT", "TIMELINE", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "FILE_UPLOAD", "LINEAR_SCALE", "RATING", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID", "DATE", "TIME", "STAFF_NOTE", "STAFF_CHECKLIST", "CLIENT_NOTE", "TASK"]);
     const candidateType = String(raw.answerType ?? "YES_NO") as ShiftResponsibleQuestion["answerType"];
-    const answerType = supportedTypes.has(candidateType) ? candidateType : "YES_NO";
-    const options = Array.isArray(raw.options)
+    const isLegacyPresentability = candidateType === "STAFF_NOTE" && /presentabilit/i.test(title);
+    const answerType = isLegacyPresentability ? "STAFF_CHECKLIST" : supportedTypes.has(candidateType) ? candidateType : "YES_NO";
+    const configuredOptions = Array.isArray(raw.options)
       ? raw.options.map((option) => String(option).trim().slice(0, 120)).filter(Boolean).slice(0, 12)
       : [];
+    const options = isLegacyPresentability && configuredOptions.length === 0 ? DEFAULT_STAFF_PRESENTABILITY_CHECKS : configuredOptions;
     const followUps = raw.followUps && typeof raw.followUps === "object" && !Array.isArray(raw.followUps)
       ? Object.fromEntries(Object.entries(raw.followUps as Record<string, unknown>)
           .flatMap(([key, prompt]) => {
@@ -62,7 +70,7 @@ export function normalizeShiftResponsibleQuestions(value: unknown): ShiftRespons
       followUps,
       yesLabel: String(raw.yesLabel ?? "Sì").trim().slice(0, 80) || "Sì",
       noLabel: String(raw.noLabel ?? "No").trim().slice(0, 80) || "No",
-      staffResponseMode: raw.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO",
+      staffResponseMode: isLegacyPresentability || raw.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO",
     }];
   });
 }
