@@ -6,6 +6,16 @@ test("admins can manage appointment office notes", () => {
   assert.equal(canManageAppointmentOfficeNotes({ role: "ADMIN" }), true);
 });
 
+test("super admins can manage office notes after entering from the cash desk PC", () => {
+  assert.equal(
+    canManageAppointmentOfficeNotes({
+      role: "SUPER_ADMIN",
+      isPC: true,
+    }),
+    true,
+  );
+});
+
 test("office workers can manage appointment office notes", () => {
   assert.equal(
     canManageAppointmentOfficeNotes({

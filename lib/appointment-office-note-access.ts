@@ -10,7 +10,10 @@ export function canManageAppointmentOfficeNotes(input: {
   locationName?: string | null;
   isPC?: boolean;
 }) {
-  if (!input.isPC && OFFICE_NOTE_ADMIN_ROLES.has(String(input.role || ""))) return true;
+  // Il ruolo amministrativo resta valido anche quando l'utente entra dal PC
+  // cassa tramite il proprio PIN. In quel flusso `isPC` e' true, ma non deve
+  // annullare i permessi di ZERO / SUPER_ADMIN / ADMIN.
+  if (OFFICE_NOTE_ADMIN_ROLES.has(String(input.role || ""))) return true;
 
   const job = normalized(input.mansione);
   const location = normalized(input.locationName);
