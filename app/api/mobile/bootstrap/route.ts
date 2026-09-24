@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { employeeScheduleWindow } from "@/lib/schedule-visibility";
+import { BANNER_DEFAULT_DURATION_MS } from "@/lib/communication-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
   const planning = normalizePlanningAccess(planningSetting?.value);
   const window = employeeScheduleWindow(now, planning.nextMonthVisible);
 
-  const [schedules, logs, notifications, documents, tasks, clockRuleSetting] = await Promise.all([
+  const [schedules, logs, notifications, documents, tasks, clockRuleSetting, activeCommunications] = await Promise.all([
     prisma.scheduleEntry.findMany({
       where: { user_id: user.id, date: { gte: window.start, lt: window.end } },
       include: { category: true, location: true },
@@ -67,6 +68,14 @@ export async function GET(request: NextRequest) {
     user.sede_id
       ? prisma.setting.findUnique({ where: { key: clockRuleKey(user.sede_id) } }).catch(() => null)
       : Promise.resolve(null),
+    prisma.notification.findMany({
+      where: { user_id: user.id, type: "COMUNICAZIONE", OR: [
+        { banner_expires_at: { gt: now } },
+        { banner_expires_at: null, created_at: { gt: new Date(now.getTime() - BANNER_DEFAULT_DURATION_MS) } },
+      ] },
+      orderBy: { created_at: "desc" },
+      select: { id: true, title: true, message: true, type: true, read: true, created_at: true, banner_expires_at: true },
+    }),
   ]);
 
   const breakDurationMinutes = parseClockRule(clockRuleSetting?.value).breakDurationMinutes;
@@ -82,6 +91,11 @@ export async function GET(request: NextRequest) {
       photoURL: user.photo_url,
     },
     breakDurationMinutes,
+    activeCommunications: activeCommunications.map((item) => ({
+      id: item.id, title: item.title, message: item.message, type: item.type,
+      createdAt: item.created_at.toISOString(), read: item.read,
+      expiresAt: (item.banner_expires_at ?? new Date(item.created_at.getTime() + BANNER_DEFAULT_DURATION_MS)).toISOString(),
+    })),
     shifts: schedules.map((entry) => ({
       id: entry.id,
       date: entry.date.toISOString().slice(0, 10),
