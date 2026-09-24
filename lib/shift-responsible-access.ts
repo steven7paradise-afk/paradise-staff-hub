@@ -1,3 +1,4 @@
+import { SHIFT_NOTE_LIMIT, SHIFT_ANSWER_PAYLOAD_LIMIT } from "./shift-note-limits";
 export const SHIFT_RESPONSIBLE_ACCESS_KEY = "shift_responsible_access";
 
 export type ShiftAccessStatus = "PENDING" | "APPROVED" | "DENIED";
@@ -53,14 +54,14 @@ export function normalizeShiftResponsibleAccess(value: unknown): ShiftResponsibl
         actorName: String(entry.actorName ?? "Utente"),
         at: String(entry.at),
         action: "ANSWER" as const,
-        previousValue: typeof entry.previousValue === "string" ? entry.previousValue.slice(0, 12000) : undefined,
-        nextValue: typeof entry.nextValue === "string" ? entry.nextValue.slice(0, 12000) : undefined,
+        previousValue: typeof entry.previousValue === "string" ? entry.previousValue.slice(0, SHIFT_ANSWER_PAYLOAD_LIMIT) : undefined,
+        nextValue: typeof entry.nextValue === "string" ? entry.nextValue.slice(0, SHIFT_ANSWER_PAYLOAD_LIMIT) : undefined,
       }];
     }).slice(-300) : [];
     const comments = Array.isArray(raw.comments) ? raw.comments.flatMap((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return [];
       const entry = item as Record<string, unknown>;
-      const text = typeof entry.text === "string" ? entry.text.trim().slice(0, 2000) : "";
+      const text = typeof entry.text === "string" ? entry.text.trim().slice(0, SHIFT_NOTE_LIMIT) : "";
       if (!entry.id || !entry.authorId || !entry.at || !text) return [];
       return [{ id: String(entry.id), authorId: String(entry.authorId), authorName: String(entry.authorName ?? "Utente"), text, at: String(entry.at) }];
     }).slice(-200) : [];

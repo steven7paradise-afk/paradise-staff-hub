@@ -1,5 +1,6 @@
 "use client";
 
+import { ShiftNoteTextarea } from "@/components/shift-note-textarea";
 import { useState, useTransition } from "react";
 import { AlertCircle, CalendarClock, Check, CheckCircle2, ListTodo, LoaderCircle, Plus, Star, Trash2, Upload, UserRound, X } from "lucide-react";
 import { activeShiftFollowUps, type ShiftResponsibleAnswer, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
@@ -21,7 +22,7 @@ type ShiftStaffMember = {
 type TaskAssignee = { id: string; name: string; group: "Ufficio" | "Responsabile" };
 
 function answerTypeName(type: ShiftResponsibleQuestion["answerType"]) {
-  return ({ SHORT_TEXT: "Risposta breve", TEXT: "Paragrafo", MULTI_TEXT: "Risposte scritte multiple", TIMELINE: "Timeline ora + nota", MULTIPLE_CHOICE: "Scelta multipla", CHECKBOXES: "Caselle di controllo", DROPDOWN: "Elenco a discesa", FILE_UPLOAD: "Caricamento file", LINEAR_SCALE: "Scala lineare", RATING: "Classificazione", MULTIPLE_CHOICE_GRID: "Griglia a scelta multipla", CHECKBOX_GRID: "Griglia con caselle", DATE: "Data", TIME: "Ora", STAFF_NOTE: "Collega allo staff", CLIENT_NOTE: "Collega a cliente", TASK: "Genera task", YES_NO: "SÌ / NO" } as Record<ShiftResponsibleQuestion["answerType"], string>)[type];
+  return ({ SHORT_TEXT: "Risposta breve", TEXT: "Paragrafo", MULTI_TEXT: "Risposte scritte multiple", TIMELINE: "Timeline ora + nota", MULTIPLE_CHOICE: "Scelta multipla", CHECKBOXES: "Caselle di controllo", DROPDOWN: "Elenco a discesa", FILE_UPLOAD: "Caricamento file", LINEAR_SCALE: "Scala lineare", RATING: "Classificazione", MULTIPLE_CHOICE_GRID: "Griglia a scelta multipla", CHECKBOX_GRID: "Griglia con caselle", DATE: "Data", TIME: "Ora", STAFF_NOTE: "Collega allo staff", STAFF_CHECKLIST: "Controlli per ogni staff", CLIENT_NOTE: "Collega a cliente", TASK: "Genera task", YES_NO: "SÌ / NO" } as Record<ShiftResponsibleQuestion["answerType"], string>)[type];
 }
 
 export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointmentClients, taskAssignees, initialAnswers, onSaved }: { day: string; questions: ShiftResponsibleQuestion[]; shiftStaff: ShiftStaffMember[]; appointmentClients: ShiftAppointmentClient[]; taskAssignees: TaskAssignee[]; initialAnswers: Record<string, string>; onSaved?: () => void | Promise<void> }) {
@@ -195,6 +196,7 @@ export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointm
                 : ["MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"].includes(question.answerType) ? <GridAnswer question={question} selected={answers[question.id]} status={saveStatuses[question.id]} onAnswer={(value) => answer(question.id, value)} />
                   : question.answerType === "FILE_UPLOAD" ? <FileUploadAnswer day={day} selected={answers[question.id]} status={saveStatuses[question.id]} onAnswer={(value) => answer(question.id, value)} />
                     : question.answerType === "STAFF_NOTE" ? <StaffNoteAnswer staff={shiftStaff} selected={answers[question.id]} status={saveStatuses[question.id]} onAnswer={(value) => answer(question.id, value)} />
+                      : question.answerType === "STAFF_CHECKLIST" ? <StaffChecklistAnswer question={question} staff={shiftStaff} selected={answers[question.id]} status={saveStatuses[question.id]} onAnswer={(value) => answer(question.id, value)} />
                       : question.answerType === "CLIENT_NOTE" ? <ClientNoteAnswer clients={appointmentClients} selected={answers[question.id]} status={saveStatuses[question.id]} onAnswer={(value) => answer(question.id, value)} />
                         : question.answerType === "TASK" ? <TaskAnswer assignees={taskAssignees} selected={answers[question.id]} status={saveStatuses[question.id]} onAnswer={(value) => answer(question.id, value)} />
             : null}
@@ -294,7 +296,7 @@ function TimelineAnswer({ selected, status, onAnswer }: { selected?: string; sta
     <div className="relative space-y-3 before:absolute before:bottom-6 before:left-[25px] before:top-6 before:w-px before:bg-[#b7eac5] sm:before:left-[37px]">
       {rows.map((row, index) => <div key={index} className="relative grid grid-cols-[52px_minmax(0,1fr)_36px] gap-2 rounded-xl border border-black/10 bg-[#f8fbf9] p-2 sm:grid-cols-[76px_minmax(0,1fr)_40px] sm:gap-3 sm:p-3">
         <input type="time" value={row.time} onChange={(event) => setRows((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, time: event.target.value } : item))} aria-label={`Ora evento ${index + 1}`} className="relative z-10 h-11 min-w-0 rounded-lg border border-[#2ed65d]/20 bg-[#eefbf2] px-1 text-[9px] font-black text-[#16883a] outline-none focus:border-[#2ed65d] sm:px-2 sm:text-[10px]" />
-        <textarea value={row.note} onChange={(event) => setRows((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, note: event.target.value } : item))} rows={2} maxLength={1000} aria-label={`Nota evento ${index + 1}`} placeholder="Scrivi una nota libera…" className="min-h-11 w-full resize-none rounded-lg border border-black/10 bg-white px-3 py-2.5 text-xs outline-none focus:border-[#2ed65d]" />
+        <ShiftNoteTextarea value={row.note} onChange={(event) => setRows((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, note: event.target.value } : item))} rows={2}  aria-label={`Nota evento ${index + 1}`} placeholder="Scrivi una nota libera…" className="min-h-11 w-full resize-none rounded-lg border border-black/10 bg-white px-3 py-2.5 text-xs outline-none focus:border-[#2ed65d]" />
         <button type="button" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} disabled={rows.length <= 1} className="grid size-9 place-items-center self-center rounded-full text-black/35 hover:bg-[#fff1f3] hover:text-[#b33e53] disabled:opacity-20" aria-label={`Elimina evento ${index + 1}`}><Trash2 className="size-4" /></button>
       </div>)}
     </div>
@@ -315,7 +317,7 @@ function MultiTextAnswer({ labels, selected, status, onAnswer }: { labels: strin
   const complete = prepared.length > 0 && prepared.every((entry) => entry.value);
   const isSaved = Boolean(selected) && serialized === savedSerialized;
 
-  return <div className="mt-4 border-t border-black/[0.06] pt-4"><div className="grid gap-3 sm:grid-cols-2">{labels.map((label, index) => <label key={`${label}-${index}`} className="rounded-xl border border-black/10 bg-[#f8fbf9] p-3"><span className="text-[9px] font-black uppercase tracking-wide text-[#16883a]">{label}</span><textarea value={values[label] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [label]: event.target.value }))} rows={2} maxLength={1000} placeholder={`Scrivi ${label.toLocaleLowerCase("it")}…`} className="mt-2 w-full resize-none rounded-lg border border-black/10 bg-white px-3 py-2.5 text-xs outline-none focus:border-[#2ed65d]" /></label>)}</div><div className="mt-3 flex items-center justify-end gap-2">{status === "saving" || status === "error" ? <SaveStatusLine status={status} /> : isSaved ? <SaveStatusLine status="saved" /> : null}<button type="button" onClick={() => onAnswer(serialized)} disabled={!complete || status === "saving" || isSaved} className="min-h-10 rounded-lg bg-[#2ed65d] px-4 text-[9px] font-black text-white disabled:opacity-40">{status === "saving" ? "Salvataggio…" : isSaved ? "Risposte salvate" : status === "error" ? "Riprova" : "Salva risposte"}</button></div></div>;
+  return <div className="mt-4 border-t border-black/[0.06] pt-4"><div className="grid gap-3 sm:grid-cols-2">{labels.map((label, index) => <label key={`${label}-${index}`} className="rounded-xl border border-black/10 bg-[#f8fbf9] p-3"><span className="text-[9px] font-black uppercase tracking-wide text-[#16883a]">{label}</span><ShiftNoteTextarea value={values[label] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [label]: event.target.value }))} rows={2}  placeholder={`Scrivi ${label.toLocaleLowerCase("it")}…`} className="mt-2 w-full resize-none rounded-lg border border-black/10 bg-white px-3 py-2.5 text-xs outline-none focus:border-[#2ed65d]" /></label>)}</div><div className="mt-3 flex items-center justify-end gap-2">{status === "saving" || status === "error" ? <SaveStatusLine status={status} /> : isSaved ? <SaveStatusLine status="saved" /> : null}<button type="button" onClick={() => onAnswer(serialized)} disabled={!complete || status === "saving" || isSaved} className="min-h-10 rounded-lg bg-[#2ed65d] px-4 text-[9px] font-black text-white disabled:opacity-40">{status === "saving" ? "Salvataggio…" : isSaved ? "Risposte salvate" : status === "error" ? "Riprova" : "Salva risposte"}</button></div></div>;
 }
 
 function CheckboxAnswer({ options, allowOther, selected, status, onAnswer }: { options: string[]; allowOther: boolean; selected?: string; status?: SaveStatus; onAnswer: (value: string) => void }) {
@@ -366,7 +368,7 @@ function FileUploadAnswer({ day, selected, status, onAnswer }: { day: string; se
 function WrittenAnswer({ questionId, value, kind = "TEXT", saved, status, onChange, onSave }: { questionId: string; value: string; kind?: ShiftResponsibleQuestion["answerType"]; saved: boolean; status?: SaveStatus; onChange: (value: string) => void; onSave: () => void }) {
   return (
     <div className="mt-2" data-question-id={questionId}>
-      {kind === "TEXT" ? <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder="Scrivi qui la risposta…" rows={3} maxLength={1000} className="w-full resize-none border-0 border-b-2 border-black/20 bg-[#f8f9fa] px-3 py-3 text-xs font-medium text-[#202124] outline-none focus:border-[#2ed65d]" />
+      {kind === "TEXT" ? <ShiftNoteTextarea value={value} onChange={(event) => onChange(event.target.value)} placeholder="Scrivi qui la risposta…" rows={3}  className="w-full resize-none border-0 border-b-2 border-black/20 bg-[#f8f9fa] px-3 py-3 text-xs font-medium text-[#202124] outline-none focus:border-[#2ed65d]" />
         : <input type={kind === "DATE" ? "date" : kind === "TIME" ? "time" : "text"} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Scrivi qui la risposta…" maxLength={1000} className="h-11 w-full border-0 border-b-2 border-black/20 bg-[#f8f9fa] px-3 text-xs font-medium text-[#202124] outline-none focus:border-[#2ed65d]" />}
       <div className="mt-2 flex items-center justify-end gap-2">
         {status || saved ? <SaveStatusLine status={status ?? "saved"} /> : null}
@@ -484,11 +486,10 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
               {/* Textarea note */}
               <div className="mt-3 min-w-[200px] flex-1 sm:mt-0">
                 <span className="sr-only">Nota per {person.name}</span>
-                <textarea
+                <ShiftNoteTextarea
                   value={notes[person.id] ?? ""}
                   onChange={(event) => setNotes((current) => ({ ...current, [person.id]: event.target.value }))}
                   rows={2}
-                  maxLength={400}
                   placeholder={`Nota per ${person.name}…`}
                   className="w-full resize-none rounded-lg border border-black/10 bg-[#f8f9fa] px-3 py-2 text-xs outline-none focus:border-[#2ed65d] focus:bg-white"
                 />
@@ -500,6 +501,81 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
       <div className="mt-3 flex items-center justify-end gap-2">
         {status === "saving" || status === "error" ? <SaveStatusLine status={status} /> : isSaved ? <SaveStatusLine status="saved" /> : null}
         <button type="button" onClick={() => onAnswer(serialized)} disabled={!preparedNotes.length || status === "saving" || isSaved} className="min-h-10 rounded-lg bg-[#2ed65d] px-4 text-[9px] font-black text-white disabled:opacity-40">{status === "saving" ? "Salvataggio…" : isSaved ? "Note salvate" : status === "error" ? "Riprova" : "Salva note staff"}</button>
+      </div>
+    </div>
+  );
+}
+
+type StaffChecklistValue = "YES" | "NO" | "CHECKED" | "UNCHECKED";
+
+function parseStaffChecklist(value?: string) {
+  try {
+    const parsed = JSON.parse(value || "") as { staffChecks?: unknown };
+    if (!Array.isArray(parsed.staffChecks)) return {};
+    return Object.fromEntries(parsed.staffChecks.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const entry = item as { staffId?: unknown; responses?: unknown };
+      if (typeof entry.staffId !== "string" || !entry.responses || typeof entry.responses !== "object" || Array.isArray(entry.responses)) return [];
+      const responses = Object.fromEntries(Object.entries(entry.responses as Record<string, unknown>).flatMap(([label, response]) =>
+        ["YES", "NO", "CHECKED", "UNCHECKED"].includes(String(response)) ? [[label, response as StaffChecklistValue]] : [],
+      ));
+      return [[entry.staffId, responses] as const];
+    }));
+  } catch {
+    return {};
+  }
+}
+
+function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: { question: ShiftResponsibleQuestion; staff: ShiftStaffMember[]; selected?: string; status?: SaveStatus; onAnswer: (value: string) => void }) {
+  const mode = question.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO";
+  const criteria = question.options ?? [];
+  const savedResponses = parseStaffChecklist(selected);
+  const [responses, setResponses] = useState<Record<string, Record<string, StaffChecklistValue>>>(savedResponses);
+  const prepared = staff.map((person) => ({
+    staffId: person.id,
+    name: person.name,
+    responses: Object.fromEntries(criteria.map((criterion) => [criterion, mode === "CHECKBOXES" ? responses[person.id]?.[criterion] === "CHECKED" ? "CHECKED" : "UNCHECKED" : responses[person.id]?.[criterion]])),
+  }));
+  const isComplete = mode === "CHECKBOXES" || prepared.every((entry) => criteria.every((criterion) => entry.responses[criterion] === "YES" || entry.responses[criterion] === "NO"));
+  const serialized = JSON.stringify({ staffChecks: prepared });
+  const isSaved = Boolean(selected) && serialized === selected;
+
+  function setResponse(staffId: string, criterion: string, value: StaffChecklistValue) {
+    setResponses((current) => ({ ...current, [staffId]: { ...(current[staffId] ?? {}), [criterion]: value } }));
+  }
+
+  if (!staff.length) return <div className="mt-4 rounded-xl border border-dashed border-black/15 bg-[#f8f9fa] px-4 py-6 text-center text-[10px] font-semibold text-[#5f6368]">Nessun membro dello staff risulta programmato in questo turno.</div>;
+
+  return (
+    <div className="mt-4 border-t border-black/[0.06] pt-4">
+      <div className="mb-3 flex items-center justify-between gap-3 rounded-xl bg-[#f0fcf4] px-3 py-2.5">
+        <p className="text-[9px] font-bold text-[#16883a]">{mode === "YES_NO" ? "Rispondi Sì o No a ogni voce per ciascun lavoratore." : "Spunta le attività completate per ciascun lavoratore."}</p>
+        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[8px] font-black uppercase text-[#16883a]">{staff.length} staff</span>
+      </div>
+      <div className="space-y-3">
+        {staff.map((person) => (
+          <article key={person.id} className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
+            <header className="flex items-center gap-3 border-b border-black/[0.06] bg-[#fbfcfb] px-3.5 py-3">
+              <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-black/35">{person.photoUrl ? <img src={person.photoUrl} alt="" className="size-full object-cover" /> : <UserRound className="size-4" />}</span>
+              <div className="min-w-0"><h3 className="truncate text-xs font-black text-[#202124]">{person.name}</h3><p className="mt-0.5 truncate text-[9px] text-[#5f6368]">{person.role} · {person.shiftTime}</p></div>
+            </header>
+            <div className="divide-y divide-black/[0.06] px-3.5">
+              {criteria.map((criterion) => {
+                const value = responses[person.id]?.[criterion];
+                if (mode === "CHECKBOXES") {
+                  const checked = value === "CHECKED";
+                  return <button key={criterion} type="button" onClick={() => setResponse(person.id, criterion, checked ? "UNCHECKED" : "CHECKED")} aria-pressed={checked} className="flex min-h-12 w-full items-center gap-3 py-2.5 text-left"><span className={`grid size-6 shrink-0 place-items-center rounded-md border ${checked ? "border-[#2ed65d] bg-[#2ed65d] text-white" : "border-black/20 bg-white text-transparent"}`}><Check className="size-4" strokeWidth={3} /></span><span className="text-[10px] font-semibold leading-snug text-[#3c4043]">{criterion}</span></button>;
+                }
+                return <div key={criterion} className="grid min-h-14 gap-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-center"><p className="text-[10px] font-semibold leading-snug text-[#3c4043]">{criterion}</p><div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => setResponse(person.id, criterion, "YES")} aria-pressed={value === "YES"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "YES" ? "border-[#2ed65d] bg-[#f0fcf4] text-[#16883a]" : "border-black/10 bg-white text-black/45"}`}>Sì</button><button type="button" onClick={() => setResponse(person.id, criterion, "NO")} aria-pressed={value === "NO"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "NO" ? "border-[#dc6b7f] bg-[#fff1f3] text-[#a12f45]" : "border-black/10 bg-white text-black/45"}`}>No</button></div></div>;
+              })}
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        {!isComplete ? <p className="mr-auto text-[9px] font-bold text-[#a76a00]">Completa tutte le risposte Sì/No prima di salvare.</p> : null}
+        {status === "saving" || status === "error" ? <SaveStatusLine status={status} /> : isSaved ? <SaveStatusLine status="saved" /> : null}
+        <button type="button" onClick={() => onAnswer(serialized)} disabled={!criteria.length || !isComplete || status === "saving" || isSaved} className="min-h-10 rounded-lg bg-[#2ed65d] px-4 text-[9px] font-black text-white disabled:opacity-40">{status === "saving" ? "Salvataggio…" : isSaved ? "Controlli salvati" : status === "error" ? "Riprova" : "Salva controlli staff"}</button>
       </div>
     </div>
   );
@@ -557,7 +633,7 @@ function ClientNoteAnswer({ clients, selected, status, onAnswer }: { clients: Sh
               {clients.filter((item) => item.id === row.appointmentId || !selectedIds.has(item.id)).map((item) => <option key={item.id} value={item.id}>{item.time} · {item.name} · {item.service}</option>)}
             </select>
             {client ? <div className="mt-2 flex items-center gap-2 text-[9px] text-[#5f6368]"><CalendarClock className="size-4 shrink-0 text-[#2ed65d]" /><span>{client.time} · {client.service}</span></div> : null}
-            <textarea value={row.note} onChange={(event) => setRows((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, note: event.target.value } : item))} disabled={!client} rows={2} maxLength={1000} aria-label={`Nota cliente ${index + 1}`} placeholder={client ? `Trascrivi la nota per ${client.name}…` : "Prima seleziona una cliente"} className="mt-2 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-3 text-xs outline-none focus:border-[#2ed65d] disabled:cursor-not-allowed disabled:opacity-50" />
+            <ShiftNoteTextarea value={row.note} onChange={(event) => setRows((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, note: event.target.value } : item))} disabled={!client} rows={2}  aria-label={`Nota cliente ${index + 1}`} placeholder={client ? `Trascrivi la nota per ${client.name}…` : "Prima seleziona una cliente"} className="mt-2 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-3 text-xs outline-none focus:border-[#2ed65d] disabled:cursor-not-allowed disabled:opacity-50" />
           </div>;
         })}
       </div>

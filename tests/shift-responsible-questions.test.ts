@@ -68,6 +68,19 @@ test("mantiene il tipo timeline con ora e nota libera", () => {
   assert.equal(item.answerType, "TIMELINE");
 });
 
+test("mantiene i controlli separati per lo staff e la modalità di risposta", () => {
+  const [item] = normalizeShiftResponsibleQuestions([{
+    id: "q-staff-checks",
+    title: "Controlli individuali",
+    answerType: "STAFF_CHECKLIST",
+    staffResponseMode: "CHECKBOXES",
+    options: ["Postazione ordinata", "Divisa corretta"],
+  }]);
+  assert.equal(item.answerType, "STAFF_CHECKLIST");
+  assert.equal(item.staffResponseMode, "CHECKBOXES");
+  assert.deepEqual(item.options, ["Postazione ordinata", "Divisa corretta"]);
+});
+
 test("salva etichette personalizzate mantenendo Sì e No come valori interni", () => {
   const [item] = normalizeShiftResponsibleQuestions([{ id: "q1", title: "Stato", answerType: "YES_NO", yesLabel: "Completato", noLabel: "Da completare" }]);
   assert.equal(item.yesLabel, "Completato");
@@ -79,6 +92,7 @@ test("prepara per la task un commento leggibile senza JSON o identificativi", ()
   const questions = [
     question({ id: "presence", title: "Tutti presenti", yesLabel: "Sì, tutti presenti" }),
     question({ id: "breaks", title: "Pause", answerType: "STAFF_NOTE" }),
+    question({ id: "staff-checks", title: "Controlli staff", answerType: "STAFF_CHECKLIST", options: ["Postazione ordinata"], staffResponseMode: "YES_NO" }),
     question({ id: "clients", title: "Clienti", answerType: "CLIENT_NOTE" }),
     question({ id: "details", title: "Servizi rifiutati", answerType: "MULTI_TEXT" }),
     question({ id: "timeline", title: "Eventi della giornata", answerType: "TIMELINE" }),
@@ -87,6 +101,7 @@ test("prepara per la task un commento leggibile senza JSON o identificativi", ()
   const context = buildShiftTaskCommentContext("2026-09-03", "Controllare il sistema", questions, {
     presence: "YES",
     breaks: JSON.stringify({ staffNotes: [{ staffId: "internal-1", name: "Angelica Pasculli", note: "Pausa alle 12:00" }] }),
+    "staff-checks": JSON.stringify({ staffChecks: [{ staffId: "internal-1", name: "Angelica Pasculli", responses: { "Postazione ordinata": "YES" } }] }),
     clients: JSON.stringify({ clientNotes: [{ appointmentId: "internal-2", name: "Alessandra Vergallo", time: "10:00", service: "Trattamento", note: "Richiamare" }] }),
     details: JSON.stringify({ textEntries: [{ label: "Motivo:", value: "Cliente assente" }] }),
     timeline: JSON.stringify({ timelineEntries: [{ time: "14:30", note: "Cliente richiamata" }, { time: "09:15", note: "Apertura completata" }] }),
@@ -95,6 +110,7 @@ test("prepara per la task un commento leggibile senza JSON o identificativi", ()
 
   assert.match(context.readableText, /Tutti presenti: Sì, tutti presenti/);
   assert.match(context.readableText, /Angelica Pasculli: Pausa alle 12:00/);
+  assert.match(context.readableText, /Postazione ordinata: Sì/);
   assert.match(context.readableText, /Alessandra Vergallo \(10:00 · Trattamento\): Richiamare/);
   assert.match(context.readableText, /Motivo: Cliente assente/);
   assert.match(context.readableText, /14:30 — Cliente richiamata/);

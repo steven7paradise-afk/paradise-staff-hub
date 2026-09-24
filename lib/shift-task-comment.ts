@@ -36,6 +36,18 @@ function formatStructuredAnswer(question: ShiftResponsibleQuestion, rawValue: st
       return name && note ? [`${name}: ${note}`] : [];
     }).join("; ");
   }
+  if (Array.isArray(value.staffChecks)) {
+    return value.staffChecks.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const entry = item as Record<string, unknown>;
+      const name = cleanText(entry.name, 160);
+      if (!name || !entry.responses || typeof entry.responses !== "object" || Array.isArray(entry.responses)) return [];
+      const checks = Object.entries(entry.responses as Record<string, unknown>)
+        .map(([label, result]) => `${cleanText(label, 200)}: ${result === "YES" || result === "CHECKED" ? "Sì" : "No"}`)
+        .join(", ");
+      return checks ? [`${name}: ${checks}`] : [];
+    }).join("; ");
+  }
   if (Array.isArray(value.clientNotes)) {
     return value.clientNotes.flatMap((item) => {
       if (!item || typeof item !== "object") return [];

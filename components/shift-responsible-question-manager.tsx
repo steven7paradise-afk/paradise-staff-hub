@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ChevronDown, ChevronUp, Circle, Copy, GripVertical, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Circle, Copy, GripVertical, Pencil, Plus, Sparkles, Trash2, UserCheck, X } from "lucide-react";
 import type { ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 
 type GeneratorScope = "OPENING" | "SERVICE" | "CLOSING" | "COMPLETE";
@@ -29,6 +29,7 @@ const questionTypes: Array<{ value: ShiftResponsibleQuestion["answerType"]; labe
   { value: "DATE", label: "Data", icon: "▣" },
   { value: "TIME", label: "Ora", icon: "◷" },
   { value: "STAFF_NOTE", label: "Collega allo staff", icon: "♙" },
+  { value: "STAFF_CHECKLIST", label: "Controlli per ogni staff", icon: "✓♙" },
   { value: "CLIENT_NOTE", label: "Collega a cliente", icon: "♧" },
   { value: "TASK", label: "Genera task", icon: "✓+" },
   { value: "YES_NO", label: "SÌ / NO", icon: "✓" },
@@ -55,6 +56,7 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
   const [followUps, setFollowUps] = useState<Record<string, string>>({});
   const [yesLabel, setYesLabel] = useState("Sì");
   const [noLabel, setNoLabel] = useState("No");
+  const [staffResponseMode, setStaffResponseMode] = useState<"YES_NO" | "CHECKBOXES">("YES_NO");
   const [status, setStatus] = useState("");
   const [isPending, startTransition] = useTransition();
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -85,6 +87,15 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
     setFollowUps({});
     setYesLabel("Sì");
     setNoLabel("No");
+    setStaffResponseMode("YES_NO");
+  }
+
+  function openStaffChecklist() {
+    openNew();
+    setAnswerType("STAFF_CHECKLIST");
+    setTitle("Controllo individuale dello staff");
+    setDescription("Compila il controllo separatamente per ogni persona presente nel turno.");
+    setOptions(["", ""]);
   }
 
   async function generateQuestionnaire() {
@@ -150,23 +161,24 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
     setFollowUps(question.followUps ?? {});
     setYesLabel(question.yesLabel || "Sì");
     setNoLabel(question.noLabel || "No");
+    setStaffResponseMode(question.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO");
   }
 
   function saveQuestion() {
     const cleanTitle = title.trim();
     const cleanOptions = Array.from(new Set(options.map((option) => option.trim()).filter(Boolean)));
     const cleanRows = Array.from(new Set(rows.map((row) => row.trim()).filter(Boolean)));
-    const needsOptions = ["MULTI_TEXT", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"].includes(answerType);
+    const needsOptions = ["MULTI_TEXT", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID", "STAFF_CHECKLIST"].includes(answerType);
     const needsRows = ["MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"].includes(answerType);
     const allowedFollowUpKeys = new Set(
       ["MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN"].includes(answerType)
         ? [...cleanOptions.map((_, index) => `OPTION_${index}`), ...(["MULTIPLE_CHOICE", "CHECKBOXES"].includes(answerType) && allowOther ? ["OTHER"] : [])]
         : ["LINEAR_SCALE", "RATING"].includes(answerType)
           ? Array.from({ length: scaleMax - (answerType === "RATING" ? 1 : scaleMin) + 1 }, (_, index) => `VALUE_${index + (answerType === "RATING" ? 1 : scaleMin)}`)
-          : answerType === "YES_NO" ? [] : ["ANY"],
+          : ["YES_NO", "STAFF_CHECKLIST"].includes(answerType) ? [] : ["ANY"],
     );
     const cleanFollowUps = Object.fromEntries(Object.entries(followUps).flatMap(([key, prompt]) => allowedFollowUpKeys.has(key) && prompt.trim() ? [[key, prompt.trim()]] : []));
-    if (!cleanTitle || (needsOptions && cleanOptions.length < (answerType === "MULTI_TEXT" ? 1 : 2)) || (needsRows && cleanRows.length < 1)) return;
+    if (!cleanTitle || (needsOptions && cleanOptions.length < (["MULTI_TEXT", "STAFF_CHECKLIST"].includes(answerType) ? 1 : 2)) || (needsRows && cleanRows.length < 1)) return;
     const next = editingId === "new"
       ? [...questions, {
           id: `question-${Date.now()}`,
@@ -184,6 +196,7 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
           followUps: cleanFollowUps,
           yesLabel: answerType === "YES_NO" ? yesLabel.trim() || "Sì" : undefined,
           noLabel: answerType === "YES_NO" ? noLabel.trim() || "No" : undefined,
+          staffResponseMode: answerType === "STAFF_CHECKLIST" ? staffResponseMode : undefined,
         }]
       : questions.map((question) => question.id === editingId ? {
           ...question,
@@ -201,6 +214,7 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
           followUps: cleanFollowUps,
           yesLabel: answerType === "YES_NO" ? yesLabel.trim() || "Sì" : undefined,
           noLabel: answerType === "YES_NO" ? noLabel.trim() || "No" : undefined,
+          staffResponseMode: answerType === "STAFF_CHECKLIST" ? staffResponseMode : undefined,
         } : question);
 
     startTransition(async () => {
@@ -310,9 +324,9 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
     persistQuestionOrder(next);
   }
 
-  const usesOptions = ["MULTI_TEXT", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"].includes(answerType);
+  const usesOptions = ["MULTI_TEXT", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID", "STAFF_CHECKLIST"].includes(answerType);
   const usesRows = ["MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"].includes(answerType);
-  const minimumOptions = answerType === "MULTI_TEXT" ? 1 : 2;
+  const minimumOptions = ["MULTI_TEXT", "STAFF_CHECKLIST"].includes(answerType) ? 1 : 2;
   const maximumOptions = answerType === "MULTI_TEXT" ? 10 : 12;
   const validOptions = new Set(options.map((option) => option.trim()).filter(Boolean)).size >= minimumOptions;
   const validRows = !usesRows || rows.some((row) => row.trim());
@@ -320,7 +334,7 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
     ? [...options.map((option, index) => ({ key: `OPTION_${index}`, label: `Dopo “${option.trim() || `Opzione ${index + 1}`}”, chiedi` })), ...(["MULTIPLE_CHOICE", "CHECKBOXES"].includes(answerType) && allowOther ? [{ key: "OTHER", label: "Dopo “Altro”, chiedi" }] : [])]
     : ["LINEAR_SCALE", "RATING"].includes(answerType)
       ? Array.from({ length: scaleMax - (answerType === "RATING" ? 1 : scaleMin) + 1 }, (_, index) => { const value = index + (answerType === "RATING" ? 1 : scaleMin); return { key: `VALUE_${value}`, label: `Dopo ${value}, chiedi` }; })
-      : answerType === "YES_NO" ? [] : [{ key: "ANY", label: "Dopo la risposta, chiedi" }];
+      : ["YES_NO", "STAFF_CHECKLIST"].includes(answerType) ? [] : [{ key: "ANY", label: "Dopo la risposta, chiedi" }];
 
   return (
     <section className="min-h-screen bg-[#f4f1fa] px-3 py-8 sm:px-8 sm:py-12 xl:px-12">
@@ -349,6 +363,20 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
             </button>
           </div>
           </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-4 rounded-2xl border border-[#2ed65d]/25 bg-[#f4fcf6] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-[#16883a] shadow-sm"><UserCheck className="size-5" /></span>
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#16883a]">Sezione separata</p>
+              <h3 className="mt-1 text-base font-black text-[#202124]">Controlli sullo staff</h3>
+              <p className="mt-1 text-[10px] leading-relaxed text-[#5f6368]">La stessa verifica viene mostrata per ogni persona in turno. Puoi usare risposte Sì/No oppure caselle da spuntare.</p>
+            </div>
+          </div>
+          <button type="button" onClick={openStaffChecklist} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#16883a] px-4 text-[10px] font-black text-white shadow-sm">
+            <Plus className="size-4" /> Aggiungi controllo staff
+          </button>
         </div>
 
         {generatorOpen ? (
@@ -428,21 +456,30 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
               <div className="mt-6">
                 {usesOptions ? (
                   <div className="space-y-2">
+                    {answerType === "STAFF_CHECKLIST" ? (
+                      <div className="mb-5 rounded-xl border border-[#2ed65d]/20 bg-[#f4fcf6] p-4">
+                        <p className="text-[9px] font-black uppercase tracking-wide text-[#16883a]">Come risponde il responsabile per ogni lavoratore?</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <button type="button" onClick={() => setStaffResponseMode("YES_NO")} aria-pressed={staffResponseMode === "YES_NO"} className={`min-h-12 rounded-xl border px-4 text-left text-[10px] font-black ${staffResponseMode === "YES_NO" ? "border-[#2ed65d] bg-white text-[#16883a] ring-2 ring-[#2ed65d]/15" : "border-black/10 bg-white/70 text-[#5f6368]"}`}>Sì / No per ogni domanda</button>
+                          <button type="button" onClick={() => setStaffResponseMode("CHECKBOXES")} aria-pressed={staffResponseMode === "CHECKBOXES"} className={`min-h-12 rounded-xl border px-4 text-left text-[10px] font-black ${staffResponseMode === "CHECKBOXES" ? "border-[#2ed65d] bg-white text-[#16883a] ring-2 ring-[#2ed65d]/15" : "border-black/10 bg-white/70 text-[#5f6368]"}`}>Caselle da spuntare</button>
+                        </div>
+                      </div>
+                    ) : null}
                     {usesRows ? <div className="mb-5 rounded-lg bg-[#faf7f9] p-3"><p className="mb-2 text-[9px] font-black uppercase tracking-wide text-[#874363]">Righe della griglia</p>{rows.map((row, index) => <div key={index} className="flex items-center gap-2"><input value={row} onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Riga ${index + 1}`} className="h-9 min-w-0 flex-1 border-b border-black/20 bg-transparent px-1 text-xs outline-none focus:border-[#a45a7d]" /><button type="button" onClick={() => setRows((current) => current.filter((_, itemIndex) => itemIndex !== index))} disabled={rows.length <= 1} className="grid size-8 place-items-center rounded-full text-black/35 disabled:opacity-20" aria-label={`Elimina riga ${index + 1}`}><X className="size-4" /></button></div>)}<button type="button" onClick={() => setRows((current) => [...current, ""])} className="mt-2 text-[10px] font-bold text-[#874363]">+ Aggiungi riga</button></div> : null}
-                    <p className="text-[9px] font-black uppercase tracking-wide text-[#874363]">{usesRows ? "Colonne" : answerType === "DROPDOWN" ? "Voci dell'elenco" : answerType === "MULTI_TEXT" ? "Voci da compilare" : "Opzioni di risposta"}</p>
+                    <p className="text-[9px] font-black uppercase tracking-wide text-[#874363]">{usesRows ? "Colonne" : answerType === "DROPDOWN" ? "Voci dell'elenco" : answerType === "MULTI_TEXT" ? "Voci da compilare" : answerType === "STAFF_CHECKLIST" ? "Domande da ripetere per ogni lavoratore" : "Opzioni di risposta"}</p>
                     {options.map((option, index) => (
                       <div key={index} className="grid grid-cols-[24px_minmax(0,1fr)_36px] items-center gap-2">
                         {answerType === "MULTI_TEXT" ? <span className="grid size-5 place-items-center rounded bg-[#f5eaf0] text-[8px] font-black text-[#874363]">{index + 1}</span> : <Circle className="size-5 text-black/25" />}
-                        <input value={option} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={answerType === "MULTI_TEXT" ? `Nome della voce ${index + 1}` : `Opzione ${index + 1}`} maxLength={120} className="h-10 min-w-0 border-b border-black/20 bg-transparent px-1 text-xs text-[#3c4043] outline-none focus:border-[#a45a7d]" />
+                        <input value={option} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={answerType === "MULTI_TEXT" ? `Nome della voce ${index + 1}` : answerType === "STAFF_CHECKLIST" ? `Domanda ${index + 1}` : `Opzione ${index + 1}`} maxLength={120} className="h-10 min-w-0 border-b border-black/20 bg-transparent px-1 text-xs text-[#3c4043] outline-none focus:border-[#a45a7d]" />
                         <button type="button" onClick={() => setOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))} disabled={options.length <= minimumOptions} className="grid size-9 place-items-center rounded-full text-black/40 hover:bg-black/5 disabled:opacity-20" aria-label={`Elimina ${answerType === "MULTI_TEXT" ? "voce" : "opzione"} ${index + 1}`}><X className="size-4" /></button>
                       </div>
                     ))}
                     <div className="flex items-center gap-2 pl-8 text-[11px]">
-                      <button type="button" onClick={() => setOptions((current) => [...current, ""])} disabled={options.length >= maximumOptions} className="py-2 font-medium text-[#5f6368] hover:text-[#a45a7d] disabled:opacity-35">{answerType === "MULTI_TEXT" ? `Aggiungi voce (${options.length}/10)` : "Aggiungi opzione"}</button>
-                      {answerType !== "DROPDOWN" && answerType !== "MULTI_TEXT" && !usesRows ? <><span className="text-black/30">o</span><button type="button" onClick={() => setAllowOther(true)} disabled={allowOther} className="py-2 font-medium text-[#a45a7d] disabled:text-black/30">aggiungi “Altro”</button></> : null}
+                      <button type="button" onClick={() => setOptions((current) => [...current, ""])} disabled={options.length >= maximumOptions} className="py-2 font-medium text-[#5f6368] hover:text-[#a45a7d] disabled:opacity-35">{answerType === "MULTI_TEXT" ? `Aggiungi voce (${options.length}/10)` : answerType === "STAFF_CHECKLIST" ? `Aggiungi domanda (${options.length}/12)` : "Aggiungi opzione"}</button>
+                      {answerType !== "DROPDOWN" && answerType !== "MULTI_TEXT" && answerType !== "STAFF_CHECKLIST" && !usesRows ? <><span className="text-black/30">o</span><button type="button" onClick={() => setAllowOther(true)} disabled={allowOther} className="py-2 font-medium text-[#a45a7d] disabled:text-black/30">aggiungi “Altro”</button></> : null}
                     </div>
                     {allowOther ? <div className="flex items-center gap-2 pl-0"><Circle className="size-5 text-black/25" /><span className="flex-1 border-b border-black/15 py-2 text-xs text-[#5f6368]">Altro…</span><button type="button" onClick={() => setAllowOther(false)} className="grid size-9 place-items-center rounded-full text-black/40 hover:bg-black/5" aria-label="Rimuovi opzione Altro"><X className="size-4" /></button></div> : null}
-                    {!validOptions ? <p className="pl-8 text-[9px] font-bold text-[#b33e53]">{answerType === "MULTI_TEXT" ? "Inserisci almeno una voce." : "Inserisci almeno due risposte."}</p> : null}
+                    {!validOptions ? <p className="pl-8 text-[9px] font-bold text-[#b33e53]">{["MULTI_TEXT", "STAFF_CHECKLIST"].includes(answerType) ? "Inserisci almeno una voce." : "Inserisci almeno due risposte."}</p> : null}
                     {!validRows ? <p className="text-[9px] font-bold text-[#b33e53]">Inserisci almeno una riga.</p> : null}
                   </div>
                 ) : answerType === "YES_NO" ? (
@@ -464,7 +501,7 @@ export function ShiftResponsibleQuestionManager({ initialQuestions }: { initialQ
                       : answerType === "DATE" ? <input type="date" disabled className="h-11 rounded-lg border border-black/15 bg-white px-3 text-xs" />
                         : answerType === "TIME" ? <input type="time" disabled className="h-11 rounded-lg border border-black/15 bg-white px-3 text-xs" />
                           : <div className="h-12 w-full max-w-md border-b border-dotted border-black/35 px-1 py-3 text-xs text-black/35">{answerType === "SHORT_TEXT" ? "Risposta breve" : "Testo della risposta"}</div>}
-                {answerType !== "YES_NO" ? (
+                {!["YES_NO", "STAFF_CHECKLIST"].includes(answerType) ? (
                   <div className="mt-5 rounded-xl border border-[#a45a7d]/10 bg-[#faf7f9] p-4">
                     <p className="text-[9px] font-black uppercase tracking-wide text-[#874363]">Varianti della domanda <span className="font-medium normal-case tracking-normal text-black/40">(facoltative)</span></p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">

@@ -1,3 +1,4 @@
+import { isValidShiftNote, SHIFT_ANSWER_PAYLOAD_LIMIT, SHIFT_NOTE_LIMIT } from "@/lib/shift-note-limits";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -61,10 +62,12 @@ export async function PUT(request: NextRequest) {
   const payload = await request.json().catch(() => null) as { day?: unknown; questionId?: unknown; answer?: unknown } | null;
   const day = typeof payload?.day === "string" ? payload.day : "";
   const questionId = typeof payload?.questionId === "string" ? payload.questionId : "";
-  const answer = typeof payload?.answer === "string" ? payload.answer.trim().slice(0, 12000) : "";
+  const answer = typeof payload?.answer === "string" ? payload.answer.trim() : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !questionId || !answer) {
     return NextResponse.json({ error: "Dati non validi" }, { status: 400 });
   }
+
+  if (answer.length > SHIFT_ANSWER_PAYLOAD_LIMIT) return NextResponse.json({ error: "Risposta troppo lunga" }, { status: 400 });
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
   if (day !== today) return NextResponse.json({ error: "È possibile modificare soltanto il turno di oggi" }, { status: 400 });
@@ -85,6 +88,9 @@ export async function PUT(request: NextRequest) {
   const answers = normalizeShiftResponsibleAnswers(answersSetting?.value);
   const [baseQuestionId, branch, extraPart] = questionId.split("::");
   const question = questions.find((item) => item.id === baseQuestionId);
+  if ((branch || ["TEXT", "SHORT_TEXT"].includes(question?.answerType ?? "")) && answer.length > SHIFT_NOTE_LIMIT) {
+    return NextResponse.json({ error: "La nota può contenere al massimo 5.000 caratteri" }, { status: 400 });
+  }
   const primaryAnswer = answers[day]?.[baseQuestionId];
   const validFollowUp = question && branch ? activeShiftFollowUps(question, primaryAnswer).some((followUp) => followUp.key === branch) : false;
   const isPrimaryChoice = answer === "YES" || answer === "NO";
@@ -128,7 +134,7 @@ export async function PUT(request: NextRequest) {
       const validEntries = entries.length > 0
         && entries.length <= 30
         && uniqueIds.size === entries.length
-        && entries.every((entry) => entry.note.trim().length > 0 && entry.note.length <= 400);
+        && entries.every((entry) => isValidShiftNote(entry.note));
       if (validEntries) {
         const scheduledStaff = await prisma.scheduleEntry.findMany({
           where: {
@@ -146,6 +152,43 @@ export async function PUT(request: NextRequest) {
       }
     } catch { /* invalid staff answer */ }
   }
+  let isStaffChecklist = false;
+  if (question?.answerType === "STAFF_CHECKLIST") {
+    try {
+      const parsed = JSON.parse(answer) as { staffChecks?: unknown };
+      const entries = Array.isArray(parsed.staffChecks) ? parsed.staffChecks.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const entry = item as { staffId?: unknown; name?: unknown; responses?: unknown };
+        if (typeof entry.staffId !== "string" || typeof entry.name !== "string" || !entry.responses || typeof entry.responses !== "object" || Array.isArray(entry.responses)) return [];
+        return [{ staffId: entry.staffId, name: entry.name, responses: entry.responses as Record<string, unknown> }];
+      }) : [];
+      const uniqueIds = new Set(entries.map((entry) => entry.staffId));
+      const criteria = question.options ?? [];
+      const mode = question.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO";
+      const validResponses = criteria.length > 0 && entries.every((entry) => {
+        const keys = Object.keys(entry.responses);
+        if (keys.length !== criteria.length || !criteria.every((criterion) => keys.includes(criterion))) return false;
+        return criteria.every((criterion) => mode === "CHECKBOXES"
+          ? entry.responses[criterion] === "CHECKED" || entry.responses[criterion] === "UNCHECKED"
+          : entry.responses[criterion] === "YES" || entry.responses[criterion] === "NO");
+      });
+      if (entries.length > 0 && entries.length <= 30 && uniqueIds.size === entries.length && validResponses) {
+        const scheduledStaff = await prisma.scheduleEntry.findMany({
+          where: {
+            date: romeDayRange(day).date,
+            user_id: { in: [...uniqueIds] },
+            location: { name: { contains: "Buenos Aires", mode: "insensitive" } },
+            user: { active: true, employee_status: { not: "Ex dipendente" } },
+          },
+          select: { user_id: true, user: { select: { name: true } }, category: { select: { start_time: true, end_time: true } }, start_time: true, end_time: true },
+        });
+        const scheduledPeople = new Map(scheduledStaff
+          .filter((row) => (row.start_time || row.category.start_time) && (row.end_time || row.category.end_time))
+          .map((row) => [row.user_id, row.user.name]));
+        isStaffChecklist = scheduledPeople.size === entries.length && entries.every((entry) => scheduledPeople.get(entry.staffId) === entry.name);
+      }
+    } catch { /* invalid staff checklist */ }
+  }
   let isClientNote = false;
   if (question?.answerType === "CLIENT_NOTE") {
     try {
@@ -161,7 +204,7 @@ export async function PUT(request: NextRequest) {
           : [];
       });
       const uniqueIds = new Set(entries.map((entry) => entry.appointmentId));
-      if (entries.length > 0 && entries.length <= 10 && uniqueIds.size === entries.length && entries.every((entry) => entry.note.trim().length > 0 && entry.note.length <= 1000)) {
+      if (entries.length > 0 && entries.length <= 10 && uniqueIds.size === entries.length && entries.every((entry) => isValidShiftNote(entry.note))) {
         const appointmentMap = new Map((await getShiftAppointmentClients(day)).map((item) => [item.id, item]));
         isClientNote = entries.every((entry) => {
           const appointment = appointmentMap.get(entry.appointmentId);
@@ -183,7 +226,7 @@ export async function PUT(request: NextRequest) {
       isMultiText = labels.length > 0
         && labels.length <= 10
         && entries.length === labels.length
-        && entries.every((entry, index) => entry.label === labels[index] && entry.value.trim().length > 0 && entry.value.length <= 1000);
+        && entries.every((entry, index) => entry.label === labels[index] && isValidShiftNote(entry.value));
     } catch { /* invalid multiple written answers */ }
   }
   let isTimeline = false;
@@ -197,7 +240,7 @@ export async function PUT(request: NextRequest) {
       }) : [];
       isTimeline = entries.length > 0
         && entries.length <= 10
-        && entries.every((entry) => /^([01]\d|2[0-3]):[0-5]\d$/.test(entry.time) && entry.note.trim().length > 0 && entry.note.length <= 1000);
+        && entries.every((entry) => /^([01]\d|2[0-3]):[0-5]\d$/.test(entry.time) && isValidShiftNote(entry.note));
     } catch { /* invalid timeline answer */ }
   }
   let taskRequest: { taskTitle: string; assigneeIds: string[] } | null = null;
@@ -218,7 +261,7 @@ export async function PUT(request: NextRequest) {
   }
   const validPrimaryAnswer = ["SHORT_TEXT", "TEXT", "DATE", "TIME"].includes(question?.answerType ?? "")
     || (question?.answerType === "YES_NO" && isPrimaryChoice)
-    || isSingleChoice || isNumberChoice || isStructuredChoice || isUploadedFile || isStaffNote || isClientNote || isMultiText || isTimeline || Boolean(taskRequest);
+    || isSingleChoice || isNumberChoice || isStructuredChoice || isUploadedFile || isStaffNote || isStaffChecklist || isClientNote || isMultiText || isTimeline || Boolean(taskRequest);
   if (!question || extraPart || (branch ? !validFollowUp : !validPrimaryAnswer)) {
     return NextResponse.json({ error: "Domanda non valida" }, { status: 400 });
   }

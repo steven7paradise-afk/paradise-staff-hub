@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarCheck,
@@ -678,6 +679,7 @@ type AppointmentNotePreview = {
   key: "shopify" | "office" | "booking" | "form";
   label: string;
   text: string;
+  fullText: string;
 };
 
 function getBookingNotePreviews(
@@ -690,10 +692,11 @@ function getBookingNotePreviews(
   const seen = new Set<string>();
   const add = (key: AppointmentNotePreview["key"], label: string, value?: string | null) => {
     const text = compactValue(value, 260);
-    const normalized = normalizeSearchValue(text);
+    const fullText = String(value || "").trim();
+    const normalized = normalizeSearchValue(fullText);
     if (!text || !normalized || seen.has(normalized)) return;
     seen.add(normalized);
-    previews.push({ key, label, text });
+    previews.push({ key, label, text, fullText });
   };
 
   // La nota Shopify contiene il riepilogo operativo finale: deve diventare
@@ -714,9 +717,11 @@ function getBookingNotePreviews(
 function AppointmentNotePreviews({
   notes,
   compact = false,
+  expandable = false,
 }: {
   notes: AppointmentNotePreview[];
   compact?: boolean;
+  expandable?: boolean;
 }) {
   if (!notes.length) return null;
   return (
@@ -743,7 +748,11 @@ function AppointmentNotePreviews({
           <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${isShopify ? "text-emerald-800" : isCompleted ? "text-emerald-700" : "text-[#B9476D]"}`}>
             {isCompleted ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
           </span>
-          <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
+          {expandable ? (
+            <AppointmentNoteDisclosure text={note.fullText} label={note.label} />
+          ) : (
+            <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
+          )}
         </div>
         );
       })}
@@ -6890,7 +6899,7 @@ export function AppointmentsBrowser({
                           {booking.bookingStr ? <span>Ordine {formatOrderCode(booking.bookingStr)}</span> : null}
                           {booking.customerPhone ? <span>{booking.customerPhone}</span> : null}
                         </div>
-                        <AppointmentNotePreviews notes={notePreviews} />
+                        <AppointmentNotePreviews notes={notePreviews} expandable />
                         <div className="mt-4 flex flex-col gap-3 border-t border-[#F0E5EA] pt-3 sm:flex-row sm:items-end sm:justify-between">
                           <label className="min-w-0 flex-1">
                             <span className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.15em] text-[#806774]">

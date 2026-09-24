@@ -1,3 +1,4 @@
+import { isValidShiftNote } from "@/lib/shift-note-limits";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
@@ -13,8 +14,10 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as { day?: unknown; text?: unknown } | null;
   const day = typeof body?.day === "string" ? body.day : "";
-  const text = typeof body?.text === "string" ? body.text.trim().slice(0, 2000) : "";
+  const text = typeof body?.text === "string" ? body.text.trim() : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !text) return NextResponse.json({ error: "Scrivi un commento prima di inviare" }, { status: 400 });
+
+  if (!isValidShiftNote(text)) return NextResponse.json({ error: "Il commento può contenere al massimo 5.000 caratteri" }, { status: 400 });
 
   const [accessSetting, assignmentSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: SHIFT_RESPONSIBLE_ACCESS_KEY } }),

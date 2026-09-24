@@ -1,3 +1,4 @@
+import { SHIFT_ANSWER_PAYLOAD_LIMIT } from "./shift-note-limits";
 export const SHIFT_RESPONSIBLE_QUESTIONS_KEY = "shift_responsible_questions";
 export const SHIFT_RESPONSIBLE_ANSWERS_KEY = "shift_responsible_answers";
 
@@ -5,7 +6,7 @@ export type ShiftResponsibleQuestion = {
   id: string;
   title: string;
   description: string;
-  answerType: "YES_NO" | "SHORT_TEXT" | "TEXT" | "MULTI_TEXT" | "TIMELINE" | "MULTIPLE_CHOICE" | "CHECKBOXES" | "DROPDOWN" | "FILE_UPLOAD" | "LINEAR_SCALE" | "RATING" | "MULTIPLE_CHOICE_GRID" | "CHECKBOX_GRID" | "DATE" | "TIME" | "STAFF_NOTE" | "CLIENT_NOTE" | "TASK";
+  answerType: "YES_NO" | "SHORT_TEXT" | "TEXT" | "MULTI_TEXT" | "TIMELINE" | "MULTIPLE_CHOICE" | "CHECKBOXES" | "DROPDOWN" | "FILE_UPLOAD" | "LINEAR_SCALE" | "RATING" | "MULTIPLE_CHOICE_GRID" | "CHECKBOX_GRID" | "DATE" | "TIME" | "STAFF_NOTE" | "STAFF_CHECKLIST" | "CLIENT_NOTE" | "TASK";
   options?: string[];
   rows?: string[];
   scaleMin?: number;
@@ -17,6 +18,7 @@ export type ShiftResponsibleQuestion = {
   followUps?: Record<string, string>;
   yesLabel?: string;
   noLabel?: string;
+  staffResponseMode?: "YES_NO" | "CHECKBOXES";
 };
 
 export type ShiftResponsibleAnswer = "YES" | "NO";
@@ -29,7 +31,7 @@ export function normalizeShiftResponsibleQuestions(value: unknown): ShiftRespons
     const raw = item as Record<string, unknown>;
     const title = String(raw.title ?? "").trim().slice(0, 160);
     if (!title) return [];
-    const supportedTypes = new Set<ShiftResponsibleQuestion["answerType"]>(["YES_NO", "SHORT_TEXT", "TEXT", "MULTI_TEXT", "TIMELINE", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "FILE_UPLOAD", "LINEAR_SCALE", "RATING", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID", "DATE", "TIME", "STAFF_NOTE", "CLIENT_NOTE", "TASK"]);
+    const supportedTypes = new Set<ShiftResponsibleQuestion["answerType"]>(["YES_NO", "SHORT_TEXT", "TEXT", "MULTI_TEXT", "TIMELINE", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "FILE_UPLOAD", "LINEAR_SCALE", "RATING", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID", "DATE", "TIME", "STAFF_NOTE", "STAFF_CHECKLIST", "CLIENT_NOTE", "TASK"]);
     const candidateType = String(raw.answerType ?? "YES_NO") as ShiftResponsibleQuestion["answerType"];
     const answerType = supportedTypes.has(candidateType) ? candidateType : "YES_NO";
     const options = Array.isArray(raw.options)
@@ -49,7 +51,7 @@ export function normalizeShiftResponsibleQuestions(value: unknown): ShiftRespons
       title,
       description: String(raw.description ?? "").trim().slice(0, 500),
       answerType,
-      options: ["MULTI_TEXT", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"].includes(answerType) ? options.slice(0, answerType === "MULTI_TEXT" ? 10 : 12) : [],
+      options: ["MULTI_TEXT", "MULTIPLE_CHOICE", "CHECKBOXES", "DROPDOWN", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID", "STAFF_CHECKLIST"].includes(answerType) ? options.slice(0, answerType === "MULTI_TEXT" ? 10 : 12) : [],
       rows: Array.isArray(raw.rows) ? raw.rows.map((row) => String(row).trim().slice(0, 120)).filter(Boolean).slice(0, 12) : [],
       scaleMin: Number(raw.scaleMin) === 0 ? 0 : 1,
       scaleMax: Math.max(2, Math.min(10, Number(raw.scaleMax) || 5)),
@@ -60,6 +62,7 @@ export function normalizeShiftResponsibleQuestions(value: unknown): ShiftRespons
       followUps,
       yesLabel: String(raw.yesLabel ?? "Sì").trim().slice(0, 80) || "Sì",
       noLabel: String(raw.noLabel ?? "No").trim().slice(0, 80) || "No",
+      staffResponseMode: raw.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO",
     }];
   });
 }
@@ -109,7 +112,7 @@ export function normalizeShiftResponsibleAnswers(value: unknown): ShiftResponsib
           Object.entries(answers as Record<string, unknown>)
             .flatMap(([questionId, answer]) => {
               if (typeof answer !== "string") return [];
-              const normalized = answer.trim().slice(0, 12000);
+              const normalized = answer.trim().slice(0, SHIFT_ANSWER_PAYLOAD_LIMIT);
               return normalized ? [[questionId, normalized]] : [];
             }),
         ),
