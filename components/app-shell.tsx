@@ -37,6 +37,7 @@ function getContrastYIQ(hexcolor: string) {
 const nav = [
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
+  { href: "/hub", label: "Magazzino Paradise", iconName: "PanelsTopLeft", roles: routePermissions["/hub"], section: "Planning & Saloni" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/responsabile-di-turno", label: "Responsabile di turno", iconName: "UserRound", roles: routePermissions["/responsabile-di-turno"], section: "Generale" },
   { href: "/programmazione-responsabile-di-turno", label: "Turni responsabili", iconName: "CalendarDays", roles: routePermissions["/programmazione-responsabile-di-turno"], section: "Generale" },
@@ -308,6 +309,24 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     const sectionIndex = preferredSection >= 0 ? preferredSection : 0;
     sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
       ? { ...section, routes: [...section.routes, "/barcode-labels"] }
+      : section);
+  }
+  const canSeeHub = effectivePermissionSet
+    ? effectivePermissionSet.view.includes("/hub")
+    : routePermissions["/hub"].includes(currentRole);
+  if (
+    canSeeHub
+    && sidebarConfig
+    && !sidebarConfig.some((section) => section.routes.includes("/hub"))
+  ) {
+    const preferredSection = sidebarConfig.findIndex((section) =>
+      section.id === "planning"
+      || section.title.toLowerCase().includes("planning")
+      || section.routes.includes("/orders")
+    );
+    const sectionIndex = preferredSection >= 0 ? preferredSection : 0;
+    sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
+      ? { ...section, routes: [...section.routes, "/hub"] }
       : section);
   }
   const getSidebarLabel = (href: string, fallback: string) => {
