@@ -15,9 +15,9 @@ export function bearerToken(request: Request) {
   return match?.[1] ?? null;
 }
 
-export async function createMobileSession(userId: string, deviceName?: string) {
+export async function createMobileSession(userId: string, deviceName?: string, lifetimeMs = SESSION_DAYS * 24 * 60 * 60 * 1000) {
   const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + lifetimeMs);
   await prisma.mobileSession.create({
     data: {
       user_id: userId,
