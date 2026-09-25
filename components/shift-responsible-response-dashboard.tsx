@@ -7,7 +7,7 @@ import { ArrowRight, CalendarDays, CalendarRange, CheckCircle2, ChevronDown, Dow
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { ShiftResponsibleComments } from "@/components/shift-responsible-comments";
 import type { ShiftResponsibleAccess } from "@/lib/shift-responsible-access";
-import { activeShiftFollowUps, type ShiftResponsibleAnswers, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
+import { activeShiftFollowUps, staffChecklistDisplayRows, type ShiftResponsibleAnswers, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 
 type ResponsiblePerson = { id: string; name: string; photoUrl: string | null };
 
@@ -31,13 +31,9 @@ function answerLabel(value: string, question?: ShiftResponsibleQuestion) {
         }).join(" · ");
       }
       if (Array.isArray(record.staffChecks)) {
-        return record.staffChecks.flatMap((item) => {
-          if (!item || typeof item !== "object") return [];
-          const entry = item as Record<string, unknown>;
-          if (typeof entry.name !== "string" || !entry.responses || typeof entry.responses !== "object" || Array.isArray(entry.responses)) return [];
-          const checks = Object.entries(entry.responses as Record<string, unknown>).map(([label, result]) => `${label}: ${result === "YES" || result === "CHECKED" ? "Sì" : "No"}`).join(", ");
-          return [`${entry.name}: ${checks}`];
-        }).join(" · ");
+        return staffChecklistDisplayRows(record.staffChecks, question?.staffResponseMode)
+          .map((row) => `${row.staff}: ${row.control}: ${row.outcome}`)
+          .join(" · ") || "Nessuna selezione";
       }
       if (Array.isArray(record.clientNotes)) {
         return record.clientNotes.flatMap((item) => {
@@ -495,13 +491,11 @@ function StructuredResponse({ value, question }: { value: string; question?: Shi
       return <ResponseTable headers={["Staff", "Nota"]} rows={parsed.staffNotes.flatMap((item) => item && typeof item === "object" ? [[String((item as Record<string, unknown>).name || "-"), String((item as Record<string, unknown>).note || "-")]] : [])} />;
     }
     if (Array.isArray(parsed.staffChecks)) {
-      const rows = parsed.staffChecks.flatMap((item) => {
-        if (!item || typeof item !== "object") return [];
-        const entry = item as Record<string, unknown>;
-        if (!entry.responses || typeof entry.responses !== "object" || Array.isArray(entry.responses)) return [];
-        return Object.entries(entry.responses as Record<string, unknown>).map(([label, result]) => [String(entry.name || "-"), label, result === "YES" || result === "CHECKED" ? "Sì" : "No"]);
-      });
-      return <ResponseTable headers={["Staff", "Controllo", "Esito"]} rows={rows} />;
+      const rows = staffChecklistDisplayRows(parsed.staffChecks, question?.staffResponseMode)
+        .map((row) => [row.staff, row.control, row.outcome]);
+      return rows.length
+        ? <ResponseTable headers={["Staff", "Controllo", "Esito"]} rows={rows} />
+        : <p className="text-[10px] italic text-black/35">Nessuna risposta selezionata.</p>;
     }
     if (Array.isArray(parsed.clientNotes)) {
       return <ResponseTable headers={["Cliente", "Ora", "Servizio", "Nota"]} rows={parsed.clientNotes.flatMap((item) => item && typeof item === "object" ? [[String((item as Record<string, unknown>).name || "-"), String((item as Record<string, unknown>).time || "-"), String((item as Record<string, unknown>).service || "-"), String((item as Record<string, unknown>).note || "-")]] : [])} />;

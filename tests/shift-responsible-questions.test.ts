@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeShiftFollowUps, DEFAULT_STAFF_PRESENTABILITY_CHECKS, normalizeShiftResponsibleQuestions, type ShiftResponsibleQuestion } from "../lib/shift-responsible-questions";
+import { activeShiftFollowUps, DEFAULT_STAFF_PRESENTABILITY_CHECKS, normalizeShiftResponsibleQuestions, staffChecklistDisplayRows, type ShiftResponsibleQuestion } from "../lib/shift-responsible-questions";
 import { buildShiftTaskCommentContext } from "../lib/shift-task-comment";
 
 function question(overrides: Partial<ShiftResponsibleQuestion>): ShiftResponsibleQuestion {
@@ -91,6 +91,42 @@ test("converte la vecchia presentabilità staff in multi-check per ogni lavorato
   assert.equal(item.answerType, "STAFF_CHECKLIST");
   assert.equal(item.staffResponseMode, "CHECKBOXES");
   assert.deepEqual(item.options, DEFAULT_STAFF_PRESENTABILITY_CHECKS);
+});
+
+test("nella risposta multi-check mostra soltanto i controlli selezionati", () => {
+  const rows = staffChecklistDisplayRows([
+    {
+      staffId: "staff-1",
+      name: "Aurora Dassisti",
+      responses: {
+        "Divisa pulita": "CHECKED",
+        "Capelli ordinati": "UNCHECKED",
+      },
+    },
+    {
+      staffId: "staff-2",
+      name: "Melissa Valente",
+      responses: {
+        "Divisa pulita": "NO",
+        "Capelli ordinati": "YES",
+      },
+    },
+  ], "CHECKBOXES");
+
+  assert.deepEqual(rows, [
+    { staff: "Aurora Dassisti", control: "Divisa pulita", outcome: "Sì" },
+    { staff: "Melissa Valente", control: "Capelli ordinati", outcome: "Sì" },
+  ]);
+});
+
+test("nella modalità sì/no mantiene anche le risposte negative esplicite", () => {
+  const rows = staffChecklistDisplayRows([
+    { name: "Laura Barreca", responses: { "Postazione in ordine": "NO" } },
+  ], "YES_NO");
+
+  assert.deepEqual(rows, [
+    { staff: "Laura Barreca", control: "Postazione in ordine", outcome: "No" },
+  ]);
 });
 
 test("salva etichette personalizzate mantenendo Sì e No come valori interni", () => {

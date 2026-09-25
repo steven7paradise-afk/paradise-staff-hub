@@ -30,6 +30,44 @@ export type ShiftResponsibleQuestion = {
 export type ShiftResponsibleAnswer = "YES" | "NO";
 export type ShiftResponsibleAnswers = Record<string, Record<string, string>>;
 
+export type StaffChecklistDisplayRow = {
+  staff: string;
+  control: string;
+  outcome: "Sì" | "No";
+};
+
+/**
+ * Prepara le righe leggibili dello storico staff.
+ * Nella modalità CHECKBOXES le risposte negative rappresentano semplicemente
+ * caselle non selezionate, quindi non devono comparire come risposte "No".
+ */
+export function staffChecklistDisplayRows(
+  value: unknown,
+  responseMode: ShiftResponsibleQuestion["staffResponseMode"],
+): StaffChecklistDisplayRow[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    if (!entry.responses || typeof entry.responses !== "object" || Array.isArray(entry.responses)) return [];
+
+    return Object.entries(entry.responses as Record<string, unknown>).flatMap(([control, rawResult]) => {
+      const result = String(rawResult);
+      const selected = result === "YES" || result === "CHECKED";
+      const explicitlyNegative = result === "NO" || result === "UNCHECKED";
+      if (!selected && !explicitlyNegative) return [];
+      if (responseMode === "CHECKBOXES" && !selected) return [];
+
+      return [{
+        staff: String(entry.name || "-"),
+        control,
+        outcome: selected ? "Sì" as const : "No" as const,
+      }];
+    });
+  });
+}
+
 export function normalizeShiftResponsibleQuestions(value: unknown): ShiftResponsibleQuestion[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 30).flatMap((item, index) => {
