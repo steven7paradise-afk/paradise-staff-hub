@@ -2,7 +2,7 @@ export const liveKinds = ["coffee", "water", "help", "note", "product"] as const
 export type LiveKind = typeof liveKinds[number];
 export type LiveItem = {
   id: string; locationId: string; bookingId: string; customerName: string;
-  workerId: string; workerName: string; kind: LiveKind; text: string;
+  workerId: string; workerName: string; kind: LiveKind | "assignment"; text: string;
   createdAt: string; state: "open" | "claimed" | "done" | "cancelled"; handledBy?: string;
   product?: { variantId: string; title: string; barcode: string; price: string; currency: string; quantity: number };
   orderReference?: string;
@@ -19,6 +19,7 @@ export function validLiveInput(b: unknown): b is { id: string; bookingId: string
       && Number.isInteger(v.quantity) && Number(v.quantity) >= 1 && Number(v.quantity) <= 99));
 }
 export function canAdvanceLiveItem(item: LiveItem, state: string, actor: string) {
+  if (item.kind === "assignment") return false;
   return item.state === "open" && state === "claimed"
     || item.state === "claimed" && ["done", "cancelled"].includes(state) && item.handledBy === actor;
 }
