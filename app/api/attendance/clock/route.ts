@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publishLiveChange } from "@/lib/salon-live";
 import { AttendanceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
@@ -197,6 +198,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  if (type === "ENTRATA") await publishLiveChange().catch(() => console.warn("Live attendance update unavailable"));
   await prisma.device.update({
     where: { id: device.id },
     data: { last_used_at: actualTimestamp },
