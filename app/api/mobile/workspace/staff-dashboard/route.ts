@@ -5,6 +5,7 @@ import { staffDashboardItem } from "@/lib/mobile-staff-dashboard";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 import { assignmentSnapshot } from "@/lib/client-assignment";
+import { financialSummary } from "@/lib/mobile-financial-summary";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
@@ -26,9 +27,15 @@ export async function GET(request: Request) {
     }, orderBy: { name: "asc" },
   });
   const cashAllowed = await canAccessForUser(prisma, "/cash", context.auth.user);
-  const [closings, bookings] = await Promise.all([
+  const [closings, bookings, finance] = await Promise.all([
     cashAllowed ? prisma.cashClosing.findMany({ where: { date: { gte: today, lt: tomorrow } }, select: { location_id: true, withdrawn: true }, orderBy: { created_at: "desc" } }) : Promise.resolve(null),
     context.modules.some(m => m.id === "appointments") ? assignmentSnapshot().catch(() => null) : Promise.resolve(null),
+    cashAllowed ? Promise.all([
+      prisma.cashClosing.findMany({ where: { date: { lt: tomorrow } }, select: { location_id: true, date: true, withdrawn: true }, orderBy: { created_at: "desc" } }),
+      prisma.cashVaultWithdrawal.findMany({ where: { date: { lt: tomorrow } }, select: { location_id: true, date: true, amount: true } }),
+      prisma.setting.findMany({ where: { key: { startsWith: "cash_week_close:" } }, select: { key: true, value: true } }),
+      prisma.cashMonthClose.findFirst({ orderBy: { month: "desc" }, select: { month: true } }),
+    ]).then(([c, w, s, m]) => financialSummary(day, c, w, s, m?.month ?? null)).catch(() => null) : Promise.resolve(null),
   ]);
   // Same recorded revenue basis as the web financial dashboard: latest closing per location/day.
   const latest = new Map<string, number>();
@@ -36,6 +43,6 @@ export async function GET(request: Request) {
   const revenue = latest.size ? Math.round([...latest.values()].reduce((a, b) => a + b, 0) * 100) / 100 : null;
   const clients = bookings && bookings.items.length < 400
     ? bookings.items.filter(b => ["IN_ATTESA", "ARRIVATO", "ARRIVATO_IN_RITARDO", "ARRIVED", "INIZIATO", "IN_PROGRESS"].includes(b.status.toUpperCase())).length : null;
-  return NextResponse.json({ day, updatedAt: now.toISOString(), revenue, recordedLocations: latest.size, clients,
+  return NextResponse.json({ day, updatedAt: now.toISOString(), revenue, recordedLocations: latest.size, clients, finance,
     items: workers.map(w => staffDashboardItem(w, now)) }, { headers: { "Cache-Control": "private, no-store" } });
 }
