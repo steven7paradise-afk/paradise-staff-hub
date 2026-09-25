@@ -34,6 +34,9 @@ export function staffDashboardItem(worker: Worker, now: Date) {
   if (vacation) categories.push("vacation");
   if (sick) categories.push("sick");
   if (lateMinutes > 0) categories.push("late");
+  const enteredMinutes = state.firstEntry ? attendanceActualMinutes(state.firstEntry) : null;
+  const actualStart = enteredMinutes === null ? null : `${String(Math.floor(enteredMinutes / 60)).padStart(2, "0")}:${String(enteredMinutes % 60).padStart(2, "0")}`;
   return { id: worker.id, name: worker.name, photoUrl: worker.photo_url ?? null, location, categories, lateMinutes,
+    plannedStart: start ?? null, actualStart,
     detail: state.status === "BREAK" ? "In pausa" : state.status === "IN" ? "In turno" : comparison.absent ? `Ingresso previsto ${start}` : state.firstEntry ? "Turno terminato" : "" };
 }

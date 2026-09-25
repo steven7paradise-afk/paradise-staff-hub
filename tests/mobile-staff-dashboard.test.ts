@@ -22,7 +22,22 @@ test("pause remains present and recorded late arrival remains a separate metric"
   assert.deepEqual(result.categories, ["present", "late"]);
   assert.equal(result.lateMinutes, 7);
   assert.equal(result.detail, "In pausa");
+  assert.equal(result.plannedStart, "10:00");
+  assert.equal(result.actualStart, "10:10");
+});
+test("photos and missing clock times are represented without invented values", () => {
+  const result = staffDashboardItem({ ...worker, photo_url: "/photo.jpg", schedule_entries: [] }, now);
+  assert.equal(result.photoUrl, "/photo.jpg");
+  assert.equal(result.plannedStart, null);
+  assert.equal(result.actualStart, null);
 });
 test("future logs never mark a worker present", () => {
   assert.deepEqual(staffDashboardItem({ ...worker, attendance_logs: [{ type: "ENTRATA" as const, timestamp: new Date("2026-09-25T15:00:00Z"), note: null }] }, now).categories, ["absent"]);
+});
+test("actual entry uses recorded clock time and not the later synchronization timestamp", () => {
+  const result = staffDashboardItem({ ...worker, attendance_logs: [
+    { type: "ENTRATA" as const, timestamp: new Date("2026-09-25T09:00:00Z"), note: "Ora rilevata 09:58:12" },
+  ] }, now);
+  assert.equal(result.actualStart, "09:58");
+  assert.equal(result.lateMinutes, 0);
 });
