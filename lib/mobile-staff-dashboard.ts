@@ -2,7 +2,7 @@ import { deriveAttendanceState, type AttendanceStateLog } from "./attendance-sta
 import { attendanceActualMinutes, compareScheduledClock, scheduledEntryPolicy, currentRomeMinutes, scheduleTimeToMinutes } from "./scheduled-attendance";
 
 type Worker = {
-  id: string; name: string; location: { name: string } | null;
+  id: string; name: string; photo_url?: string | null; location: { name: string } | null;
   attendance_logs: (AttendanceStateLog & { timestamp: Date; note: string | null })[];
   schedule_entries: { start_time: string | null; end_time: string | null; location: { name: string } | null;
     category: { name: string; code: string; start_time: string | null; end_time: string | null } }[];
@@ -34,6 +34,6 @@ export function staffDashboardItem(worker: Worker, now: Date) {
   if (vacation) categories.push("vacation");
   if (sick) categories.push("sick");
   if (lateMinutes > 0) categories.push("late");
-  return { id: worker.id, name: worker.name, location, categories, lateMinutes,
+  return { id: worker.id, name: worker.name, photoUrl: worker.photo_url ?? null, location, categories, lateMinutes,
     detail: state.status === "BREAK" ? "In pausa" : state.status === "IN" ? "In turno" : comparison.absent ? `Ingresso previsto ${start}` : state.firstEntry ? "Turno terminato" : "" };
 }

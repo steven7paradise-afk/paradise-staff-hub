@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const tomorrow = new Date(today); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const workers = await prisma.user.findMany({
     where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] }, employee_status: { not: "Ex dipendente" } },
-    select: { id: true, name: true, location: { select: { name: true } },
+    select: { id: true, name: true, photo_url: true, location: { select: { name: true } },
       attendance_logs: { where: { date: { gte: today, lt: tomorrow }, timestamp: { lte: now } }, select: { type: true, timestamp: true, note: true } },
       schedule_entries: { where: { date: { gte: today, lt: tomorrow } }, select: { start_time: true, end_time: true, location: { select: { name: true } }, category: { select: { name: true, code: true, start_time: true, end_time: true } } } },
       leave_requests: { where: { status: "APPROVED", start_date: { lt: tomorrow }, end_date: { gte: today }, type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] } }, select: { type: true, start_time: true, end_time: true } },
