@@ -63,7 +63,6 @@ export async function GET(request: NextRequest) {
         location: { select: { name: true } },
       },
       orderBy: [{ due_date: "asc" }, { updated_at: "desc" }],
-      take: 80,
     }),
     user.sede_id
       ? prisma.setting.findUnique({ where: { key: clockRuleKey(user.sede_id) } }).catch(() => null)
