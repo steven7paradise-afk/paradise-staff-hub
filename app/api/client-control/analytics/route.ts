@@ -95,7 +95,6 @@ export async function GET(request: NextRequest) {
   const employees = await prisma.user.findMany({
     where: {
       active: true,
-      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     },
     orderBy: { name: "asc" },
     select: {
@@ -103,6 +102,7 @@ export async function GET(request: NextRequest) {
       name: true,
       photo_url: true,
       sede_id: true,
+      role: true,
       location: { select: { id: true, name: true } },
     },
   });
@@ -204,6 +204,7 @@ export async function GET(request: NextRequest) {
     employees: employees.map((employee) => ({
       id: employee.id,
       name: employee.name,
+      role: employee.role,
       photoUrl: employee.photo_url,
       locationId: employee.sede_id,
       locationName: employee.location?.name ?? "Senza sede",

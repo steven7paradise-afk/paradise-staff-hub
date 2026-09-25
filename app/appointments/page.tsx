@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
 import { cookies } from "next/headers";
 import { after } from "next/server";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
@@ -390,13 +391,13 @@ export default async function AppointmentsPage({
   const safeBookings = Array.isArray(bookings) ? bookings : [];
 
   const corsoUsers = localUsers.filter((user) =>
-    isCorsoLocation(user.location?.name) || normalizeName(user.name) === "franci"
+    isCorsoLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || normalizeName(user.name) === "franci"
   );
   const pcDisplayUser = (isPC || isAdminRemoteController) && kioskWorkerName
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
     : null;
 
-  const cowlendarTeamOptionsByName = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
+  const cowlendarTeamOptionsByName = new Map<string, { id: string; name: string; role: string; locationName?: string | null; photoUrl?: string | null }>();
   const cowlendarTeammates = safeBookings.flatMap((booking) => booking.teammates ?? []);
 
   for (const mate of cowlendarTeammates) {
@@ -406,6 +407,8 @@ export default async function AppointmentsPage({
     cowlendarTeamOptionsByName.set(normalizeName(matchedUser.name), {
       id: matchedUser.id,
       name: matchedUser.name,
+      role: matchedUser.role,
+      locationName: matchedUser.location?.name,
       photoUrl: matchedUser.photo_url || mate.thumbnail || null,
     });
   }
@@ -416,6 +419,8 @@ export default async function AppointmentsPage({
     cowlendarTeamOptionsByName.set(key, {
       id: user.id,
       name: user.name,
+      role: user.role,
+      locationName: user.location?.name,
       photoUrl: user.photo_url || null,
     });
   }

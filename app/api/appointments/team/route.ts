@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
 import { saveAppointmentChange } from "@/lib/appointment-realtime";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
@@ -109,12 +110,13 @@ export async function POST(request: NextRequest) {
         id: true,
         name: true,
         photo_url: true,
+        role: true,
         location: { select: { name: true } },
       },
     });
     const usersById = new Map(
       activeUsers
-        .filter((user) => isBuenosAiresLocation(user.location?.name) || isFranci(user.name))
+        .filter((user) => isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
         .map((user) => [user.id, user]),
     );
     const teammates = requestedIds.flatMap((id) => {
@@ -126,7 +128,7 @@ export async function POST(request: NextRequest) {
 
     if (teammates.length !== requestedIds.length) {
       return NextResponse.json(
-        { error: "Una delle collaboratrici selezionate non appartiene al Salone Buenos Aires." },
+        { error: "Una delle persone selezionate non è abilitata: scegli personale del salone oppure un admin o super admin attivo." },
         { status: 400 },
       );
     }
@@ -137,17 +139,13 @@ export async function POST(request: NextRequest) {
     const salonRoster = await prisma.user.findMany({
       where: {
         active: true,
-        OR: [
-          { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
-          { name: { equals: "Franci", mode: "insensitive" } },
-        ],
       },
-      select: { name: true, location: { select: { name: true } } },
+      select: { name: true, role: true, location: { select: { name: true } } },
     });
     const shopifyTeammateNames = formatShopifyStaffNames(
       teammates.map((teammate) => teammate.name),
       salonRoster
-        .filter((user) => isBuenosAiresLocation(user.location?.name) || isFranci(user.name))
+        .filter((user) => isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
         .map((user) => user.name),
     ).join(", ");
 

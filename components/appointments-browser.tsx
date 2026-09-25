@@ -1,4 +1,5 @@
 "use client";
+import { canWorkAcrossAppointmentLocations, employeeMatchesAppointmentLocation, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
@@ -105,6 +106,8 @@ type AppointmentStatusValue =
 type BookingTeammate = {
   id: string;
   name: string;
+  role?: string | null;
+  locationName?: string | null;
   photoUrl?: string | null;
 };
 
@@ -113,6 +116,7 @@ type TeamOption = BookingTeammate;
 type ClientControlEmployee = {
   id: string;
   name: string;
+  role?: string | null;
   photoUrl?: string | null;
   locationName?: string | null;
 };
@@ -1969,43 +1973,15 @@ export function AppointmentsBrowser({
     booking: AppointmentRecord,
     employees: ClientControlEmployee[],
   ) {
-    const clean = (value?: string | null) =>
-      String(value ?? "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-    const bookingSalon = normalizeSalonName(salonNameForBooking(booking));
-    const salonEmployees = employees.filter((employee) => {
-      const employeeSalon = normalizeSalonName(employee.locationName);
-      return (
-        employeeSalon.includes(bookingSalon) ||
-        bookingSalon.includes(employeeSalon)
-      );
-    });
-    const ids: string[] = [];
-
-    for (const mate of getBookingTeam(booking)) {
-      const mateClean = clean(mate.name);
-      if (!mateClean) continue;
-      const matched = salonEmployees.find((employee) => {
-        const employeeClean = clean(employee.name);
-        if (!employeeClean) return false;
-        const firstName = mateClean.split("|")[0] || mateClean;
-        return (
-          employeeClean.includes(mateClean) ||
-          mateClean.includes(employeeClean) ||
-          employeeClean.includes(firstName)
-        );
-      });
-      if (matched && !ids.includes(matched.id)) ids.push(matched.id);
-    }
-
-    return ids;
+    return matchAppointmentEmployeeIds(getBookingTeam(booking), employees, salonNameForBooking(booking));
   }
 
   function matchEmployeeIdForTeammate(
     teammate: Pick<BookingTeammate, "id" | "name">,
     employees: ClientControlEmployee[],
   ) {
+    const byId = employees.find(employee => employee.id === teammate.id);
+    if (byId) return byId.id;
     const normalizedName = normalizeSearchValue(teammate.name);
     if (!normalizedName) return null;
     const exact = employees.find(
@@ -2701,7 +2677,8 @@ export function AppointmentsBrowser({
         id: employee.id,
         name: employee.name,
         photoUrl: employee.photoUrl,
-        locationName: "Salone Buenos Aires",
+        role: employee.role,
+        locationName: employee.locationName ?? "Salone Buenos Aires",
       });
     });
 
@@ -2748,11 +2725,7 @@ export function AppointmentsBrowser({
   const filteredClientControlEmployees = useMemo(() => {
     const selectedSalon = normalizeSalonName(clientControlForm.salon);
     return clientControlEmployeeOptions.filter((employee) => {
-      const employeeSalon = normalizeSalonName(employee.locationName);
-      return (
-        employeeSalon.includes(selectedSalon) ||
-        selectedSalon.includes(employeeSalon)
-      );
+      return employeeMatchesAppointmentLocation(employee, selectedSalon);
     });
   }, [clientControlEmployeeOptions, clientControlForm.salon]);
 
@@ -4196,7 +4169,7 @@ export function AppointmentsBrowser({
 
     if (
       booking.inferredSalon !== "buenos-aires" &&
-      !nextTeam.some((teammate) => normalizeSearchValue(teammate.name) === "franci")
+      !nextTeam.every((teammate) => canWorkAcrossAppointmentLocations(teammate.role) || normalizeSearchValue(teammate.name) === "franci")
     ) {
       alert(
         "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
