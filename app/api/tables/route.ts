@@ -1,3 +1,5 @@
+import { syncTableReworks } from "@/lib/monthly-bonus-tables-store";
+import { romeBonusDay } from "@/lib/monthly-bonus";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -39,12 +41,15 @@ export async function PUT(request: NextRequest) {
   try {
     const payload = await request.json();
     const sheets = normalizeAssistanceSheets(payload?.sheets);
-    await prisma.setting.upsert({
+    const bonus = await prisma.$transaction(async tx=>{
+    await tx.setting.upsert({
       where: { key: ASSISTANCE_TABLES_KEY },
       create: { key: ASSISTANCE_TABLES_KEY, value: sheets },
       update: { value: sheets },
     });
-    return NextResponse.json({ sheets });
+    return syncTableReworks(tx,romeBonusDay().slice(0,7),sheets);
+    },{timeout:20000});
+    return NextResponse.json({ sheets, bonusPending:bonus.pending });
   } catch (error) {
     return NextResponse.json({ error: "Errore nel salvataggio delle tabelle" }, { status: 500 });
   }

@@ -27,9 +27,9 @@ test('euro amounts are withheld from staff until direction explicitly unlocks th
  assert.equal('euros' in visibleBonusBalance(account,staff,setBonusVisibility(unlocked,admin,false,now)),false);
 });
 
-test('rework counters automatically use completed blocks without configuration',()=>{
+test('rework counters automatically use started blocks without configuration',()=>{
  let s=configured();
- assert.equal(s.configs.staff.reworkPolicy,'COMPLETED_BLOCK');
+ assert.equal(s.configs.staff.reworkPolicy,'STARTED_BLOCK');
  s.configs.staff.reworkPolicy=null; // Configuration saved before this change.
  const deltas=[];
  for(let i=1;i<=9;i++){
@@ -37,13 +37,13 @@ test('rework counters automatically use completed blocks without configuration',
   const result=prepareBonusEvent(s,month,rs,'staff',input,null,now);
   deltas.push(result.event.points);s={...s,accounts:{staff:result.account}};
  }
- assert.deepEqual(deltas,[0,0,0,0,0,-20,0,0,-20]);
+ assert.deepEqual(deltas,[0,0,0,-20,0,0,-20,0,0]);
  assert.equal(accountFor(blankBonusState(s.configs),'2026-10','staff')?.events.length,0);
 });
-test('previously recorded rework policy and points are not rewritten',()=>{
+test('new policy preserves previously recorded event amounts',()=>{
  const s=configured();
  const existing=accountFor(s,month,'staff')!;
- existing.reworkPolicy='STARTED_BLOCK';
+ existing.reworkPolicy='COMPLETED_BLOCK';
  existing.events=[{...event,type:'REWORK',recordedAt:now.toISOString(),actorId:rs.id,actorName:rs.name,ordinal:4,points:-20,reason:'Historical rule'}];
  s.accounts.staff=existing;
  assert.equal(accountFor(s,month,'staff')?.reworkPolicy,'STARTED_BLOCK');

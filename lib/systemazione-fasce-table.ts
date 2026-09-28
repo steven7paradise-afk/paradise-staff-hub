@@ -1,3 +1,5 @@
+import { syncTableReworks } from "@/lib/monthly-bonus-tables-store";
+import { romeBonusDay } from "@/lib/monthly-bonus";
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -431,5 +433,6 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
       value: { fingerprint: finalFingerprint, checkedAt: new Date().toISOString() },
     },
   });
+  await prisma.$transaction(tx=>syncTableReworks(tx,romeBonusDay().slice(0,7)),{timeout:20000});
   return { createdRows: result.createdRows, updatedRows: result.updatedRows };
 }

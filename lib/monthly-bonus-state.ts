@@ -14,9 +14,9 @@ export function blankBonusState(configs: Record<string, BonusConfig> = {}): Bonu
 export function accountFor(state: BonusState, month: string, userId: string): BonusAccount | null {
   const config = state.configs[userId];
   const existing=state.accounts[userId];
-  // Preserve recorded historical policies, but no choice is needed for a new counter.
-  if(existing) return {...existing,rules:bonusRules(state.rules),reworkPolicy:existing.events.some(e=>e.type==='REWORK')?existing.reworkPolicy:'COMPLETED_BLOCK'};
-  return config ? {...createBonusAccount(month, config, 'COMPLETED_BLOCK'),rules:bonusRules(state.rules)} : null;
+  // Apply the confirmed started-block rule to new events; historical event amounts stay unchanged.
+  if(existing) return {...existing,rules:bonusRules(state.rules),reworkPolicy:'STARTED_BLOCK'};
+  return config ? {...createBonusAccount(month, config, 'STARTED_BLOCK'),rules:bonusRules(state.rules)} : null;
 }
 export function mayReadBonus(actor: BonusActor, state: BonusState, userId: string) {
   const c = state.configs[userId];
@@ -30,8 +30,7 @@ export function configureBonus(state: BonusState, month: string, actor: BonusAct
   if (!Object.hasOwn(BONUS_LEVELS, level)) throw new Error('Scegli il livello.');
   const quota = raw.quota;
   if (quota !== null && (typeof quota !== 'number' || !Number.isSafeInteger(quota) || quota < 0 || quota > 100000)) throw new Error('Quota non valida. Usa un intero positivo o lascia il campo vuoto.');
-  const priorAccount=state.accounts[userId];
-  const policy:ReworkPolicy|null=priorAccount?.events.some(e=>e.type==='REWORK') ? priorAccount.reworkPolicy : 'COMPLETED_BLOCK';
+  const policy:ReworkPolicy='STARTED_BLOCK';
   const responsibleIds = Array.isArray(raw.responsibleIds) ? [...new Set(raw.responsibleIds.map(String))] : [];
   if (responsibleIds.some(id=>!people.some(p=>p.id===id && p.active && p.role==='RESPONSABILE'))) throw new Error('Seleziona una responsabile di sede attiva.');
   const referenceMasterId = raw.referenceMasterId ? String(raw.referenceMasterId) : null;
@@ -40,7 +39,6 @@ export function configureBonus(state: BonusState, month: string, actor: BonusAct
   const account = state.accounts[userId];
   if (old?.level==='MASTER' && level!=='MASTER' && Object.values(state.configs).some(c=>c.referenceMasterId===userId)) throw new Error('Riassegna prima le Junior collegate a questo Master.');
   if (account?.events.length && account.level !== level) throw new Error('Il livello del mese è bloccato: esistono eventi. La correzione deve essere concordata.');
-  if (account?.events.some(e=>e.type==='REWORK') && account.reworkPolicy!==policy) throw new Error('Regola bloccata: esistono rilavorazioni nel mese.');
   if (account?.events.some(e=>e.type==='EXTRA_APPOINTMENT') && old?.quota!==quota) throw new Error('Quota bloccata: esistono bonus extra registrati. La correzione deve essere concordata.');
   const config: BonusConfig = { userId, level, quota: quota as number|null, reworkPolicy: policy, responsibleIds, referenceMasterId };
   const updated = account ? { ...account, ...BONUS_LEVELS[level], level, reworkPolicy: policy } : undefined;

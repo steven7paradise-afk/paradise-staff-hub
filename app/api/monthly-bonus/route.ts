@@ -1,3 +1,4 @@
+import { syncTableReworks } from "@/lib/monthly-bonus-tables-store";
 import { bonusRules } from "@/lib/monthly-bonus-rules";
 import { loadBonusState as load, BONUS_SETTING_PREFIX as prefix } from "@/lib/monthly-bonus-store";
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,8 +17,9 @@ export async function GET(request:NextRequest) {
   const session=await auth();if(!session?.user?.id)return json({error:'Accesso richiesto.'},401);
   try {
     const month=validateBonusMonth(request.nextUrl.searchParams.get('month')??romeBonusDay().slice(0,7));
-    const [staff,state]=await Promise.all([people(prisma),load(prisma,month)]);
+    const staff=await people(prisma);
     const actor=staff.find(p=>p.id===session.user.id);if(!actor)return json({error:'Accesso non disponibile.'},403);
+    const state=await prisma.$transaction(async tx=>(await syncTableReworks(tx,month)).state,{timeout:20000});
     const visible=staff.filter(p=>mayReadBonus(actor,state,p.id));
     return json({month,rules:bonusRules(state.rules),rulesAudit:isBonusAdmin(actor.role)?state.rulesAudit??[]:[],today:romeBonusDay(),actor,admin:isBonusAdmin(actor.role),revision:state.revision,showValue:isBonusAdmin(actor.role)||state.valueVisible===true,valueVisible:state.valueVisible===true,
       people:visible.map(p=>{const account=accountFor(state,month,p.id);return {...p,config:state.configs[p.id]??null,account,balance:account?visibleBonusBalance(account,actor,state):null};}),

@@ -140,3 +140,11 @@ Gli importi in euro restano nascosti allo staff finché la direzione non abilita
 I nuovi caricamenti in Documenti riconoscono la tipologia LETTERA_CONTESTAZIONE oppure le diciture «lettera di contestazione», «contestazione disciplinare» e «richiamo disciplinare» nel titolo/nome file. Il livello deve essere già assegnato; carica la direzione o una responsabile autorizzata per la persona. Il malus configurato viene applicato nel mese del caricamento, non nella data storica del documento. Documento ed evento punti vengono salvati nella stessa transazione del database. Lo stesso contenuto file per la stessa persona nello stesso mese non genera un secondo malus. Non si analizza il contenuto del PDF e non si rielaborano lettere già presenti. La voce manuale è disabilitata. Modificare o eliminare un documento non riscrive gli eventi punti già registrati.
 
 La malattia non compare più nei riepiloghi o nelle spiegazioni delle regole; il relativo calcolo resta invariato. Test mirati punti: 33 superati. Controllo TypeScript superato.
+
+## Regola confermata: blocco iniziato e tabella Sistemazione fasce
+
+Prime tre rilavorazioni senza malus; con i valori predefiniti il malus di 20 punti scatta alla quarta, settima e decima, anche se il blocco non è completo. Le soglie e gli importi restano modificabili in Gestione punti. I punti storici già registrati non vengono riscritti.
+
+Le righe della tabella Sistemazione fasce vengono attribuite al nome completo indicato in App precedente, mai alla persona che esegue la sistemazione. Una riga per persona genera un solo evento REWORK; condivide il contatore delle altre rilavorazioni. La sincronizzazione avviene al salvataggio delle tabelle, nell'importazione degli appuntamenti e aprendo Centro Punti/dashboard. Il mese è quello di creazione della riga; si escludono righe precedenti alla decorrenza 28/09/2026. Le prenotazioni importate richiedono Sistemazione valorizzato dal Controllo Cliente. Nomi ambigui, livelli mancanti, riassegnazioni di righe già addebitate e mesi con premio zero rilavorazioni restano da verificare. Correggere/eliminare righe non cancella gli eventi storici.
+
+Validazione: 400 test superati; TypeScript senza errori.

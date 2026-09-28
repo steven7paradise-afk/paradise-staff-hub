@@ -176,7 +176,8 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
           body: JSON.stringify({ sheets: nextSheets }),
         });
         if (!response.ok) throw new Error("Errore");
-        setMessage("Salvato");
+        const result = await response.json();
+        setMessage(result.bonusPending ? `Salvato. ${result.bonusPending} righe da verificare per i punti: controlla nomi completi e livelli in Gestione punti.` : "Salvato · punti aggiornati");
       } catch (error) {
         setMessage("Errore salvataggio");
       }
@@ -408,6 +409,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
             </button>
             <div className="min-w-0">
               <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-[#B85B68]">Sheet aperta</p>
+              {/sistemazione fasc/i.test(activeSheet.name)&&<p className="mt-2 text-xs text-neutral-500">Punti alla lavoratrice in App precedente: prime 3 senza penalità, poi −20 alla 4ª, 7ª, 10ª. La stessa riga conta una volta. Il mese è quello di creazione della riga; per gli appuntamenti importati serve il Controllo Cliente completato. Le righe precedenti al 28/09/2026 sono escluse. Per correggere eventi già conteggiati, rivolgiti alla direzione.</p>}
               <input
                 value={activeSheet.name}
                 onChange={(event) => {
