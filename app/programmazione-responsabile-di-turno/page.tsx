@@ -1,3 +1,4 @@
+import { ShiftMonthlyReportPanel } from "@/components/shift-monthly-report-panel";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ShiftResponsibleResponseDashboard } from "@/components/shift-responsible-response-dashboard";
@@ -52,6 +53,7 @@ export default async function ControlloRisposteTurnoPage({ searchParams }: { sea
             people={people.map((person) => ({ id: person.id, name: person.name, photoUrl: person.photo_url }))}
             access={normalizeShiftResponsibleAccess(accessSetting?.value)}
             fullPage
+            monthlyReport={<ShiftMonthlyReportPanel initialMonth={today.slice(0, 7)} />}
             planner={
               <WeeklyShiftResponsiblePlanner
                 embedded

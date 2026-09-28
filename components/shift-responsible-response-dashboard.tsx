@@ -77,13 +77,14 @@ function isComplete(questions: ShiftResponsibleQuestion[], answers: Record<strin
   return { completed, total: required.length, percent: required.length ? Math.round(completed / required.length * 100) : 100 };
 }
 
-export function ShiftResponsibleResponseDashboard({ questions, answers, assignments, people, access, planner, fullPage = false }: {
+export function ShiftResponsibleResponseDashboard({ questions, answers, assignments, people, access, planner, monthlyReport, fullPage = false }: {
   questions: ShiftResponsibleQuestion[];
   answers: ShiftResponsibleAnswers;
   assignments: Record<string, string>;
   people: ResponsiblePerson[];
   access: ShiftResponsibleAccess;
   planner?: ReactNode;
+  monthlyReport?: ReactNode;
   fullPage?: boolean;
 }) {
   const [search, setSearch] = useState("");
@@ -354,6 +355,8 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
           </div>
           {pdfError ? <p role="alert" className="mt-3 text-right text-[10px] font-bold text-[#b8374f]">{pdfError}</p> : null}
         </header>
+
+        {monthlyReport}
 
         {planner ? <section id="organizza-turni" className="scroll-mt-4 overflow-hidden rounded-[26px] border border-black/[0.06] bg-white shadow-[0_14px_40px_rgba(47,28,38,0.05)]">
           <div className="flex items-start gap-3 border-b border-black/[0.06] px-5 py-5 sm:px-7">
