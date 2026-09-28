@@ -1,4 +1,5 @@
 "use client";
+import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,15 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
 }
 
 export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string }) {
+  const router = useRouter();
+  if (remoteTarget) return <RemoteAppointmentsKioskEntry salone={salone} pcName={pcName} remoteTarget={remoteTarget} />;
+  return <><RemoteControlBridge pcMode /><AppointmentsPinEntry salon={salone} pcName={pcName} onUnlock={(_, destination) => {
+    if (isSameAppointmentDestination(window.location.href, destination)) router.refresh();
+    else router.replace(destination);
+  }} /></>;
+}
+
+function RemoteAppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget: string }) {
   const router = useRouter();
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
