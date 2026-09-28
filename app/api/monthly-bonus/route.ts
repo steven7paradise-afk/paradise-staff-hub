@@ -48,6 +48,7 @@ export async function POST(request:NextRequest) {
         if(body.revision!==state.revision)throw new Error('I dati sono cambiati. Ricarica prima di salvare.');
         next=configureBonus(state,month,actor,body.config??{},staff);
       } else if(body.action==='event'||body.action==='preview') {
+        if(body.type==='DISCIPLINARY_LETTER')throw new Error('Carica la lettera nella sezione Documenti: i punti vengono registrati automaticamente.');
         const userId=String(body.userId??'');if(!staff.some(p=>p.id===userId))throw new Error('Persona non disponibile.');
         if(!Object.hasOwn(BONUS_EVENT_LABELS,String(body.type)))throw new Error('Voce non valida.');
         if(typeof body.id!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(body.id))throw new Error('Identificativo non valido.');

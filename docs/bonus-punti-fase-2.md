@@ -134,3 +134,9 @@ La dashboard reale include il riepilogo Centro Punti e il collegamento diretto a
 Il bonus lavoro fuori turno è inizialmente disattivato (0 punti). Impostando un valore positivo, dalle prossime uscite il sistema verifica una giornata esplicitamente segnata Riposo, una coppia entrata/uscita valida e nessuna assenza approvata. Esclude timbrature inserite/modificate manualmente da Admin e accredita al massimo un evento per persona e giornata. Un turno mancante non è riposo. Gli appuntamenti oltre quota restano registrati con totale verificato; il premio iniziale è 0,5 punti ed è modificabile. La malattia non comporta penalità.
 
 Gli importi in euro restano nascosti allo staff finché la direzione non abilita la visibilità. Controlli: 391 test superati e TypeScript senza errori.
+
+## Lettere di contestazione automatiche
+
+I nuovi caricamenti in Documenti riconoscono la tipologia LETTERA_CONTESTAZIONE oppure le diciture «lettera di contestazione», «contestazione disciplinare» e «richiamo disciplinare» nel titolo/nome file. Il livello deve essere già assegnato; carica la direzione o una responsabile autorizzata per la persona. Il malus configurato viene applicato nel mese del caricamento, non nella data storica del documento. Documento ed evento punti vengono salvati nella stessa transazione del database. Lo stesso contenuto file per la stessa persona nello stesso mese non genera un secondo malus. Non si analizza il contenuto del PDF e non si rielaborano lettere già presenti. La voce manuale è disabilitata. Modificare o eliminare un documento non riscrive gli eventi punti già registrati.
+
+La malattia non compare più nei riepiloghi o nelle spiegazioni delle regole; il relativo calcolo resta invariato. Test mirati punti: 33 superati. Controllo TypeScript superato.

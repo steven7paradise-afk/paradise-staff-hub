@@ -1,3 +1,9 @@
+import { createHash } from "node:crypto";
+import type { Prisma } from "@prisma/client";
+import { isDisciplinaryDocument, validateDocumentBonus, applyDocumentBonus } from "@/lib/monthly-bonus-documents";
+import { loadBonusState, BONUS_SETTING_PREFIX } from "@/lib/monthly-bonus-store";
+import { romeBonusDay } from "@/lib/monthly-bonus";
+import type { BonusState } from "@/lib/monthly-bonus-state";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
@@ -17,7 +23,7 @@ export async function POST(request: NextRequest) {
   const file = data.get("file");
   const userId = String(data.get("userId") ?? "");
   const title = String(data.get("title") ?? "").trim();
-  const type = String(data.get("type") ?? "DOCUMENTO").trim().toUpperCase();
+  let type = String(data.get("type") ?? "DOCUMENTO").trim().toUpperCase();
   const notes = String(data.get("notes") ?? "").trim();
   const month = Number(data.get("month") ?? 0) || null;
   const year = Number(data.get("year") ?? 0) || null;
@@ -43,6 +49,16 @@ export async function POST(request: NextRequest) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } });
   if (!user) return NextResponse.json({ error: "Dipendente non trovato." }, { status: 404 });
 
+  const disciplinary = isDisciplinaryDocument(type, title, file.name);
+  if (disciplinary) type = "LETTERA_CONTESTAZIONE";
+  const now = new Date();
+  const bonusMonth = romeBonusDay(now).slice(0, 7);
+  const actor = await prisma.user.findUnique({where:{id:session.user.id},select:{id:true,name:true,role:true,active:true}});
+  if (!actor?.active || !uploadRoles.has(actor.role)) return NextResponse.json({error:"Non autorizzato"},{status:403});
+  if (disciplinary) {
+    try { validateDocumentBonus(await loadBonusState(prisma, bonusMonth), userId, actor); }
+    catch (error) { return NextResponse.json({error:error instanceof Error?error.message:"Configurazione punti non disponibile."},{status:400}); }
+  }
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     const safeTitle = title.replace(/[\/\\:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
@@ -54,7 +70,17 @@ export async function POST(request: NextRequest) {
       file.type || "application/pdf",
       user.name
     );
-    const document = await prisma.document.create({
+    const document = await prisma.$transaction(async tx => {
+      let state: BonusState | undefined;
+      const key = BONUS_SETTING_PREFIX + bonusMonth;
+      if (disciplinary) {
+        const initial = await loadBonusState(tx, bonusMonth);
+        await tx.setting.upsert({where:{key},create:{key,value:initial as unknown as Prisma.InputJsonValue},update:{}});
+        const locked = await tx.$queryRaw<Array<{value:unknown}>>`SELECT value FROM settings WHERE key = ${key} FOR UPDATE`;
+        state = locked[0].value as BonusState;
+        validateDocumentBonus(state,userId,actor);
+      }
+      const created = await tx.document.create({
       data: {
         user_id: userId,
         title,
@@ -68,6 +94,12 @@ export async function POST(request: NextRequest) {
         storage_path: null,
       },
     });
+      if (state) {
+        const next = applyDocumentBonus(state,userId,actor,{id:created.id,title,hash:createHash('sha256').update(buffer).digest('hex')},now);
+        if(next!==state) await tx.setting.update({where:{key},data:{value:next as unknown as Prisma.InputJsonValue}});
+      }
+      return created;
+    }, {timeout:20000});
     await createNotification({ user_id: userId, title: "Nuovo documento disponibile", message: `${title} e disponibile nella sezione Documenti.`, type: "DOCUMENTO", action_url: "/documents", read: false });
     return NextResponse.json(document);
   } catch (error) {
