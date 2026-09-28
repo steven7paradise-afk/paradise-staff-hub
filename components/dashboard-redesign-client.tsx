@@ -1,4 +1,5 @@
 "use client";
+import { BonusDashboardCard } from "./bonus-dashboard-card";
 import { DashboardCommunicationBanner } from "./dashboard-communication-banner";
 
 import { useEffect, useMemo, useState } from "react";
@@ -221,6 +222,7 @@ export function DashboardRedesignClient({
           </button>
           </div>
         </header></DashboardCommunicationBanner>
+        <BonusDashboardCard />
 
         <section className="worker-dashboard-enter worker-dashboard-enter-delay-1 mt-5 grid overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)] lg:grid-cols-[1.35fr_0.65fr]">
           <div className="border-b border-[#ecc6dc] p-5 sm:p-7 lg:border-b-0 lg:border-r">

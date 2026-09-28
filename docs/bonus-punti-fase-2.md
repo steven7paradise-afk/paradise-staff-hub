@@ -126,3 +126,11 @@ alla 6ª, 9ª, 12ª rilavorazione. La responsabile registra il singolo evento;
 il server calcola franchigia e malus. I conti storici con eventi già valutati
 con una regola diversa restano invariati. Nessuna penalità automatica viene
 ricavata dalla ricerca testuale nelle note Controllo Cliente.
+
+## Regole configurabili e dashboard — 28 settembre 2026
+
+La dashboard reale include il riepilogo Centro Punti e il collegamento diretto a Gestione punti. La direzione può modificare soglie, penalità e premi per mese; ogni salvataggio registra autore, data, valori precedenti e nuovi. Gli eventi già registrati conservano i propri punti.
+
+Il bonus lavoro fuori turno è inizialmente disattivato (0 punti). Impostando un valore positivo, dalle prossime uscite il sistema verifica una giornata esplicitamente segnata Riposo, una coppia entrata/uscita valida e nessuna assenza approvata. Esclude timbrature inserite/modificate manualmente da Admin e accredita al massimo un evento per persona e giornata. Un turno mancante non è riposo. Gli appuntamenti oltre quota restano registrati con totale verificato; il premio iniziale è 0,5 punti ed è modificabile. La malattia non comporta penalità.
+
+Gli importi in euro restano nascosti allo staff finché la direzione non abilita la visibilità. Controlli: 391 test superati e TypeScript senza errori.

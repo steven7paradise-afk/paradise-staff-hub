@@ -1,3 +1,4 @@
+import { bonusRules, type BonusRules } from "./monthly-bonus-rules";
 /** Bonus Fase 2. Independent from the legacy communication/goal/redemption points. */
 export const BONUS_START_DATE = "2026-09-28";
 export const BONUS_START_MONTH = BONUS_START_DATE.slice(0, 7);
@@ -22,6 +23,7 @@ export const BONUS_EVENT_LABELS = {
   URGENT_AVAILABILITY: "Reperibilità urgenza confermata",
   ZERO_REWORK: "Zero rilavorazioni nel mese",
   TRAINING: "Partecipazione a formazione",
+  OFF_SHIFT_WORK: "Giornata lavorata fuori turno",
 } as const;
 export type BonusEventType = keyof typeof BONUS_EVENT_LABELS;
 export type BonusActor = { id: string; name: string; role: string; active: boolean };
@@ -46,6 +48,7 @@ export type BonusEvent = {
   reason: string;
 };
 export type BonusAccount = {
+  rules?: BonusRules;
   month: string;
   userId: string;
   level: BonusLevel;
@@ -82,6 +85,7 @@ export function createBonusAccount(month: string, assignment: BonusAssignment, r
 
 export function canRegisterBonus(actor: BonusActor, assignment: BonusAssignment, type: BonusEventType) {
   // Direction is read-only, even when it has generic admin editing permissions.
+  if (type === 'OFF_SHIFT_WORK') return false; // Only the verified attendance importer can create these.
   if (!actor.active || ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(actor.role)) return false;
   const juniorOnly = type === "ZERO_REWORK" || type === "TRAINING";
   if (juniorOnly) return assignment.level === "JUNIOR" && actor.id === assignment.referenceMasterId;
@@ -146,6 +150,7 @@ export function previewBonusEvent(account: BonusAccount, input: NewBonusEvent, n
   if (input.type === "EXTRA_APPOINTMENT" && account.level === "JUNIOR") {
     throw new Error("Appuntamenti extra riservati a Master e Autonome.");
   }
+  const rules=bonusRules(account.rules);
   const ordinal = account.events.filter(event => event.type === input.type).length + 1;
   let points = 0;
   let reason = "";
@@ -153,8 +158,8 @@ export function previewBonusEvent(account: BonusAccount, input: NewBonusEvent, n
     case "ENTRY_LATE":
     case "BREAK_LATE":
     case "APPEARANCE": {
-      const free = input.type === "APPEARANCE" ? 2 : 3;
-      points = ordinal > free ? (input.type === "BREAK_LATE" ? -2 : -10) : 0;
+      const free = input.type === "APPEARANCE" ? rules.appearanceGrace : input.type === "BREAK_LATE" ? rules.breakGrace : rules.entryGrace;
+      points = ordinal > free ? (input.type === "BREAK_LATE" ? -rules.breakPenalty : input.type === "APPEARANCE" ? -rules.appearancePenalty : -rules.entryPenalty) : 0;
       reason = `${ordinal}° evento registrato nel mese: ${ordinal <= free ? `entro la franchigia di ${free}` : "oltre franchigia"}.`;
       break;
     }
@@ -163,28 +168,30 @@ export function previewBonusEvent(account: BonusAccount, input: NewBonusEvent, n
       if (account.events.some(event => event.type === "ZERO_REWORK")) {
         throw new Error("Bonus zero rilavorazioni già registrato: serve una correzione concordata e tracciata.");
       }
-      const charge = ordinal > 3 && (account.reworkPolicy === "COMPLETED_BLOCK" ? ordinal % 3 === 0 : (ordinal - 4) % 3 === 0);
-      points = charge ? -20 : 0;
-      reason = `${ordinal}ª rilavorazione: ${ordinal <= 3 ? "entro le 3 gratuite" : charge ? "blocco soggetto a malus" : "nessun nuovo malus per questo blocco"}.`;
+      const charge = ordinal > rules.reworkFree && (account.reworkPolicy === "COMPLETED_BLOCK" ? (ordinal-rules.reworkFree) % rules.reworkBlock === 0 : (ordinal-rules.reworkFree-1) % rules.reworkBlock === 0);
+      points = charge ? -rules.reworkPenalty : 0;
+      reason = `${ordinal}ª rilavorazione: ${ordinal <= rules.reworkFree ? `entro le ${rules.reworkFree} gratuite` : charge ? "blocco soggetto a malus" : "nessun nuovo malus per questo blocco"}.`;
       break;
     }
     case "POSITIVE_REVIEW":
-      points = ordinal > 20 ? 1 : 0;
-      reason = `${ordinal}ª recensione nominativa: ${ordinal <= 20 ? "soglia di 20 non superata" : "oltre la soglia di 20"}.`;
+      points = ordinal > rules.positiveReviewThreshold ? rules.positiveReviewPoints : 0;
+      reason = `${ordinal}ª recensione nominativa: ${ordinal <= rules.positiveReviewThreshold ? `soglia di ${rules.positiveReviewThreshold} non superata` : `oltre la soglia di ${rules.positiveReviewThreshold}`}.`;
       break;
-    case "NEGATIVE_REVIEW": points = -2; break;
-    case "DISCIPLINARY_LETTER": points = -20; break;
-    case "EXTRA_APPOINTMENT": points = 0.5; break;
-    case "SHIFT_CHANGE":
-    case "URGENT_AVAILABILITY": points = 1; break;
-    case "TRAINING": points = 2; break;
+    case "NEGATIVE_REVIEW": points = -rules.negativeReviewPenalty; break;
+    case "DISCIPLINARY_LETTER": points = -rules.letterPenalty; break;
+    case "EXTRA_APPOINTMENT": points = rules.extraAppointmentPoints; break;
+    case "SHIFT_CHANGE": points = rules.shiftChangePoints; break;
+    case "URGENT_AVAILABILITY": points = rules.urgencyPoints; break;
+    case "TRAINING": points = rules.trainingPoints;
+      break;
+    case "OFF_SHIFT_WORK": points = rules.offShiftDayPoints; break;
     case "ZERO_REWORK":
       if (account.month >= today.slice(0, 7)) throw new Error("Zero rilavorazioni si verifica solo dopo la fine del mese.");
       if (input.zeroReworksConfirmed !== true || account.events.some(event => event.type === "REWORK")) {
         throw new Error("Occorre verificare l’assenza di rilavorazioni nell’intero mese.");
       }
       if (ordinal !== 1) throw new Error("Bonus zero rilavorazioni già registrato per questo mese.");
-      points = 3;
+      points = rules.zeroReworkPoints;
       break;
   }
   return { ordinal, points, reason: reason || BONUS_EVENT_LABELS[input.type] };

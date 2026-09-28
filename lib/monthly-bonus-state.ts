@@ -1,8 +1,9 @@
+import { bonusRules, validateBonusRules, type BonusRules } from "./monthly-bonus-rules";
 import { BONUS_LEVELS, BONUS_START_MONTH, bonusBalance, appendBonusEvent, createBonusAccount, extraAppointmentQuota, previewBonusEvent, romeBonusDay, type BonusAccount, type BonusActor, type BonusAssignment, type BonusLevel, type NewBonusEvent, type ReworkPolicy } from './monthly-bonus';
 
 export type BonusConfig = BonusAssignment & { quota: number | null; reworkPolicy: ReworkPolicy | null };
 export type BonusAudit = { id: string; at: string; actorId: string; actorName: string; userId: string; before: BonusConfig | null; after: BonusConfig };
-export type BonusState = { valueVisible?: boolean; visibilityAudit?: Array<{at:string;actorId:string;visible:boolean}>; version: 1; revision: number; configs: Record<string, BonusConfig>; accounts: Record<string, BonusAccount>; audit: BonusAudit[] };
+export type BonusState = { rules?: BonusRules; rulesAudit?: Array<{at:string;actorId:string;actorName:string;before:BonusRules;after:BonusRules}>; valueVisible?: boolean; visibilityAudit?: Array<{at:string;actorId:string;visible:boolean}>; version: 1; revision: number; configs: Record<string, BonusConfig>; accounts: Record<string, BonusAccount>; audit: BonusAudit[] };
 export type BonusPerson = BonusActor & { locationName: string | null };
 export const isBonusAdmin = (role: string) => ['ZERO', 'SUPER_ADMIN', 'ADMIN'].includes(role);
 export function validateBonusMonth(month: string, now = new Date()) {
@@ -14,8 +15,8 @@ export function accountFor(state: BonusState, month: string, userId: string): Bo
   const config = state.configs[userId];
   const existing=state.accounts[userId];
   // Preserve recorded historical policies, but no choice is needed for a new counter.
-  if(existing) return existing.events.some(e=>e.type==='REWORK') ? existing : {...existing,reworkPolicy:'COMPLETED_BLOCK'};
-  return config ? createBonusAccount(month, config, 'COMPLETED_BLOCK') : null;
+  if(existing) return {...existing,rules:bonusRules(state.rules),reworkPolicy:existing.events.some(e=>e.type==='REWORK')?existing.reworkPolicy:'COMPLETED_BLOCK'};
+  return config ? {...createBonusAccount(month, config, 'COMPLETED_BLOCK'),rules:bonusRules(state.rules)} : null;
 }
 export function mayReadBonus(actor: BonusActor, state: BonusState, userId: string) {
   const c = state.configs[userId];
@@ -69,4 +70,10 @@ export function setBonusVisibility(state:BonusState,actor:BonusActor,visible:unk
   if(!actor.active||!isBonusAdmin(actor.role))throw new Error('Solo la direzione può sbloccare il valore economico.');
   if(typeof visible!=='boolean')throw new Error('Impostazione non valida.');
   return {...state,valueVisible:visible,revision:state.revision+1,visibilityAudit:[...(state.visibilityAudit??[]),{at:now.toISOString(),actorId:actor.id,visible}]};
+}
+
+export function setBonusRules(state:BonusState,actor:BonusActor,raw:unknown,now=new Date()):BonusState {
+ if(!actor.active||!isBonusAdmin(actor.role))throw new Error('Solo la direzione può modificare le regole.');
+ const rules=validateBonusRules(raw);
+ return {...state,rules,revision:state.revision+1,rulesAudit:[...(state.rulesAudit??[]),{at:now.toISOString(),actorId:actor.id,actorName:actor.name,before:bonusRules(state.rules),after:rules}]};
 }

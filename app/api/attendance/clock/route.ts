@@ -1,3 +1,4 @@
+import { syncOffShiftBonus } from "@/lib/monthly-bonus-attendance";
 import { NextRequest, NextResponse } from "next/server";
 import { publishLiveChange } from "@/lib/salon-live";
 import { AttendanceType } from "@prisma/client";
@@ -196,6 +197,10 @@ export async function POST(request: NextRequest) {
       ip_address: ip,
       note: storedNote,
     },
+  });
+
+  if (type === "USCITA") await syncOffShiftBonus(user.id, shiftDateOnly).catch(error => {
+    console.error("Bonus fuori turno non aggiornato; timbratura salvata:", error);
   });
 
   if (type === "ENTRATA") await publishLiveChange().catch(() => console.warn("Live attendance update unavailable"));

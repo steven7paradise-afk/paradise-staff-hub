@@ -1,3 +1,4 @@
+import { BonusDashboardCard } from "@/components/bonus-dashboard-card";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
@@ -477,6 +478,7 @@ export default async function DashboardPage() {
 
     return (
       <AppShell title="Dashboard" subtitle="Direzione operativa" role={role as any} hideHeader transparentMain>
+        <div className="mx-auto max-w-[1600px] px-4"><BonusDashboardCard /></div>
         <ManagementDashboard data={managementData} />
       </AppShell>
     );
