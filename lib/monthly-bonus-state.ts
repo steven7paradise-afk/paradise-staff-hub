@@ -12,7 +12,10 @@ export function validateBonusMonth(month: string, now = new Date()) {
 export function blankBonusState(configs: Record<string, BonusConfig> = {}): BonusState { return { version: 1, revision: 0, configs, accounts: {}, audit: [], valueVisible:false, visibilityAudit:[] }; }
 export function accountFor(state: BonusState, month: string, userId: string) {
   const config = state.configs[userId];
-  return state.accounts[userId] ?? (config ? createBonusAccount(month, config, config.reworkPolicy) : null);
+  const existing=state.accounts[userId];
+  // Preserve recorded historical policies, but no choice is needed for a new counter.
+  if(existing) return existing.events.some(e=>e.type==='REWORK') ? existing : {...existing,reworkPolicy:'COMPLETED_BLOCK'};
+  return config ? createBonusAccount(month, config, 'COMPLETED_BLOCK') : null;
 }
 export function mayReadBonus(actor: BonusActor, state: BonusState, userId: string) {
   const c = state.configs[userId];
@@ -26,8 +29,8 @@ export function configureBonus(state: BonusState, month: string, actor: BonusAct
   if (!Object.hasOwn(BONUS_LEVELS, level)) throw new Error('Scegli il livello.');
   const quota = raw.quota;
   if (quota !== null && (typeof quota !== 'number' || !Number.isSafeInteger(quota) || quota < 0 || quota > 100000)) throw new Error('Quota non valida. Usa un intero positivo o lascia il campo vuoto.');
-  const policy = raw.reworkPolicy as ReworkPolicy | null;
-  if (policy !== null && !['COMPLETED_BLOCK','STARTED_BLOCK'].includes(policy)) throw new Error('Regola rilavorazioni non valida.');
+  const priorAccount=state.accounts[userId];
+  const policy:ReworkPolicy|null=priorAccount?.events.some(e=>e.type==='REWORK') ? priorAccount.reworkPolicy : 'COMPLETED_BLOCK';
   const responsibleIds = Array.isArray(raw.responsibleIds) ? [...new Set(raw.responsibleIds.map(String))] : [];
   if (responsibleIds.some(id=>!people.some(p=>p.id===id && p.active && p.role==='RESPONSABILE'))) throw new Error('Seleziona una responsabile di sede attiva.');
   const referenceMasterId = raw.referenceMasterId ? String(raw.referenceMasterId) : null;

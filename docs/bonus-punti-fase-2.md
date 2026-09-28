@@ -118,3 +118,11 @@ tracciato e ripreso nei mesi seguenti, senza attivazione automatica.
 Verifiche: 382 test superati, controllo TypeScript e build produzione completati.
 Il rilascio resta distinto dal completamento del codice: verificare il push e
 il deploy effettivo prima di dichiarare il sito aggiornato.
+
+## Rilavorazioni: regola automatica confermata
+
+La scelta manuale è rimossa per i nuovi conteggi: prime 3 gratuite, malus −20
+alla 6ª, 9ª, 12ª rilavorazione. La responsabile registra il singolo evento;
+il server calcola franchigia e malus. I conti storici con eventi già valutati
+con una regola diversa restano invariati. Nessuna penalità automatica viene
+ricavata dalla ricerca testuale nelle note Controllo Cliente.
