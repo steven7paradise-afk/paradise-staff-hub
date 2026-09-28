@@ -25,6 +25,9 @@ function readableEmployeeError(error: unknown) {
       if (target.includes("pin_lookup")) return "Questo PIN e gia assegnato a un altro collaboratore.";
       return "Esiste gia un collaboratore con questi dati.";
     }
+    if (code === "P2028" || code === "P2024") {
+      return "Il database ha impiegato troppo tempo. Riprova il salvataggio tra pochi secondi.";
+    }
   }
 
   return error instanceof Error ? error.message : "Errore durante il salvataggio del collaboratore.";
@@ -147,37 +150,71 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
             user_id: id,
             date: { gte: todayUtcStart() },
           },
-          include: { category: true },
+          select: {
+            id: true,
+            category: {
+              select: {
+                name: true,
+                code: true,
+                color: true,
+                text_color: true,
+                start_time: true,
+                end_time: true,
+                editable_time: true,
+                paid_hours: true,
+                active: true,
+              },
+            },
+          },
         });
 
+        // I turni futuri condividono quasi sempre poche categorie. Prima il
+        // codice eseguiva due query per ogni singolo giorno: con molti turni
+        // la transazione superava facilmente il limite di 5 secondi.
+        const sourceCategoryByCode = new Map(
+          futureEntries.map((entry) => [entry.category.code, entry.category]),
+        );
+        const entryIdsByCode = new Map<string, string[]>();
         for (const entry of futureEntries) {
+          const entryIds = entryIdsByCode.get(entry.category.code) ?? [];
+          entryIds.push(entry.id);
+          entryIdsByCode.set(entry.category.code, entryIds);
+        }
+
+        const targetCategoryIdByCode = new Map<string, string>();
+        for (const sourceCategory of sourceCategoryByCode.values()) {
           const category = await tx.scheduleCategory.upsert({
             where: {
               code_location_id: {
-                code: entry.category.code,
+                code: sourceCategory.code,
                 location_id: nextSedeId,
               },
             },
             create: {
-              name: entry.category.name,
-              code: entry.category.code,
+              name: sourceCategory.name,
+              code: sourceCategory.code,
               location_id: nextSedeId,
-              color: entry.category.color,
-              text_color: entry.category.text_color,
-              start_time: entry.category.start_time,
-              end_time: entry.category.end_time,
-              editable_time: entry.category.editable_time,
-              paid_hours: entry.category.paid_hours,
-              active: entry.category.active,
+              color: sourceCategory.color,
+              text_color: sourceCategory.text_color,
+              start_time: sourceCategory.start_time,
+              end_time: sourceCategory.end_time,
+              editable_time: sourceCategory.editable_time,
+              paid_hours: sourceCategory.paid_hours,
+              active: sourceCategory.active,
             },
             update: {},
           });
+          targetCategoryIdByCode.set(sourceCategory.code, category.id);
+        }
 
-          await tx.scheduleEntry.update({
-            where: { id: entry.id },
+        for (const [code, entryIds] of entryIdsByCode) {
+          const categoryId = targetCategoryIdByCode.get(code);
+          if (!categoryId) continue;
+          await tx.scheduleEntry.updateMany({
+            where: { id: { in: entryIds } },
             data: {
               location_id: nextSedeId,
-              category_id: category.id,
+              category_id: categoryId,
             },
           });
         }
@@ -186,6 +223,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       }
 
       return updatedUser;
+    }, {
+      // Margine per database remoto o momentaneamente sotto carico. Il lavoro
+      // e comunque raggruppato per categoria, quindi normalmente termina in
+      // poche query anche con molti mesi di turni programmati.
+      maxWait: 5_000,
+      timeout: 20_000,
     });
 
     return NextResponse.json({ ...user, password_hash: undefined, pin_hash: undefined, pinConfigured: Boolean(user.pin_hash) });
