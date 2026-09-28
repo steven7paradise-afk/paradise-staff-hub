@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import { CalendarDays, FileText, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { NotificationsPopover } from "@/components/notifications-popover";
+import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 
 function applyThemeVariables(isDark: boolean) {
   const root = document.querySelector<HTMLElement>(".paradise-theme-root");
@@ -94,7 +95,7 @@ export function TopControls({
   function choosePcProfile(event?: React.MouseEvent<HTMLElement>) {
     if (userId !== "PC_CASSA" || !pathname?.startsWith("/appointments")) return false;
     event?.preventDefault();
-    window.dispatchEvent(new CustomEvent("appointments:choose-profile"));
+    void handleLogout();
     return true;
   }
 
@@ -121,12 +122,24 @@ export function TopControls({
   }, [userId]);
 
   async function handleLogout() {
-    if (choosePcProfile()) return;
     if (userId === "PC_CASSA") {
-      window.location.replace(profileHref);
+      try {
+        const destination = await endAppointmentWorkerSession();
+        window.location.replace(destination || profileHref);
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Logout non riuscito. Riprova.");
+      }
       return;
     }
 
+    if (pathname?.startsWith("/appointments")) {
+      try {
+        const destination = await endAppointmentWorkerSession();
+        await signOut({ redirect: false });
+        window.location.replace(destination || "/login");
+      } catch { window.alert("Logout non riuscito. Controlla la connessione e riprova."); }
+      return;
+    }
     await signOut({ redirect: false });
     window.location.replace("/login");
   }

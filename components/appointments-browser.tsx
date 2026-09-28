@@ -1,4 +1,5 @@
 "use client";
+import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
 import { canWorkAcrossAppointmentLocations, employeeMatchesAppointmentLocation, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
 
@@ -3320,8 +3321,7 @@ export function AppointmentsBrowser({
   useEffect(() => {
     if (!isPC) return;
     const showProfileChoice = () => {
-      setPcActiveWorker(null);
-      setPcScreenLocked(true);
+      void handlePcLogout();
     };
     window.addEventListener("appointments:choose-profile", showProfileChoice);
     return () => window.removeEventListener("appointments:choose-profile", showProfileChoice);
@@ -3330,6 +3330,15 @@ export function AppointmentsBrowser({
   function handlePcUnlock(worker: ActivePcWorker) {
     setPcActiveWorker(worker);
     setPcScreenLocked(false);
+  }
+
+  async function handlePcLogout() {
+    try {
+      const destination = await endAppointmentWorkerSession();
+      window.location.replace(destination || `/appointments/${salon}?choose=1`);
+    } catch (error) {
+      showPushToast("Uscita non completata", error instanceof Error ? error.message : "Riprova.", "error");
+    }
   }
 
   function handleExpiredPcWorker(response: Response) {
@@ -6045,10 +6054,7 @@ export function AppointmentsBrowser({
                     {isPC && pcActiveWorker ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setPcActiveWorker(null);
-                          setPcScreenLocked(true);
-                        }}
+                        onClick={() => { void handlePcLogout(); }}
                         className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 transition hover:bg-emerald-100"
                         title="Cambia profilo"
                       >
