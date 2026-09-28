@@ -1,3 +1,4 @@
+import { usesMonthlyBonus } from "@/lib/monthly-bonus";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
@@ -14,6 +15,11 @@ export async function POST(
   }
 
   const { id } = await context.params;
+
+  if (usesMonthlyBonus()) {
+    await prisma.notification.updateMany({ where: { id, user_id: session.user.id, type: "COMUNICAZIONE" }, data: { read: true } });
+    return NextResponse.json({ success: true, pointsAwarded: 0 });
+  }
 
   try {
     const newPoints = await prisma.$transaction(async (tx) => {

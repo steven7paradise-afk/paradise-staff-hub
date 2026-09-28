@@ -62,7 +62,7 @@ const nav = [
   { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/fine-giornata", label: "Fine giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/points", label: "Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/points", label: "Centro Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
   { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/service-forms", label: "Moduli", iconName: "ClipboardList", roles: ["RESPONSABILE"], section: "Planning & Saloni" },

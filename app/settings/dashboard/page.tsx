@@ -1,3 +1,4 @@
+import { usesMonthlyBonus } from "@/lib/monthly-bonus";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
@@ -57,7 +58,7 @@ export default async function DashboardSettingsPage() {
       subtitle="Pannello Super Admin per impostare gli obiettivi mensili, lo schema punti lavoratori, l'assegnazione/riscatto premi, promozioni e comunicazioni."
       role={role as any}
     >
-      <DashboardSettingsClient role={role} initialSettings={initialSettings} />
+      <DashboardSettingsClient monthlyBonusEnabled={usesMonthlyBonus()} role={role} initialSettings={initialSettings} />
     </AppShell>
   );
 }

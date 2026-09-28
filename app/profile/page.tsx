@@ -1,3 +1,4 @@
+import { usesMonthlyBonus } from "@/lib/monthly-bonus";
 import Link from "next/link";
 import { CalendarDays, ChevronRight, FileCheck2, FileText, IdCard, LockKeyhole, User, Mail, Fingerprint, Briefcase, ShieldAlert, MapPin, Sparkles } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -277,6 +278,7 @@ export default async function ProfilePage() {
           year: d.year,
           createdAt: d.created_at.toISOString()
         }))}
+        monthlyBonusEnabled={usesMonthlyBonus()}
         pointsStats={{
           schedeCount,
           workerGoal,

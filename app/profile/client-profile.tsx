@@ -55,6 +55,7 @@ type ClientProfileProps = {
     documents: number;
     taskInProgress: number;
   };
+  monthlyBonusEnabled?: boolean;
   pointsStats?: {
     schedeCount: number;
     workerGoal: number;
@@ -185,6 +186,7 @@ export function ClientProfile({
   colleagues,
   stats,
   pointsStats,
+  monthlyBonusEnabled = false,
   unreadNotifications,
   shiftWeeks,
   holidayRequests,
@@ -355,7 +357,7 @@ export function ClientProfile({
     { label: "Richieste aperte", value: String(stats.openRequests), icon: CalendarCheck2 },
     { label: "Documenti", value: String(stats.documents), icon: FileText },
     { label: "Task in corso", value: String(stats.taskInProgress), icon: FileCheck },
-    { label: "Punti disponibili", value: String(availablePoints), icon: Briefcase, accent: true },
+    ...(!monthlyBonusEnabled ? [{ label: "Punti disponibili", value: String(availablePoints), icon: Briefcase, accent: true }] : []),
   ];
   const workedPercent = Math.min(100, Math.round((stats.workedHours / Math.max(1, stats.plannedHours)) * 100));
 
@@ -472,6 +474,7 @@ export function ClientProfile({
       {activeTab === "points" && (
         <div className="profile-page-enter profile-page-enter-delay-3 flex flex-col gap-4 xl:col-start-2 xl:row-start-3">
           
+          {monthlyBonusEnabled ? <div className="order-3 rounded-2xl border border-pink-200 bg-pink-50 p-6"><h2 className="text-xl font-bold">Centro Punti</h2><p className="my-3 text-sm">Consulta saldo mensile, bonus, malus e storico.</p><Link href="/points" className="inline-block rounded-xl bg-pink-600 px-5 py-3 font-bold text-white">Apri Centro Punti</Link></div> : <>
           {/* Target Progress Section */}
           <div className="profile-glass-section order-3 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6">
             <div className="flex flex-col justify-between gap-4 border-b border-neutral-100 pb-4 md:flex-row md:items-center">
@@ -572,6 +575,7 @@ export function ClientProfile({
             </div>
           </div>
 
+          </>}
           {/* WEEKLY PERSONAL SHIFTS */}
           <div className="profile-glass-section order-1 flex flex-col gap-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:gap-5 sm:p-6">
             <div className="order-1 flex flex-col gap-3 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">

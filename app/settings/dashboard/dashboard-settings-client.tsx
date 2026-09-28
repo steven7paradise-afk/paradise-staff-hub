@@ -70,6 +70,7 @@ type EmployeeItem = {
 };
 
 type Props = {
+  monthlyBonusEnabled?: boolean;
   role: string;
   initialSettings: {
     salonGoal: number;
@@ -84,7 +85,7 @@ type Props = {
   };
 };
 
-export function DashboardSettingsClient({ role, initialSettings }: Props) {
+export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEnabled = false }: Props) {
   const router = useRouter();
   const [salonGoal, setSalonGoal] = useState<number>(initialSettings.salonGoal || 500);
   const [workerGoal, setWorkerGoal] = useState<number>(initialSettings.workerGoal || 100);
@@ -323,6 +324,7 @@ export function DashboardSettingsClient({ role, initialSettings }: Props) {
         </div>
       </div>
 
+      {monthlyBonusEnabled ? <div className="rounded-xl border border-pink-200 bg-pink-50 p-6"><h2 className="font-bold">Nuovo Centro Punti</h2><p className="my-3 text-sm">Livelli, quote e responsabili si configurano in Gestione punti. Il vecchio saldo è conservato e non alimenta il nuovo conto.</p><a href="/points" className="font-bold text-pink-700 underline">Apri Gestione punti nel Centro Punti</a></div> : <>
       {/* SECTION 2: SCHEMA PUNTI & RISCATTO PREMI DIPENDENTI */}
       <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
         <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
@@ -429,6 +431,7 @@ export function DashboardSettingsClient({ role, initialSettings }: Props) {
         </div>
       </div>
 
+      </>}
       {/* SECTION 3: PROMOZIONI & SLIDER CAMPAGNE */}
       <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
         <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
