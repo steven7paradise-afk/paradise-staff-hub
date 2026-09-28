@@ -50,7 +50,6 @@ export function bonusRuleExplanation(r:BonusRules) {
   `Cambio turno ultimo momento: +${r.shiftChangePoints} punti. Reperibilità confermata: +${r.urgencyPoints} punti.`,
   `Junior: +${r.trainingPoints} per corso; +${r.zeroReworkPoints} per zero rilavorazioni a mese concluso.`,
   r.offShiftDayPoints>0?`Fuori turno: +${r.offShiftDayPoints} punti per giornata di Riposo con entrata e uscita valide. Una sola volta al giorno.`:'Lavoro fuori turno: bonus disattivato finché la direzione non imposta i punti.',
-  'Malattia: non toglie punti. Non è una rilavorazione né un ritardo.',
   'Ogni mese riparte dalla base del livello. Il saldo non scende sotto zero e non supera il tetto.',
  ];
 }

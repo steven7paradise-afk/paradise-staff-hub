@@ -56,7 +56,7 @@ test('automatic bonus is awarded once per day, not per clock session',()=>{
 });
 test('illness does not have a penalty and employee output still excludes euros',()=>{
  assert.equal('SICKNESS' in BONUS_EVENT_LABELS,false);
- assert.equal(bonusRuleExplanation(bonusRules()).some(t=>t.startsWith('Malattia: non toglie punti.')),true);
+ assert.equal(bonusRuleExplanation(bonusRules()).some(t=>/malattia/i.test(t)),false);
  const a=awardOffShiftDay(account(),day,now);
  assert.equal('euros' in visibleBonusBalance(a,rs,blankBonusState()),false);
 });
