@@ -69,7 +69,6 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       where: taskWhere,
       select: taskListSelect,
       orderBy: { updated_at: "desc" },
-      take: 120,
     }),
     prisma.setting.findUnique({ where: { key: "task_categories" } }),
   ]);
