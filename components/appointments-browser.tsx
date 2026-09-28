@@ -6046,6 +6046,148 @@ export function AppointmentsBrowser({
           </div>
         </div>
       ) : null}
+      {pcGenModalOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="pc-registration-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white border border-[#E8D8CF] rounded-[32px] max-w-md w-full p-8 shadow-2xl relative space-y-6">
+
+            <button
+              aria-label="Chiudi registrazione PC"
+              onClick={() => setPcGenModalOpen(false)}
+              className="absolute right-6 top-6 p-2 rounded-full hover:bg-neutral-100 transition text-neutral-400 hover:text-neutral-800"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="space-y-1.5 text-center">
+              <h2 id="pc-registration-title" className="text-xl font-serif font-light tracking-wide uppercase text-neutral-900">
+                Registra PC Cassa
+              </h2>
+              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                Genera un link monouso per configurare un PC di cassa o reception.
+              </p>
+            </div>
+
+            {generatedLink ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center">
+                  Link generato con successo! Copialo e aprilo una sola volta sul PC della cassa.
+                </div>
+
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={generatedLink}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    className="w-full text-xs bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-neutral-700 outline-none font-mono"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      let success = false;
+                      if (navigator.clipboard && window.isSecureContext) {
+                        try {
+                          await navigator.clipboard.writeText(generatedLink);
+                          success = true;
+                        } catch (err) {
+                          console.error("Clipboard API failed, using fallback:", err);
+                        }
+                      }
+                      if (!success) {
+                        const textArea = document.createElement("textarea");
+                        textArea.value = generatedLink;
+                        textArea.style.top = "0";
+                        textArea.style.left = "0";
+                        textArea.style.position = "fixed";
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        try {
+                          success = document.execCommand("copy");
+                        } catch (err) {
+                          console.error("Fallback copy failed:", err);
+                        }
+                        document.body.removeChild(textArea);
+                      }
+                      if (success) {
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      } else {
+                        alert("Impossibile copiare automaticamente. Seleziona il testo sopra e copialo manualmente.");
+                      }
+                    }}
+                    className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition"
+                  >
+                    {copiedLink ? "Copiato!" : "Copia Link"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleGeneratePcLink} className="space-y-4">
+                {genError && (
+                  <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold">
+                    {genError}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
+                    Sede Salone
+                  </label>
+                  <select
+                    value={genSedeId}
+                    onChange={(e) => setGenSedeId(e.target.value)}
+                    required
+                    className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
+                  >
+                    <option value="">Seleziona sede</option>
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
+                    Nome Dispositivo PC
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={genPcName}
+                    onChange={(e) => setGenPcName(e.target.value)}
+                    placeholder="Es: Cassa Buenos Aires"
+                    className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={generatingLink || !genSedeId || !genPcName.trim()}
+                  className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {generatingLink && <Loader2 className="size-4 animate-spin" />}
+                  <span>{generatingLink ? "Generazione..." : "Genera Link Monouso"}</span>
+                </button>
+              </form>
+            )}
+
+            {!generatedLink && (
+              <button
+                type="button"
+                onClick={() => setPcGenModalOpen(false)}
+                className="w-full py-3 rounded-full border border-neutral-200 hover:border-neutral-400 text-neutral-500 hover:text-neutral-900 text-xs font-black uppercase tracking-wider transition"
+              >
+                Chiudi
+              </button>
+            )}
+
+          </div>
+        </div>
+      )}
       <div className="appointments-workspace w-full">
         <main className="relative min-h-[calc(100dvh-4rem)] min-w-0 space-y-3 overflow-hidden rounded-[22px] border border-[#E7D9E0] bg-[#F6EEF2] p-1.5 sm:space-y-5 sm:rounded-[30px] sm:p-3 lg:p-4">
           <section className={`relative overflow-visible rounded-[22px] border border-[#E7D9E0] bg-[#FBF7F9] p-3 shadow-[0_10px_30px_rgba(66,39,51,0.06)] sm:rounded-[28px] sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
@@ -9115,147 +9257,6 @@ export function AppointmentsBrowser({
         fallbackWorkers={corsoTeamOptions}
       />
 
-      {pcGenModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white border border-[#E8D8CF] rounded-[32px] max-w-md w-full p-8 shadow-2xl relative space-y-6">
-            
-            <button
-              onClick={() => setPcGenModalOpen(false)}
-              className="absolute right-6 top-6 p-2 rounded-full hover:bg-neutral-100 transition text-neutral-400 hover:text-neutral-800"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="space-y-1.5 text-center">
-              <h2 className="text-xl font-serif font-light tracking-wide uppercase text-neutral-900">
-                Registra PC Cassa
-              </h2>
-              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                Genera un link monouso per configurare un PC di cassa o reception.
-              </p>
-            </div>
-
-            {generatedLink ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center">
-                  Link generato con successo! Copialo e aprilo una sola volta sul PC della cassa.
-                </div>
-                
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={generatedLink}
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                    className="w-full text-xs bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-neutral-700 outline-none font-mono"
-                  />
-                  
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      let success = false;
-                      if (navigator.clipboard && window.isSecureContext) {
-                        try {
-                          await navigator.clipboard.writeText(generatedLink);
-                          success = true;
-                        } catch (err) {
-                          console.error("Clipboard API failed, using fallback:", err);
-                        }
-                      }
-                      if (!success) {
-                        const textArea = document.createElement("textarea");
-                        textArea.value = generatedLink;
-                        textArea.style.top = "0";
-                        textArea.style.left = "0";
-                        textArea.style.position = "fixed";
-                        document.body.appendChild(textArea);
-                        textArea.focus();
-                        textArea.select();
-                        try {
-                          success = document.execCommand("copy");
-                        } catch (err) {
-                          console.error("Fallback copy failed:", err);
-                        }
-                        document.body.removeChild(textArea);
-                      }
-                      if (success) {
-                        setCopiedLink(true);
-                        setTimeout(() => setCopiedLink(false), 2000);
-                      } else {
-                        alert("Impossibile copiare automaticamente. Seleziona il testo sopra e copialo manualmente.");
-                      }
-                    }}
-                    className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition"
-                  >
-                    {copiedLink ? "Copiato!" : "Copia Link"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleGeneratePcLink} className="space-y-4">
-                {genError && (
-                  <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold">
-                    {genError}
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
-                    Sede Salone
-                  </label>
-                  <select
-                    value={genSedeId}
-                    onChange={(e) => setGenSedeId(e.target.value)}
-                    required
-                    className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
-                  >
-                    <option value="">Seleziona sede</option>
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
-                    Nome Dispositivo PC
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={genPcName}
-                    onChange={(e) => setGenPcName(e.target.value)}
-                    placeholder="Es: Cassa Buenos Aires"
-                    className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={generatingLink || !genSedeId || !genPcName.trim()}
-                  className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {generatingLink && <Loader2 className="size-4 animate-spin" />}
-                  <span>{generatingLink ? "Generazione..." : "Genera Link Monouso"}</span>
-                </button>
-              </form>
-            )}
-
-            {!generatedLink && (
-              <button
-                type="button"
-                onClick={() => setPcGenModalOpen(false)}
-                className="w-full py-3 rounded-full border border-neutral-200 hover:border-neutral-400 text-neutral-500 hover:text-neutral-900 text-xs font-black uppercase tracking-wider transition"
-              >
-                Chiudi
-              </button>
-            )}
-
-          </div>
-        </div>
-      )}
     </div>
   );
 }
