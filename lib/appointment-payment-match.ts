@@ -36,3 +36,27 @@ export function closestAppointmentPayment<T extends PaymentOrder>(
 export function canCorrectAppointmentClient(role?: string | null) {
   return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role || "");
 }
+
+type CustomerContact = { email?: string | null; phone?: string | null };
+/** Automatic financial links never use fuzzy names/emails or short phone suffixes. */
+export function exactPaymentCustomer(a: CustomerContact, b: CustomerContact) {
+  const email = (value?: string | null) => {
+    const normalized = (value || "").trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : "";
+  };
+  const phone = (value?: string | null) => {
+    const digits = (value || "").replace(/\D/g, "").replace(/^00/, "");
+    return digits.length >= 8 ? digits : "";
+  };
+  const ae = email(a.email), be = email(b.email), ap = phone(a.phone), bp = phone(b.phone);
+  // Conflicting populated contacts require manual verification, even if one matches.
+  if (ae && be && ae !== be) return false;
+  if (ap && bp && ap !== bp) return false;
+  return Boolean((ae && be && ae === be) || (ap && bp && ap === bp));
+}
+
+export function uniqueAppointmentPayment<T extends PaymentOrder & CustomerContact>(orders: T[], customer: CustomerContact, start?: string, deposit = ""): T | null {
+  const candidates = orders.filter(order => exactPaymentCustomer(customer, order) && closestAppointmentPayment([order], start, deposit));
+  const unique = new Map(candidates.map(order => [order.id, order]));
+  return unique.size === 1 ? [...unique.values()][0] : null;
+}

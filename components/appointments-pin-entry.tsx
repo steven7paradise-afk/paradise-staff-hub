@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Loader2, Delete, RefreshCw, LockKeyhole, Sun, Moon } from "lucide-react";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { appointmentPinKey } from "@/lib/appointment-pin-keyboard";
 import styles from "./appointments-pin-entry.module.css";
 
 const THEME_KEY = "paradise-appointments-entry-theme";
@@ -26,6 +27,11 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
   const inFlight = useRef(false);
   const pinInput = useRef<HTMLInputElement>(null);
   const [theme, setTheme] = useState<"light" | "dark" | null>(null);
+  // Restore focus after React commits profile changes or re-enables the input
+  // following a rejected PIN, rather than focusing a still-disabled element.
+  useEffect(() => {
+    if (!busy) pinInput.current?.focus({ preventScroll: true });
+  }, [selectedWorker, busy]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     let saved: string | null = null;
@@ -102,7 +108,23 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
           <div className={styles.admin}><AppointmentsAdminUnlock salone={salon} compact /></div>
         </div>
       </header>
-      <div className={styles.columns}>
+      <div className={styles.columns} onKeyDownCapture={event => {
+        const target = event.target as HTMLElement;
+        // Native input editing (including paste/selection) must remain intact.
+        // Scope shortcuts to this login surface, never to the admin dialog.
+        if (target.closest("input, textarea, select, [contenteditable='true']")) return;
+        const action = appointmentPinKey({ ...event, isComposing: event.nativeEvent.isComposing });
+        if (!action) return;
+        // Enter on a profile must retain normal keyboard button activation.
+        if (action === "submit" && !target.closest("form")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (busy || inFlight.current) return;
+        if (action === "submit") { void enter(); return; }
+        setError("");
+        setPin(value => action === "backspace" ? value.slice(0, -1) : action === "clear" ? "" : `${value}${action}`.slice(0, pinLength));
+        pinInput.current?.focus({ preventScroll: true });
+      }}>
       <section aria-label="Personale disponibile" className={styles.profiles}>
         <div className={styles.panelHeading}><div><h2>Il tuo profilo {staffState === "ready" && <span className={styles.count}>{workers.length}</span>}</h2><p>Scegli la tua foto</p></div><button type="button" disabled={staffState === "loading" || busy} onClick={() => setStaffRetry(value => value + 1)} aria-label="Aggiorna personale" title="Aggiorna personale" className={styles.refresh}><RefreshCw aria-hidden className={`size-4 ${staffState === "loading" ? "animate-spin" : ""}`} /></button></div>
         {staffState === "loading" && <p role="status" className={styles.message}>Caricamento personale…</p>}
@@ -132,6 +154,7 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
         <div className={styles.keypad}>
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", "Cancella", "0", "Indietro"].map(key => <button key={key} type="button" disabled={busy} aria-label={key} onClick={() => {
             setError(""); setPin(value => key === "Cancella" ? "" : key === "Indietro" ? value.slice(0, -1) : `${value}${key}`.slice(0, pinLength));
+            pinInput.current?.focus({ preventScroll: true });
           }}>{key === "Indietro" ? <Delete aria-hidden className="size-5" /> : key === "Cancella" ? <span className="text-xs">Cancella</span> : key}</button>)}
         </div>
         {error && <p id="appointment-entry-error" role="alert" className={styles.error}>{error}</p>}

@@ -60,7 +60,7 @@ import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock"
 import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
-import { closestAppointmentPayment, canCorrectAppointmentClient } from "@/lib/appointment-payment-match";
+import { uniqueAppointmentPayment, canCorrectAppointmentClient } from "@/lib/appointment-payment-match";
 import {
   allowsMissingFinalPaymentOrder,
   CLIENT_CONTROL_SERVICE_OPTIONS,
@@ -1975,7 +1975,24 @@ export function AppointmentsBrowser({
   const [showManualShopifyCorrection] = useState(false);
 
   const paymentRefreshRef = useRef(fetchTodayShopifyOrders);
+  const paymentLookupSequence = useRef(0);
   useEffect(() => { paymentRefreshRef.current = fetchTodayShopifyOrders; });
+  useEffect(() => {
+    if (!clientControlOpen || !clientControlForm.bookingId) return;
+    const events = new EventSource("/api/appointments/events");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const form = clientControlFormRef.current;
+        void paymentRefreshRef.current({ clientName: form.clientName, email: form.email, phone: form.phone, shopifyOrder: form.shopifyOrder });
+      }, 300);
+    };
+    events.addEventListener("payments.changed", refresh);
+    const visible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", visible);
+    return () => { events.close(); clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
+  }, [clientControlOpen, clientControlForm.bookingId]);
   useEffect(() => {
     if (!clientControlOpen || !clientControlForm.bookingId) return;
     const timer = window.setInterval(() => {
@@ -1987,6 +2004,7 @@ export function AppointmentsBrowser({
   }, [clientControlOpen, clientControlForm.bookingId]);
 
   async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string; shopifyOrder?: string }) {
+    const sequence = ++paymentLookupSequence.current;
     const lookupBookingId = clientControlFormRef.current.bookingId;
     setLoadingTodayOrders(true);
     try {
@@ -2001,7 +2019,7 @@ export function AppointmentsBrowser({
         try {
           const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`, { cache: "no-store" });
           const data = await res.json().catch(() => null);
-          if (clientControlFormRef.current.bookingId !== lookupBookingId) return;
+          if (sequence !== paymentLookupSequence.current || clientControlFormRef.current.bookingId !== lookupBookingId) return;
           if (res.ok && Array.isArray(data?.orders) && data.orders.length > 0) {
             setTodayOrdersList(data.orders);
             setShopifyNoteFallbackToDeposit(false);
@@ -2013,7 +2031,7 @@ export function AppointmentsBrowser({
       }
 
       if (lastLookupError) console.error("Failed to fetch client's Shopify orders:", lastLookupError);
-      if (clientControlFormRef.current.bookingId !== lookupBookingId) return;
+      if (sequence !== paymentLookupSequence.current || clientControlFormRef.current.bookingId !== lookupBookingId) return;
       setTodayOrdersList([]);
       const depositOrder = String(
         identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
@@ -2024,7 +2042,7 @@ export function AppointmentsBrowser({
       }
     } catch (err) {
       console.error("Failed to prepare client's Shopify order search:", err);
-      if (clientControlFormRef.current.bookingId !== lookupBookingId) return;
+      if (sequence !== paymentLookupSequence.current || clientControlFormRef.current.bookingId !== lookupBookingId) return;
       const depositOrder = String(
         identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
       ).trim().replace(/^#/, "");
@@ -2033,7 +2051,7 @@ export function AppointmentsBrowser({
         setShopifyNoteFallbackToDeposit(true);
       }
     } finally {
-      if (clientControlFormRef.current.bookingId === lookupBookingId) setLoadingTodayOrders(false);
+      if (sequence === paymentLookupSequence.current && clientControlFormRef.current.bookingId === lookupBookingId) setLoadingTodayOrders(false);
     }
   }
 
@@ -2173,8 +2191,8 @@ export function AppointmentsBrowser({
 
   const latestClientPaymentOrder = useMemo(() => {
     const booking = initialBookings.find((item) => item.id === clientControlForm.bookingId);
-    return closestAppointmentPayment(clientMatchingOrders, booking?.startDate, clientControlForm.shopifyOrder);
-  }, [clientMatchingOrders, initialBookings, clientControlForm.bookingId, clientControlForm.shopifyOrder]);
+    return uniqueAppointmentPayment(clientMatchingOrders, clientControlForm, booking?.startDate, clientControlForm.shopifyOrder);
+  }, [clientMatchingOrders, initialBookings, clientControlForm.bookingId, clientControlForm.shopifyOrder, clientControlForm.email, clientControlForm.phone]);
 
   // Suggested 1° Ordine (Acconto)
   const suggestedAccontoOrder = useMemo(() => {
@@ -2258,7 +2276,7 @@ export function AppointmentsBrowser({
       !clientControlOpen ||
       !clientControlHistoryLoaded ||
       !suggestedSaldoOrder ||
-      currentSecondOrder === suggestedSaldoOrder.orderName.replace(/^#/, "")
+      Boolean(currentSecondOrder)
     ) {
       return;
     }

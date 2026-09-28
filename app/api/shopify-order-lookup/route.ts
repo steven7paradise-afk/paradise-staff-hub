@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         try {
           while (nextUrl && page < 4) {
             const res: Response = await fetch(nextUrl, {
+              cache: "no-store",
               headers: fetchHeaders,
               signal: AbortSignal.timeout(5000),
             });
