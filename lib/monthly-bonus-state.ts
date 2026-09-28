@@ -10,7 +10,7 @@ export function validateBonusMonth(month: string, now = new Date()) {
   return month;
 }
 export function blankBonusState(configs: Record<string, BonusConfig> = {}): BonusState { return { version: 1, revision: 0, configs, accounts: {}, audit: [], valueVisible:false, visibilityAudit:[] }; }
-export function accountFor(state: BonusState, month: string, userId: string) {
+export function accountFor(state: BonusState, month: string, userId: string): BonusAccount | null {
   const config = state.configs[userId];
   const existing=state.accounts[userId];
   // Preserve recorded historical policies, but no choice is needed for a new counter.
