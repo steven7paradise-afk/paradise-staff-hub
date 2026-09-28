@@ -10,6 +10,8 @@ import {
 } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
 import { isPinPrefixValidForUser } from "@/lib/pin";
+import { mobileLoginAllowed, clearMobileLoginAttempts } from "@/lib/mobile-login-limit";
+import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
 import {
   appointmentStaffDisplayName,
   isAlwaysActiveAppointmentStaff,
@@ -25,10 +27,12 @@ export async function POST(request: NextRequest) {
   if (!pcAuth) {
     return NextResponse.json({ error: "PC non autorizzato." }, { status: 401 });
   }
+  const limitKey = `appointment-pin:${pcAuth.code}`;
+  if (!mobileLoginAllowed(limitKey)) return NextResponse.json({ error: "Troppi tentativi. Attendi 15 minuti prima di riprovare." }, { status: 429 });
 
   const body = await request.json().catch(() => null);
   const workerId = typeof body?.workerId === "string" ? body.workerId.trim() : "";
-  const pinPrefix = typeof body?.pinPrefix === "string" ? body.pinPrefix.replace(/\D/g, "").slice(0, 6) : "";
+  const pinPrefix = typeof body?.pinPrefix === "string" ? body.pinPrefix : "";
   const salone = normalizeAppointmentSalonSlug(body?.salone);
 
   if (!workerId) {
@@ -51,6 +55,7 @@ export async function POST(request: NextRequest) {
     select: {
       id: true,
       name: true,
+      role: true,
       sede_id: true,
       pin_prefix_lookup: true,
       attendance_logs: {
@@ -64,6 +69,7 @@ export async function POST(request: NextRequest) {
   if (!worker) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
+  if (isAppointmentPinOnlyRole(worker.role)) return NextResponse.json({ error: "Per questo profilo usa il PIN completo di 4 cifre." }, { status: 403 });
 
   const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
   if (!alwaysActive && worker.sede_id !== null && worker.sede_id !== pcAuth.locationId) {
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest) {
   }
 
   const workerName = appointmentStaffDisplayName(worker.name, worker.id);
+  clearMobileLoginAttempts(limitKey);
   const response = NextResponse.json({
     success: true,
     appointmentUrl: `${appointmentSalonUrl(salone)}?worker=${encodeURIComponent(workerName)}`,

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import {
   appointmentStaffDisplayName,
   isAlwaysActiveAppointmentStaff,
@@ -26,6 +27,7 @@ function normalizeStaffAliases(value: unknown) {
 export async function GET(request: NextRequest) {
   const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
   const includeAllSalonStaff = request.nextUrl.searchParams.get("scope") === "salon";
+  const isPinEntry = request.nextUrl.searchParams.get("scope") === "pin-entry";
   const session = await auth();
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
@@ -65,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     const [workers, aliasSetting] = await Promise.all([
       prisma.user.findMany({
-      where: { active: true },
+      where: { active: true, ...(isPinEntry ? { role: { notIn: ["ADMIN", "SUPER_ADMIN", "ZERO"] }, employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}) },
       select: {
         id: true,
         name: true,

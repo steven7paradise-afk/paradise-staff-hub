@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import AppointmentsPage from "../page";
-import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonSlugFromName, appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 import { prisma } from "@/lib/prisma";
@@ -42,11 +43,13 @@ export default async function SalonAppointmentsPage({
           active: true,
           OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
         },
-        select: { id: true, name: true, sede_id: true },
+        select: { id: true, name: true, sede_id: true, role: true },
       }).catch(() => null)
     : null;
   const selectedWorkerRecord = selectedWorkerCandidate && pcAuth && (
     selectedWorkerCandidate.sede_id === pcAuth.locationId ||
+    selectedWorkerCandidate.sede_id === null ||
+    isAppointmentPinOnlyRole(selectedWorkerCandidate.role) ||
     isAlwaysActiveAppointmentStaff(selectedWorkerCandidate.name, selectedWorkerCandidate.id)
   ) ? selectedWorkerCandidate : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
@@ -58,6 +61,14 @@ export default async function SalonAppointmentsPage({
     return await AppointmentsPage({
       searchParams: Promise.resolve({ ...resolvedSearchParams, salone }),
     });
+  }
+
+  // A PIN operator retains only this authorized PC's salon, including admins.
+  if (pcAuth && !isAdminRemote) {
+    const location = await prisma.location.findUnique({ where: { id: pcAuth.locationId }, select: { name: true } });
+    const pcSalon = appointmentSalonSlugFromName(location?.name ?? "");
+    if (!pcSalon) notFound();
+    if (salone !== pcSalon) redirect(appointmentSalonUrl(pcSalon));
   }
 
   if (!pcAuth && !isAdminRemote) {
