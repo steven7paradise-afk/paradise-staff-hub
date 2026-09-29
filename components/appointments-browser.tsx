@@ -395,7 +395,6 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
 ];
 
 const pcLinkManagerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
-const pcLockTimeoutMs = 10 * 60 * 1000;
 
 const clientControlSalons = [{ label: "Corso", value: "Salone Buenos Aires" }];
 
@@ -3324,17 +3323,6 @@ export function AppointmentsBrowser({
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
   const canCorrectClientIdentity = !isPC && canCorrectAppointmentClient(currentUser?.role);
 
-  useEffect(() => {
-    if (!isPC || !pcActiveWorker) return;
-
-    const lockScreen = () => {
-      setPcScreenLocked(true);
-      setPcActiveWorker(null);
-    };
-
-    const timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
-    return () => window.clearTimeout(timeout);
-  }, [isPC, pcActiveWorker?.id]);
 
   useEffect(() => {
     if (!isPC) return;

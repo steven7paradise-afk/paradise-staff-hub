@@ -1,4 +1,5 @@
 export async function endAppointmentWorkerSession(request: typeof fetch = fetch): Promise<string | null> {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("appointments:session-ending"));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
