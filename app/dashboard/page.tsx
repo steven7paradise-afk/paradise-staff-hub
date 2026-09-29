@@ -1,4 +1,3 @@
-import { BonusDashboardCard } from "@/components/bonus-dashboard-card";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
@@ -478,7 +477,6 @@ export default async function DashboardPage() {
 
     return (
       <AppShell title="Dashboard" subtitle="Direzione operativa" role={role as any} hideHeader transparentMain>
-        <div className="mx-auto max-w-[1600px] px-4"><BonusDashboardCard /></div>
         <ManagementDashboard data={managementData} />
       </AppShell>
     );
@@ -562,9 +560,7 @@ export default async function DashboardPage() {
 
   // Parse Dashboard Settings (Goals, Promos, Products, Announcements, Worker Bonus Map)
   const dashboardVal = (dashboardSettingRaw?.value as any) || {};
-  const salonGoal = Number(dashboardVal?.salonGoal) || DEFAULT_DASHBOARD_SETTINGS.salonGoal;
   const workerGoal = Number(dashboardVal?.workerGoal) || DEFAULT_DASHBOARD_SETTINGS.workerGoal;
-  const workerBonusMap = (dashboardVal?.workerBonusMap as Record<string, { manualBonusPoints?: number; redeemedPoints?: number }>) || {};
   const promos = Array.isArray(dashboardVal?.promos) ? dashboardVal.promos : DEFAULT_DASHBOARD_SETTINGS.promos;
   const sideCard1 = dashboardVal?.sideCard1 || DEFAULT_DASHBOARD_SETTINGS.sideCard1;
   const sideCard2 = dashboardVal?.sideCard2 || DEFAULT_DASHBOARD_SETTINGS.sideCard2;
@@ -582,17 +578,7 @@ export default async function DashboardPage() {
     .filter((f) => isClientControlFormName(f.name, f.category))
     .map((f) => f.id);
 
-  let currentSalonPoints = 0;
   let currentWorkerPoints = 0;
-  let allWorkerPoints: {
-    id: string;
-    name: string;
-    points: number;
-    manualBonusPoints: number;
-    redeemedPoints: number;
-    totalEarnedPoints: number;
-    availablePoints: number;
-  }[] = [];
 
   if (clientControlFormIds.length > 0) {
     const rawResponses = await safe(prisma.serviceFormResponse.findMany({
@@ -616,13 +602,9 @@ export default async function DashboardPage() {
     });
 
     const staffCountsMap = new Map<string, number>();
-    let countedSalonResponses = 0;
-
     for (const response of responses) {
       const answers = (response.answers as Record<string, unknown>) || {};
       if (!countsInAnalytics(answers)) continue;
-
-      countedSalonResponses += 1;
 
       const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
       const fallbackOwner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
@@ -634,37 +616,7 @@ export default async function DashboardPage() {
       }
     }
 
-    currentSalonPoints = countedSalonResponses;
     currentWorkerPoints = staffCountsMap.get(currentWorkerCanonicalName) || staffCountsMap.get(currentUser.name || "") || 0;
-
-    const salonEarned = currentSalonPoints >= salonGoal;
-
-    allWorkerPoints = allEmployees.map((emp) => {
-      const canonical = resolveCanonicalStaffName(emp.name, canonicalEmployeeNames);
-      const pts = staffCountsMap.get(canonical) || staffCountsMap.get(emp.name) || 0;
-      const workerEarned = pts >= workerGoal;
-
-      const userBonusRecord = workerBonusMap[emp.id] || workerBonusMap[canonical] || workerBonusMap[emp.name] || {};
-      const manualBonusPoints = Number(userBonusRecord.manualBonusPoints) || 0;
-      const redeemedPoints = Number(userBonusRecord.redeemedPoints) || 0;
-
-      let monthGoalBonus = 0;
-      if (salonEarned) monthGoalBonus += 10;
-      if (workerEarned) monthGoalBonus += 10;
-
-      const totalEarnedPoints = monthGoalBonus + manualBonusPoints;
-      const availablePoints = Math.max(0, totalEarnedPoints - redeemedPoints);
-
-      return {
-        id: emp.id,
-        name: emp.name,
-        points: pts,
-        manualBonusPoints,
-        redeemedPoints,
-        totalEarnedPoints,
-        availablePoints,
-      };
-    }).sort((a, b) => b.points - a.points);
   }
 
   // Calculate Shift & Worked Hours for Logged-In User
@@ -801,11 +753,8 @@ export default async function DashboardPage() {
           locationName: currentUser.location?.name ?? null,
           sedeId: currentUser.sede_id ?? null,
         }}
-        salonGoal={salonGoal}
         workerGoal={workerGoal}
-        currentSalonPoints={currentSalonPoints}
         currentWorkerPoints={currentWorkerPoints}
-        allWorkerPoints={allWorkerPoints}
         promos={promos}
         sideCard1={sideCard1}
         sideCard2={sideCard2}

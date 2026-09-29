@@ -23,6 +23,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/programmazione-responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/premio-risultato": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/registro-giornaliero": ["SUPER_ADMIN"],
@@ -43,7 +44,6 @@ export const routePermissions: Record<string, Role[]> = {
   "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/barcode-labels": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/remote": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/consulenza-online": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
@@ -238,6 +238,13 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
       edit: Array.from(new Set([...next[role].edit, "/magazzino"])),
     };
   });
+  // The new award area is reserved for administrators, including older maps.
+  (["SUPER_ADMIN", "ADMIN"] as Role[]).forEach((role) => {
+    next[role] = {
+      ...next[role],
+      view: Array.from(new Set([...next[role].view, "/premio-risultato"])),
+    };
+  });
   next.ZERO = defaults.ZERO;
   next.SUPER_ADMIN.view = Array.from(new Set([...next.SUPER_ADMIN.view, "/registro-giornaliero"]));
   for (const role of Object.keys(next) as Role[]) {
@@ -285,7 +292,7 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
 
   if (pathname === "/") return true;
   if (isApiRoute(pathname)) return true;
-  if (pathname === "/remote" || pathname.startsWith("/remote/")) {
+  if (pathname === "/remote" || pathname.startsWith("/remote/") || pathname === "/premio-risultato" || pathname.startsWith("/premio-risultato/")) {
     return ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
   }
   if (role === "ZERO") return Boolean(matchRoute(pathname));
@@ -315,6 +322,7 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
 
 export function canEdit(pathname: string, role?: Role, mansione?: string, accessList?: any) {
   if (!role) return false;
+  if (pathname === "/premio-risultato" || pathname.startsWith("/premio-risultato/")) return ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
 
   if (role === "ZERO") return true;
   const matchedRoute = matchRoute(pathname);

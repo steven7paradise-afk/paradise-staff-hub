@@ -1,4 +1,3 @@
-import { usesMonthlyBonus } from "@/lib/monthly-bonus";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
@@ -56,12 +55,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
-    const oldSettings = usesMonthlyBonus() ? await prisma.setting.findUnique({where:{key:DASHBOARD_SETTINGS_KEY}}) : null;
+    const oldSettings = await prisma.setting.findUnique({where:{key:DASHBOARD_SETTINGS_KEY}});
     const preservedBonus = (oldSettings?.value as Record<string, unknown> | null)?.workerBonusMap ?? {};
     const cleanSettings = {
       salonGoal: Math.max(1, Number(body.salonGoal) || DEFAULT_DASHBOARD_SETTINGS.salonGoal),
       workerGoal: Math.max(1, Number(body.workerGoal) || DEFAULT_DASHBOARD_SETTINGS.workerGoal),
-      workerBonusMap: usesMonthlyBonus() ? preservedBonus : body.workerBonusMap && typeof body.workerBonusMap === "object" ? body.workerBonusMap : {},
+      workerBonusMap: preservedBonus,
       promos: Array.isArray(body.promos) ? body.promos : DEFAULT_DASHBOARD_SETTINGS.promos,
       sideCard1: body.sideCard1 || DEFAULT_DASHBOARD_SETTINGS.sideCard1,
       sideCard2: body.sideCard2 || DEFAULT_DASHBOARD_SETTINGS.sideCard2,

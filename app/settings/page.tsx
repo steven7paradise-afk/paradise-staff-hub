@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 
 const allSettings = [
-  { href: "/settings/dashboard", title: "Obiettivi & Promo", text: "Obiettivi mensili (punti/schede), slider promozioni scadenziabili e prodotto del mese.", icon: Sparkles, superAdminOnly: true },
+  { href: "/settings/dashboard", title: "Obiettivi & Promo", text: "Obiettivi mensili sulle schede, slider promozioni scadenziabili e prodotto del mese.", icon: Sparkles, superAdminOnly: true },
   { href: "/settings/sidebar", title: "Personalizza Sidebar", text: "Modifica il colore di sfondo della barra laterale e l'ordine dei pulsanti di navigazione.", icon: Palette, superAdminOnly: true },
   { href: "/settings/branding", title: "Branding", text: "Colori, logo, dark mode e look premium.", icon: Palette, superAdminOnly: true },
   { href: "/settings/devices", title: "Dispositivi", text: "Tablet autorizzati e blocco timbrature.", icon: Smartphone, superAdminOnly: true },

@@ -62,7 +62,7 @@ export async function PUT(request: NextRequest) {
   const payload = await request.json().catch(() => null) as { day?: unknown; questionId?: unknown; answer?: unknown } | null;
   const day = typeof payload?.day === "string" ? payload.day : "";
   const questionId = typeof payload?.questionId === "string" ? payload.questionId : "";
-  const answer = typeof payload?.answer === "string" ? payload.answer.trim() : "";
+  let answer = typeof payload?.answer === "string" ? payload.answer.trim() : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !questionId || !answer) {
     return NextResponse.json({ error: "Dati non validi" }, { status: 400 });
   }
@@ -264,6 +264,12 @@ export async function PUT(request: NextRequest) {
     || isSingleChoice || isNumberChoice || isStructuredChoice || isUploadedFile || isStaffNote || isStaffChecklist || isClientNote || isMultiText || isTimeline || Boolean(taskRequest);
   if (!question || extraPart || (branch ? !validFollowUp : !validPrimaryAnswer)) {
     return NextResponse.json({ error: "Domanda non valida" }, { status: 400 });
+  }
+
+  if (!branch && isStaffChecklist) {
+    // Preserve the saved mode so future question edits cannot reinterpret an empty box as No.
+    const parsed = JSON.parse(answer) as { staffChecks: unknown[] };
+    answer = JSON.stringify({ staffChecks: parsed.staffChecks, staffResponseMode: question.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO" });
   }
 
   const previousAnswer = answers[day]?.[questionId];

@@ -43,6 +43,7 @@ const nav = [
   { href: "/responsabile-di-turno", label: "Responsabile di turno", iconName: "UserRound", roles: routePermissions["/responsabile-di-turno"], section: "Generale" },
   { href: "/programmazione-responsabile-di-turno", label: "Turni responsabili", iconName: "CalendarDays", roles: routePermissions["/programmazione-responsabile-di-turno"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/premio-risultato", label: "Premio di risultato", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Generale" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 
   // Section: Planning & Saloni
@@ -63,7 +64,6 @@ const nav = [
   { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/fine-giornata", label: "Fine giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/points", label: "Centro Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
   { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/service-forms", label: "Moduli", iconName: "ClipboardList", roles: ["RESPONSABILE"], section: "Planning & Saloni" },

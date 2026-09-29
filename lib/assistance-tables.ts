@@ -23,6 +23,8 @@ export type AssistanceTableRow = {
   values: Record<string, AssistanceCellValue>;
   createdAt: string;
   updatedAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
 };
 
 export type AssistanceTableColumn = {
@@ -146,6 +148,8 @@ export function normalizeAssistanceSheets(value: unknown): AssistanceSheet[] {
             values: values(r.values),
             createdAt: text(r.createdAt) || now,
             updatedAt: text(r.updatedAt) || now,
+            reviewedAt: text(r.reviewedAt) || null,
+            reviewedBy: text(r.reviewedBy) || null,
           };
         })
         .filter(Boolean) as AssistanceTableRow[];

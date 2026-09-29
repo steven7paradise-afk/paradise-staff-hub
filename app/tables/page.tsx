@@ -5,13 +5,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   ASSISTANCE_TABLES_ACCESS_KEY,
-  ASSISTANCE_TABLES_KEY,
   canUseAssistanceTables,
   defaultAssistanceSheet,
   normalizeAssistanceTablesAccess,
-  normalizeAssistanceSheets,
 } from "@/lib/assistance-tables";
 import type { Role } from "@/lib/roles";
+import { loadAutocompletedAssistanceSheets } from "@/lib/systemazione-fasce-autocomplete";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +31,7 @@ export default async function TablesPage() {
     redirect("/dashboard");
   }
 
-  const setting = await prisma.setting.findUnique({ where: { key: ASSISTANCE_TABLES_KEY } });
-  const sheets = normalizeAssistanceSheets(setting?.value);
+  const sheets = await loadAutocompletedAssistanceSheets();
 
   return (
     <AppShell

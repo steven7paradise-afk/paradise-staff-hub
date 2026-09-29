@@ -48,7 +48,7 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
     setLoading(false);
     if (!response.ok) return setStatus(result.error ?? "Documento non caricato.");
     setOpen(false);
-    setStatus("Documento caricato e notifica inviata al dipendente. Le lettere di contestazione aggiornano automaticamente i punti.");
+    setStatus("Documento caricato e notifica inviata al dipendente.");
     router.refresh();
   }
 
@@ -263,7 +263,6 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
               </button>
             </div>
 
-            <p className="mb-4 text-xs text-neutral-500">Le lettere di contestazione aggiornano automaticamente i punti nel mese del caricamento, con la penalità impostata in Gestione punti. Configura prima il livello della persona. Non registrare anche un evento manuale.</p>
             {uploadMode === "single" ? (
               /* SINGLE UPLOAD MODE */
               <form className="grid gap-3" onSubmit={submit}>

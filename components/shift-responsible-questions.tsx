@@ -537,8 +537,8 @@ function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: {
     responses: Object.fromEntries(criteria.map((criterion) => [criterion, mode === "CHECKBOXES" ? responses[person.id]?.[criterion] === "CHECKED" ? "CHECKED" : "UNCHECKED" : responses[person.id]?.[criterion]])),
   }));
   const isComplete = mode === "CHECKBOXES" || prepared.every((entry) => criteria.every((criterion) => entry.responses[criterion] === "YES" || entry.responses[criterion] === "NO"));
-  const serialized = JSON.stringify({ staffChecks: prepared });
-  const isSaved = Boolean(selected) && serialized === selected;
+  const serialized = JSON.stringify({ staffChecks: prepared, staffResponseMode: mode });
+  const isSaved = Boolean(selected) && (serialized === selected || JSON.stringify({ staffChecks: prepared }) === selected);
 
   function setResponse(staffId: string, criterion: string, value: StaffChecklistValue) {
     setResponses((current) => ({ ...current, [staffId]: { ...(current[staffId] ?? {}), [criterion]: value } }));

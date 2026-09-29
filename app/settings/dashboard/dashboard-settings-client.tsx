@@ -13,16 +13,8 @@ import {
   Save, 
   Check, 
   AlertCircle,
-  Calendar,
-  Eye,
-  EyeOff,
-  Link as LinkIcon,
-  LayoutGrid,
-  Gift,
-  Award,
-  Users
+  LayoutGrid
 } from "lucide-react";
-import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Promo = {
   id: string;
@@ -63,15 +55,7 @@ type Communication = {
   tag: string;
 };
 
-type EmployeeItem = {
-  id: string;
-  name: string;
-  photo_url?: string | null;
-};
-
 type Props = {
-  monthlyBonusEnabled?: boolean;
-  role: string;
   initialSettings: {
     salonGoal: number;
     workerGoal: number;
@@ -81,17 +65,14 @@ type Props = {
     sideCard2?: SideCard;
     productOfMonth: ProductOfMonth;
     communications: Communication[];
-    employees?: EmployeeItem[];
   };
 };
 
-export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEnabled = false }: Props) {
+export function DashboardSettingsClient({ initialSettings }: Props) {
   const router = useRouter();
   const [salonGoal, setSalonGoal] = useState<number>(initialSettings.salonGoal || 500);
   const [workerGoal, setWorkerGoal] = useState<number>(initialSettings.workerGoal || 100);
-  const [workerBonusMap, setWorkerBonusMap] = useState<Record<string, { manualBonusPoints?: number; redeemedPoints?: number }>>(
-    initialSettings.workerBonusMap || {}
-  );
+  const workerBonusMap = initialSettings.workerBonusMap || {};
   
   const [promos, setPromos] = useState<Promo[]>(initialSettings.promos || []);
   
@@ -125,36 +106,6 @@ export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEna
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const employees = initialSettings.employees || [];
-
-  const handleUpdateWorkerBonus = (empId: string, field: "manualBonusPoints" | "redeemedPoints", delta: number) => {
-    setWorkerBonusMap((prev) => {
-      const current = prev[empId] || { manualBonusPoints: 0, redeemedPoints: 0 };
-      const currentVal = Number(current[field]) || 0;
-      const newVal = Math.max(0, currentVal + delta);
-      return {
-        ...prev,
-        [empId]: {
-          ...current,
-          [field]: newVal,
-        }
-      };
-    });
-  };
-
-  const handleSetWorkerBonusDirect = (empId: string, field: "manualBonusPoints" | "redeemedPoints", val: number) => {
-    setWorkerBonusMap((prev) => {
-      const current = prev[empId] || { manualBonusPoints: 0, redeemedPoints: 0 };
-      return {
-        ...prev,
-        [empId]: {
-          ...current,
-          [field]: Math.max(0, val),
-        }
-      };
-    });
-  };
 
   const handleAddPromo = () => {
     const newPromo: Promo = {
@@ -229,7 +180,7 @@ export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEna
         throw new Error(data.error || "Impossibile salvare le impostazioni");
       }
 
-      setSuccessMsg("Impostazioni e punti dipendenti salvati con successo! Le modifiche sono ora attive sulla Dashboard.");
+      setSuccessMsg("Impostazioni salvate con successo. Le modifiche sono ora attive sulla Dashboard.");
       router.refresh();
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
@@ -324,121 +275,13 @@ export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEna
         </div>
       </div>
 
-      {monthlyBonusEnabled ? <div className="rounded-xl border border-pink-200 bg-pink-50 p-6"><h2 className="font-bold">Nuovo Centro Punti</h2><p className="my-3 text-sm">Livelli, quote e responsabili si configurano in Gestione punti. Il vecchio saldo è conservato e non alimenta il nuovo conto.</p><a href="/points" className="font-bold text-pink-700 underline">Apri Gestione punti nel Centro Punti</a></div> : <>
-      {/* SECTION 2: SCHEMA PUNTI & RISCATTO PREMI DIPENDENTI */}
-      <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
-          <div className="flex items-center gap-2">
-            <Gift className="text-red-600" size={20} />
-            <div>
-              <h2 className="text-base font-black uppercase tracking-wider text-black">
-                2. Schema Punti & Riscatto Premi Dipendenti
-              </h2>
-              <p className="text-xs text-zinc-500">
-                Gestisci i punti bonus extra assegnati dalla direzione ed i punti riscattati dai dipendenti per premi e prodotti.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Employees Points Table */}
-        <div className="overflow-x-auto border border-zinc-200">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-zinc-900 text-white uppercase text-[10px] font-black tracking-wider">
-              <tr>
-                <th className="p-3">Collaboratore</th>
-                <th className="p-3">Punti Bonus Extra (Admin)</th>
-                <th className="p-3">Punti Riscattati (Premi)</th>
-                <th className="p-3">Azioni Rapide Admin</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 font-medium">
-              {employees.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="p-4 text-center text-zinc-400">
-                    Nessun dipendente trovato.
-                  </td>
-                </tr>
-              ) : (
-                employees.map((emp) => {
-                  const record = workerBonusMap[emp.id] || { manualBonusPoints: 0, redeemedPoints: 0 };
-                  const manualPts = Number(record.manualBonusPoints) || 0;
-                  const redeemedPts = Number(record.redeemedPoints) || 0;
-
-                  return (
-                    <tr key={emp.id} className="hover:bg-zinc-50 transition">
-                      <td className="p-3 font-black text-black uppercase flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-[10px] shrink-0 overflow-hidden">
-                          {emp.photo_url ? (
-                            <img src={resolveDrivePhotoUrl(emp.photo_url)} alt={emp.name} className="w-full h-full object-cover" />
-                          ) : (
-                            emp.name.slice(0, 2).toUpperCase()
-                          )}
-                        </div>
-                        <span>{emp.name}</span>
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            value={manualPts}
-                            onChange={(e) => handleSetWorkerBonusDirect(emp.id, "manualBonusPoints", Number(e.target.value))}
-                            className="w-20 bg-zinc-50 border border-zinc-300 px-2 py-1 text-xs font-black text-black focus:outline-none focus:border-black"
-                          />
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Punti</span>
-                        </div>
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            value={redeemedPts}
-                            onChange={(e) => handleSetWorkerBonusDirect(emp.id, "redeemedPoints", Number(e.target.value))}
-                            className="w-20 bg-zinc-50 border border-zinc-300 px-2 py-1 text-xs font-black text-red-600 focus:outline-none focus:border-black"
-                          />
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Riscattati</span>
-                        </div>
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateWorkerBonus(emp.id, "manualBonusPoints", 10)}
-                            className="bg-black hover:bg-zinc-800 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition"
-                          >
-                            +10 Punti Bonus
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateWorkerBonus(emp.id, "redeemedPoints", 10)}
-                            className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition"
-                          >
-                            Riscatta Premio (-10P)
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      </>}
-      {/* SECTION 3: PROMOZIONI & SLIDER CAMPAGNE */}
+      {/* SECTION 2: PROMOZIONI & SLIDER CAMPAGNE */}
       <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
         <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
           <div className="flex items-center gap-2">
             <Tag className="text-red-600" size={20} />
             <h2 className="text-base font-black uppercase tracking-wider text-black">
-              3. Slider Promozioni Attive con Scadenza Automatizzata
+              2. Slider Promozioni Attive con Scadenza Automatizzata
             </h2>
           </div>
 
@@ -577,12 +420,12 @@ export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEna
         </div>
       </div>
 
-      {/* SECTION 4: CARD LATERALI (PORTA UN'AMICA & LOYALTY) */}
+      {/* SECTION 3: CARD LATERALI (PORTA UN'AMICA & LOYALTY) */}
       <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
         <div className="flex items-center gap-2 border-b border-zinc-200 pb-4">
           <LayoutGrid className="text-red-600" size={20} />
           <h2 className="text-base font-black uppercase tracking-wider text-black">
-            4. Card Laterali (Porta un'Amica & Loyalty Paradise Card)
+            3. Card Laterali (Porta un'Amica & Loyalty Paradise Card)
           </h2>
         </div>
 
@@ -699,12 +542,12 @@ export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEna
         </div>
       </div>
 
-      {/* SECTION 5: PRODOTTO DEL MESE */}
+      {/* SECTION 4: PRODOTTO DEL MESE */}
       <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
         <div className="flex items-center gap-2 border-b border-zinc-200 pb-4">
           <ShoppingBag className="text-red-600" size={20} />
           <h2 className="text-base font-black uppercase tracking-wider text-black">
-            5. Prodotto del Mese (Retail)
+            4. Prodotto del Mese (Retail)
           </h2>
         </div>
 
@@ -772,13 +615,13 @@ export function DashboardSettingsClient({ role, initialSettings, monthlyBonusEna
         </div>
       </div>
 
-      {/* SECTION 6: COMUNICAZIONI DIREZIONE */}
+      {/* SECTION 5: COMUNICAZIONI DIREZIONE */}
       <div className="bg-white border border-zinc-200 p-6 space-y-6 shadow-sm">
         <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
           <div className="flex items-center gap-2">
             <Bell className="text-red-600" size={20} />
             <h2 className="text-base font-black uppercase tracking-wider text-black">
-              6. Comunicazioni Direzione (Bacheca In basso)
+              5. Comunicazioni Direzione (Bacheca In basso)
             </h2>
           </div>
 

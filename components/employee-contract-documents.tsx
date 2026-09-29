@@ -173,7 +173,6 @@ export function EmployeeContractDocuments({
 
       {showUpload ? (
         <form onSubmit={upload} className="mt-4 grid gap-3 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4 md:grid-cols-4">
-          <p className="text-xs text-neutral-500 md:col-span-4">Le lettere di contestazione aggiornano automaticamente i punti nel mese del caricamento, con la penalità impostata in Gestione punti. Configura prima il livello della persona. Non registrare anche un evento manuale.</p>
           <label className="space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo documento</span>
             <Select name="type" defaultValue="CONTRATTO" required>

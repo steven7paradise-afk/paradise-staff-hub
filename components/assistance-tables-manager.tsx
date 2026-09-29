@@ -139,8 +139,11 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [message, setMessage] = useState("Salvato");
   const [isPending, startTransition] = useTransition();
+  const [reviewSaving, setReviewSaving] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState("");
 
   const activeSheet = sheets.find((sheet) => sheet.id === openedSheetId) ?? null;
+  const hasReview = Boolean(activeSheet && /sistemazione fasc/i.test(activeSheet.name));
   const selectedRow = activeSheet?.rows.find((row) => row.id === selectedRowId) ?? null;
   const selectedRowTitle = selectedRow
     ? activeSheet?.columns.map((column) => cellSearchText(selectedRow.values?.[column.id] ?? "")).find(Boolean) || "Dettaglio riga"
@@ -165,6 +168,33 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
     });
   }, [activeSheet?.rows, columnFilter, query]);
 
+  async function setReviewed(row: AssistanceTableRow, checked: boolean) {
+    if (!activeSheet || reviewSaving || isPending) return;
+    const sheetId = activeSheet.id;
+    setReviewSaving(row.id); setReviewError("");
+    try {
+      const response = await fetch("/api/tables", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sheetId, rowId: row.id, checked, updatedAt: row.updatedAt }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Check non salvato. Riprova.");
+      setSheets((current) => current.map((sheet) => sheet.id === sheetId ? { ...sheet, updatedAt: result.row.updatedAt, rows: sheet.rows.map((r) => r.id === row.id ? result.row : r) } : sheet));
+      setMessage(checked ? "Riga controllata e salvata." : "Check rimosso.");
+    } catch (error) { setReviewError(error instanceof Error ? error.message : "Check non salvato. Riprova."); }
+    finally { setReviewSaving(null); }
+  }
+
+  function reviewControl(row: AssistanceTableRow) {
+    return <div className="inline-flex max-w-56 flex-col items-start gap-1.5" onClick={(event) => event.stopPropagation()}>
+      <label className={cn("inline-flex min-h-11 cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-semibold", row.reviewedAt ? "bg-emerald-50 text-emerald-800" : "bg-neutral-50 text-neutral-600")} title={row.reviewedAt ? `Controllato da ${row.reviewedBy || "Staff"} il ${detailDate(row.reviewedAt)}` : "Conferma la verifica della riga"}>
+      <input type="checkbox" className="size-5 accent-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" checked={Boolean(row.reviewedAt)} disabled={Boolean(reviewSaving) || isPending} onChange={(event) => setReviewed(row, event.target.checked)} aria-label={`Controllato: ${activeSheet?.columns.map((column) => cellSearchText(row.values[column.id] ?? "")).find(Boolean) || "riga"}`} />
+      {reviewSaving === row.id ? "Salvataggio…" : "Controllato"}
+      </label>
+      {row.reviewedAt && <div className="px-3 text-xs leading-5 text-neutral-600">
+        <p className="whitespace-normal break-words font-semibold">{row.reviewedBy || "Staff"}</p>
+        <time dateTime={row.reviewedAt}>{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "long", year: "numeric" }).format(new Date(row.reviewedAt))}</time>
+      </div>}
+    </div>;
+  }
+
   function persist(nextSheets: AssistanceSheet[]) {
     setSheets(nextSheets);
     setMessage("Salvataggio...");
@@ -176,9 +206,8 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
           body: JSON.stringify({ sheets: nextSheets }),
         });
         if (!response.ok) throw new Error("Errore");
-        const result = await response.json();
-        setMessage(result.bonusPending ? `Salvato. ${result.bonusPending} righe da verificare per i punti: controlla nomi completi e livelli in Gestione punti.` : "Salvato · punti aggiornati");
-      } catch (error) {
+        setMessage("Tabelle salvate correttamente.");
+      } catch {
         setMessage("Errore salvataggio");
       }
     });
@@ -224,7 +253,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
         rows: sheet.rows.map((row) => {
           const nextValues = { ...(row.values ?? {}) };
           delete nextValues[columnId];
-          return { ...row, values: nextValues, updatedAt: timestamp };
+          return { ...row, values: nextValues, updatedAt: timestamp, reviewedAt: null, reviewedBy: null };
         }),
         updatedAt: timestamp,
       };
@@ -265,7 +294,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
     const timestamp = now();
     const newId = uid();
     const rows = editingId
-      ? activeSheet.rows.map((row) => row.id === editingId ? { ...row, ...cleanForm, updatedAt: timestamp } : row)
+      ? activeSheet.rows.map((row) => row.id === editingId ? { ...row, ...cleanForm, updatedAt: timestamp, reviewedAt: null, reviewedBy: null } : row)
       : [
           {
             id: newId,
@@ -393,6 +422,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
 
   return (
     <div className="space-y-4">
+      {reviewError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{reviewError}</p>}
       <div className="rounded-[24px] border border-black/5 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
@@ -509,6 +539,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
                 ))}
                 <th className="border border-white/70 bg-[#B85B68] px-3 py-3 dark:border-white/10">Creato</th>
                 <th className="border border-white/70 bg-paradise-pink px-3 py-3 text-paradise-noir dark:border-white/10">Aggiornato</th>
+                {hasReview && <th className="border border-white/70 bg-emerald-800 px-3 py-3 text-white">Controllato</th>}
                 <th className="border border-white/70 bg-[#B85B68] px-3 py-3 text-right dark:border-white/10">Azioni</th>
               </tr>
             </thead>
@@ -530,6 +561,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
                   ))}
                   <td className="border border-black/10 px-3 py-2 text-xs text-black/50 dark:border-white/10 dark:text-white/50">{compactDate(row.createdAt)}</td>
                   <td className="border border-black/10 px-3 py-2 text-xs text-black/50 dark:border-white/10 dark:text-white/50">{compactDate(row.updatedAt)}</td>
+                  {hasReview && <td className="border border-black/10 px-3 py-2 dark:border-white/10">{reviewControl(row)}</td>}
                   <td className="border border-black/10 px-3 py-2 dark:border-white/10">
                     <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
                       <button type="button" onClick={() => setSelectedRowId(row.id)} className="grid size-9 place-items-center rounded-full bg-black/5 text-black/55 hover:bg-paradise-pink hover:text-paradise-noir">
@@ -546,7 +578,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={4 + (activeSheet.columns ?? []).length} className="px-6 py-16 text-center">
+                  <td colSpan={4 + (activeSheet.columns ?? []).length + (hasReview ? 1 : 0)} className="px-6 py-16 text-center">
                     <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-paradise-softPink/45 text-[#B85B68]">
                       <Table2 className="size-6" />
                     </div>
@@ -603,6 +635,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
                     <p className="mt-1 font-bold">{detailDate(selectedRow.updatedAt)}</p>
                   </div>
                 </div>
+                {hasReview && <div className="border-t border-black/5 pt-3">{reviewControl(selectedRow)}{reviewError && <p role="alert" className="mt-2 text-sm text-red-700">{reviewError}</p>}</div>}
                 <div className="flex gap-2">
                   <Button type="button" variant="soft" className="flex-1" onClick={() => editRow(selectedRow)}>
                     <Pencil className="size-4" />

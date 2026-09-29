@@ -1,5 +1,5 @@
-import { syncOffShiftBonus } from "@/lib/monthly-bonus-attendance";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
+import { publishDailyResultBonus } from "@/lib/result-bonus-delivery";
 import { publishLiveChange } from "@/lib/salon-live";
 import { AttendanceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -199,8 +199,12 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  if (type === "USCITA") await syncOffShiftBonus(user.id, shiftDateOnly).catch(error => {
-    console.error("Bonus fuori turno non aggiornato; timbratura salvata:", error);
+  if (type === "USCITA") after(async () => {
+    // Keep the clock-out response fast; retry transient transaction/network failures.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try { await publishDailyResultBonus(log.id); return; }
+      catch { if (attempt === 2) console.error("Daily result bonus notification could not be published", { exitId: log.id }); }
+    }
   });
 
   if (type === "ENTRATA") await publishLiveChange().catch(() => console.warn("Live attendance update unavailable"));

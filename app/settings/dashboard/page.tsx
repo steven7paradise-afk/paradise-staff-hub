@@ -1,4 +1,3 @@
-import { usesMonthlyBonus } from "@/lib/monthly-bonus";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
@@ -27,16 +26,9 @@ export default async function DashboardSettingsPage() {
     redirect("/dashboard");
   }
 
-  const [employees, setting] = await Promise.all([
-    prisma.user.findMany({
-      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, photo_url: true }
-    }).catch(() => []),
-    prisma.setting.findUnique({
+  const setting = await prisma.setting.findUnique({
       where: { key: DASHBOARD_SETTINGS_KEY },
-    }).catch(() => null)
-  ]);
+    }).catch(() => null);
 
   const val = setting?.value as any;
 
@@ -49,16 +41,15 @@ export default async function DashboardSettingsPage() {
     sideCard2: val?.sideCard2 || DEFAULT_DASHBOARD_SETTINGS.sideCard2,
     productOfMonth: val?.productOfMonth || DEFAULT_DASHBOARD_SETTINGS.productOfMonth,
     communications: Array.isArray(val?.communications) ? val.communications : DEFAULT_DASHBOARD_SETTINGS.communications,
-    employees,
   };
 
   return (
     <AppShell
       title="Configura Dashboard, Obiettivi & Promo"
-      subtitle="Pannello Super Admin per impostare gli obiettivi mensili, lo schema punti lavoratori, l'assegnazione/riscatto premi, promozioni e comunicazioni."
+      subtitle="Pannello Super Admin per impostare obiettivi mensili, promozioni e comunicazioni."
       role={role as any}
     >
-      <DashboardSettingsClient monthlyBonusEnabled={usesMonthlyBonus()} role={role} initialSettings={initialSettings} />
+      <DashboardSettingsClient initialSettings={initialSettings} />
     </AppShell>
   );
 }

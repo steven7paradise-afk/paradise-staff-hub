@@ -76,6 +76,39 @@ test("trova l'applicazione precedente e chi l'ha svolta", () => {
   assert.equal(previousApplicationStaff(previous), "Angelica Pasculli");
 });
 
+test("riconosce la scheda completata con titolo Acconto e quantità di extension", () => {
+  const deposit = response({ id: "deposit", createdAt: "2026-09-09T09:35:00Z", answers: {
+    ...response().answers,
+    client_control_service_title: "BUENOS AIRES - ACCONTO 50€",
+    client_control_shopify_order: "27122",
+    custom_services: [], custom_grammi: "50", custom_fasce: "1",
+    client_control_is_draft: false,
+    client_control_service_staff: ["Aurora Dassisti"],
+  } });
+  assert.equal(findPreviousApplication(appointment, [response(), deposit])?.id, "deposit");
+  const existing = applySystemazioneAppointmentsToSheet({ sheet: sheet(), appointments: [appointment], responses: [] }).sheet;
+  const result = applySystemazioneAppointmentsToSheet({ sheet: existing, appointments: [appointment], responses: [deposit] });
+  assert.equal(result.sheet.rows.length, 1);
+  assert.equal(result.sheet.rows[0].values.previous, "Aurora Dassisti");
+  assert.equal(result.sheet.rows[0].values.current, "Da verificare");
+  assert.equal(result.updatedRows, 1);
+  assert.equal(applySystemazioneAppointmentsToSheet({ sheet: result.sheet, appointments: [appointment], responses: [deposit] }).changed, false);
+});
+
+test("non attribuisce acconti senza lavoro documentato, bozze o altri servizi", () => {
+  const base = { ...response().answers, client_control_service_title: "ACCONTO 50€", custom_services: [], custom_grammi: "50", custom_fasce: "1" };
+  for (const change of [
+    { custom_grammi: "" }, { custom_fasce: "0" }, { custom_fasce: true },
+    { client_control_is_draft: true }, { client_control_correctness: "Errore" },
+    { client_control_service_title: "Consulenza" }, { custom_services: ["Rimozione"] },
+    { custom_services: ["Sistemazione fasce"] },
+    { custom_grammi: undefined, custom_fasce: undefined, client_control_notes: "50 grammi, 1 fascia" },
+    { client_control_shopify_order: "different", client_control_client_name: "Altra cliente", client_control_phone: "999", client_control_email: "other@example.com" },
+  ]) {
+    assert.equal(findPreviousApplication(appointment, [response({ answers: { ...base, ...change } })]), null);
+  }
+});
+
 test("usa la scheda della stessa giornata per chi ha svolto la sistemazione", () => {
   const control = findSystemazioneControl(appointment, [
     response({

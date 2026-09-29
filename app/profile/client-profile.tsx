@@ -55,19 +55,6 @@ type ClientProfileProps = {
     documents: number;
     taskInProgress: number;
   };
-  monthlyBonusEnabled?: boolean;
-  pointsStats?: {
-    schedeCount: number;
-    workerGoal: number;
-    salonSchedeCount: number;
-    salonGoal: number;
-    salonEarned: boolean;
-    workerEarned: boolean;
-    manualBonusPoints: number;
-    redeemedPoints: number;
-    availablePoints: number;
-    totalEarnedPoints: number;
-  };
   unreadNotifications: number;
   shiftWeeks: Array<{
     key: string;
@@ -185,8 +172,6 @@ export function ClientProfile({
   user,
   colleagues,
   stats,
-  pointsStats,
-  monthlyBonusEnabled = false,
   unreadNotifications,
   shiftWeeks,
   holidayRequests,
@@ -194,7 +179,7 @@ export function ClientProfile({
   settingsNode
 }: ClientProfileProps) {
   const [userPhoto, setUserPhoto] = useState(user.photoUrl);
-  const [activeTab, setActiveTab] = useState<"points" | "info" | "security">("points");
+  const [activeTab, setActiveTab] = useState<"overview" | "info" | "security">("overview");
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [visibleShiftWeekIndex, setVisibleShiftWeekIndex] = useState(0);
   const [selectedShiftDate, setSelectedShiftDate] = useState(() => shiftWeeks[0]?.days.find((day) => day.isToday)?.dateKey || shiftWeeks[0]?.days[0]?.dateKey || "");
@@ -228,14 +213,6 @@ export function ClientProfile({
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const availablePoints = pointsStats?.availablePoints ?? 0;
-  const schedeCount = pointsStats?.schedeCount ?? 0;
-  const workerGoal = pointsStats?.workerGoal ?? 150; // default is 150 based on mockup "72 / 150 SCHEDE"
-  const salonSchedeCount = pointsStats?.salonSchedeCount ?? 0;
-  const salonGoal = pointsStats?.salonGoal ?? 500;
-
-  const workerPercent = Math.min(100, Math.round((schedeCount / (workerGoal || 1)) * 100));
-  const salonPercent = Math.min(100, Math.round((salonSchedeCount / (salonGoal || 1)) * 100));
   const visibleShiftWeek = shiftWeeks[visibleShiftWeekIndex] || shiftWeeks[0];
   const selectedShift = visibleShiftWeek?.days.find((day) => day.dateKey === selectedShiftDate) || visibleShiftWeek?.days[0];
   const todayShift = shiftWeeks.flatMap((week) => week.days).find((day) => day.isToday);
@@ -357,7 +334,6 @@ export function ClientProfile({
     { label: "Richieste aperte", value: String(stats.openRequests), icon: CalendarCheck2 },
     { label: "Documenti", value: String(stats.documents), icon: FileText },
     { label: "Task in corso", value: String(stats.taskInProgress), icon: FileCheck },
-    ...(!monthlyBonusEnabled ? [{ label: "Punti disponibili", value: String(availablePoints), icon: Briefcase, accent: true }] : []),
   ];
   const workedPercent = Math.min(100, Math.round((stats.workedHours / Math.max(1, stats.plannedHours)) * 100));
 
@@ -407,13 +383,13 @@ export function ClientProfile({
           </section>
 
           <div className="profile-page-enter profile-page-enter-delay-1 flex min-w-0 flex-col gap-3 xl:col-start-2 xl:row-start-1">
-            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:grid xl:grid-cols-6 xl:overflow-visible xl:px-0 xl:pb-0">
-              {profileSummary.map(({ label, value, icon: Icon, accent }) => (
-                <article key={label} className={cn("flex min-h-24 w-[132px] shrink-0 snap-start flex-col justify-between rounded-[16px] border p-3 text-left xl:w-auto xl:min-w-0", accent ? "border-[#d85a91]/45 bg-[linear-gradient(145deg,#9e2c5d,#d65a91)] text-white shadow-[0_14px_30px_rgba(182,47,105,0.2)] dark:border-[#f080b7]/35 dark:bg-[linear-gradient(145deg,#762044,#a83768)]" : "border-neutral-200 bg-neutral-50 text-neutral-900 dark:border-white/10 dark:bg-[#232329] dark:text-white") }>
-                  <span className={cn("grid size-7 place-items-center rounded-full", accent ? "bg-white/18 text-white" : "bg-[#f8dce8] text-[#9f2f60] dark:bg-[#4b2738] dark:text-[#f4a6c9]")}><Icon className="size-3.5" aria-hidden="true" /></span>
+            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:grid xl:grid-cols-5 xl:overflow-visible xl:px-0 xl:pb-0">
+              {profileSummary.map(({ label, value, icon: Icon }) => (
+                <article key={label} className="flex min-h-24 w-[132px] shrink-0 snap-start flex-col justify-between rounded-[16px] border border-neutral-200 bg-neutral-50 p-3 text-left text-neutral-900 dark:border-white/10 dark:bg-[#232329] dark:text-white xl:w-auto xl:min-w-0">
+                  <span className="grid size-7 place-items-center rounded-full bg-[#f8dce8] text-[#9f2f60] dark:bg-[#4b2738] dark:text-[#f4a6c9]"><Icon className="size-3.5" aria-hidden="true" /></span>
                   <div>
-                    <p className={cn("truncate text-xl font-black tabular-nums sm:text-2xl", accent ? "text-white" : "text-neutral-900")}>{value}</p>
-                    <p className={cn("mt-1 line-clamp-2 text-[7px] font-black uppercase leading-3 tracking-[0.08em] sm:text-[8px]", accent ? "text-white/70" : "text-neutral-500")}>{label}</p>
+                    <p className="truncate text-xl font-black tabular-nums text-neutral-900 sm:text-2xl">{value}</p>
+                    <p className="mt-1 line-clamp-2 text-[7px] font-black uppercase leading-3 tracking-[0.08em] text-neutral-500 sm:text-[8px]">{label}</p>
                   </div>
                 </article>
               ))}
@@ -447,7 +423,7 @@ export function ClientProfile({
         {/* Premium Underlined Navigation Tabs (Dior Style) */}
         <div className="profile-glass-section profile-page-enter profile-page-enter-delay-2 grid grid-cols-3 gap-1 rounded-[16px] border border-neutral-200 bg-white p-1 sm:flex sm:items-center sm:gap-8 sm:overflow-x-auto sm:px-5 sm:pb-px sm:pt-0 xl:col-start-2 xl:row-start-2">
           {[
-            { id: "points", label: "PARADISE", mobileLabel: "Paradise" },
+            { id: "overview", label: "PARADISE", mobileLabel: "Paradise" },
             { id: "info", label: "Documenti", mobileLabel: "Documenti" },
             { id: "security", label: "Impostazioni & Sicurezza", mobileLabel: "Account" }
           ].map((tab) => {
@@ -470,112 +446,9 @@ export function ClientProfile({
           })}
         </div>
 
-      {/* 🔴 TAB 1: PUNTI & TRAGUARDI */}
-      {activeTab === "points" && (
+      {/* TAB 1: RIEPILOGO OPERATIVO */}
+      {activeTab === "overview" && (
         <div className="profile-page-enter profile-page-enter-delay-3 flex flex-col gap-4 xl:col-start-2 xl:row-start-3">
-          
-          {monthlyBonusEnabled ? <div className="order-3 rounded-2xl border border-pink-200 bg-pink-50 p-6"><h2 className="text-xl font-bold">Centro Punti</h2><p className="my-3 text-sm">Consulta saldo mensile, bonus, malus e storico.</p><Link href="/points" className="inline-block rounded-xl bg-pink-600 px-5 py-3 font-bold text-white">Apri Centro Punti</Link></div> : <>
-          {/* Target Progress Section */}
-          <div className="profile-glass-section order-3 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6">
-            <div className="flex flex-col justify-between gap-4 border-b border-neutral-100 pb-4 md:flex-row md:items-center">
-              <div className="space-y-1.5 text-left">
-                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">OBIETTIVI MENSILI</span>
-                <h2 className="text-lg font-serif font-light text-neutral-900 uppercase">
-                  Andamento & Premi
-                </h2>
-              </div>
-              
-              <div className="text-xs font-bold text-neutral-400 tracking-[0.1em] uppercase flex flex-wrap gap-4">
-                <span>Bonus Extra: <strong className="text-neutral-900 font-extrabold">+{pointsStats?.manualBonusPoints ?? 0}P</strong></span>
-                <span className="opacity-50">|</span>
-                <span>Riscattati: <strong className="text-neutral-900 font-extrabold">-{pointsStats?.redeemedPoints ?? 0}P</strong></span>
-              </div>
-            </div>
-
-            {/* Target Progress Cards */}
-            <div className={cn("grid gap-4", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
-              
-              {/* OBIETTIVO PERSONALE */}
-              <div className="profile-glass-inset space-y-3 rounded-[16px] border border-neutral-200 bg-neutral-50 p-4 text-left">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">DIPENDENTE</span>
-                    <span className="text-sm font-bold uppercase tracking-wider text-neutral-800">
-                      Obiettivo Personale ({user.name.split(" ")[0]})
-                    </span>
-                  </div>
-                  <span className="text-sm font-serif font-light text-neutral-900">
-                    {schedeCount} / {workerGoal} <span className="text-[10px] font-sans font-bold tracking-wider text-neutral-500 uppercase">Schede</span>
-                  </span>
-                </div>
-
-                {/* Sleek Minimalist Black Progress Bar */}
-                <div className="w-full h-1 bg-neutral-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-neutral-900 transition-all duration-700"
-                    style={{ width: `${workerPercent}%` }}
-                  />
-                </div>
-
-                <div className="flex justify-between items-center text-[10px] font-bold tracking-wider uppercase">
-                  <span className="text-neutral-400">{workerPercent}% RAGGIUNTO</span>
-                  <span className={pointsStats?.workerEarned ? "text-neutral-900 font-black" : "text-amber-700"}>
-                    {pointsStats?.workerEarned ? "🎉 TRAGUARDO SBLOCCATO (+10P)" : "IN CORSO (+10P)"}
-                  </span>
-                </div>
-              </div>
-
-              {/* OBIETTIVO SALONE - ONLY visible for non-employees (e.g. admins) */}
-              {!isEmployee && (
-                <div className="profile-glass-inset space-y-3 rounded-[16px] border border-neutral-200 bg-neutral-50 p-4 text-left">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">STRUTTURA</span>
-                      <span className="text-sm font-bold uppercase tracking-wider text-neutral-800">
-                        Obiettivo Salone
-                      </span>
-                    </div>
-                    <span className="text-sm font-serif font-light text-neutral-900">
-                      {salonSchedeCount} / {salonGoal} <span className="text-[10px] font-sans font-bold tracking-wider text-neutral-500 uppercase">Schede</span>
-                    </span>
-                  </div>
-
-                  {/* Sleek Minimalist Progress Bar */}
-                  <div className="w-full h-1 bg-neutral-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-neutral-500 transition-all duration-700"
-                      style={{ width: `${salonPercent}%` }}
-                    />
-                  </div>
-
-                  <div className="flex justify-between items-center text-[10px] font-bold tracking-wider uppercase">
-                    <span className="text-neutral-400">{salonPercent}% RAGGIUNTO</span>
-                    <span className={pointsStats?.salonEarned ? "text-neutral-900 font-black" : "text-amber-700"}>
-                      {pointsStats?.salonEarned ? "🎉 TRAGUARDO SBLOCCATO (+10P)" : "IN CORSO (+10P)"}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Redeem Action Row */}
-            <div className="flex justify-end border-t border-neutral-100 pt-4">
-              {availablePoints >= 10 ? (
-                <Link
-                  href="/requests"
-                  className="w-full md:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs uppercase tracking-[0.2em] px-8 py-4 rounded-xl shadow-xs transition duration-200 text-center active:scale-98"
-                >
-                  Riscatta Premio (10 Punti)
-                </Link>
-              ) : (
-                <div className="w-full md:w-auto text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400 bg-neutral-50 border border-neutral-200 px-6 py-3 rounded-xl text-center">
-                  Raggiungi 10 punti per riscattare un premio
-                </div>
-              )}
-            </div>
-          </div>
-
-          </>}
           {/* WEEKLY PERSONAL SHIFTS */}
           <div className="profile-glass-section order-1 flex flex-col gap-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:gap-5 sm:p-6">
             <div className="order-1 flex flex-col gap-3 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">

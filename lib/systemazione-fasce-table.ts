@@ -1,5 +1,3 @@
-import { syncTableReworks } from "@/lib/monthly-bonus-tables-store";
-import { romeBonusDay } from "@/lib/monthly-bonus";
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -19,6 +17,7 @@ const ORDER_COLUMN_LABEL = "Numero ordine";
 const AUTO_ROW_PREFIX = "sistemazione-fasce:";
 const VERIFY_PREVIOUS_STAFF_LABEL = "Da verificare";
 const SYSTEMAZIONE_SYNC_STATE_KEY = "systemazione_fasce_sync_state";
+const SYSTEMAZIONE_MATCHING_VERSION = 3;
 
 export type SystemazioneFasceAppointment = {
   id: string | number;
@@ -79,8 +78,23 @@ function answerServices(answers: Record<string, unknown>) {
 
 function isApplicationResponse(answers: Record<string, unknown>) {
   const services = answerServices(answers);
-  return /\briapplicazione\b|\bapplicazione\b/.test(services)
-    && !/\bsistemazione\s+fasc(?:e|ia|ie)\b/.test(services);
+  if (/\bsistemazione\s+fasc(?:e|ia|ie)\b/.test(services)) return false;
+  if (/\briapplicazione\b|\bapplicazione\b/.test(services)) return true;
+
+  // Legacy completed sheets can retain the deposit booking title. Require
+  // actual structured extension quantities, not a staff name or free-text mention.
+  const explicitServices = normalized(Array.isArray(answers.custom_services)
+    ? answers.custom_services.join(" ") : answers.custom_services);
+  const title = normalized(answers.client_control_service_title);
+  if (explicitServices || (title && !/\bacconto\b/.test(title))) return false;
+  const positiveQuantity = (value: unknown) => {
+    if (typeof value !== "string" && typeof value !== "number") return false;
+    const text = String(value).trim().replace(",", ".");
+    if (!/^\d+(?:\.\d+)?\s*(?:g|gr|grammi|fasce)?$/i.test(text)) return false;
+    const quantity = Number.parseFloat(text);
+    return Number.isFinite(quantity) && quantity > 0;
+  };
+  return positiveQuantity(answers.custom_grammi) && positiveQuantity(answers.custom_fasce);
 }
 
 function isUsableResponse(answers: Record<string, unknown>) {
@@ -107,7 +121,7 @@ function romeDateKey(value: Date | string) {
   }).format(new Date(value));
 }
 
-function responseMatchesAppointment(
+export function responseMatchesAppointment(
   answers: Record<string, unknown>,
   appointment: SystemazioneFasceAppointment,
 ) {
@@ -169,7 +183,7 @@ export function findSystemazioneControl(
       const sameDay = Number.isFinite(responseTime) && romeDateKey(response.createdAt) === appointmentDay;
       return isUsableResponse(answers)
         && isSystemazioneResponse(answers)
-        && responseMatchesAppointment(answers, appointment)
+        && (exactBooking || responseMatchesAppointment(answers, appointment))
         && (exactBooking || sameDay);
     })
     .sort((left, right) => {
@@ -374,6 +388,7 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
     : null;
   const fingerprintForSheet = (sheetUpdatedAt: string) => createHash("sha256")
     .update(JSON.stringify({
+      matchingVersion: SYSTEMAZIONE_MATCHING_VERSION,
       sheetUpdatedAt,
       latestControlAt: latestControl?._max.updated_at?.toISOString() ?? null,
       appointments: targets
@@ -400,7 +415,6 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
         },
         select: { id: true, created_at: true, answers: true },
         orderBy: { created_at: "desc" },
-        take: 3000,
       })
     : [];
   const responses: PreviousClientControl[] = rawResponses.map((response) => ({
@@ -433,6 +447,5 @@ export async function syncSystemazioneFasceTable(appointments: SystemazioneFasce
       value: { fingerprint: finalFingerprint, checkedAt: new Date().toISOString() },
     },
   });
-  await prisma.$transaction(tx=>syncTableReworks(tx,romeBonusDay().slice(0,7)),{timeout:20000});
   return { createdRows: result.createdRows, updatedRows: result.updatedRows };
 }
