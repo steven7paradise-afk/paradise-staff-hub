@@ -669,12 +669,19 @@ export async function POST(request: NextRequest) {
   const previousAnswers = existingResponse
     ? ((existingResponse.answers || {}) as Record<string, unknown>)
     : null;
+  if (!isDraft && !isFinito && !isNoShow) {
+    // Keep the first completion date: editing a receipt tomorrow must not count it twice.
+    cleanAnswers.client_control_completed_at = previousAnswers?.client_control_completed_at
+      || (previousAnswers?.client_control_correctness === "Controllato" && previousAnswers?.client_control_is_draft !== true
+        ? existingResponse!.created_at.toISOString() : new Date().toISOString());
+  }
   let response: { id: string; created_at: Date };
 
   if (existingResponse) {
     // Editing a confirmed card automatically must not turn it back into a draft.
     if (body?.autoSave && previousAnswers?.client_control_is_draft === false) {
       cleanAnswers.client_control_is_draft = false;
+      cleanAnswers[CLIENT_CONTROL_FIELD_IDS.correctness] = previousAnswers[CLIENT_CONTROL_FIELD_IDS.correctness];
     }
     const updatedAnswers = {
       ...(existingResponse.answers as Record<string, any>),

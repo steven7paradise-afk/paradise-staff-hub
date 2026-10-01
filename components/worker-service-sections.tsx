@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
-import { Check, ChevronDown, LockKeyhole, Plus, FileText } from "lucide-react";
+import { Check, ChevronDown, LockKeyhole, Pencil, Plus, FileText } from "lucide-react";
 import { CLIENT_CONTROL_SERVICE_OPTIONS, SECONDARY_SERVICE_OPTIONS } from "@/lib/client-control-service-rules";
 import { appointmentStaffDisplayName } from "@/lib/appointment-staff-access";
 import { cleanWorkerServiceDetail, workerServiceKey, workerServiceNote, type WorkerServiceSection } from "@/lib/worker-service-sections";
@@ -15,9 +15,10 @@ type Props = {
   onChange: (sections: WorkerServiceSection[]) => void;
   disabled?: boolean;
   completionChecks?: ReactNode;
+  onEditOfficeNote?: () => void;
 };
 
-export function WorkerServiceSections({ officeNote, serviceDate, workers, sections, onChange, disabled = false, completionChecks }: Props) {
+export function WorkerServiceSections({ officeNote, serviceDate, workers, sections, onChange, disabled = false, completionChecks, onEditOfficeNote }: Props) {
   const uid = useId();
   const [openedAt] = useState(() => new Date().toISOString());
   const receiptDateValue = serviceDate && Number.isFinite(Date.parse(serviceDate)) ? serviceDate : openedAt;
@@ -37,7 +38,9 @@ export function WorkerServiceSections({ officeNote, serviceDate, workers, sectio
   }
   return <div className={styles.root}>
     <aside className={styles.office} aria-label="Nota dell’ufficio">
-      <div><LockKeyhole size={16} /><strong>Nota dell’ufficio</strong><span>Solo lettura</span></div>
+      <div>{onEditOfficeNote ? <FileText size={16} /> : <LockKeyhole size={16} />}<strong>Nota dell’ufficio</strong>
+        {onEditOfficeNote ? <button type="button" className={styles.editOffice} onClick={onEditOfficeNote} disabled={disabled} aria-label={officeNote ? "Modifica nota ufficio" : "Scrivi nota ufficio"}><Pencil size={14} />{officeNote ? "Modifica" : "Scrivi nota"}</button> : <span>Solo lettura</span>}
+      </div>
       <p>{officeNote || "Nessuna nota dell’ufficio."}</p>
     </aside>
     {!sections.length && <p className={styles.empty}>Seleziona una collaboratrice per compilare i servizi.</p>}

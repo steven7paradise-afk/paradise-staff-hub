@@ -2,6 +2,10 @@
 .office { margin: 20px 24px 0; padding: 18px 22px; border: 1px solid #eadfe4; background: #fcf8fa; border-radius: 14px; }
 .office > div { display: flex; align-items: center; gap: 9px; font-size: 13px; color: #79566a; }
 .office span { margin-left: auto; font-size: 11px; }
+.editOffice { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 12px; border: 1px solid #dec6d2; border-radius: 10px; background: white; color: #79566a; font-weight: 600; cursor: pointer; }
+.editOffice:hover { background: #f9eaf1; }
+.editOffice:focus-visible { outline: 2px solid #a3426b; outline-offset: 3px; }
+.editOffice:disabled { opacity: .5; cursor: not-allowed; }
 .office p { white-space: pre-wrap; margin-top: 10px; line-height: 1.65; overflow-wrap: anywhere; }
 .card { border-top: 1px solid #e5e7eb; min-width: 0; }
 .heading { width: 100%; display: flex; align-items: center; gap: 15px; text-align: left; padding: 22px 24px; background: white; }

@@ -1,0 +1,17 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { dashboardDelaySummary, formatDelayMinutes } from "../lib/dashboard-delay-summary";
+const date=new Date("2026-10-01");
+const log=(type:string,time:string,note?:string)=>({date,type,timestamp:new Date(`2026-10-01T${time}:00+02:00`),note});
+const shift={date,start_time:"10:00",end_time:"19:00",category:{code:"L",name:"Lavoro"}};
+test("sum entry after grace and completed excess breaks, deduplicating shifts",()=>{
+ const result=dashboardDelaySummary([log("ENTRATA","10:10"),log("PAUSA","13:00"),log("RIENTRO","14:05")],[shift,shift],"Buenos Aires",60);
+ assert.deepEqual(result,{entryCount:1,entryMinutes:7,breakMinutes:5,totalMinutes:12});
+});
+test("ignore incomplete pauses, manual break corrections and entry within grace",()=>{
+ const result=dashboardDelaySummary([log("ENTRATA","10:03"),log("PAUSA","13:00"),log("RIENTRO","14:20","Modificata manualmente da Admin"),log("PAUSA","16:00")],[shift],"Buenos Aires",60);
+ assert.equal(result.totalMinutes,0);
+});
+test("display hours and minutes without dropping excess minutes",()=>{
+ assert.equal(formatDelayMinutes(85),"1 h 25 min");assert.equal(formatDelayMinutes(60),"1 h");assert.equal(formatDelayMinutes(0),"0 min");
+});

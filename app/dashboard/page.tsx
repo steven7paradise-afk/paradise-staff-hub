@@ -1,3 +1,7 @@
+import { dashboardDelaySummary } from "@/lib/dashboard-delay-summary";
+import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
+import { countDailyCompletedCards, dailyPersonalTarget, assignedDailyAppointments } from "@/lib/daily-personal-goal";
+import { readProfessionalLevel } from "@/lib/professional-level";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
@@ -7,7 +11,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
-import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { ensureTomorrowRestNotifications } from "@/lib/rest-notifications";
@@ -54,13 +57,6 @@ function romeInstantStart(calendarDate: Date) {
   const representedAsUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
   const offset = representedAsUtc - noon.getTime();
   return new Date(Date.UTC(year, month, day) - offset);
-}
-
-function namesFromAnswer(value: unknown) {
-  if (Array.isArray(value)) return value.map(String).map((name) => name.trim()).filter(Boolean);
-  const text = String(value ?? "").trim();
-  if (!text) return [];
-  return text.split(/[,;]+/).map((name) => name.trim()).filter(Boolean);
 }
 
 function countsInAnalytics(answers: Record<string, unknown>) {
@@ -519,7 +515,7 @@ export default async function DashboardPage() {
     safe(prisma.attendanceLog.findMany({
       where: { user_id: currentUser.id, date: { gte: start, lt: end } },
       orderBy: { timestamp: "asc" },
-      select: { date: true, type: true, timestamp: true },
+      select: { date: true, type: true, timestamp: true, note: true },
     }), []),
     safe(prisma.scheduleEntry.findMany({
       where: { user_id: currentUser.id, date: { gte: start, lt: end } },
@@ -560,64 +556,34 @@ export default async function DashboardPage() {
 
   // Parse Dashboard Settings (Goals, Promos, Products, Announcements, Worker Bonus Map)
   const dashboardVal = (dashboardSettingRaw?.value as any) || {};
-  const workerGoal = Number(dashboardVal?.workerGoal) || DEFAULT_DASHBOARD_SETTINGS.workerGoal;
+  const workerGoal = dailyPersonalTarget(currentUser.workforce_data);
   const promos = Array.isArray(dashboardVal?.promos) ? dashboardVal.promos : DEFAULT_DASHBOARD_SETTINGS.promos;
   const sideCard1 = dashboardVal?.sideCard1 || DEFAULT_DASHBOARD_SETTINGS.sideCard1;
   const sideCard2 = dashboardVal?.sideCard2 || DEFAULT_DASHBOARD_SETTINGS.sideCard2;
   const productOfMonth = dashboardVal?.productOfMonth || DEFAULT_DASHBOARD_SETTINGS.productOfMonth;
   const communications = Array.isArray(dashboardVal?.communications) ? dashboardVal.communications : DEFAULT_DASHBOARD_SETTINGS.communications;
 
-  // Canonical Employee Names (exact match to /client-control analytics)
-  const canonicalEmployeeNames = allEmployees
-    .map((e) => e.name)
-    .filter((n): n is string => Boolean(n?.trim()));
-  const currentWorkerCanonicalName = resolveCanonicalStaffName(currentUser.name || "", canonicalEmployeeNames);
-
-  // Calculate Points / Schede for Current Month from Controllo Cliente
-  const clientControlFormIds = clientControlForms
-    .filter((f) => isClientControlFormName(f.name, f.category))
-    .map((f) => f.id);
-
-  let currentWorkerPoints = 0;
-
-  if (clientControlFormIds.length > 0) {
-    const rawResponses = await safe(prisma.serviceFormResponse.findMany({
-      where: {
-        form_id: { in: clientControlFormIds },
-        created_at: { gte: start, lt: end }
-      },
-      select: {
-        id: true,
-        answers: true,
-        user_location_name: true,
-        user: { select: { name: true } }
-      }
-    }), []);
-
-    // Filter out "finito" responses (exact match to /client-control analytics)
-    const responses = rawResponses.filter((resp) => {
-      const answers = (resp.answers as Record<string, unknown>) || {};
-      const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || answers.client_control_correctness || "").trim().toLowerCase();
-      return correctness !== "finito";
-    });
-
-    const staffCountsMap = new Map<string, number>();
-    for (const response of responses) {
-      const answers = (response.answers as Record<string, unknown>) || {};
-      if (!countsInAnalytics(answers)) continue;
-
-      const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
-      const fallbackOwner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
-      const staffNames = (selectedStaff.length > 0 ? selectedStaff : fallbackOwner.length > 0 ? fallbackOwner : [response.user?.name ?? "Senza responsabile"])
-        .map((name) => resolveCanonicalStaffName(name, canonicalEmployeeNames));
-
-      for (const name of staffNames) {
-        staffCountsMap.set(name, (staffCountsMap.get(name) || 0) + 1);
-      }
-    }
-
-    currentWorkerPoints = staffCountsMap.get(currentWorkerCanonicalName) || staffCountsMap.get(currentUser.name || "") || 0;
-  }
+  const canonicalEmployeeNames = allEmployees.map(e => e.name).filter((name): name is string => Boolean(name?.trim()));
+  const clientControlFormIds = clientControlForms.filter(f => isClientControlFormName(f.name, f.category)).map(f => f.id);
+  const range = { gte: romeInstantStart(statusToday), lt: romeInstantStart(statusTomorrow) };
+  const [bookings, teamSetting, statusSetting] = await Promise.all([
+    hasCowlendarToken() ? safe(getCowlendarBookingsForRange({ startDate: range.gte.toISOString(), endDate: new Date(range.lt.getTime() - 1).toISOString(), limit: 1500 }), null) : null,
+    safe(prisma.setting.findUnique({ where: { key: "appointment_team_overrides" } }), null),
+    safe(prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }), null),
+  ]);
+  const cards = clientControlFormIds.length ? await safe(prisma.serviceFormResponse.findMany({
+    where: { form_id: { in: clientControlFormIds }, OR: [
+      { created_at: range }, { updated_at: range },
+      ...(bookings || []).map(booking => ({ answers: { path: ["booking_id"], equals: String(booking.id) } })),
+    ] },
+    select: { id: true, created_at: true, answers: true, user: { select: { name: true } } },
+    orderBy: { updated_at: "desc" },
+  }), null) : [];
+  const workerIdentity = { id: currentUser.id, name: currentUser.name || "" };
+  const currentWorkerPoints = cards ? countDailyCompletedCards(cards, workerIdentity, canonicalEmployeeNames) : null;
+  const assignedAppointments = bookings && cards && teamSetting && statusSetting ? assignedDailyAppointments(
+    bookings, (teamSetting.value || {}) as any, (statusSetting.value || {}) as any, workerIdentity, canonicalEmployeeNames, cards,
+  ) : null;
 
   // Calculate Shift & Worked Hours for Logged-In User
   const myTodayShift = todayShiftEntries.find((e) => e.user_id === currentUser.id);
@@ -658,25 +624,8 @@ export default async function DashboardPage() {
   const mins = totalWorkedMinutes % 60;
   const workedHoursFormatted = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 
-  const firstEntriesByDate = new Map<string, Date>();
-  for (const log of monthlyAttendanceLogs) {
-    if (log.type !== "ENTRATA") continue;
-    const key = log.date.toISOString().slice(0, 10);
-    if (!firstEntriesByDate.has(key)) firstEntriesByDate.set(key, log.timestamp);
-  }
-  let monthlyLateCount = 0;
-  for (const shift of monthlyShiftEntries) {
-    const categoryName = shift.category.name.toLowerCase();
-    if (categoryName.includes("riposo")) continue;
-    const entryPolicy = scheduledEntryPolicy({
-      plannedStart: shift.start_time || shift.category.start_time,
-      plannedEnd: shift.end_time || shift.category.end_time,
-      locationName: currentUser.location?.name,
-    });
-    const entry = firstEntriesByDate.get(shift.date.toISOString().slice(0, 10));
-    if (entryPolicy.deadlineMinutes === null || !entry) continue;
-    if (romeDateTimeParts(entry).totalMinutes > entryPolicy.deadlineMinutes) monthlyLateCount += 1;
-  }
+  const monthlyDelays = dashboardDelaySummary(monthlyAttendanceLogs, monthlyShiftEntries, currentUser.location?.name, breakDurationMinutes);
+  const monthlyLateCount = monthlyDelays.entryCount;
 
   const plannedTodayMinutes = timeToMinutes(todayShiftStartTime);
   const todayEntryPolicy = scheduledEntryPolicy({
@@ -738,7 +687,7 @@ export default async function DashboardPage() {
   return (
     <AppShell 
       title="Dashboard" 
-      subtitle="Bacheca salone: obiettivi mensili schede, promozioni attive, presenza e clienti oggi." 
+      subtitle="Bacheca salone: obiettivi giornalieri schede, promozioni attive, presenza e clienti oggi."
       role={role as any}
       hideHeader={true}
       transparentMain={true}
@@ -753,7 +702,9 @@ export default async function DashboardPage() {
           locationName: currentUser.location?.name ?? null,
           sedeId: currentUser.sede_id ?? null,
         }}
+        assignedAppointments={assignedAppointments}
         workerGoal={workerGoal}
+        professionalLevel={readProfessionalLevel(currentUser.workforce_data)}
         currentWorkerPoints={currentWorkerPoints}
         promos={promos}
         sideCard1={sideCard1}
@@ -775,6 +726,7 @@ export default async function DashboardPage() {
         todayShiftStartTime={todayShiftStartTime}
         todayShiftAssignedHours={myTodayShift?.category?.paid_hours ?? 8}
         weeklyShifts={weeklyShifts}
+        monthlyDelays={monthlyDelays}
         monthlyLateCount={monthlyLateCount}
         todayLateMinutes={todayLateMinutes}
         workerRequests={workerRequests}

@@ -127,14 +127,25 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
       }
 
       if (result?.error) {
+        if (result.error !== "CredentialsSignin") {
+          submittingRef.current = false;
+          setLoading(false);
+          setError("Servizio di accesso temporaneamente non disponibile. Riprova tra poco.");
+          return;
+        }
         const accessStatus = await fetch("/api/auth/document-access-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(loginMode === "pin" ? { pin } : { email, password }),
-        }).then((response) => response.json()).catch(() => ({ expired: false }));
+        }).then((response) => {
+          if (!response.ok) throw new Error("Verifica accesso non disponibile");
+          return response.json();
+        }).catch(() => ({ unavailable: true }));
         submittingRef.current = false;
         setLoading(false);
-        setError(accessStatus.expired
+        setError(accessStatus.unavailable
+          ? "Impossibile verificare l’accesso in questo momento. Riprova tra poco."
+          : accessStatus.expired
           ? "Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato."
           : loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
         return;

@@ -1,5 +1,6 @@
 "use client";
-import { DashboardCommunicationBanner } from "./dashboard-communication-banner";
+import { formatDelayMinutes } from "@/lib/dashboard-delay-summary";
+import type { AssignedDailyAppointment } from "@/lib/daily-personal-goal";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -53,8 +54,10 @@ type Props = {
     locationName?: string | null;
     sedeId?: string | null;
   };
-  workerGoal?: number;
-  currentWorkerPoints?: number;
+  assignedAppointments?: AssignedDailyAppointment[] | null;
+  workerGoal?: number | null;
+  professionalLevel?: string;
+  currentWorkerPoints?: number | null;
   communications?: Communication[];
   unreadCommunications?: Array<{
     id: string;
@@ -70,6 +73,7 @@ type Props = {
   todayShiftStartTime?: string | null;
   weeklyShifts?: WeeklyShift[];
   monthlyLateCount?: number;
+  monthlyDelays?: { entryMinutes: number; breakMinutes: number; totalMinutes: number };
   todayLateMinutes?: number;
   workerRequests?: WorkerRequest[];
   todayIsRest?: boolean;
@@ -77,6 +81,8 @@ type Props = {
   greeting?: string;
   [key: string]: unknown;
 };
+
+const EMPTY_COMMUNICATIONS: NonNullable<Props["unreadCommunications"]> = [];
 
 const statusLabels: Record<string, string> = {
   PENDING: "In attesa",
@@ -86,22 +92,28 @@ const statusLabels: Record<string, string> = {
 
 export function DashboardRedesignClient({
   currentUser,
-  workerGoal = 100,
+  assignedAppointments = null,
+  workerGoal = null,
+  professionalLevel = "",
   currentWorkerPoints = 0,
   communications = [],
-  unreadCommunications = [],
+  unreadCommunications = EMPTY_COMMUNICATIONS,
   unreadNotifications = 0,
   todayShiftTime = "Nessun turno oggi",
   workedHoursFormatted = "00:00",
   recentLogs = [],
   weeklyShifts = [],
   monthlyLateCount = 0,
+  monthlyDelays = { entryMinutes: 0, breakMinutes: 0, totalMinutes: 0 },
   todayLateMinutes = 0,
   workerRequests = [],
   todayIsRest = false,
   nextWorkDayLabel = null,
   greeting = "Ciao",
 }: Props) {
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
+  const incompleteCount = assignedAppointments?.filter(item => !item.noteCompleted).length ?? null;
+  const visibleAppointments = assignedAppointments?.filter(item => !showIncompleteOnly || !item.noteCompleted);
   const [communicationsOpen, setCommunicationsOpen] = useState(false);
   const [activeComms, setActiveComms] = useState(unreadCommunications);
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -173,7 +185,8 @@ export function DashboardRedesignClient({
   const userName = currentUser.name || "Paradise Staff";
   const firstName = userName.split(" ")[0];
   const initials = userName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-  const objectivePercent = Math.min(100, Math.round((currentWorkerPoints / Math.max(workerGoal, 1)) * 100));
+  const objectivePercent = workerGoal && currentWorkerPoints !== null ? Math.min(100, Math.round((currentWorkerPoints / workerGoal) * 100)) : 0;
+  const goalReached = workerGoal !== null && currentWorkerPoints !== null && currentWorkerPoints >= workerGoal;
   const requestPreview = workerRequests.slice(0, 4);
   const configuredCommunications = communications.filter((item) => item?.title?.trim());
   const communicationCount = activeComms.length || configuredCommunications.length || unreadNotifications;
@@ -191,7 +204,7 @@ export function DashboardRedesignClient({
   return (
     <div className="worker-dashboard min-h-screen bg-transparent text-[#171717] dark:text-white">
       <main className="mx-auto w-full max-w-[1420px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <DashboardCommunicationBanner><header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)]">
+        <header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)]">
           <img src="/beta-login-hero.png" alt="" className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center" aria-hidden="true" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,8,21,0.88)_0%,rgba(78,20,48,0.62)_52%,rgba(66,14,39,0.18)_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(24,6,15,0.32),transparent_65%)]" />
@@ -207,49 +220,80 @@ export function DashboardRedesignClient({
               {todayIsRest && <p className="mt-2 text-xs font-black text-[#ffc3dc]">Ci vediamo {nextWorkDayLabel || "al prossimo turno"}.</p>}
             </div>
           </div>
-          <button type="button" onClick={() => setCommunicationsOpen(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/25 bg-white/12 px-5 text-xs font-black uppercase text-white backdrop-blur-md transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
-            <Bell className="size-4" /> Comunicazioni
-            {communicationCount > 0 && <span className="grid min-w-5 place-items-center rounded-full bg-white px-1.5 py-0.5 text-[10px] text-[#8f2857]">{communicationCount}</span>}
-          </button>
-          </div>
-        </header></DashboardCommunicationBanner>
 
-        <section className="worker-dashboard-enter worker-dashboard-enter-delay-1 mt-5 grid overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)] lg:grid-cols-[1.35fr_0.65fr]">
-          <div className="border-b border-[#ecc6dc] p-5 sm:p-7 lg:border-b-0 lg:border-r">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          </div>
+        </header>
+
+        <section className="worker-dashboard-enter worker-dashboard-enter-delay-1 mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0 rounded-[22px] border border-[#ecc6dc] bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Turno di oggi</p>
-                <p className="mt-2 text-3xl font-black sm:text-4xl">{todayShiftTime}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className={cn("inline-flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase", attendance.status === "TURNO" ? "bg-emerald-50 text-emerald-700" : attendance.status === "PAUSA" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/50")}>
+                <p className="mt-2 text-2xl font-black tracking-tight">{todayShiftTime}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-black uppercase", attendance.status === "TURNO" ? "bg-emerald-50 text-emerald-700" : attendance.status === "PAUSA" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/50")}>
                     <span className={cn("size-2 rounded-full", attendance.status === "TURNO" ? "bg-emerald-500" : attendance.status === "PAUSA" ? "bg-amber-500" : "bg-black/25")} />
                     {attendance.status === "TURNO" ? "In turno" : attendance.status === "PAUSA" ? "In pausa" : "Fuori turno"}
                   </span>
                   {todayLateMinutes > 10 && <span className="inline-flex items-center gap-2 bg-rose-50 px-3 py-2 text-[10px] font-black uppercase text-rose-700"><ClockAlert className="size-3.5" />Ritardo {todayLateMinutes} min</span>}
                 </div>
               </div>
-              <div className="min-w-[220px] rounded-[18px] bg-black px-5 py-4 text-white dark:bg-[#111114]">
-                <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/50"><Timer className="size-4 text-[#f5c1e2]" />Tempo trascorso</p>
-                <p className="mt-3 font-mono text-3xl font-black">{formatDuration(attendance.status === "PAUSA" ? attendance.breakSeconds : attendance.workedSeconds)}</p>
-                <p className="mt-1 text-[10px] font-bold uppercase text-white/45">{attendance.status === "PAUSA" ? "Pausa corrente" : `Registrato oggi ${workedHoursFormatted}`}</p>
+              <div className="rounded-xl bg-[#FAF5F8] px-4 py-3 dark:bg-[#292029]">
+                <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#79566a]"><Timer className="size-4" />{attendance.status === "PAUSA" ? "Tempo in pausa" : "Tempo lavorato"}</p>
+                <p className="mt-1 font-mono text-2xl font-bold tabular-nums">{formatDuration(attendance.status === "PAUSA" ? attendance.breakSeconds : attendance.workedSeconds)}</p>
+                <p className="mt-1 text-[10px] text-black/50">{attendance.status === "PAUSA" ? "Pausa corrente" : `Registrato oggi ${workedHoursFormatted}`}</p>
               </div>
             </div>
             {todayLateMinutes > 10 && <div className="mt-6 border-l-4 border-rose-500 bg-rose-50 px-4 py-3"><p className="text-sm font-black text-rose-800">Oggi sei entrato con {todayLateMinutes} minuti di ritardo.</p><p className="mt-1 text-xs text-rose-700">Presta attenzione all'orario di inizio dei prossimi turni.</p></div>}
           </div>
 
-          <div className="grid grid-cols-2 divide-x divide-y divide-[#ecd5e1] lg:grid-cols-1 lg:divide-x-0">
-            <div className="p-5 sm:p-6">
-              <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/40">Obiettivo personale</p><Target className="size-4 text-[#c66170]" /></div>
-              <p className="mt-3 text-3xl font-black">{currentWorkerPoints}<span className="ml-1 text-xs text-black/35">/ {workerGoal}</span></p>
-              <div className="mt-4 h-2 bg-[#f7e5ef]"><div className="h-full bg-[#c66170]" style={{ width: `${objectivePercent}%` }} /></div>
-              <p className="mt-2 text-[10px] font-black uppercase text-black/40">{objectivePercent}% raggiunto</p>
+          <div className="contents">
+            <div className="min-w-0 rounded-[22px] border border-[#ecc6dc] bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/40">Obiettivo personale · Oggi</p><Target className="size-4 shrink-0 text-[#c66170]" /></div>
+              {professionalLevel && <p className="mt-2 text-xs font-semibold text-[#98516d]">Livello {professionalLevel}</p>}
+              <p className="mt-3 text-3xl font-black">{currentWorkerPoints ?? "—"}{workerGoal !== null && <span className="ml-1 text-sm text-black/45">/ {workerGoal}</span>}</p>
+              <p className="mt-1 text-xs text-black/55">Schede cliente completate oggi</p>
+              {workerGoal !== null && currentWorkerPoints !== null ? <>
+                <div role="progressbar" aria-label="Obiettivo personale di oggi" aria-valuemin={0} aria-valuemax={workerGoal} aria-valuenow={Math.min(currentWorkerPoints, workerGoal)} className="mt-4 h-2 overflow-hidden rounded-full bg-[#f7e5ef]"><div className={cn("h-full", goalReached ? "bg-emerald-500" : "bg-[#c66170]")} style={{ width: `${objectivePercent}%` }} /></div>
+                <p role="status" className={cn("mt-3 text-sm font-bold", goalReached ? "text-emerald-700" : "text-[#98516d]")}>{goalReached ? currentWorkerPoints > workerGoal ? "Brava, hai superato il tuo obiettivo! Continua così." : "Brava, obiettivo raggiunto! Continua così." : "Completa le schede e supera il tuo obiettivo personale."}</p>
+              </> : <p className="mt-3 text-xs text-black/50">{currentWorkerPoints === null ? "Conteggio momentaneamente non disponibile." : "Obiettivo giornaliero da definire per il tuo livello."}</p>}
+
             </div>
-            <div className={cn("p-5 sm:p-6", monthlyLateCount > 0 ? "bg-[#fff9f3]" : "bg-emerald-50/40")}>
-              <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/40">Ritardi del mese</p><ClockAlert className={cn("size-4", monthlyLateCount > 0 ? "text-amber-600" : "text-emerald-600")} /></div>
-              <p className="mt-3 text-3xl font-black">{monthlyLateCount}</p>
-              <p className="mt-2 text-[10px] font-black uppercase text-black/40">Oltre 10 minuti</p>
+            <div className={cn("min-w-0 rounded-[22px] border p-5 shadow-sm", monthlyDelays.totalMinutes > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50/40")}>
+              <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[0.14em]">Ritardi del mese</p><ClockAlert className="size-4" /></div>
+              <p className="mt-3 text-3xl font-black">{formatDelayMinutes(monthlyDelays.totalMinutes)}</p>
+              <dl className="mt-3 space-y-2 text-xs"><div className="flex justify-between gap-2"><dt>Ingresso</dt><dd className="font-bold">{formatDelayMinutes(monthlyDelays.entryMinutes)}</dd></div><div className="flex justify-between gap-2"><dt>Rientro dalla pausa</dt><dd className="font-bold">{formatDelayMinutes(monthlyDelays.breakMinutes)}</dd></div></dl>
+              <p className="mt-3 text-xs font-semibold">{monthlyDelays.totalMinutes > 0 ? "Attenzione alla puntualità: questi minuti sono ritardo accumulato." : "Nessun ritardo accumulato."}</p>
             </div>
           </div>
+          <button type="button" disabled={incompleteCount === null} aria-controls="daily-assigned-appointments" aria-pressed={showIncompleteOnly}
+            onClick={() => {
+              setShowIncompleteOnly(true);
+              document.getElementById("daily-assigned-appointments")?.focus({ preventScroll: true });
+              document.getElementById("daily-assigned-appointments")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className={cn("flex min-w-0 flex-col items-stretch justify-start rounded-[22px] border p-5 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#98516d] focus-visible:ring-offset-2 disabled:cursor-default", incompleteCount === null ? "border-[#ecc6dc] bg-white" : incompleteCount > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50/40 text-emerald-800")}>
+            <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.14em]">Note non completate</p><FileText className="size-4 shrink-0" /></div>
+            <p className="mt-3 text-3xl font-black">{incompleteCount ?? "—"}</p>
+            <p className="mt-1 text-xs">Schede cliente di oggi da completare</p>
+            <p className="mt-4 text-sm font-bold">{incompleteCount === null ? "Conteggio non disponibile" : incompleteCount > 0 ? "Apri le schede da completare →" : "Tutte le note sono complete"}</p>
+          </button>
+        </section>
+
+        <section id="daily-assigned-appointments" tabIndex={-1} className="mt-5 scroll-mt-6 rounded-[28px] border border-[#ecc6dc] bg-white p-5 outline-none sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-black">{showIncompleteOnly ? "Schede con note non completate" : "I tuoi appuntamenti di oggi"}{visibleAppointments ? ` · ${visibleAppointments.length}` : ""}</h2><Link href="/appointments" className="text-sm font-bold text-[#98516d]">Apri agenda →</Link></div>
+          {assignedAppointments !== null && <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Mostra schede cliente">
+            <button type="button" aria-pressed={!showIncompleteOnly} onClick={() => setShowIncompleteOnly(false)} className={cn("rounded-full border px-3 py-2 text-xs font-bold", !showIncompleteOnly ? "border-[#98516d] bg-[#faf0f5] text-[#98516d]" : "border-neutral-200")}>Tutte · {assignedAppointments.length}</button>
+            <button type="button" aria-pressed={showIncompleteOnly} onClick={() => setShowIncompleteOnly(true)} className={cn("rounded-full border px-3 py-2 text-xs font-bold", showIncompleteOnly ? "border-red-300 bg-red-50 text-red-700" : "border-neutral-200")}>Da completare · {incompleteCount}</button>
+          </div>}
+          {assignedAppointments === null ? <p className="mt-3 text-sm text-black/50">Appuntamenti momentaneamente non disponibili.</p> : <>
+            {assignedAppointments.some(item => !item.noteCompleted) && <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">Note cliente non fatte: {assignedAppointments.filter(item => !item.noteCompleted).length}. Completa la scheda al termine di ogni appuntamento.</p>}
+            {!visibleAppointments?.length && <p className="mt-3 text-sm text-black/50">{showIncompleteOnly ? "Nessuna nota da completare per oggi." : "Nessun appuntamento assegnato oggi."}</p>}
+            <div className="mt-3 divide-y divide-[#f1e5ec]">{visibleAppointments?.map(item => <Link key={item.id} href={`/appointments?booking=${encodeURIComponent(item.id)}&focus=${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(item.start))}`} className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <div className="min-w-0"><p className="font-bold">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(item.start))} · {item.client}</p><p className="mt-1 text-sm text-black/50">{item.service}</p></div>
+              <span className={cn("rounded-full px-3 py-1.5 text-xs font-bold", item.noteCompleted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{item.noteCompleted ? "Scheda completata" : "Nota cliente non fatta →"}</span>
+            </Link>)}</div>
+          </>}
         </section>
 
         <section className="worker-dashboard-enter worker-dashboard-enter-delay-2 mt-5 overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)]">

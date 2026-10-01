@@ -5624,6 +5624,7 @@ export function AppointmentsBrowser({
                   key={clientControlForm.bookingId}
                   serviceDate={initialBookings.find(booking => booking.id === clientControlForm.bookingId)?.startDate}
                   officeNote={String(paradiseNotes[clientControlForm.bookingId || ""] || initialBookings.find(booking => booking.id === clientControlForm.bookingId)?.paradiseNote || "")}
+                  onEditOfficeNote={canManageParadiseNotes && clientControlBooking ? () => openQuickNote(clientControlBooking) : undefined}
                   workers={clientControlEmployeeOptions}
                   sections={reconcileWorkerServices(clientControlForm.workerServices || [], orderedServiceStaff(clientControlForm.staffIds, clientControlForm.primaryStaffId))}
                   disabled={clientControlLoading || !clientControlHistoryLoaded || Boolean(savingTeamId)}
@@ -6785,10 +6786,11 @@ export function AppointmentsBrowser({
                                           onClick={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
-                                            void openClientControlForBooking(booking, undefined, true, column);
+                                            if (canManageParadiseNotes) openQuickNote(booking);
+                                            else void openClientControlForBooking(booking, undefined, true, column);
                                           }}
                                           className={`w-full p-2 text-left ${canManageParadiseNotes ? "pr-10" : ""}`}
-                                          aria-label={`Apri i dettagli del servizio di ${booking.customerName}`}
+                                          aria-label={canManageParadiseNotes ? `Apri nota ufficio di ${booking.customerName}` : `Apri i dettagli del servizio di ${booking.customerName}`}
                                         >
                                           <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
                                           <span className="inline-flex items-center gap-1">
@@ -6829,11 +6831,11 @@ export function AppointmentsBrowser({
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        void openClientControlForBooking(booking, undefined, true, column);
+                                        openQuickNote(booking);
                                       }}
                                       className="appointments-board-add-note inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
                                     >
-                                      <MessageSquare className="size-3" /> Aggiungi nota
+                                      <MessageSquare className="size-3" /> Aggiungi nota ufficio
                                     </button>
                                     )}
                                   </div>
@@ -7163,7 +7165,7 @@ export function AppointmentsBrowser({
         ) : null}
 
         {quickNoteBooking ? (
-          <div className="fixed inset-0 z-[210] grid place-items-center bg-black/45 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="office-note-title" className="fixed inset-0 z-[210] grid place-items-center bg-black/45 p-4 backdrop-blur-sm">
             <button
               type="button"
               className="absolute inset-0 cursor-default"
@@ -7183,7 +7185,7 @@ export function AppointmentsBrowser({
             >
               <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-[#FFF9EB] px-5 py-4">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9A6700]">Nota ufficio</p>
+                  <p id="office-note-title" className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9A6700]">Nota ufficio</p>
                   <h3 className="mt-1 truncate text-xl font-black text-[#172B4D]">{quickNoteBooking.customerName}</h3>
                   <p className="mt-1 text-xs font-semibold text-[#6B778C]">{formatTime(quickNoteBooking.startDate)} – {formatTime(quickNoteBooking.endDate)}</p>
                 </div>
