@@ -2668,7 +2668,7 @@ export function AppointmentsBrowser({
         fasce: inferredFasce || "", atteggiamento: inferredOfficeDetails.attitude || "",
       });
       return { ...current, staffIds, primaryStaffId, workerServices,
-        customNoteText: combinedWorkerServiceNote(workerServices, employees),
+        customNoteText: combinedWorkerServiceNote(workerServices, employees, booking.startDate),
       };
     });
     setClientControlHistoryLoaded(true);
@@ -2787,7 +2787,7 @@ export function AppointmentsBrowser({
       const workerServices = reconcileWorkerServices(formToSubmit.workerServices || [], orderedStaffIds);
       const structuredServices = formToSubmit.workerServices !== undefined;
       const primaryService = workerServices[0];
-      const serviceNote = combinedWorkerServiceNote(workerServices, clientControlEmployeeOptions);
+      const serviceNote = combinedWorkerServiceNote(workerServices, clientControlEmployeeOptions, initialBookings.find(booking => booking.id === formToSubmit.bookingId)?.startDate);
       const payload = {
         ...formToSubmit,
         staffIds: orderedStaffIds,
@@ -5003,12 +5003,18 @@ export function AppointmentsBrowser({
                           ? `€ ${clientControlForm.depositPaid}`
                           : "Prezzo non disponibile"}
                     </p>
+                    {clientControlForm.secondShopifyOrder ? (
+                      <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-[#334155]">
+                        <ShoppingBag className="size-3 shrink-0" />
+                        <span>Saldo #{clientControlForm.secondShopifyOrder}</span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="min-w-0 bg-white p-3 sm:p-3.5">
                     <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-black/40">
                       <UsersRound className="size-3.5 text-[#334155]" />
-                      Collaboratrice e ordine
+                      Collaboratrice
                     </p>
                     <p className="mt-1 line-clamp-2 text-xs font-semibold text-[#1F1F1F]">
                       {clientControlBookingTeam.map((mate) => mate.name).join(", ") ||
@@ -5018,12 +5024,6 @@ export function AppointmentsBrowser({
                           .join(", ") ||
                         "Non assegnata"}
                     </p>
-                    {clientControlForm.secondShopifyOrder ? (
-                      <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-[#334155]">
-                        <ShoppingBag className="size-3 shrink-0" />
-                        <span>Saldo #{clientControlForm.secondShopifyOrder}</span>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
               </section>
@@ -5618,7 +5618,7 @@ export function AppointmentsBrowser({
                   onChange={sections => setClientControlForm(current => ({ ...current,
                     workerServices: [...(current.workerServices || []).filter(section => !current.staffIds.includes(section.staffId)), ...sections],
                     primaryStaffId: sections[0]?.staffId,
-                    customNoteText: combinedWorkerServiceNote(sections, clientControlEmployeeOptions),
+                    customNoteText: combinedWorkerServiceNote(sections, clientControlEmployeeOptions, clientControlBooking?.startDate),
                     notes: sections.some(section => section.services.length || section.details.length),
                   }))}
                 />

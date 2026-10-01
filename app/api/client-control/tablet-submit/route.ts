@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
   if (workerServices && body) {
     const primary = workerServices[0];
     body.customServices = [...new Set(workerServices.flatMap(section => section.services))];
-    body.customNoteText = combinedWorkerServiceNote(workerServices, staffForSalon);
+    body.customNoteText = combinedWorkerServiceNote(workerServices, staffForSalon, body.appointmentStart);
     body.customGrammi = primary?.grammi || "";
     body.customLunghezza = primary?.lunghezza || "";
     body.customFasce = primary?.fasce || "";
@@ -738,7 +738,7 @@ export async function POST(request: NextRequest) {
     const collaboratorName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(", ") || "");
 
     noteSync = await syncClientControlNotes(targetOrders,
-      singleOrder => appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato"),
+      singleOrder => appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato", workerServices && !isNoShow ? { receiptKey: bookingId || response.id } : undefined),
       singleOrder => updateShopifyOrderMetafields(
         singleOrder,
         isNoShow ? "No Show" : "Controllato",

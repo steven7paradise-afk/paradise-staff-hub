@@ -14,8 +14,8 @@ test("multiple services and notes remain attached to their worker; drafts are no
   assert.match(workerServiceNote(a), /Taglio e Colore/);
   assert.doesNotMatch(workerServiceNote(a), /Onde|Non confermato/);
   const note = combinedWorkerServiceNote(parsed, [{ id: "a", name: "Nicol" }, { id: "b", name: "Francesca" }]);
-  assert.match(note, /Nicol \(principale\).*Solo punte/);
-  assert.match(note, /Francesca.*Onde morbide/);
+  assert.match(note, /Nicol\.{14}\d{2}\/\d{2}\/\d{4}[\s\S]*Solo punte/);
+  assert.match(note, /Francesca[\s\S]*Onde morbide/);
 });
 test("reopening and changing the team preserve notes by identity", () => {
   const a = { ...emptyWorkerService("a"), details: ["Nota A"], draftDetail: "In corso" };
@@ -48,7 +48,7 @@ test("solo work defaults to two separately editable sections for the same worker
   assert.deepEqual(restoreWorkerServices({ worker_service_sections: saved }, ["a"], "", fallback), sections);
   assert.doesNotMatch(workerServiceNote(saved[0]), /Onde|Piega/);
   assert.doesNotMatch(workerServiceNote(saved[1]), /punte|Taglio/);
-  assert.equal((combinedWorkerServiceNote(saved, [{ id: "a", name: "Nicol" }]).match(/Nicol \(principale\)/g) || []).length, 2);
+  assert.equal((combinedWorkerServiceNote(saved, [{ id: "a", name: "Nicol" }]).match(/Nicol\.{14}/g) || []).length, 1);
 });
 test("a collaborator replaces the unused solo section without reassigning existing notes", () => {
   const sections = reconcileWorkerServices([], ["a"]);

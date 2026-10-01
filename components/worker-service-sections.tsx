@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { Check, ChevronDown, LockKeyhole, Plus, FileText } from "lucide-react";
 import { CLIENT_CONTROL_SERVICE_OPTIONS, SECONDARY_SERVICE_OPTIONS } from "@/lib/client-control-service-rules";
 import { appointmentStaffDisplayName } from "@/lib/appointment-staff-access";
-import { workerServiceKey, workerServiceNote, type WorkerServiceSection } from "@/lib/worker-service-sections";
+import { cleanWorkerServiceDetail, workerServiceKey, workerServiceNote, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import styles from "./worker-service-sections.module.css";
 
 type Props = {
@@ -89,7 +89,7 @@ export function WorkerServiceSections({ officeNote, serviceDate, workers, sectio
                 </div>
                 <div className={styles.receiptBlock}>
                   <span className={styles.receiptLabel}>Nota</span>
-                  {section.details.length ? section.details.map((detail, detailIndex) => <p key={detailIndex}>{detail}</p>) : <p className={styles.receiptEmpty}>Nessuna nota aggiunta.</p>}
+                  {section.details.map(cleanWorkerServiceDetail).filter(Boolean).length ? section.details.map(cleanWorkerServiceDetail).filter(Boolean).map((detail, detailIndex) => <p key={detailIndex}>{detail}</p>) : <p className={styles.receiptEmpty}>Nessuna nota aggiunta.</p>}
                 </div>
                 <div className={styles.receiptBlock}>
                   <span className={styles.receiptLabel}>Servizi eseguiti</span>

@@ -1,3 +1,4 @@
+import { mergeShopifyServiceReceipt } from "./shopify-service-receipt";
 import { prisma } from "@/lib/prisma";
 
 const SHOPIFY_MISSING_RETRY_MS = 5 * 60 * 1000;
@@ -409,7 +410,7 @@ export function extractShopifyOrderCodes(...inputs: (string | null | undefined)[
  * Appends a staff comment/note to a Shopify order's note field.
  * Prevents duplicating the exact same note text multiple times.
  */
-export async function appendShopifyOrderNote(orderName: string, userName: string, message: string): Promise<boolean> {
+export async function appendShopifyOrderNote(orderName: string, userName: string, message: string, receiptOptions?: { receiptKey: string }): Promise<boolean> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
     const token = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -498,6 +499,25 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
     }
 
     const cleanCurrent = currentNote.trim();
+
+    if (receiptOptions) {
+      const key = `shopify_service_receipt:${orderId}:${receiptOptions.receiptKey}`;
+      const previous = await prisma.setting.findUnique({ where: { key } });
+      const value = previous?.value as { versions?: unknown } | null;
+      const versions = Array.isArray(value?.versions) ? value.versions.filter((item): item is string => typeof item === "string") : [];
+      const updatedNote = mergeShopifyServiceReceipt(cleanCurrent, cleanMessage, versions);
+      // Journal both versions before the network write. A failed request or a lost
+      // response can be retried without appending another copy of the receipt.
+      const nextValue = { versions: [...new Set([...versions.filter(version => cleanCurrent.includes(version)), cleanMessage])] };
+      await prisma.setting.upsert({ where: { key }, create: { key, value: nextValue }, update: { value: nextValue } });
+      if (updatedNote === cleanCurrent) return true;
+      const result = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderId}.json`, {
+        method: "PUT",
+        headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ order: { id: orderId, note: updatedNote } }),
+      });
+      return result.ok;
+    }
 
     // DEDUPLICATION FIX: Filter out lines that are ALREADY present in the existing note!
     const existingLines = new Set(

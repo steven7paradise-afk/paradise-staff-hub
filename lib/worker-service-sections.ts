@@ -1,3 +1,4 @@
+import { appointmentStaffDisplayName } from "./appointment-staff-access";
 import { CLIENT_CONTROL_SERVICE_OPTIONS, SECONDARY_SERVICE_OPTIONS } from "./client-control-service-rules";
 import { clientControlServiceSentence } from "./client-control-summary";
 
@@ -40,17 +41,49 @@ export function orderedServiceStaff(ids: string[], primaryId?: string) {
   return primaryId && unique.includes(primaryId) ? [primaryId, ...unique.filter(id => id !== primaryId)] : unique;
 }
 
-export function workerServiceNote(section: WorkerServiceSection) {
-  return clientControlServiceSentence({ ...section, extraNote: section.details.join("\n") });
+/** Assignment audit lines are metadata, not details written about the service. */
+export function cleanWorkerServiceDetail(value: string) {
+  return value.trim().replace(/(^|[.\n]\s*)Staff:\s*[^.\n]+\.?/gi, "$1")
+    .replace(/Collaboratric[ei] assegnat[ae] da Paradise Staff Hub:\s*[^.\n]+\.?/gi, "")
+    .replace(/^\s*\.\s*/, "").trim();
 }
 
-export function combinedWorkerServiceNote(sections: WorkerServiceSection[], staff: { id: string; name: string }[]) {
-  return sections.map((section, index) => {
-    const note = workerServiceNote(section);
-    if (!note) return "";
-    const name = staff.find(person => person.id === section.staffId)?.name || "Collaboratrice";
-    return `Sezione ${index + 1} — ${name}${section.staffId === sections[0]?.staffId ? " (principale)" : ""}: ${note}`;
-  }).filter(Boolean).join("\n\n");
+function workerServiceReceiptBody(section: WorkerServiceSection) {
+  const details = section.details.map(cleanWorkerServiceDetail).filter(Boolean);
+  const specs = [["Grammi", section.grammi], ["Lunghezza", section.lunghezza], ["Fasce", section.fasce], ["Cliente", section.atteggiamento]].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`);
+  return [
+    ...(details.length ? ["-----------------------", "NOTA", details.join("\n")] : []),
+    ...(section.services.length ? ["-----------------------", "SERVIZI ESEGUITI", section.services.join("\n")] : []),
+    ...(specs.length ? ["-----------------------", ...specs] : []),
+  ].join("\n");
+}
+
+function workerServiceReceiptHeader(staffId: string, name: string, serviceDate?: string) {
+  const date = serviceDate && Number.isFinite(Date.parse(serviceDate)) ? new Date(serviceDate) : new Date();
+  const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Rome" }).format(date);
+  return `${appointmentStaffDisplayName(name, staffId)}..............${dateLabel}`;
+}
+
+export function workerServiceReceipt(section: WorkerServiceSection, name: string, serviceDate?: string) {
+  return [workerServiceReceiptHeader(section.staffId, name, serviceDate), workerServiceReceiptBody(section)].filter(Boolean).join("\n");
+}
+
+export function workerServiceNote(section: WorkerServiceSection) {
+  return clientControlServiceSentence({ ...section, extraNote: section.details.map(cleanWorkerServiceDetail).filter(Boolean).join("\n") });
+}
+
+export function combinedWorkerServiceNote(sections: WorkerServiceSection[], staff: { id: string; name: string }[], serviceDate?: string) {
+  const groups = new Map<string, WorkerServiceSection[]>();
+  for (const section of sections) {
+    if (!workerServiceReceiptBody(section)) continue;
+    const group = groups.get(section.staffId) || [];
+    group.push(section);
+    groups.set(section.staffId, group);
+  }
+  return [...groups].map(([id, ownSections]) => [
+    workerServiceReceiptHeader(id, staff.find(person => person.id === id)?.name || "Collaboratrice", serviceDate),
+    ...ownSections.map(workerServiceReceiptBody),
+  ].join("\n")).join("\n\n");
 }
 
 /** IDs, services and bounds are verified on the server before writing any draft. */
@@ -71,7 +104,7 @@ export function parseWorkerServices(value: unknown, staffIds: string[]): WorkerS
     };
     if (!Array.isArray(item.services) || item.services.length > ALLOWED_WORKER_SERVICES.length || item.services.some(service => !ALLOWED_WORKER_SERVICES.includes(service as string))) throw new Error("Servizio non valido.");
     if (!Array.isArray(item.details) || item.details.length > 30 || item.details.some(detail => typeof detail !== "string" || detail.length > 6000)) throw new Error("Nota del servizio non valida o troppo lunga.");
-    return { staffId: item.staffId, ...(item.slot === "additional" ? { slot: "additional" as const } : {}), services: [...new Set(item.services as string[])], grammi: text("grammi"), lunghezza: text("lunghezza"), fasce: text("fasce"), atteggiamento: text("atteggiamento"), details: (item.details as string[]).map(detail => detail.trim()).filter(Boolean), draftDetail: text("draftDetail", 600) };
+    return { staffId: item.staffId, ...(item.slot === "additional" ? { slot: "additional" as const } : {}), services: [...new Set(item.services as string[])], grammi: text("grammi"), lunghezza: text("lunghezza"), fasce: text("fasce"), atteggiamento: text("atteggiamento"), details: (item.details as string[]).map(cleanWorkerServiceDetail).filter(Boolean), draftDetail: text("draftDetail", 600) };
   });
   if (staffIds.some(id => !parsed.some(section => section.staffId === id && !section.slot))) throw new Error("Manca la sezione di una collaboratrice.");
   return parsed;
@@ -97,8 +130,10 @@ export function restoreWorkerServices(
       return reconcileWorkerServices(valid, staffIds);
     } catch { /* Preserve legacy text below for older or incomplete drafts. */ }
   }
-  const extra = removeOfficeNoteFromLegacy(String(answers?.custom_extra_note || ""), officeNote);
-  const previous = removeOfficeNoteFromLegacy(String(answers?.client_control_notes_text || ""), officeNote);
+  const extra = cleanWorkerServiceDetail(removeOfficeNoteFromLegacy(String(answers?.custom_extra_note || ""), officeNote));
+  const previous = cleanWorkerServiceDetail(removeOfficeNoteFromLegacy(String(answers?.client_control_notes_text || ""), officeNote)
+    .replace(/^Sezione \d+ — [^\n]*?:\s*/gm, "")
+    .replace(/(^|\n)Servizi:\s*[^.\n]+\.?/gi, "$1"));
   const services = Array.isArray(answers?.custom_services)
     ? (answers.custom_services as unknown[]).filter((service): service is string => typeof service === "string" && ALLOWED_WORKER_SERVICES.includes(service as string))
     : fallback.services;
