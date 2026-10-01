@@ -125,7 +125,6 @@ export async function reconcileDailyClientControls(options: {
       answers.client_control_shopify_order_note = depositOrder.note || "";
       answers.client_control_shopify_expected_paid = depositOrder.totalPrice;
       if (depositOrder.lineItems.length) {
-        answers[CLIENT_CONTROL_FIELD_IDS.products] = true;
         answers[CLIENT_CONTROL_FIELD_IDS.productsList] = depositOrder.lineItems
           .map((item) => item.quantity > 1 ? `${item.title} (x${item.quantity})` : item.title)
           .join(", ");

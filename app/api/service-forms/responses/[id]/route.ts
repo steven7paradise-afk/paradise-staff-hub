@@ -126,6 +126,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     if (comments) dataToUpdate.comments = comments; // JSON array of comments
     if (answers) {
+      if (typeof answers[CLIENT_CONTROL_FIELD_IDS.products] === "boolean") {
+        answers.client_control_products_manual = answers[CLIENT_CONTROL_FIELD_IDS.products];
+      }
       const orderNum = String(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim();
       const originalAnswers = (response.answers as Record<string, any>) || {};
       const originalCorrectness = originalAnswers[CLIENT_CONTROL_FIELD_IDS.correctness];
@@ -137,7 +140,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         if (details) {
           if (details.lineItems.length > 0) {
             answers[CLIENT_CONTROL_FIELD_IDS.productsList] = details.lineItems.map(item => item.quantity > 1 ? `${item.title} (x${item.quantity})` : item.title).join(", ");
-            answers[CLIENT_CONTROL_FIELD_IDS.products] = true;
           }
           if (details.clientName && !answers[CLIENT_CONTROL_FIELD_IDS.clientName]) {
             answers[CLIENT_CONTROL_FIELD_IDS.clientName] = details.clientName;

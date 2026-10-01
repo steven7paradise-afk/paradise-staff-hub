@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Check, ChevronDown, LockKeyhole, Plus, FileText } from "lucide-react";
 import { CLIENT_CONTROL_SERVICE_OPTIONS, SECONDARY_SERVICE_OPTIONS } from "@/lib/client-control-service-rules";
 import { appointmentStaffDisplayName } from "@/lib/appointment-staff-access";
@@ -14,9 +14,10 @@ type Props = {
   sections: WorkerServiceSection[];
   onChange: (sections: WorkerServiceSection[]) => void;
   disabled?: boolean;
+  completionChecks?: ReactNode;
 };
 
-export function WorkerServiceSections({ officeNote, serviceDate, workers, sections, onChange, disabled = false }: Props) {
+export function WorkerServiceSections({ officeNote, serviceDate, workers, sections, onChange, disabled = false, completionChecks }: Props) {
   const uid = useId();
   const [openedAt] = useState(() => new Date().toISOString());
   const receiptDateValue = serviceDate && Number.isFinite(Date.parse(serviceDate)) ? serviceDate : openedAt;
@@ -79,6 +80,7 @@ export function WorkerServiceSections({ officeNote, serviceDate, workers, sectio
                   {['Tranquilla', 'Simpatica', 'Esigente', 'Pretenziosa'].map(value => <button key={value} type="button" aria-pressed={section.atteggiamento === value} onClick={() => change(workerServiceKey(section), { atteggiamento: section.atteggiamento === value ? "" : value })}>{value}</button>)}
                 </div></div>
               </div>
+              {index === 0 && completionChecks ? <div className="mt-6">{completionChecks}</div> : null}
             </div>
             <aside className={styles.note} aria-label={`Nota del servizio di ${name}`}>
               <h4><FileText size={18} />Nota del servizio · {name}</h4>

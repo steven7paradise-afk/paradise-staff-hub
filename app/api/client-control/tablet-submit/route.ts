@@ -1,3 +1,5 @@
+import { appendClientControlChecks } from "@/lib/client-control-checks-note";
+import { clientControlProductSelection } from "@/lib/client-control-products";
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
 import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, parseWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
@@ -341,6 +343,14 @@ export async function POST(request: NextRequest) {
     body?.serviceTitle,
   ]);
   const isNoShow = !!body?.isNoShow;
+  if (body && !isNoShow && !isFinito) {
+    body.customNoteText = appendClientControlChecks(textValue(body.customNoteText), {
+      beforeMedia: boolValue(body.beforeMedia),
+      afterMedia: boolValue(body.afterMedia),
+      products: boolValue(body.products),
+      review: boolValue(body.review),
+    });
+  }
   let productsListStr = "";
   let shopifyClientName: string | null = null;
   let shopifyTotalPrice: number | null = null;
@@ -534,7 +544,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt]: secondOrderDetails?.transactionProcessedAt || "",
     client_control_payment_breakdown: secondOrderDetails?.paymentBreakdown || [],
     [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,
-    [CLIENT_CONTROL_FIELD_IDS.products]: productsListStr !== "",
+    ...(typeof body?.products === "boolean" ? clientControlProductSelection(body.products) : {}),
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
     [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
@@ -585,7 +595,7 @@ export async function POST(request: NextRequest) {
     booking_id: textValue(body?.bookingId),
     [CLIENT_CONTROL_FIELD_IDS.beforeMedia]: boolValue(body?.beforeMedia),
     [CLIENT_CONTROL_FIELD_IDS.afterMedia]: boolValue(body?.afterMedia),
-    [CLIENT_CONTROL_FIELD_IDS.products]: boolValue(body?.products) || (productsListStr !== ""),
+    ...clientControlProductSelection(boolValue(body?.products)),
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
     [CLIENT_CONTROL_FIELD_IDS.review]: boolValue(body?.review),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,

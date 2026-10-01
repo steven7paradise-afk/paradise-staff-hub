@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ClientControlChecks } from "./client-control-checks";
 import { WorkerServiceSections } from "./worker-service-sections";
 import { reconcileWorkerServices, parseWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 
@@ -10,6 +11,7 @@ const storageKey = "paradise-local-worker-services-demo-solo-v2";
 
 export function DevWorkerServicesPreview() {
   const [sections, setSections] = useState<WorkerServiceSection[]>(initial);
+  const [checks, setChecks] = useState({ beforeMedia: false, afterMedia: false, products: false, review: false });
   const [ready, setReady] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
@@ -34,7 +36,7 @@ export function DevWorkerServicesPreview() {
         <button type="button" className="rounded-xl border bg-white px-4 py-2 text-sm" onClick={() => change(initial())}>Azzera esempio</button>
       </div>
       <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm">
-        <WorkerServiceSections serviceDate="2026-10-01T10:00:00+02:00" officeNote="CAPELLI IN UFFICIO, VUOLE NICOL" workers={workers} sections={sections} onChange={change} disabled={!ready} />
+        <WorkerServiceSections completionChecks={<ClientControlChecks values={checks} onChange={(key, checked) => setChecks(current => ({ ...current, [key]: checked }))} />} serviceDate="2026-10-01T10:00:00+02:00" officeNote="CAPELLI IN UFFICIO, VUOLE NICOL" workers={workers} sections={sections} onChange={change} disabled={!ready} />
       </div>
       <p className="mt-5 text-xs text-slate-500">Questa anteprima usa lo stesso modulo degli appuntamenti. I dati di esempio restano nel browser e non vengono inviati al gestionale.</p>
     </div>

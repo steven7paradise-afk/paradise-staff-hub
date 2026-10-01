@@ -2,6 +2,8 @@
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
 import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
+import { restoreClientControlProducts } from "@/lib/client-control-products";
+import { ClientControlChecks } from "./client-control-checks";
 import { WorkerServiceSections } from "./worker-service-sections";
 import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, restoreWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation";
@@ -1345,6 +1347,7 @@ export function AppointmentsBrowser({
     null,
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
   const [internalNotes, setInternalNotes] = useState<Record<string, string>>(
     {},
   );
@@ -2641,7 +2644,7 @@ export function AppointmentsBrowser({
           notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]) || Boolean(officeNote),
           beforeMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
           afterMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.afterMedia]),
-          products: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.products]),
+          products: restoreClientControlProducts(existingAnswers),
           review: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.review]),
         };
       }
@@ -5028,6 +5031,8 @@ export function AppointmentsBrowser({
                 </div>
               </section>
 
+
+
               {/* Compact payment notice; history only opens on request. */}
               <div className="sticky top-0 z-30 -mx-4 border-b border-neutral-100 bg-white px-4 py-1 shadow-[0_4px_12px_rgba(0,0,0,0.025)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
                 <AppointmentPaymentNotice
@@ -5609,6 +5614,13 @@ export function AppointmentsBrowser({
                 </div>
 
                 <WorkerServiceSections
+                  completionChecks={
+                    <ClientControlChecks
+                      values={clientControlForm}
+                      disabled={clientControlLoading || !clientControlHistoryLoaded || clientControlSubmitting}
+                      onChange={updateClientControlCheck}
+                    />
+                  }
                   key={clientControlForm.bookingId}
                   serviceDate={initialBookings.find(booking => booking.id === clientControlForm.bookingId)?.startDate}
                   officeNote={String(paradiseNotes[clientControlForm.bookingId || ""] || initialBookings.find(booking => booking.id === clientControlForm.bookingId)?.paradiseNote || "")}
@@ -5622,10 +5634,9 @@ export function AppointmentsBrowser({
                     notes: sections.some(section => section.services.length || section.details.length),
                   }))}
                 />
-                <div id="client-service-fields" className={serviceDetailsStyles.fields}>
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)] md:col-span-2">
+                <div id="client-service-fields" className="grid min-w-0 gap-5 border-t border-[#E5E7EB] bg-[#FAFAFB] p-5 sm:p-6 md:grid-cols-2">
+                  <div className="min-w-0">
                     <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">6</span>
                       Come ci hai conosciuti?
                     </span>
                     <select
@@ -5653,13 +5664,15 @@ export function AppointmentsBrowser({
                     ) : null}
                   </div>
 
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-[#F8FAFC] p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] md:col-span-2">
-                    <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-end">
-                      <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#334155] bg-white px-3.5 shadow-[0_3px_10px_rgba(15,23,42,0.10)] transition focus-within:border-[#334155] focus-within:ring-2 focus-within:ring-[#334155]/25">
+                  <div className="min-w-0">
+                    <div>
+                      <label htmlFor="client-control-instagram" className="mb-3 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">Instagram cliente <span className="text-[10px] font-normal normal-case tracking-normal text-slate-500">Facoltativo</span></label>
+                      <label className="flex h-12 items-center gap-3 rounded-xl border-2 border-[#DDE2E7] bg-white px-3.5 transition focus-within:border-[#334155] focus-within:ring-2 focus-within:ring-[#334155]/25">
                         <Instagram className="size-5 shrink-0 text-[#334155]" strokeWidth={2.5} />
                         <span className="min-w-0 flex-1">
                           <input
                             type="text"
+                            id="client-control-instagram"
                             aria-label="Instagram cliente"
                             value={clientControlForm.instagramTag}
                             onChange={(event) =>
@@ -5669,50 +5682,12 @@ export function AppointmentsBrowser({
                               }))
                             }
                             placeholder="@usercliente"
-                            className="h-8 w-full border-0 bg-transparent p-0 text-base font-semibold leading-none text-[#334155] outline-none placeholder:font-semibold placeholder:text-[#334155] placeholder:opacity-100"
+                            className="h-8 w-full border-0 bg-transparent p-0 text-sm font-semibold leading-none text-[#334155] outline-none placeholder:font-normal placeholder:text-slate-400"
                           />
                         </span>
                       </label>
 
-                      <div>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-black/40">
-                          Verifiche e controlli
-                        </span>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {[
-                            ["beforeMedia", "Prima foto/video"],
-                            ["afterMedia", "Dopo foto/video"],
-                            ["products", "Prodotti"],
-                            ["review", "Recensione"],
-                          ].map(([fieldKey, fieldLabel]) => {
-                            const checked = Boolean((clientControlForm as any)[fieldKey]);
-                            return (
-                              <label
-                                key={fieldKey}
-                                className={[
-                                  "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold shadow-2xs transition active:scale-95",
-                                  checked
-                                    ? "border-[#334155] bg-[#334155] text-white shadow-xs"
-                                    : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
-                                ].join(" ")}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={(event) =>
-                                    updateClientControlCheck(
-                                      fieldKey as "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
-                                      event.target.checked,
-                                    )
-                                  }
-                                  className="size-4 accent-[#334155]"
-                                />
-                                <span>{fieldLabel}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
+
                     </div>
                   </div>
 
@@ -5918,7 +5893,7 @@ export function AppointmentsBrowser({
       )}
       <div className="appointments-workspace w-full">
         <main className="relative min-h-[calc(100dvh-4rem)] min-w-0 space-y-3 overflow-hidden rounded-[22px] border border-[#E7D9E0] bg-[#F6EEF2] p-1.5 sm:space-y-5 sm:rounded-[30px] sm:p-3 lg:p-4">
-          <section className={`relative overflow-visible rounded-[22px] border border-[#E7D9E0] bg-[#FBF7F9] p-3 shadow-[0_10px_30px_rgba(66,39,51,0.06)] sm:rounded-[28px] sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
+          <section className={`relative overflow-visible rounded-[22px] border border-[#E7D9E0] bg-[#FBF7F9] p-3 shadow-[0_10px_30px_rgba(66,39,51,0.06)] sm:rounded-[28px] sm:p-4 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
             <div>
               <div>
                 <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-4">
@@ -5928,14 +5903,14 @@ export function AppointmentsBrowser({
                     </span>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-                        <h1 className="text-2xl font-black tracking-[-0.04em] text-[#171717] sm:text-4xl">
+                        <h1 className="text-2xl font-black tracking-[-0.04em] text-[#171717] sm:text-2xl">
                           {pageTitle}
                         </h1>
                         <span className="rounded-full border border-[#F0C4D7] bg-[#FFF2F8] px-2 py-0.5 text-[10px] font-black tabular-nums text-[#A93469] sm:px-3 sm:py-1 sm:text-xs">
                           {activeBookingsCount} attivi
                         </span>
                       </div>
-                      <p className="mt-0.5 line-clamp-1 text-[11px] font-semibold text-black/48 sm:mt-1 sm:text-sm">
+                      <p className="mt-0.5 line-clamp-1 text-[11px] font-semibold text-black/48">
                         {pageSubtitle}
                       </p>
                     </div>
@@ -5952,6 +5927,23 @@ export function AppointmentsBrowser({
                       </button>
                     ) : null}
                   </div>
+
+                  <button
+                    type="button"
+                    aria-expanded={searchPanelOpen}
+                    aria-controls="appointments-search-panel"
+                    onClick={() => {
+                      setSearchPanelOpen(current => !current);
+                      setIsDatePickerOpen(false);
+                      setIsFilterModalOpen(false);
+                      if (!searchPanelOpen) requestAnimationFrame(() => document.getElementById("appointments-client-search")?.focus());
+                    }}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#E4B8CD] bg-white px-4 text-sm font-bold text-[#9E3262] transition hover:bg-[#FFF0F7]"
+                  >
+                    {searchPanelOpen ? <X className="size-4" /> : <Search className="size-4" />}
+                    {searchPanelOpen ? "Chiudi ricerca" : "Cerca"}
+                    {searchTerm.trim() || activeAdvancedFilterCount > 0 || salon !== "tutti" ? <span className="size-2 rounded-full bg-[#A93469]" aria-label="Filtri attivi" /> : null}
+                  </button>
 
                   <div className="inline-flex rounded-xl border border-[#E7D9E0] bg-[#F1E8ED] p-1 shadow-inner" role="group" aria-label="Vista appuntamenti">
                     <button
@@ -5995,6 +5987,14 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
+            <p className="mt-2 text-xs text-[#775565]">
+              {dateFilterLabel} · {salon === "tutti" ? "Tutti i saloni" : salonOptions.find(option => option.value === salon)?.label}
+              {searchTerm.trim() ? ` · Ricerca: ${searchTerm.trim()}` : ""}
+              {filterStatus !== "all" ? ` · ${filterStatus === "ANNULLATO" ? "Annullato" : appointmentStatusOptions.find(option => option.value === filterStatus)?.label || filterStatus}` : ""}
+              {filterStaff !== "all" ? ` · ${filterStaff}` : ""}
+              {filterPayment !== "all" ? ` · ${filterPayment}` : ""}
+            </p>
+            <div id="appointments-search-panel" hidden={!searchPanelOpen}>
             <div className="mt-4 overflow-x-auto rounded-[16px] border border-[#E7D9E0] bg-[#F1E8ED] p-1 sm:mt-7 sm:rounded-[20px] sm:p-1.5">
               <div className="flex min-w-max gap-1">
                 {[
@@ -6074,7 +6074,7 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
-            <div className="mt-3 grid items-stretch gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 xl:grid-cols-[minmax(430px,1.5fr)_210px_190px_120px_150px]">
+            <div className="mt-3 grid items-stretch gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_100px_130px]">
               <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} />
               <div className="relative h-11 sm:h-[52px]">
                 <button
@@ -6322,6 +6322,7 @@ export function AppointmentsBrowser({
                 <RefreshCw className={`size-4 text-[#FFD8E9] ${isRefreshing ? "animate-spin" : ""}`} />
                 <span>{isRefreshing ? "Sincronizzo..." : "Sincronizza"}</span>
               </button>
+            </div>
             </div>
           </section>
 
