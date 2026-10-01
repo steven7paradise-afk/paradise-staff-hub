@@ -7,6 +7,37 @@ export function canWorkAcrossAppointmentLocations(role?: string | null) {
 
 type AssignmentEmployee = { id: string; name: string; role?: string | null; locationName?: string | null };
 const normalizeAssignmentName = (value?: string | null) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\|.*$/, "").replace(/\s+/g, " ").trim();
+/** Picker suggestions are based on the actual salon, not cross-location access. */
+export function suggestEmployeeForAppointmentSalon(employee: AssignmentEmployee, salon: string) {
+  const normalize = (value?: string | null) => {
+    const name = normalizeAssignmentName(value);
+    if (!name || name.includes("ufficio")) return "";
+    const clean = name.replace(/^salone\s+/, "").replace(/^corso\s+/, "");
+    if (clean === "corso" || clean === "buenos aires") return "buenos aires";
+    return clean;
+  };
+  const location = normalize(employee.locationName);
+  const target = normalize(salon);
+  return Boolean(location && target && location === target);
+}
+
+export function appointmentOperatorInSalon(employees: AssignmentEmployee[], operator: { id?: string; name?: string } | null, salon: string) {
+  if (!operator) return undefined;
+  const eligible = employees.filter(employee => suggestEmployeeForAppointmentSalon(employee, salon));
+  if (operator.id && operator.id !== "kiosk-selected-worker") {
+    return eligible.find(employee => employee.id === operator.id);
+  }
+  const name = normalizeAssignmentName(operator.name);
+  if (!name) return undefined;
+  const matches = eligible.filter(employee => normalizeAssignmentName(employee.name) === name);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function isClockedInAppointmentWorker(worker: { status?: string; clockedInAt?: string | null }) {
+  return ["IN", "BREAK"].includes(worker.status || "") &&
+    Boolean(worker.clockedInAt && Number.isFinite(Date.parse(worker.clockedInAt)));
+}
+
 export function employeeMatchesAppointmentLocation(employee: AssignmentEmployee, salon: string) {
   if (canWorkAcrossAppointmentLocations(employee.role)) return true;
   const normalize = (value?: string | null) => normalizeAssignmentName(value).replace(/^salone\s+/, "").replace(/^corso\s+/, "");

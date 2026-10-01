@@ -60,3 +60,28 @@ export function uniqueAppointmentPayment<T extends PaymentOrder & CustomerContac
   const unique = new Map(candidates.map(order => [order.id, order]));
   return unique.size === 1 ? [...unique.values()][0] : null;
 }
+
+/** Display all paid orders for the day; this never selects or links an order.
+ * The original booking order can establish Shopify identity despite a contact typo.
+ * Names and fuzzy contacts alone cannot establish that identity.
+ */
+export function appointmentDayPayments<T extends PaymentOrder & CustomerContact & { customerId?: string | null }>(
+  orders: T[], customer: CustomerContact, start?: string, bookingOrder = "",
+): T[] {
+  const date = new Date(start || "");
+  if (!Number.isFinite(date.getTime())) return [];
+  const day = appointmentDateKey(date);
+  const reference = bookingOrder.trim().replace(/^#/, "");
+  const anchors = new Set(orders.filter(order => reference && order.orderName.replace(/^#/, "") === reference)
+    .map(order => order.customerId).filter((id): id is string => Boolean(id)));
+  if (anchors.size > 1) return [];
+  const anchor = anchors.size === 1 ? [...anchors][0] : null;
+  const matches = orders.filter(order => {
+    const time = new Date(order.createdAt);
+    return String(order.financialStatus || "").toLowerCase() === "paid"
+      && Number.isFinite(time.getTime()) && appointmentDateKey(time) === day
+      && (anchor ? order.customerId === anchor : exactPaymentCustomer(customer, order));
+  });
+  return [...new Map(matches.map(order => [order.id, order])).values()]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || a.id.localeCompare(b.id));
+}

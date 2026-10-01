@@ -1,7 +1,9 @@
 "use client";
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
-import { canWorkAcrossAppointmentLocations, employeeMatchesAppointmentLocation, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
+import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isClockedInAppointmentWorker, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
+import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation";
+import { hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
@@ -56,11 +58,14 @@ import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appoin
 import { initialAppointmentDateFilter } from "@/lib/appointment-date";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { AppointmentPaymentNotice, AppointmentPaymentHistory } from "@/components/appointment-payment-notice";
+import { clientControlParagraph, clientControlServiceSentence } from "@/lib/client-control-summary";
+import serviceDetailsStyles from "./service-details.module.css";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
-import { uniqueAppointmentPayment, canCorrectAppointmentClient } from "@/lib/appointment-payment-match";
+import { uniqueAppointmentPayment, appointmentDayPayments, canCorrectAppointmentClient } from "@/lib/appointment-payment-match";
 import {
   allowsMissingFinalPaymentOrder,
   CLIENT_CONTROL_SERVICE_OPTIONS,
@@ -125,6 +130,7 @@ type ClientControlEmployee = {
 
 type ShopifyClientOrder = {
   id: string;
+  customerId?: string | null;
   orderName: string;
   clientName: string;
   firstName?: string;
@@ -141,6 +147,7 @@ type ShopifyClientOrder = {
   note: string;
   createdAt: string;
   financialStatus?: string | null;
+  sourceName?: string | null;
 };
 
 type ClientControlAppointmentForm = {
@@ -1633,6 +1640,11 @@ export function AppointmentsBrowser({
   }
 
   const [clientControlOpen, setClientControlOpen] = useState(false);
+  const [workerConfirmationOpen, setWorkerConfirmationOpen] = useState(false);
+  const [workerConfirmationContext, setWorkerConfirmationContext] = useState<{ id: string; name: string } | null>(null);
+  const [confirmationAttendance, setConfirmationAttendance] = useState<ActivePcWorker[]>([]);
+  const [confirmationAttendanceLoading, setConfirmationAttendanceLoading] = useState(false);
+  const [confirmationAttendanceError, setConfirmationAttendanceError] = useState("");
   const [clientControlEmployees, setClientControlEmployees] = useState<
     ClientControlEmployee[]
   >([]);
@@ -1650,6 +1662,7 @@ export function AppointmentsBrowser({
     clientControlRequestRef.current?.abort();
     clientControlRequestRef.current = null;
     setClientControlOpen(false);
+    setWorkerConfirmationOpen(false);
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
     setSelectedShopifyNoteOrder("");
@@ -1704,17 +1717,7 @@ export function AppointmentsBrowser({
     const n = overrides?.extraNote !== undefined ? overrides.extraNote : extraNoteText;
     const services = overrides?.services !== undefined ? overrides.services : selectedServiceDetails;
 
-    const parts: string[] = [];
-    if (services.length) parts.push(`Servizi: ${services.join(", ")}`);
-    if (g) parts.push(`Grammi: ${g}`);
-    if (l) parts.push(`Lunghezza: ${l}`);
-    if (f) parts.push(`Fasce: ${f}`);
-    if (a) parts.push(`Cliente: ${a}`);
-
-    let formatted = parts.join(" • ");
-    if (n.trim()) {
-      formatted = formatted ? `${formatted}\nNote: ${n.trim()}` : n.trim();
-    }
+    const formatted = clientControlServiceSentence({ services, grammi: g, lunghezza: l, fasce: f, atteggiamento: a, extraNote: n });
 
     setClientControlForm((prev) => ({
       ...prev,
@@ -1979,18 +1982,14 @@ export function AppointmentsBrowser({
   useEffect(() => {
     if (!clientControlOpen || !clientControlForm.bookingId) return;
     const events = new EventSource("/api/appointments/events");
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const form = clientControlFormRef.current;
-        void paymentRefreshRef.current({ clientName: form.clientName, email: form.email, phone: form.phone, shopifyOrder: form.shopifyOrder });
-      }, 300);
+      const form = clientControlFormRef.current;
+      void paymentRefreshRef.current({ clientName: form.clientName, email: form.email, phone: form.phone, shopifyOrder: form.shopifyOrder });
     };
     events.addEventListener("payments.changed", refresh);
     const visible = () => { if (document.visibilityState === "visible") refresh(); };
     document.addEventListener("visibilitychange", visible);
-    return () => { events.close(); clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
+    return () => { events.close(); document.removeEventListener("visibilitychange", visible); };
   }, [clientControlOpen, clientControlForm.bookingId]);
   useEffect(() => {
     if (!clientControlOpen || !clientControlForm.bookingId) return;
@@ -2036,7 +2035,6 @@ export function AppointmentsBrowser({
         identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
       ).trim().replace(/^#/, "");
       if (depositOrder) {
-        setSelectedShopifyNoteOrder(depositOrder);
         setShopifyNoteFallbackToDeposit(true);
       }
     } catch (err) {
@@ -2046,7 +2044,6 @@ export function AppointmentsBrowser({
         identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
       ).trim().replace(/^#/, "");
       if (depositOrder) {
-        setSelectedShopifyNoteOrder(depositOrder);
         setShopifyNoteFallbackToDeposit(true);
       }
     } finally {
@@ -2094,6 +2091,7 @@ export function AppointmentsBrowser({
       });
     }
     setShowTodayOrdersDropdown(false);
+    setShowShopifyOrdersPanel(false);
   }
 
   const sortedTodayOrdersList = useMemo(() => {
@@ -2193,6 +2191,11 @@ export function AppointmentsBrowser({
     return uniqueAppointmentPayment(clientMatchingOrders, clientControlForm, booking?.startDate, clientControlForm.shopifyOrder);
   }, [clientMatchingOrders, initialBookings, clientControlForm.bookingId, clientControlForm.shopifyOrder, clientControlForm.email, clientControlForm.phone]);
 
+  const dayClientPayments = useMemo(() => {
+    const booking = initialBookings.find(item => item.id === clientControlForm.bookingId);
+    return appointmentDayPayments(todayOrdersList, clientControlForm, booking?.startDate, booking?.bookingStr || "");
+  }, [todayOrdersList, initialBookings, clientControlForm.bookingId, clientControlForm.email, clientControlForm.phone]);
+
   // Suggested 1° Ordine (Acconto)
   const suggestedAccontoOrder = useMemo(() => {
     if (!clientMatchingOrders.length) return null;
@@ -2269,41 +2272,8 @@ export function AppointmentsBrowser({
     return Array.from(groups.values());
   }, [clientShopifyNoteHistory]);
 
-  useEffect(() => {
-    const currentSecondOrder = String(clientControlForm.secondShopifyOrder || "").trim().replace(/^#/, "");
-    if (
-      !clientControlOpen ||
-      !clientControlHistoryLoaded ||
-      !suggestedSaldoOrder ||
-      Boolean(currentSecondOrder)
-    ) {
-      return;
-    }
-
-    const cleanOrderName = suggestedSaldoOrder.orderName.replace(/^#/, "");
-    setSecondOrderDetails(suggestedSaldoOrder);
-    setSelectedShopifyNoteOrder(cleanOrderName);
-    setShopifyNoteFallbackToDeposit(false);
-    const nextForm = {
-      ...clientControlFormRef.current,
-      secondShopifyOrder: cleanOrderName,
-      paid: suggestedSaldoOrder.totalPrice != null
-        ? String(suggestedSaldoOrder.totalPrice)
-        : clientControlFormRef.current.paid,
-    };
-    clientControlFormRef.current = nextForm;
-    setClientControlForm(nextForm);
-    scheduleClientControlDraft(nextForm);
-    void handleSecondShopifyOrderLookup(cleanOrderName);
-    // L'ordine suggerito cambia solo dopo il caricamento dello storico cliente.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    clientControlForm.secondShopifyOrder,
-    clientControlForm.shopifyOrder,
-    clientControlHistoryLoaded,
-    clientControlOpen,
-    suggestedSaldoOrder,
-  ]);
+  // Discovery is automatic; + explicitly selects the verified order.
+  // Never replace a saved/manual selection merely because a payment event arrives.
 
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
@@ -2313,7 +2283,7 @@ export function AppointmentsBrowser({
         name: employee.name,
         photoUrl: employee.photoUrl,
         role: employee.role,
-        locationName: employee.locationName ?? "Salone Buenos Aires",
+        locationName: employee.locationName,
       });
     });
 
@@ -2360,7 +2330,7 @@ export function AppointmentsBrowser({
   const filteredClientControlEmployees = useMemo(() => {
     const selectedSalon = normalizeSalonName(clientControlForm.salon);
     return clientControlEmployeeOptions.filter((employee) => {
-      return employeeMatchesAppointmentLocation(employee, selectedSalon);
+      return suggestEmployeeForAppointmentSalon(employee, selectedSalon);
     });
   }, [clientControlEmployeeOptions, clientControlForm.salon]);
 
@@ -2475,6 +2445,7 @@ export function AppointmentsBrowser({
     booking: AppointmentRecord,
     preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
     openServiceDetails = false,
+    boardWorker?: { id: string; name: string },
   ) {
     clientControlRequestRef.current?.abort();
     const requestController = new AbortController();
@@ -2488,6 +2459,20 @@ export function AppointmentsBrowser({
     setIsStaffDropdownOpen(false);
     setClientControlLastVisitAt(null);
     setClientControlHistoryLoaded(false);
+    const assignedTeam = getBookingTeam(booking);
+    const questionWorker = boardWorker?.id !== "unassigned" && boardWorker
+      ? boardWorker : assignedTeam.length === 1 ? assignedTeam[0] : null;
+    setWorkerConfirmationContext(questionWorker);
+    const confirmedRecently = assignedTeam.length === 1 &&
+      (!questionWorker || questionWorker.id === assignedTeam[0].id) &&
+      (!preferredTeammate || preferredTeammate.id === assignedTeam[0].id) &&
+      hasRecentWorkerConfirmation(workerConfirmationSessionStorage(), {
+        bookingId: booking.id,
+        operatorId: confirmationOperatorKey,
+        salon: salonNameForBooking(booking),
+        workerId: assignedTeam[0].id,
+      });
+    setWorkerConfirmationOpen(!confirmedRecently);
     setServiceDetailsModalOpen(openServiceDetails);
     setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);
@@ -2633,11 +2618,7 @@ export function AppointmentsBrowser({
     if (existingAnswers) {
       setSelectedShopifyNoteOrder(
         String(
-          existingAnswers.shopify_note_order ||
-            existingAnswers.second_shopify_order ||
-            existingAnswers.secondShopifyOrder ||
-            existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ||
-            "",
+          existingAnswers.shopify_note_scope === "day" ? "" : existingAnswers.shopify_note_order || "",
         ).replace(/^#/, ""),
       );
     }
@@ -2842,6 +2823,8 @@ export function AppointmentsBrowser({
       const payload = {
         ...formToSubmit,
         shopifyNoteOrder: selectedShopifyNoteOrder,
+        shopifyNoteScope: selectedShopifyNoteOrder ? "selected" : "day",
+        appointmentStart: initialBookings.find(booking => booking.id === formToSubmit.bookingId)?.startDate,
         manualPaymentMethod: manualPaymentMethodOverride ?? manualPaymentMethod ?? undefined,
         secondShopifyOrder: formToSubmit.secondShopifyOrder || "",
         customGrammi: customGrammiVal || "",
@@ -2887,7 +2870,7 @@ export function AppointmentsBrowser({
               ?.photoUrl || null,
         }));
 
-      let teamSyncWarning = "";
+      let teamSyncWarning = typeof data?.warning === "string" ? data.warning : "";
       if (
         !saveAsDraft &&
         targetBookingId &&
@@ -2913,9 +2896,9 @@ export function AppointmentsBrowser({
           }));
         } else {
           const teamError = await teamResponse.json().catch(() => null);
-          teamSyncWarning =
+          teamSyncWarning = [teamSyncWarning,
             teamError?.error ||
-            "La scheda è salvata, ma la collaboratrice non è stata aggiornata nella lista appuntamenti.";
+            "La scheda è salvata, ma la collaboratrice non è stata aggiornata nella lista appuntamenti."].filter(Boolean).join(" ");
         }
       }
 
@@ -2954,7 +2937,7 @@ export function AppointmentsBrowser({
             ? "✓ Appuntamento modificato e salvato. Puoi continuare a fare altre modifiche."
             : "✓ Appuntamento salvato. Puoi continuare a modificarlo."),
       });
-      if (!keepOpen) setClientControlLastSave(saveAsDraft ? "draft" : "confirmed");
+      if (!keepOpen) setClientControlLastSave(teamSyncWarning ? null : saveAsDraft ? "draft" : "confirmed");
       setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
 
       // Flusso cassa: dopo un salvataggio riuscito si torna subito alla lista.
@@ -3085,8 +3068,8 @@ export function AppointmentsBrowser({
     const nextForm = clientControlFormRef.current;
     scheduleClientControlDraft(nextForm);
     setEditingClientIdentity(false);
-    setShowShopifyOrdersPanel(true);
-    setShowTodayOrdersDropdown(true);
+    setShowShopifyOrdersPanel(false);
+    setShowTodayOrdersDropdown(false);
     void fetchTodayShopifyOrders({
       clientName: nextForm.clientName,
       email: nextForm.email,
@@ -3310,6 +3293,7 @@ export function AppointmentsBrowser({
   const [newCommentText, setNewCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
+    id?: string;
     name: string;
     role: string;
   } | null>(null);
@@ -3320,6 +3304,34 @@ export function AppointmentsBrowser({
       : null,
   );
   const effectivePcWorkerName = pcActiveWorker?.name || initialPcWorkerName;
+  const confirmationOperator = isPC ? pcActiveWorker : currentUser;
+  const confirmationOperatorKey = confirmationOperator
+    ? `${isPC ? "pc" : "user"}:${confirmationOperator.id || ""}:${confirmationOperator.name}`
+    : "";
+  const confirmationIdentity = workerConfirmationContext || confirmationOperator;
+  const matchedConfirmationSelf = appointmentOperatorInSalon(clientControlEmployeeOptions, confirmationIdentity, clientControlForm.salon);
+  const confirmationSelf = matchedConfirmationSelf
+    ? clientControlEmployeeOptions.find(employee => employee.id === matchedConfirmationSelf.id)
+    : undefined;
+  const confirmationWorkers = filteredClientControlEmployees.filter(employee =>
+    confirmationAttendance.some(worker => worker.id === employee.id && isClockedInAppointmentWorker(worker)),
+  );
+  useEffect(() => {
+    if (!workerConfirmationOpen || !clientControlOpen) return;
+    const controller = new AbortController();
+    setConfirmationAttendance([]);
+    setConfirmationAttendanceLoading(true);
+    setConfirmationAttendanceError("");
+    const salonSlug = normalizeSalonName(clientControlForm.salon).includes("duomo") ? "duomo" : "buenos-aires";
+    fetch(`/api/appointments/pc/active-staff?salone=${salonSlug}&scope=salon`, { cache: "no-store", signal: controller.signal })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data)) throw new Error("Non riesco a verificare le timbrature. Chiudi e riapri la scheda per riprovare.");
+        if (!controller.signal.aborted) setConfirmationAttendance(data);
+      }).catch(error => { if (!controller.signal.aborted) setConfirmationAttendanceError(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setConfirmationAttendanceLoading(false); });
+    return () => controller.abort();
+  }, [workerConfirmationOpen, clientControlOpen, clientControlForm.bookingId, clientControlForm.salon]);
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
   const canCorrectClientIdentity = !isPC && canCorrectAppointmentClient(currentUser?.role);
 
@@ -3365,6 +3377,7 @@ export function AppointmentsBrowser({
       .then((data) => {
         if (data?.user) {
           setCurrentUser({
+            id: data.user.id,
             name: data.user.name || "",
             role: data.user.role || "",
           });
@@ -3891,6 +3904,33 @@ export function AppointmentsBrowser({
     } finally {
       setSavingTeamId(null);
     }
+  }
+
+  async function confirmServiceWorker(employee: { id: string; name: string }) {
+    const form = clientControlFormRef.current;
+    const booking = initialBookings.find(item => item.id === form.bookingId);
+    if (!booking || !clientControlHistoryLoaded || clientControlLoading || savingTeamId) return false;
+    if (!filteredClientControlEmployees.some(item => item.id === employee.id)) return false;
+    if (employee.id !== confirmationSelf?.id && !confirmationWorkers.some(item => item.id === employee.id)) return false;
+    const rememberConfirmation = () => rememberWorkerConfirmation(workerConfirmationSessionStorage(), {
+      bookingId: booking.id,
+      operatorId: confirmationOperatorKey,
+      salon: salonNameForBooking(booking),
+      workerId: employee.id,
+    });
+    if (form.staffIds.length === 1 && form.staffIds[0] === employee.id &&
+      getBookingTeam(booking).length === 1 && getBookingTeam(booking)[0].id === employee.id) {
+      rememberConfirmation();
+      setWorkerConfirmationOpen(false);
+      return true;
+    }
+    // This question selects the service owner, rather than toggling an extra worker.
+    const saved = await executeTeamChange(booking, [employee.id], confirmationOperator?.name);
+    if (saved) {
+      rememberConfirmation();
+      setWorkerConfirmationOpen(false);
+    }
+    return saved;
   }
 
   async function toggleClientControlStaff(employeeId: string) {
@@ -4795,26 +4835,26 @@ export function AppointmentsBrowser({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
               <div className="mx-auto w-full max-w-[1480px] space-y-3.5 px-4 py-3 sm:px-6 lg:px-8">
               {/* Riepilogo ordinato della card appuntamento (Compact Official View) */}
-              <section className="overflow-hidden rounded-[22px] border border-[#F0D4E2] bg-white shadow-[0_8px_30px_rgba(184,61,127,0.06)]">
-                <div className="flex flex-col gap-2 border-b border-[#F3E3EB] bg-[linear-gradient(100deg,#FFF4F9,#FCFAFF)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <section className="overflow-hidden rounded-[22px] border border-[#DDE2E7] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+                <div className="flex flex-col gap-2 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                   <div className="flex items-center gap-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#B83D7F] text-white shadow-md">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#334155] text-white shadow-md">
                       <CalendarCheck className="size-4" />
                     </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[8px] font-black uppercase tracking-[0.24em] text-[#B83D7F] bg-[#FFF0F6] border border-[#F6C6DE] px-2 py-0.5 rounded-md">
-                          PARADISE HUB · OFFICIAL
+                        <span className="text-[8px] font-semibold uppercase tracking-[0.24em] text-[#334155] bg-[#F8FAFC] border border-[#DDE2E7] px-2 py-0.5 rounded-md">
+                          SCHEDA CLIENTE
                         </span>
                         {clientControlBookingStatus ? (
                           <span
-                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black ${appointmentStatusClasses[clientControlBookingStatus]}`}
+                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${["INIZIATO", "PAGATO"].includes(clientControlBookingStatus) ? "border-slate-200 bg-slate-100 text-slate-700" : appointmentStatusClasses[clientControlBookingStatus]}`}
                           >
                             {appointmentStatusLabels[clientControlBookingStatus]}
                           </span>
                         ) : null}
                       </div>
-                      <h3 className="mt-0.5 text-base font-black text-[#1F1F1F]">
+                      <h3 className="mt-0.5 text-base font-semibold text-[#1F1F1F]">
                         {maskClientPrivacy ? maskClientName(clientControlForm.clientName) : (clientControlForm.clientName || "Cliente non indicata")}
                       </h3>
                       <p className="text-[11px] font-bold text-black/50">
@@ -4835,7 +4875,7 @@ export function AppointmentsBrowser({
                       <button
                         type="button"
                         onClick={() => setMaskClientPrivacy((prev) => !prev)}
-                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#F0C4D7] bg-white px-3 text-[11px] font-black uppercase tracking-wider text-[#A93469] shadow-2xs transition hover:bg-[#FFF0F6]"
+                        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#DDE2E7] bg-white px-3 text-[11px] font-semibold uppercase tracking-wider text-[#334155] shadow-2xs transition hover:bg-[#F8FAFC]"
                         title={maskClientPrivacy ? "Mostra dati completi cliente" : "Censura dati cliente"}
                       >
                         {maskClientPrivacy ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
@@ -4845,22 +4885,22 @@ export function AppointmentsBrowser({
                     <button
                       type="button"
                       onClick={closeClientControl}
-                      className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#A82E6C] bg-[#B83D7F] px-3.5 text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)] transition hover:bg-[#A83273] active:scale-95"
+                      className={`${serviceDetailsStyles.softAction} inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-3.5 transition active:scale-95`}
                       aria-label="Torna agli appuntamenti"
                     >
                       <X className="size-4" />
-                      <span className="text-[11px] font-black uppercase tracking-[0.14em]">Chiudi</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">Chiudi</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="grid gap-px bg-[#F1E7EC] sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-px bg-[#E5E7EB] sm:grid-cols-2 xl:grid-cols-4">
                   <div className="bg-white p-3.5">
-                    <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                      <Clock3 className="size-4 text-[#D96B94]" />
+                    <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-black/40">
+                      <Clock3 className="size-4 text-[#334155]" />
                       Data, ora e sede
                     </p>
-                    <p className="mt-3 text-sm font-black text-[#1F1F1F]">
+                    <p className="mt-3 text-sm font-semibold text-[#1F1F1F]">
                       {clientControlBooking
                         ? formatDate(clientControlBooking.startDate)
                         : "Data non disponibile"}
@@ -4870,7 +4910,7 @@ export function AppointmentsBrowser({
                         ? `${formatTime(clientControlBooking.startDate)} – ${formatTime(clientControlBooking.endDate)} · ${formatDuration(clientControlBooking.startDate, clientControlBooking.endDate)}`
                         : "Orario non disponibile"}
                     </p>
-                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#8D5E49]">
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#475569]">
                       <MapPin className="size-3.5" />
                       {clientControlBooking
                         ? getSalonLabel(clientControlBooking.inferredSalon)
@@ -4880,8 +4920,8 @@ export function AppointmentsBrowser({
 
                   <div className="min-w-0 bg-white p-3 sm:p-3.5">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-black/40">
-                        <User className="size-3.5 text-[#D96B94]" />
+                      <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-black/40">
+                        <User className="size-3.5 text-[#334155]" />
                         Cliente e contatti
                       </p>
                       {canCorrectClientIdentity ? <button
@@ -4889,56 +4929,56 @@ export function AppointmentsBrowser({
                         onClick={() => setEditingClientIdentity((current) => !current)}
                         aria-expanded={editingClientIdentity}
                         aria-controls="client-control-identity-editor"
-                        className="inline-flex min-h-7 items-center gap-1 rounded-md border border-[#F0C4D7] bg-[#FFF7FB] px-2 text-[9px] font-black uppercase tracking-wider text-[#A93469] transition hover:bg-[#FCE5F3]"
+                        className="inline-flex min-h-7 items-center gap-1 rounded-md border border-[#DDE2E7] bg-[#F8FAFC] px-2 text-[9px] font-semibold uppercase tracking-wider text-[#334155] transition hover:bg-[#F1F5F9]"
                       >
                         <Pencil className="size-2.5" />
                         {editingClientIdentity ? "Chiudi" : "Correggi"}
                       </button> : null}
                     </div>
-                    <p className="mt-1 truncate text-xs font-black text-[#1F1F1F]">
+                    <p className="mt-1 truncate text-xs font-semibold text-[#1F1F1F]">
                       {maskClientPrivacy ? maskClientName(clientControlForm.clientName) : (clientControlForm.clientName || "Cliente non indicata")}
                     </p>
                     <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] font-bold text-black/55">
-                      <Phone className="size-3 shrink-0 text-[#D96B94]" />
+                      <Phone className="size-3 shrink-0 text-[#334155]" />
                       <span className="truncate">{maskClientPrivacy ? maskPhone(clientControlForm.phone) : (clientControlForm.phone || "Telefono non disponibile")}</span>
                     </p>
                     <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] font-bold text-black/55">
-                      <Mail className="size-3 shrink-0 text-[#D96B94]" />
+                      <Mail className="size-3 shrink-0 text-[#334155]" />
                       <span className="truncate">{maskClientPrivacy ? maskEmail(clientControlForm.email) : (clientControlForm.email || "Email non disponibile")}</span>
                     </p>
                   </div>
 
                   {editingClientIdentity && canCorrectClientIdentity ? (
-                    <div id="client-control-identity-editor" className="order-last bg-[#FFF9FC] p-3.5 sm:col-span-2 xl:col-span-4">
+                    <div id="client-control-identity-editor" className="order-last bg-[#F8FAFC] p-3.5 sm:col-span-2 xl:col-span-4">
                       <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
                         <div className="grid min-w-0 flex-1 gap-2.5 sm:grid-cols-3">
                           <label className="block min-w-0">
-                            <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/50">Nome cliente</span>
+                            <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/50">Nome cliente</span>
                             <input
                               value={clientControlForm.clientName}
                               onChange={(event) => updateClientControlIdentity("clientName", event.target.value)}
-                              className="mt-1 h-9 w-full rounded-xl border border-[#E8C3D4] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F]"
+                              className="mt-1 h-9 w-full rounded-xl border border-[#DDE2E7] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#334155]"
                               placeholder="Nome e cognome"
                             />
                           </label>
                           <label className="block min-w-0">
-                            <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/50">Email</span>
+                            <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/50">Email</span>
                             <input
                               type="email"
                               value={clientControlForm.email}
                               onChange={(event) => updateClientControlIdentity("email", event.target.value)}
-                              className="mt-1 h-9 w-full rounded-xl border border-[#E8C3D4] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F]"
+                              className="mt-1 h-9 w-full rounded-xl border border-[#DDE2E7] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#334155]"
                               placeholder="email@esempio.com"
                             />
                           </label>
                           <label className="block min-w-0">
-                            <span className="text-[9px] font-black uppercase tracking-[0.14em] text-black/50">Telefono</span>
+                            <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/50">Telefono</span>
                             <input
                               type="tel"
                               inputMode="tel"
                               value={clientControlForm.phone}
                               onChange={(event) => updateClientControlIdentity("phone", event.target.value)}
-                              className="mt-1 h-9 w-full rounded-xl border border-[#E8C3D4] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#B83D7F]"
+                              className="mt-1 h-9 w-full rounded-xl border border-[#DDE2E7] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none transition focus:border-[#334155]"
                               placeholder="Numero di telefono"
                             />
                           </label>
@@ -4947,7 +4987,7 @@ export function AppointmentsBrowser({
                           type="button"
                           onClick={saveClientIdentityAndSearchPayment}
                           disabled={loadingTodayOrders || (!clientControlForm.clientName.trim() && !clientControlForm.email.trim() && !clientControlForm.phone.trim())}
-                          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#B83D7F] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#A83273] disabled:opacity-45"
+                          className={`${serviceDetailsStyles.softAction} inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-semibold transition disabled:opacity-45`}
                         >
                           {loadingTodayOrders ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
                           Salva e cerca pagamento
@@ -4957,17 +4997,17 @@ export function AppointmentsBrowser({
                   ) : null}
 
                   <div className="min-w-0 bg-white p-3 sm:p-3.5">
-                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-black/40">
-                      <Sparkles className="size-3.5 text-[#D96B94]" />
+                    <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-black/40">
+                      <Sparkles className="size-3.5 text-[#334155]" />
                       Servizio
                     </p>
-                    <p className="mt-1 line-clamp-2 text-xs font-black uppercase leading-4 text-[#1F1F1F]">
+                    <p className="mt-1 line-clamp-2 text-xs font-semibold uppercase leading-4 text-[#1F1F1F]">
                       {clientControlForm.serviceTitle || "Servizio non indicato"}
                     </p>
                     <p className="mt-0.5 text-[11px] font-bold text-black/50">
                       {clientControlBooking?.bookingType || "Prenotazione regolare"}
                     </p>
-                    <p className="mt-1 text-xs font-black text-[#B83D7F]">
+                    <p className="mt-1 text-xs font-semibold text-[#334155]">
                       {clientControlBooking
                         ? formatMoney(
                             clientControlBooking.priceAmount,
@@ -4980,11 +5020,11 @@ export function AppointmentsBrowser({
                   </div>
 
                   <div className="min-w-0 bg-white p-3 sm:p-3.5">
-                    <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-black/40">
-                      <UsersRound className="size-3.5 text-[#D96B94]" />
+                    <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-black/40">
+                      <UsersRound className="size-3.5 text-[#334155]" />
                       Collaboratrice e ordine
                     </p>
-                    <p className="mt-1 line-clamp-2 text-xs font-black text-[#1F1F1F]">
+                    <p className="mt-1 line-clamp-2 text-xs font-semibold text-[#1F1F1F]">
                       {clientControlBookingTeam.map((mate) => mate.name).join(", ") ||
                         filteredClientControlEmployees
                           .filter((employee) => clientControlForm.staffIds.includes(employee.id))
@@ -4993,7 +5033,7 @@ export function AppointmentsBrowser({
                         "Non assegnata"}
                     </p>
                     {clientControlForm.secondShopifyOrder ? (
-                      <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-[#B83D7F]">
+                      <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-[#334155]">
                         <ShoppingBag className="size-3 shrink-0" />
                         <span>Saldo #{clientControlForm.secondShopifyOrder}</span>
                       </div>
@@ -5002,86 +5042,40 @@ export function AppointmentsBrowser({
                 </div>
               </section>
 
-              {/* 1° e 2° Ordine Shopify Card */}
-              <div className={`rounded-2xl border shadow-sm transition-colors ${latestClientPaymentOrder ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
-                <div className="p-3 sm:p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#FFF0F6] text-[#B83D7F]">
-                      <ShoppingBag className="size-4" />
-                    </span>
+              {/* Compact payment notice; history only opens on request. */}
+              <div className="sticky top-0 z-30 -mx-4 border-b border-neutral-100 bg-white px-4 py-1 shadow-[0_4px_12px_rgba(0,0,0,0.025)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                <AppointmentPaymentNotice
+                  key={clientControlForm.bookingId || "client"}
+                  payments={dayClientPayments}
+                  loading={loadingTodayOrders}
+                  selectedOrder={selectedShopifyNoteOrder}
+                  disabled={clientControlLoading || !clientControlHistoryLoaded || clientControlSubmitting}
+                  onSelect={(payment) => selectShopifyOrderFromList(payment, "second")}
+                  onRefresh={() => void fetchTodayShopifyOrders()}
+                  onOpen={() => {
+                    setShowShopifyOrdersPanel(true);
+                    setShowTodayOrdersDropdown(true);
+                    void fetchTodayShopifyOrders();
+                  }}
+                />
 
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-[10px] font-black uppercase tracking-[0.14em] ${latestClientPaymentOrder ? "text-emerald-800" : "text-amber-800"}`}>
-                        {latestClientPaymentOrder ? "Pagamento del giorno trovato" : "Pagamento del giorno da verificare"}
-                      </p>
-                      {loadingTodayOrders && !latestClientPaymentOrder ? (
-                        <p className="mt-1 text-xs font-bold text-black/50">Cerco l’ultimo pagamento…</p>
-                      ) : latestClientPaymentOrder ? (
-                        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-                          <div>
-                            <span className="text-sm font-black text-[#1F1F1F]">
-                              {maskClientPrivacy
-                                ? maskClientName(latestClientPaymentOrder.clientName || clientControlForm.clientName)
-                                : (latestClientPaymentOrder.clientName || clientControlForm.clientName || "Cliente")}
-                            </span>
-                            <span className="ml-2 text-xs font-semibold text-black/45">
-                              #{latestClientPaymentOrder.orderName.replace(/^#/, "")} · {formatOrderDate(latestClientPaymentOrder.createdAt)}
-                            </span>
-                          </div>
-                          <p className="text-lg font-black tracking-tight text-[#1F1F1F]">
-                            €{latestClientPaymentOrder.totalPrice.toFixed(2)}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="mt-0.5">
-                          <p className="text-xs font-black text-[#1F1F1F]">Nessun pagamento trovato</p>
-                          <p className="text-xs font-semibold text-amber-800/80">Cerco il pagamento dello stesso giorno più vicino all’appuntamento. Verifica automatica ogni 30 secondi.</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-                      <button type="button" onClick={() => void fetchTodayShopifyOrders()} disabled={loadingTodayOrders} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/65 transition hover:bg-neutral-50 disabled:opacity-50">
-                        <RefreshCw className={`size-3.5 ${loadingTodayOrders ? "animate-spin" : ""}`} /> Verifica ora
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowShopifyOrdersPanel((previous) => {
-                            const next = !previous;
-                            if (next) {
-                              setShowTodayOrdersDropdown(true);
-                              void fetchTodayShopifyOrders();
-                            }
-                            if (!next) setShowTodayOrdersDropdown(false);
-                            return next;
-                          });
-                        }}
-                        aria-expanded={showShopifyOrdersPanel}
-                        aria-controls="client-control-shopify-orders"
-                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-[#FAFAFA] px-3.5 text-xs font-bold text-black/60 transition hover:border-[#F6C6DE] hover:bg-[#FFF7FB] hover:text-[#B83D7F] active:scale-[0.98]"
-                      >
-                        {showShopifyOrdersPanel ? "Chiudi ricerca" : "Cerca altro ordine"}
-                        <ChevronDown className={`size-3.5 transition-transform ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {latestClientPaymentOrder && selectedShopifyNoteOrder === latestClientPaymentOrder.orderName.replace(/^#/, "") ? (
-                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs font-extrabold text-emerald-800">
-                      <span className="grid size-4 shrink-0 place-items-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>
-                      <span>
-                        {`Pagamento #${selectedShopifyNoteOrder.replace(/^#/, "")} selezionato automaticamente`}
-                      </span>
-                    </div>
-                  ) : null}
+                <div className="flex flex-wrap items-center gap-2 pb-2 text-xs text-slate-600">
+                  <p>{selectedShopifyNoteOrder
+                    ? `Ordine #${selectedShopifyNoteOrder.replace(/^#/, "")} confermato per la nota. Premi “Conferma controllo” per inviarla a Shopify.`
+                    : "Alla conferma, la nota sarà scritta su tutti i pagamenti della cliente di questa giornata."}</p>
+                  {selectedShopifyNoteOrder ? <button type="button"
+                    disabled={clientControlSubmitting || clientControlLoading}
+                    onClick={() => setSelectedShopifyNoteOrder("")}
+                    className="min-h-10 rounded-lg border border-slate-200 px-3 font-semibold hover:bg-slate-50 disabled:opacity-50"
+                  >Usa tutti i pagamenti del giorno</button> : null}
                 </div>
 
                 {showShopifyOrdersPanel ? (
+                <AppointmentPaymentHistory onClose={() => { setShowShopifyOrdersPanel(false); setShowTodayOrdersDropdown(false); }}>
                 <div id="client-control-shopify-orders" className="space-y-4 border-t border-neutral-200 px-4 pb-5 pt-4 sm:px-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-xs font-black text-[#1F1F1F]">Tutti i pagamenti della cliente</p>
+                      <p className="text-xs font-semibold text-[#1F1F1F]">Tutti i pagamenti della cliente</p>
                       <p className="mt-0.5 text-[11px] font-semibold text-black/45">Seleziona l’ordine nel quale deve essere salvata la nota Shopify.</p>
                     </div>
                     <button
@@ -5090,7 +5084,7 @@ export function AppointmentsBrowser({
                         setShowTodayOrdersDropdown(true);
                         void fetchTodayShopifyOrders();
                       }}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#F6C6DE] bg-[#FFF7FB] px-4 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition hover:bg-[#FCE5F3] active:scale-[0.98]"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#DDE2E7] bg-[#F8FAFC] px-4 text-[10px] font-semibold uppercase tracking-wider text-[#334155] transition hover:bg-[#F1F5F9] active:scale-[0.98]"
                     >
                       <RefreshCw className={`size-3.5 ${loadingTodayOrders ? "animate-spin" : ""}`} />
                       <span>{loadingTodayOrders ? "Aggiornamento..." : `Aggiorna (${clientPaymentOrders.length})`}</span>
@@ -5101,18 +5095,18 @@ export function AppointmentsBrowser({
                 {showTodayOrdersDropdown && (
                   <div
                     id="client-control-shopify-order-history"
-                    className="rounded-2xl border border-[#F1D6E3] bg-[#FFFDFE] p-3.5 shadow-[0_12px_30px_rgba(184,61,127,0.08)]"
+                    className="rounded-2xl border border-[#DDE2E7] bg-[#F8FAFC] p-3.5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
                   >
                     <div className="flex items-center justify-between border-b border-black/5 pb-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B83D7F]">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#334155]">
                           Storico pagamenti
                         </p>
                         <p className="mt-0.5 text-[11px] font-semibold text-black/45">
                           Dal più recente al più vecchio
                         </p>
                       </div>
-                      <span className="rounded-full bg-[#FFF0F6] px-3 py-1.5 text-[10px] font-black text-[#B83D7F]">
+                      <span className="rounded-full bg-[#F8FAFC] px-3 py-1.5 text-[10px] font-semibold text-[#334155]">
                         {clientPaymentOrders.length} {clientPaymentOrders.length === 1 ? "pagamento" : "pagamenti"}
                       </span>
                     </div>
@@ -5120,7 +5114,7 @@ export function AppointmentsBrowser({
                     <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-0.5">
                       {loadingTodayOrders && clientPaymentOrders.length === 0 ? (
                         <div className="flex items-center justify-center gap-2 p-5 text-xs font-bold text-black/45">
-                          <Loader2 className="size-4 animate-spin text-[#B83D7F]" />
+                          <Loader2 className="size-4 animate-spin text-[#334155]" />
                           Caricamento pagamenti…
                         </div>
                       ) : clientPaymentOrders.length > 0 ? (
@@ -5134,7 +5128,7 @@ export function AppointmentsBrowser({
                               className={`flex flex-col gap-3 rounded-2xl border p-3 transition sm:flex-row sm:items-center ${
                                 isSelected
                                   ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200"
-                                  : "border-black/5 bg-white hover:border-[#EDB2CE]"
+                                  : "border-black/5 bg-white hover:border-[#DDE2E7]"
                               }`}
                             >
                               <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
@@ -5142,8 +5136,8 @@ export function AppointmentsBrowser({
                               </span>
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-black text-[#1F1F1F]">#{orderCode}</span>
-                                  <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                  <span className="text-sm font-semibold text-[#1F1F1F]">#{orderCode}</span>
+                                  <span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
                                     {isPaid ? "Pagato" : "Da verificare"}
                                   </span>
                                 </div>
@@ -5152,19 +5146,19 @@ export function AppointmentsBrowser({
                                   {order.serviceTitle ? ` · ${order.serviceTitle}` : ""}
                                 </p>
                               </div>
-                              <p className="shrink-0 text-lg font-black tabular-nums text-[#1F1F1F]">
+                              <p className="shrink-0 text-lg font-semibold tabular-nums text-[#1F1F1F]">
                                 {formatMoney(order.totalPrice)}
                               </p>
                               <button
                                 type="button"
                                 onClick={() => selectShopifyOrderFromList(order, "second")}
-                                className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 text-xs font-black transition active:scale-[0.98] ${
+                                className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 text-xs font-semibold transition active:scale-[0.98] ${
                                   isSelected
                                     ? "bg-emerald-600 text-white"
-                                    : "bg-[#B83D7F] text-white hover:bg-[#A93472]"
+                                    : serviceDetailsStyles.softAction
                                 }`}
                               >
-                                {isSelected ? "Selezionato ✓" : "Seleziona"}
+                                {isSelected ? "Confermato per la nota ✓" : "Seleziona"}
                               </button>
                             </div>
                           );
@@ -5179,9 +5173,9 @@ export function AppointmentsBrowser({
                 )}
 
                 {showManualShopifyCorrection ? <details className="group rounded-2xl border border-neutral-200 bg-[#FAFAFA]">
-                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-xs font-black text-black/55 marker:content-none">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-xs font-semibold text-black/55 marker:content-none">
                     <span>Correzione manuale dei codici ordine</span>
-                    <ChevronDown className="size-4 text-[#B83D7F] transition-transform group-open:rotate-180" />
+                    <ChevronDown className="size-4 text-[#334155] transition-transform group-open:rotate-180" />
                   </summary>
                   <div className="grid grid-cols-1 gap-3.5 border-t border-neutral-200 p-3 sm:grid-cols-2">
                   {/* Codice Ordine Acconto */}
@@ -5194,16 +5188,16 @@ export function AppointmentsBrowser({
                       return (
                         <>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-black uppercase text-black/60 tracking-wider">
+                            <span className="text-[10px] font-semibold uppercase text-black/60 tracking-wider">
                               1° Codice Ordine (Acconto Booking)
                             </span>
                             {Boolean(selectedBooking?.bookingStr || clientControlForm.shopifyOrder) && (
                               <button
                                 type="button"
                                 onClick={() => setIsDepositUnlockedManually((prev) => !prev)}
-                                className={`inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-md border transition cursor-pointer hover:scale-105 active:scale-95 ${
                                   isDepositLocked
-                                    ? "text-[#B83D7F] bg-[#FFF0F6] border-[#F6C6DE]"
+                                    ? "text-[#334155] bg-[#F8FAFC] border-[#DDE2E7]"
                                     : "text-emerald-700 bg-emerald-50 border-emerald-300 shadow-2xs"
                                 }`}
                                 title={isDepositLocked ? "Clicca per sbloccare e modificare il codice acconto" : "Clicca per ribloccare"}
@@ -5223,9 +5217,9 @@ export function AppointmentsBrowser({
                                 shopifyOrder: event.target.value,
                               }));
                             }}
-                            className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
+                            className={`h-11 w-full rounded-xl border px-3.5 text-xs font-semibold outline-none transition shadow-2xs ${
                               isDepositLocked
-                                ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
+                                ? "border-[#DDE2E7] bg-[#F8FAFC] text-black/70 cursor-not-allowed"
                                 : "border-emerald-300 bg-white text-black/90 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                             }`}
                             placeholder="N° Acconto (es. 22831)"
@@ -5234,11 +5228,11 @@ export function AppointmentsBrowser({
                             <button
                               type="button"
                               onClick={() => selectShopifyOrderFromList(suggestedAccontoOrder, "first")}
-                              className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#F6C6DE] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                              className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#DDE2E7] bg-[#F8FAFC] px-3 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-[#F1F5F9] transition active:scale-95 shadow-2xs"
                               title="Clicca per inserire il codice dell'acconto booking"
                             >
                               <span className="flex items-center gap-1">
-                                <Sparkles className="size-3.5 text-[#D96B94]" />
+                                <Sparkles className="size-3.5 text-[#334155]" />
                                 <span>Suggerito Acconto: #{suggestedAccontoOrder.orderName.replace(/^#/, "")}</span>
                               </span>
                               <span className="font-extrabold text-xs">€{suggestedAccontoOrder.totalPrice.toFixed(2)}</span>
@@ -5250,7 +5244,7 @@ export function AppointmentsBrowser({
                   </div>
 
                   {/* Codice Ordine Finale (Pagamento Totale) */}
-                  <div className="rounded-2xl border border-[#D96B94]/40 bg-white p-3 shadow-2xs ring-2 ring-[#D96B94]/10">
+                  <div className="rounded-2xl border border-[#334155]/40 bg-white p-3 shadow-2xs ring-2 ring-[#334155]/10">
                     {(() => {
                       const isSecondLocked = Boolean(
                         secondOrderDetails &&
@@ -5260,16 +5254,16 @@ export function AppointmentsBrowser({
                       return (
                         <>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-black uppercase text-[#B83D7F] tracking-wider flex items-center gap-1">
+                            <span className="text-[10px] font-semibold uppercase text-[#334155] tracking-wider flex items-center gap-1">
                               ⭐ 2° Codice Ordine (Pagamento Totale Finale)
                             </span>
                             {Boolean(clientControlForm.secondShopifyOrder) ? (
                               <button
                                 type="button"
                                 onClick={() => setIsSecondUnlockedManually((prev) => !prev)}
-                                className={`inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-md border transition cursor-pointer hover:scale-105 active:scale-95 ${
                                   isSecondLocked
-                                    ? "text-[#B83D7F] bg-[#FFF0F6] border-[#F6C6DE]"
+                                    ? "text-[#334155] bg-[#F8FAFC] border-[#DDE2E7]"
                                     : "text-emerald-700 bg-emerald-50 border-emerald-300 shadow-2xs"
                                 }`}
                                 title={isSecondLocked ? "Clicca per sbloccare e modificare il codice saldo" : "Clicca per ribloccare"}
@@ -5277,7 +5271,7 @@ export function AppointmentsBrowser({
                                 {isSecondLocked ? "🔒 Bloccato" : "🔓 Sbloccato (Clicca per bloccare)"}
                               </button>
                             ) : (
-                              <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">
+                              <span className="text-[9px] font-extrabold text-[#334155] uppercase">
                                 {finalPaymentOptional ? "Non richiesto per questo servizio" : "Obbligatorio"}
                               </span>
                             )}
@@ -5299,25 +5293,25 @@ export function AppointmentsBrowser({
                               setShowTodayOrdersDropdown(true);
                               if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
                             }}
-                            className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
+                            className={`h-11 w-full rounded-xl border px-3.5 text-xs font-semibold outline-none transition shadow-2xs ${
                               isSecondLocked
-                                ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
-                                : "border-[#D96B94]/50 bg-white text-[#1F1F1F] focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30"
+                                ? "border-[#DDE2E7] bg-[#F8FAFC] text-black/70 cursor-not-allowed"
+                                : "border-[#334155]/50 bg-white text-[#1F1F1F] focus:border-[#334155] focus:ring-2 focus:ring-[#334155]/30"
                             }`}
                             placeholder={finalPaymentOptional ? "Non richiesto per questo servizio" : "N° Ordine Finale Salone (es. 25344)"}
                           />
                           {secondShopifyLookupLoading ? (
-                            <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[#B83D7F]">Verifica pagamento Shopify in corso...</p>
+                            <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[#334155]">Verifica pagamento Shopify in corso...</p>
                           ) : null}
                           {suggestedSaldoOrder && (
                             <button
                               type="button"
                               onClick={() => selectShopifyOrderFromList(suggestedSaldoOrder, "second")}
-                              className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                              className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#334155] bg-[#F8FAFC] px-3 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-[#F1F5F9] transition active:scale-95 shadow-2xs"
                               title="Clicca per inserire il codice del saldo finale salone"
                             >
                               <span className="flex items-center gap-1">
-                                <Sparkles className="size-3.5 text-[#D96B94]" />
+                                <Sparkles className="size-3.5 text-[#334155]" />
                                 <span>Suggerito Saldo: #{suggestedSaldoOrder.orderName.replace(/^#/, "")}</span>
                               </span>
                               <span className="font-extrabold text-xs">€{suggestedSaldoOrder.totalPrice.toFixed(2)}</span>
@@ -5325,7 +5319,7 @@ export function AppointmentsBrowser({
                           )}
                           {secondOrderDetails ? (
                             <>
-                              <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+                              <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide ${
                                 String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
                                 (secondOrderDetails.paymentMethod !== "DA_VERIFICARE" || manualPaymentMethod)
                                   ? "border-emerald-200 bg-emerald-50 text-emerald-800"
@@ -5347,11 +5341,11 @@ export function AppointmentsBrowser({
                               {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
                               !["CARTA", "CASHMATIC", "CONTANTI", "MISTO"].includes(String(secondOrderDetails.paymentMethod || "")) &&
                               !manualPaymentMethod ? (
-                                <div className="mt-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF5FA] p-4 shadow-sm">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B83D7F]">
+                                <div className="mt-3 rounded-2xl border-2 border-[#334155] bg-[#F8FAFC] p-4 shadow-sm">
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#334155]">
                                     Metodo di pagamento obbligatorio
                                   </p>
-                                  <p className="mt-1 text-sm font-black text-[#171717]">
+                                  <p className="mt-1 text-sm font-semibold text-[#171717]">
                                     Come ha pagato la cliente?
                                   </p>
                                   <div className="mt-3 grid grid-cols-3 gap-2">
@@ -5366,9 +5360,9 @@ export function AppointmentsBrowser({
                                           key={option.value}
                                           type="button"
                                           onClick={() => setManualPaymentMethod(option.value)}
-                                          className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-2 py-3 text-center text-[11px] font-black text-[#171717] transition hover:border-[#D96B94] hover:bg-[#FCE5F1] active:scale-[0.98]"
+                                          className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-2 py-3 text-center text-[11px] font-semibold text-[#171717] transition hover:border-[#334155] hover:bg-[#F1F5F9] active:scale-[0.98]"
                                         >
-                                          <Icon className="size-5 text-[#B83D7F]" />
+                                          <Icon className="size-5 text-[#334155]" />
                                           <span>{option.label}</span>
                                         </button>
                                       );
@@ -5386,30 +5380,31 @@ export function AppointmentsBrowser({
                 </details> : null}
 
                 </div>
+                </AppointmentPaymentHistory>
                 ) : null}
               </div>
 
               {/* Collaboratrice */}
               <div>
                 <div className="relative block">
-                  <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
-                    <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE
+                  <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/50">
+                    <User className="size-3.5 text-[#334155]" /> COLLABORATRICE
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
                     aria-expanded={isStaffDropdownOpen}
-                    className="flex min-h-[76px] w-full items-center justify-between gap-3 rounded-2xl border border-[#F4D3E2] bg-white px-3.5 py-2.5 text-left outline-none shadow-2xs transition hover:border-[#E99CBD] hover:bg-[#FFF9FC] focus-visible:border-[#D96B94] focus-visible:ring-2 focus-visible:ring-[#D96B94]/20"
+                    className="flex min-h-[76px] w-full items-center justify-between gap-3 rounded-2xl border border-[#DDE2E7] bg-white px-3.5 py-2.5 text-left outline-none shadow-2xs transition hover:border-[#DDE2E7] hover:bg-[#F8FAFC] focus-visible:border-[#334155] focus-visible:ring-2 focus-visible:ring-[#334155]/20"
                   >
                     <span className="flex min-w-0 items-center gap-3">
                       <span className="flex shrink-0 -space-x-2">
-                        {filteredClientControlEmployees
+                        {clientControlEmployeeOptions
                           .filter((employee) => clientControlForm.staffIds.includes(employee.id))
                           .slice(0, 3)
                           .map((employee) => (
                             <span
                               key={employee.id}
-                              className="grid size-11 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm"
+                              className="grid size-11 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#E5E7EB] text-xs font-semibold text-[#334155] shadow-sm"
                             >
                               {employee.photoUrl ? (
                                 <img
@@ -5423,15 +5418,15 @@ export function AppointmentsBrowser({
                             </span>
                           ))}
                         {!clientControlForm.staffIds.length ? (
-                          <span className="grid size-11 place-items-center rounded-full bg-[#FFF0F6] text-[#B83D7F]">
+                          <span className="grid size-11 place-items-center rounded-full bg-[#F8FAFC] text-[#334155]">
                             <User className="size-5" />
                           </span>
                         ) : null}
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-black text-[#1F1F1F]">
+                        <span className="block truncate text-sm font-semibold text-[#1F1F1F]">
                           {clientControlForm.staffIds.length
-                            ? filteredClientControlEmployees
+                            ? clientControlEmployeeOptions
                                 .filter((employee) => clientControlForm.staffIds.includes(employee.id))
                                 .map((employee) => employee.name)
                                 .join(", ")
@@ -5447,16 +5442,18 @@ export function AppointmentsBrowser({
                       </span>
                     </span>
                     {savingTeamId === clientControlForm.bookingId ? (
-                      <Loader2 className="size-5 shrink-0 animate-spin text-[#B83D7F]" />
+                      <Loader2 className="size-5 shrink-0 animate-spin text-[#334155]" />
                     ) : (
-                      <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
+                      <ChevronDown className={`size-5 shrink-0 text-[#334155] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
                     )}
                   </button>
 
                   {/* Dropdown Popover */}
                   {isStaffDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-[102px] z-50 overflow-hidden rounded-2xl border border-[#F0D4E2] bg-white p-2.5 shadow-[0_18px_50px_rgba(58,30,44,0.18)]">
+                    <div className="absolute left-0 right-0 top-[102px] z-50 overflow-hidden rounded-2xl border border-[#DDE2E7] bg-white p-2.5 shadow-[0_18px_50px_rgba(58,30,44,0.18)]">
+                      <p className="px-3 pb-2 pt-1 text-xs font-semibold text-slate-600">Personale · {clientControlForm.salon}</p>
                       <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+                        {!filteredClientControlEmployees.length ? <p className="px-3 py-4 text-sm text-slate-500">Nessun collaboratore disponibile per questa sede.</p> : null}
                         {filteredClientControlEmployees.map((employee) => {
                           const selected = clientControlForm.staffIds.includes(employee.id);
                           return (
@@ -5468,12 +5465,12 @@ export function AppointmentsBrowser({
                               className={[
                                 "flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition disabled:pointer-events-none disabled:opacity-55",
                                 selected
-                                  ? "bg-[#FCE5F3] text-[#8F315F] ring-1 ring-[#EDB2CE]"
-                                  : "text-black/75 hover:bg-[#FFF9FC]",
+                                  ? "bg-[#F1F5F9] text-[#334155] ring-1 ring-[#DDE2E7]"
+                                  : "text-black/75 hover:bg-[#F8FAFC]",
                               ].join(" ")}
                             >
                               <span className="flex min-w-0 items-center gap-3">
-                                <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm">
+                                <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#E5E7EB] text-xs font-semibold text-[#334155] shadow-sm">
                                   {employee.photoUrl ? (
                                     <img
                                       src={resolveDrivePhotoUrl(employee.photoUrl)}
@@ -5485,7 +5482,7 @@ export function AppointmentsBrowser({
                                   )}
                                 </span>
                                 <span className="min-w-0">
-                                  <span className="block truncate text-xs font-black">{employee.name}</span>
+                                  <span className="block truncate text-xs font-semibold">{employee.name}</span>
                                   <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-black/40">
                                     {employee.locationName || "Personale"}
                                   </span>
@@ -5494,7 +5491,7 @@ export function AppointmentsBrowser({
                               <span
                                 className={`grid size-6 shrink-0 place-items-center rounded-full border ${
                                   selected
-                                    ? "border-[#B83D7F] bg-[#B83D7F] text-white"
+                                    ? "border-[#334155] bg-[#334155] text-white"
                                     : "border-black/20 bg-white"
                                 }`}
                               >
@@ -5506,11 +5503,11 @@ export function AppointmentsBrowser({
                       </div>
                       <div
                         aria-live="polite"
-                        className="mt-2 flex items-center gap-2 rounded-xl border border-[#F0D4E2] bg-[#FFF9FC] px-3 py-2 text-[10px] font-bold text-black/50"
+                        className="mt-2 flex items-center gap-2 rounded-xl border border-[#DDE2E7] bg-[#F8FAFC] px-3 py-2 text-[10px] font-bold text-black/50"
                       >
                         {savingTeamId === clientControlForm.bookingId ? (
                           <>
-                            <Loader2 className="size-3.5 animate-spin text-[#B83D7F]" />
+                            <Loader2 className="size-3.5 animate-spin text-[#334155]" />
                             Salvataggio della collaboratrice…
                           </>
                         ) : (
@@ -5527,13 +5524,13 @@ export function AppointmentsBrowser({
 
               {/* Details for 1° Ordine (Acconto) if available */}
               {showManualShopifyCorrection && showShopifyOrdersPanel && selectedOrderDetails && (
-                <div className="rounded-[24px] border border-[#F6C6DE] bg-gradient-to-r from-[#FFF0F6] to-[#FFEBF4] p-4 sm:p-5 shadow-2xs space-y-2.5">
+                <div className="rounded-[24px] border border-[#DDE2E7] bg-gradient-to-r from-[#F8FAFC] to-[#F1F5F9] p-4 sm:p-5 shadow-2xs space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-xl bg-[#D96B94] px-3 py-1 text-xs font-black text-white uppercase tracking-wider shadow-2xs">
+                      <span className="rounded-xl bg-[#334155] px-3 py-1 text-xs font-semibold text-white uppercase tracking-wider shadow-2xs">
                         {selectedOrderDetails.orderName}
                       </span>
-                      <span className="text-xs font-black text-[#1F1F1F]">
+                      <span className="text-xs font-semibold text-[#1F1F1F]">
                         {selectedOrderDetails.clientName}
                       </span>
                     </div>
@@ -5541,13 +5538,13 @@ export function AppointmentsBrowser({
                       href={getShopifyAdminOrderUrl(selectedOrderDetails.orderName, selectedOrderDetails.id)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#F6C6DE] px-4 py-1.5 text-xs font-black text-[#D96B94] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#DDE2E7] px-4 py-1.5 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] shadow-2xs transition active:scale-95"
                     >
                       <span>Vedi su Shopify</span>
                       <ExternalLink className="size-3.5" />
                     </a>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-[#F6C6DE]/60">
+                  <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-[#DDE2E7]/60">
                     <div>
                       <span className="text-black/50 text-[10px] font-bold block">DATA ORDINE</span>
                       <span className="font-extrabold text-[#1F1F1F] block text-xs">{formatOrderDate(selectedOrderDetails.createdAt) || "N/A"}</span>
@@ -5558,7 +5555,7 @@ export function AppointmentsBrowser({
                     </div>
                     <div>
                       <span className="text-black/50 text-[10px] font-bold block">IMPORTO</span>
-                      <span className="text-[#D96B94] font-black block text-xs">€{selectedOrderDetails.totalPrice.toFixed(2)}</span>
+                      <span className="text-[#334155] font-semibold block text-xs">€{selectedOrderDetails.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -5566,13 +5563,13 @@ export function AppointmentsBrowser({
 
               {/* Details for 2° Ordine (Saldo Finale) if available */}
               {showManualShopifyCorrection && showShopifyOrdersPanel && secondOrderDetails && (
-                <div className="rounded-[24px] border border-[#B83D7F] bg-gradient-to-r from-[#FFEBF4] to-[#FFF0F6] p-4 sm:p-5 shadow-sm space-y-2.5">
+                <div className="rounded-[24px] border border-[#334155] bg-gradient-to-r from-[#F1F5F9] to-[#F8FAFC] p-4 sm:p-5 shadow-sm space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-xl bg-gradient-to-r from-[#B83D7F] to-[#D96B94] px-3 py-1 text-xs font-black text-white uppercase tracking-wider shadow-2xs flex items-center gap-1">
+                      <span className="rounded-xl bg-[#334155] px-3 py-1 text-xs font-semibold text-white uppercase tracking-wider shadow-2xs flex items-center gap-1">
                         ⭐ {secondOrderDetails.orderName} (Saldo Totale)
                       </span>
-                      <span className="text-xs font-black text-[#1F1F1F]">
+                      <span className="text-xs font-semibold text-[#1F1F1F]">
                         {secondOrderDetails.clientName}
                       </span>
                     </div>
@@ -5580,13 +5577,13 @@ export function AppointmentsBrowser({
                       href={getShopifyAdminOrderUrl(secondOrderDetails.orderName, secondOrderDetails.id)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B83D7F]/40 px-4 py-1.5 text-xs font-black text-[#B83D7F] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#334155]/40 px-4 py-1.5 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] shadow-2xs transition active:scale-95"
                     >
                       <span>Vedi su Shopify</span>
                       <ExternalLink className="size-3.5" />
                     </a>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-[#B83D7F]/30">
+                  <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-[#334155]/30">
                     <div>
                       <span className="text-black/50 text-[10px] font-bold block">DATA ORDINE</span>
                       <span className="font-extrabold text-[#1F1F1F] block text-xs">{formatOrderDate(secondOrderDetails.createdAt) || "N/A"}</span>
@@ -5597,51 +5594,86 @@ export function AppointmentsBrowser({
                     </div>
                     <div>
                       <span className="text-black/50 text-[10px] font-bold block">PAGATO IN SALONE</span>
-                      <span className="text-[#B83D7F] font-black block text-xs">€{secondOrderDetails.totalPrice.toFixed(2)}</span>
+                      <span className="text-[#334155] font-semibold block text-xs">€{secondOrderDetails.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Sezione Dettagli del Servizio direttamente integrata nella schermata principale */}
-              <section className="overflow-hidden rounded-[24px] border-2 border-[#E5B9CE] bg-[#FCF8FA] shadow-[0_8px_28px_rgba(83,44,63,0.08)]">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EEC9DA] bg-[linear-gradient(110deg,#FFF0F6_0%,#FFFFFF_72%)] px-5 py-4 sm:px-6">
+              <section aria-labelledby="service-details-heading" className={serviceDetailsStyles.section}>
+                <div className={serviceDetailsStyles.header}>
                   <div className="flex items-center gap-3.5">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#B83D7F] text-white shadow-md">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#F1F5F9] text-[#334155]">
                       <Pencil className="size-5" />
                     </span>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-black text-[#5C3246]">Dettagli del servizio</h3>
-                        <span className="rounded-full bg-[#F8E5EE] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#A52E6B]">
-                          Compilazione rapida
-                        </span>
+                        <h3 id="service-details-heading" className="text-lg font-bold text-[#1E293B]">Dettagli del servizio</h3>
                       </div>
                       <p className="mt-0.5 text-xs font-bold text-black/50">
-                        Seleziona i dettagli del servizio. Il salvataggio è automatico.
+                        Seleziona i dettagli: la nota si compone da sola.
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={polishClientControlNote}
-                    disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#E7B6CD] bg-white px-4 text-xs font-black text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95 disabled:opacity-45"
-                  >
-                    <Sparkles className="size-4 text-[#D96B94]" />
-                    {clientControlPolishing ? "Sistemo..." : "Sistema nota"}
-                  </button>
+                  <span role="status" className={`inline-flex items-center gap-2 text-xs font-semibold ${clientControlMessage?.type === "error" ? "text-red-700" : "text-neutral-600"}`}>
+                    {clientControlSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Cloud className="size-4" />}
+                    {clientControlSubmitting ? "Salvataggio in corso…" : clientControlMessage?.type === "error" ? "Salvataggio da verificare" : "Salvataggio automatico"}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 bg-[#FCF8FA] p-4 sm:p-6 md:grid-cols-2">
-                  <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                <div className={serviceDetailsStyles.layout}>
+                <aside aria-label="Nota del servizio" className={serviceDetailsStyles.noteColumn}>
+                  <div className={serviceDetailsStyles.noteContent}>
+                    <div>
+                      <span className="inline-flex items-center gap-2 text-sm font-bold text-[#22543D]">
+                        <FileText className="size-4" /> Nota del servizio
+                      </span>
+                      <p aria-live="polite" aria-atomic="true" className={`${serviceDetailsStyles.note} ${!clientControlForm.customNoteText.trim() ? serviceDetailsStyles.noteEmpty : ""}`}>
+                        {clientControlParagraph(clientControlForm.customNoteText) || "Scegli un servizio: qui vedrai la nota prendere forma."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={polishClientControlNote}
+                        disabled={!hasClientControlNoteContext() || clientControlPolishing}
+                        className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[#22543D] transition hover:bg-emerald-100 disabled:opacity-45"
+                      >
+                        <Sparkles className="size-4" />
+                        {clientControlPolishing ? "Riformulo…" : "Riformula testo"}
+                      </button>
+                    </div>
+                    <div className="border-t border-[#dce6df] pt-5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="client-service-extra-note" className="text-sm font-semibold text-[#35483c]">Aggiungi un dettaglio</label>
+                        <span className="text-xs text-neutral-500">Facoltativo</span>
+                      </div>
+                      <textarea
+                        id="client-service-extra-note"
+                        rows={3}
+                        maxLength={600}
+                        value={extraNoteText}
+                        onChange={(e) => {
+                          const text = e.target.value;
+                          setExtraNoteText(text);
+                          updateShopifyNote({ extraNote: text });
+                        }}
+                        className="mt-3 min-h-24 w-full resize-y rounded-xl border border-[#cddbd2] bg-white px-3 py-3 text-base leading-relaxed text-[#1F1F1F] placeholder:text-neutral-500"
+                        placeholder="Preferenze della cliente o dettagli sul lavoro…"
+                        aria-describedby="client-service-extra-count"
+                      />
+                      <p id="client-service-extra-count" className="mt-1 text-right text-xs text-neutral-500">{extraNoteText.length}/600</p>
+                    </div>
+                  </div>
+                </aside>
+                <div id="client-service-fields" className={serviceDetailsStyles.fields}>
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-[#F8FAFC] p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] md:col-span-2">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                        <span className="grid size-6 place-items-center rounded-lg bg-[#B83D7F] text-[10px] text-white">1</span>
+                      <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
+                        <span className="grid size-6 place-items-center rounded-lg bg-[#334155] text-[10px] text-white">1</span>
                         Servizi eseguiti
                       </span>
-                      <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[9px] font-black text-[#A52E6B]">
-                        Rilevati automaticamente dalla prenotazione
+                      <span className="rounded-full bg-[#F1F5F9] px-2.5 py-1 text-[9px] font-semibold text-[#334155]">
+                        Puoi scegliere più servizi
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -5659,10 +5691,10 @@ export function AppointmentsBrowser({
                               setSelectedServiceDetails(next);
                               updateShopifyNote({ services: next });
                             }}
-                            className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
                               selected
-                                ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
-                                : "border-[#E8C3D4] bg-white text-[#8F2E61] hover:border-[#D96B94] hover:bg-[#FFF6FA]"
+                                ? "border-[#334155] bg-[#334155] text-white shadow-[0_6px_14px_rgba(15,23,42,0.20)]"
+                                : "border-[#DDE2E7] bg-white text-[#334155] hover:border-[#334155] hover:bg-[#F8FAFC]"
                             }`}
                           >
                             {selected ? <Check className="size-4" /> : null}
@@ -5674,9 +5706,9 @@ export function AppointmentsBrowser({
                   </div>
 
                   {/* 1. Quanti grammi? */}
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">2</span>
                       Quanti grammi?
                     </span>
                     <div className="flex flex-wrap items-center gap-2">
@@ -5686,15 +5718,16 @@ export function AppointmentsBrowser({
                           <button
                             key={gram}
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => {
                               const next = selected ? "" : gram;
                               setSelectedGrammi(next);
                               updateShopifyNote({ grammi: next });
                             }}
-                            className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            className={`min-h-11 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
                               selected
-                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
+                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
                             }`}
                           >
                             {gram}
@@ -5703,16 +5736,17 @@ export function AppointmentsBrowser({
                       })}
                       <button
                         type="button"
+                        aria-pressed={selectedGrammi === "custom"}
                         onClick={() => {
                           const isCustom = selectedGrammi === "custom";
                           const next = isCustom ? "" : "custom";
                           setSelectedGrammi(next);
                           updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
                         }}
-                        className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                        className={`min-h-11 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
                           selectedGrammi === "custom"
-                            ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                            : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                            ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
+                            : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
                         }`}
                       >
                         Personalizzato
@@ -5727,16 +5761,17 @@ export function AppointmentsBrowser({
                             updateShopifyNote({ grammi: val });
                           }}
                           placeholder="es. 250g"
-                          className="h-11 w-28 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                          aria-label="Grammi personalizzati"
+                          className="h-11 w-28 rounded-xl border-2 border-[#334155] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#334155]/20"
                         />
                       )}
                     </div>
                   </div>
 
                   {/* 2. Lunghezza */}
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">3</span>
                       Lunghezza
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -5746,15 +5781,16 @@ export function AppointmentsBrowser({
                           <button
                             key={len}
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => {
                               const next = selected ? "" : len;
                               setSelectedLunghezza(next);
                               updateShopifyNote({ lunghezza: next });
                             }}
-                            className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            className={`min-h-11 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
                               selected
-                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
+                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
                             }`}
                           >
                             {len}
@@ -5765,9 +5801,9 @@ export function AppointmentsBrowser({
                   </div>
 
                   {/* 3. Quante fasce? */}
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">4</span>
                       Quante fasce?
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -5777,15 +5813,16 @@ export function AppointmentsBrowser({
                           <button
                             key={num}
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => {
                               const next = selected ? "" : num;
                               setSelectedFasce(next);
                               updateShopifyNote({ fasce: next });
                             }}
-                            className={`grid size-11 place-items-center rounded-xl border text-sm font-black transition active:scale-95 ${
+                            className={`grid size-11 place-items-center rounded-xl border text-sm font-semibold transition active:scale-95 ${
                               selected
-                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
+                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
                             }`}
                           >
                             {num}
@@ -5794,16 +5831,17 @@ export function AppointmentsBrowser({
                       })}
                       <button
                         type="button"
+                        aria-pressed={selectedFasce === "custom"}
                         onClick={() => {
                           const isCustom = selectedFasce === "custom";
                           const next = isCustom ? "" : "custom";
                           setSelectedFasce(next);
                           updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
                         }}
-                        className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                        className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
                           selectedFasce === "custom"
-                            ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                            : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                            ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
+                            : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
                         }`}
                       >
                         Personalizzato
@@ -5818,16 +5856,17 @@ export function AppointmentsBrowser({
                             updateShopifyNote({ fasce: val });
                           }}
                           placeholder="es. 6"
-                          className="h-11 w-24 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                          aria-label="Numero di fasce personalizzato"
+                          className="h-11 w-24 rounded-xl border-2 border-[#334155] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#334155]/20"
                         />
                       )}
                     </div>
                   </div>
 
                   {/* 4. Come era la cliente? */}
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">5</span>
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">5</span>
                       Come era la cliente?
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -5842,15 +5881,16 @@ export function AppointmentsBrowser({
                           <button
                             key={att.label}
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => {
                               const next = selected ? "" : att.label;
                               setSelectedAtteggiamento(next);
                               updateShopifyNote({ atteggiamento: next });
                             }}
-                            className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
                               selected
-                                ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
-                                : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
+                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
                             }`}
                           >
                             <span>{att.emoji}</span>
@@ -5861,15 +5901,15 @@ export function AppointmentsBrowser({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">6</span>
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)] md:col-span-2">
+                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">6</span>
                       Come ci hai conosciuti?
                     </span>
                     <select
                       value={clientControlForm.discoverySource}
                       onChange={(event) => updateClientControlDiscovery(event.target.value)}
-                      className="h-12 w-full rounded-xl border-2 border-[#E8C3D4] bg-white px-4 text-sm font-black text-[#7D2154] outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
+                      className="h-12 w-full rounded-xl border-2 border-[#DDE2E7] bg-white px-4 text-sm font-semibold text-[#334155] outline-none transition focus:border-[#334155] focus:ring-2 focus:ring-[#334155]/20"
                       aria-label="Come ci hai conosciuti"
                     >
                       <option value="">Seleziona un canale</option>
@@ -5885,16 +5925,16 @@ export function AppointmentsBrowser({
                           value={clientControlForm.discoveryOther}
                           onChange={(event) => updateClientControlDiscovery("Altro", event.target.value)}
                           placeholder="Scrivi qui, per esempio Instagram o passaparola"
-                          className="h-11 w-full rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:ring-2 focus:ring-[#D96B94]/20"
+                          className="h-11 w-full rounded-xl border-2 border-[#334155] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:ring-2 focus:ring-[#334155]/20"
                         />
                       </label>
                     ) : null}
                   </div>
 
-                  <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                  <div className="rounded-2xl border border-[#DDE2E7] bg-[#F8FAFC] p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] md:col-span-2">
                     <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-end">
-                      <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-white px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:ring-2 focus-within:ring-[#D96B94]/25">
-                        <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                      <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#334155] bg-white px-3.5 shadow-[0_3px_10px_rgba(15,23,42,0.10)] transition focus-within:border-[#334155] focus-within:ring-2 focus-within:ring-[#334155]/25">
+                        <Instagram className="size-5 shrink-0 text-[#334155]" strokeWidth={2.5} />
                         <span className="min-w-0 flex-1">
                           <input
                             type="text"
@@ -5907,13 +5947,13 @@ export function AppointmentsBrowser({
                               }))
                             }
                             placeholder="@usercliente"
-                            className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                            className="h-8 w-full border-0 bg-transparent p-0 text-base font-semibold leading-none text-[#334155] outline-none placeholder:font-semibold placeholder:text-[#334155] placeholder:opacity-100"
                           />
                         </span>
                       </label>
 
                       <div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-black/40">
                           Verifiche e controlli
                         </span>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -5928,9 +5968,9 @@ export function AppointmentsBrowser({
                               <label
                                 key={fieldKey}
                                 className={[
-                                  "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
+                                  "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold shadow-2xs transition active:scale-95",
                                   checked
-                                    ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                                    ? "border-[#334155] bg-[#334155] text-white shadow-xs"
                                     : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
                                 ].join(" ")}
                               >
@@ -5943,7 +5983,7 @@ export function AppointmentsBrowser({
                                       event.target.checked,
                                     )
                                   }
-                                  className="size-4 accent-[#D96B94]"
+                                  className="size-4 accent-[#334155]"
                                 />
                                 <span>{fieldLabel}</span>
                               </label>
@@ -5954,42 +5994,7 @@ export function AppointmentsBrowser({
                     </div>
                   </div>
 
-                  {/* 5. Note Extra */}
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                        Note extra <span className="text-black/35">· facoltative</span>
-                      </span>
-                      <span className="text-[10px] font-extrabold text-black/40">
-                        {extraNoteText.length}/600
-                      </span>
-                    </div>
-                    <textarea
-                      rows={3}
-                      maxLength={600}
-                      value={extraNoteText}
-                      onChange={(e) => {
-                        const text = e.target.value;
-                        setExtraNoteText(text);
-                        updateShopifyNote({ extraNote: text });
-                      }}
-                      className="mt-2 min-h-24 w-full resize-y rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 py-3 text-sm font-bold leading-relaxed text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
-                      placeholder="Scrivi qui eventuali note extra per la cliente..."
-                    />
-                  </div>
-
-                  <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
-                      <FileText className="size-4 text-[#D96B94]" /> Nota Shopify compilata
-                    </span>
-                    <textarea
-                      value={clientControlForm.customNoteText}
-                      readOnly={true}
-                      rows={3}
-                      className="mt-2 w-full cursor-not-allowed select-none rounded-xl border border-[#F4D3E2] bg-[#FFF9FC] p-4 text-xs font-bold text-[#1F1F1F] outline-none"
-                      placeholder="La nota per Shopify viene generata automaticamente dalle selezioni del servizio."
-                    />
-                  </div>
+                </div>
                 </div>
               </section>
 
@@ -6001,20 +6006,20 @@ export function AppointmentsBrowser({
 
             {/* Footer Actions */}
             <div className="shrink-0 border-t border-neutral-200 bg-white px-5 py-4 shadow-[0_-8px_24px_rgba(17,17,17,0.04)] sm:px-8 lg:px-14">
-              <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4">
+              <div className="mx-auto flex w-full max-w-[1480px] flex-wrap items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={closeClientControl}
-                className="rounded-2xl border border-black/10 bg-neutral-100 px-8 py-3.5 text-xs font-black text-black/70 transition hover:bg-neutral-200 active:scale-95"
+                className="rounded-xl border border-black/10 bg-white px-4 py-3 text-xs font-semibold text-black/70 transition hover:bg-neutral-100 active:scale-95"
               >
                 Torna indietro
               </button>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void submitClientControlForm(undefined, true)}
                   disabled={clientControlSubmitting || clientControlLoading}
-                  className={`inline-flex items-center gap-2 rounded-2xl border-2 px-5 py-3 text-xs font-black transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "draft" ? "border-emerald-600 bg-emerald-600 text-white" : "border-[#D96B94] bg-white text-[#B83D7F] hover:bg-[#FFF0F6]"}`}
+                  className={`inline-flex items-center gap-2 rounded-2xl border-2 px-5 py-3 text-xs font-semibold transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "draft" ? "border-emerald-600 bg-emerald-600 text-white" : "border-[#334155] bg-white text-[#334155] hover:bg-[#F8FAFC]"}`}
                 >
                   <Save className="size-4" />
                   <span>{clientControlSubmitting ? "Salvataggio..." : clientControlLastSave === "draft" ? "Bozza salvata ✓" : "Salva bozza"}</span>
@@ -6023,7 +6028,7 @@ export function AppointmentsBrowser({
                   type="button"
                   onClick={() => void submitClientControlForm()}
                   disabled={clientControlSubmitting || clientControlLoading}
-                  className={`inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "bg-emerald-600 shadow-emerald-200" : "bg-gradient-to-r from-[#D96B94] to-[#B83D7F]"}`}
+                  className={`inline-flex items-center gap-2 rounded-2xl border px-6 py-3.5 text-xs font-semibold transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "border-emerald-600 bg-emerald-600 text-white" : serviceDetailsStyles.softAction}`}
                 >
                   <Check className="size-4" />
                   <span>{clientControlSubmitting ? "Conferma..." : clientControlLastSave === "confirmed" ? "Salvato ✓" : "Conferma controllo"}</span>
@@ -6034,6 +6039,18 @@ export function AppointmentsBrowser({
           </div>
         </div>
       ) : null}
+      {clientControlOpen && workerConfirmationOpen ? <AppointmentWorkerConfirmation
+        key={clientControlForm.bookingId}
+        name={confirmationSelf?.name?.split(" ")[0] || ""}
+        self={confirmationSelf}
+        workers={confirmationWorkers.map(employee => ({ ...employee, status: confirmationAttendance.find(worker => worker.id === employee.id)?.status }))}
+        workersLoading={confirmationAttendanceLoading}
+        workersError={confirmationAttendanceError}
+        clientName={maskClientPrivacy ? maskClientName(clientControlForm.clientName) : clientControlForm.clientName}
+        loading={clientControlLoading || !clientControlHistoryLoaded}
+        onAssign={confirmServiceWorker}
+        onClose={closeClientControl}
+      /> : null}
       {pcGenModalOpen && (
         <div role="dialog" aria-modal="true" aria-labelledby="pc-registration-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white border border-[#E8D8CF] rounded-[32px] max-w-md w-full p-8 shadow-2xl relative space-y-6">
@@ -6934,12 +6951,12 @@ export function AppointmentsBrowser({
                                     boardLongPressTriggeredRef.current = null;
                                     return;
                                   }
-                                  void openClientControlForBooking(booking);
+                                  void openClientControlForBooking(booking, undefined, false, column);
                                 }}
                                 onKeyDown={(event) => {
                                   if (event.key === "Enter" || event.key === " ") {
                                     event.preventDefault();
-                                    void openClientControlForBooking(booking);
+                                    void openClientControlForBooking(booking, undefined, false, column);
                                   }
                                 }}
                                 onContextMenu={(event) => {
@@ -7044,7 +7061,7 @@ export function AppointmentsBrowser({
                                           onClick={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
-                                            void openClientControlForBooking(booking, undefined, true);
+                                            void openClientControlForBooking(booking, undefined, true, column);
                                           }}
                                           className={`w-full p-2 text-left ${canManageParadiseNotes ? "pr-10" : ""}`}
                                           aria-label={`Apri i dettagli del servizio di ${booking.customerName}`}
@@ -7088,7 +7105,7 @@ export function AppointmentsBrowser({
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        openQuickNote(booking);
+                                        void openClientControlForBooking(booking, undefined, true, column);
                                       }}
                                       className="appointments-board-add-note inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
                                     >

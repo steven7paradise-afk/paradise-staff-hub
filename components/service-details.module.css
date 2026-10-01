@@ -1,0 +1,132 @@
+.section {
+  border: 1px solid #dde2e7;
+  border-radius: 20px;
+  background: #fff;
+  overflow: clip;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.layout {
+  display: grid;
+  gap: 0;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 24px;
+  min-width: 0;
+}
+
+.fields > div {
+  background: none;
+  box-shadow: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 20px;
+  border-bottom: 1px solid #e5e7eb;
+  min-width: 0;
+}
+
+.fields button[aria-pressed] {
+  box-shadow: none;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+.fields button[aria-pressed="true"] {
+  border-color: #e9b5cb;
+  background: #f8dce9;
+  color: #71334f;
+}
+
+.fields button[aria-pressed]:hover:not(:disabled) {
+  background: #fbeaf2;
+  color: #71334f;
+}
+
+.fields button[aria-pressed="true"]:hover:not(:disabled) {
+  background: #f2cbdd;
+}
+
+.softAction.softAction {
+  background: #f8dce9;
+  color: #71334f;
+  border-color: #e9b5cb;
+  box-shadow: 0 2px 6px #71334f0c;
+}
+
+.softAction.softAction:hover:not(:disabled) {
+  background: #f2cbdd;
+}
+
+.softAction:focus-visible {
+  outline: 2px solid #974567;
+  outline-offset: 3px;
+}
+
+.fields button[aria-pressed="false"] {
+  border-color: #dde2e7;
+  background: #fff;
+  color: #475569;
+}
+
+.section :is(button, input, textarea, select):focus-visible {
+  outline: 2px solid #974567;
+  outline-offset: 3px;
+}
+
+.noteColumn {
+  min-width: 0;
+  padding: 20px;
+  background: #f8faf9;
+  border-bottom: 1px solid #e2eae6;
+}
+
+.noteContent {
+  display: grid;
+  gap: 24px;
+}
+
+.note {
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 1.8;
+  color: #22543d;
+  overflow-wrap: anywhere;
+}
+
+.noteEmpty {
+  color: #627469;
+}
+
+@media (min-width: 768px) {
+  .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1280px) {
+  .layout { grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); }
+  .fields { grid-column: 1; grid-row: 1; }
+  .noteColumn {
+    grid-column: 2;
+    grid-row: 1;
+    border-bottom: 0;
+    border-left: 1px solid #e2eae6;
+    padding: 24px;
+  }
+  .noteContent { position: sticky; top: 104px; }
+}
+
+@media (max-width: 480px) {
+  .header, .fields, .noteColumn { padding: 16px; }
+}

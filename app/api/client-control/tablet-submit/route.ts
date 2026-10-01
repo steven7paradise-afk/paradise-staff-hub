@@ -9,6 +9,9 @@ import { getOperationalUser } from "@/lib/operational-session";
 import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 import { allowsMissingFinalPaymentOrder } from "@/lib/client-control-service-rules";
 import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
+import { getCowlendarBookingsForRange } from "@/lib/cowlendar";
+import { getShopifyAppointmentDayPayments } from "@/lib/shopify";
+import { syncClientControlNotes } from "@/lib/client-control-note-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +159,8 @@ export async function POST(request: NextRequest) {
     shopifyOrder?: string;
     secondShopifyOrder?: string;
     shopifyNoteOrder?: string;
+    shopifyNoteScope?: "day" | "selected";
+    appointmentStart?: string;
     instagramTag?: string;
     notes?: boolean;
     customNoteText?: string;
@@ -278,8 +283,32 @@ export async function POST(request: NextRequest) {
 
   const form = await ensureClientControlForm(submitter.id);
   const shopifyOrder = textValue(body?.shopifyOrder);
-  const secondShopifyOrder = textValue(body?.secondShopifyOrder);
+  let secondShopifyOrder = textValue(body?.secondShopifyOrder);
   const shopifyNoteOrder = textValue(body?.shopifyNoteOrder);
+  const useDayPayments = body?.shopifyNoteScope === "day" && !shopifyNoteOrder && !body?.isNoShow && !isFinito;
+  let dayNoteOrders: string[] = [];
+  if (useDayPayments && !isDraft) {
+    try {
+      const requestedStart = new Date(textValue(body?.appointmentStart));
+      if (!bookingIdFromBody || !Number.isFinite(requestedStart.getTime())) {
+        throw new Error("Riapri l’appuntamento per verificare i pagamenti della giornata.");
+      }
+      const bookings = await getCowlendarBookingsForRange({
+        startDate: new Date(requestedStart.getTime() - 86400000).toISOString(),
+        endDate: new Date(requestedStart.getTime() + 86400000).toISOString(),
+      });
+      const booking = bookings.find(item => item.id === bookingIdFromBody);
+      if (!booking) throw new Error("Appuntamento non verificabile. Riapri la scheda e riprova.");
+      const payments = await getShopifyAppointmentDayPayments(
+        String(booking.order_id || booking.booking_str || ""), booking.start_date, booking.customer || {},
+      );
+      dayNoteOrders = payments.map(payment => payment.orderName.replace(/^#/, ""));
+      // Keep the final-payment validation, but no manual '+' is required.
+      if (dayNoteOrders.length) secondShopifyOrder = dayNoteOrders[0];
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Verifica pagamenti non riuscita. Riprova." }, { status: 422 });
+    }
+  }
   const finalPaymentOptional = allowsMissingFinalPaymentOrder([
     ...(body?.customServices ?? []),
     body?.serviceTitle,
@@ -491,6 +520,8 @@ export async function POST(request: NextRequest) {
     booking_id: textValue(body?.bookingId),
     second_shopify_order: secondShopifyOrder,
     shopify_note_order: shopifyNoteOrder,
+    shopify_note_scope: body?.shopifyNoteScope || "selected",
+    shopify_note_orders: dayNoteOrders,
     client_control_created_from: isNoShow ? "Tablet Clock No Show" : "Tablet Clock Finito",
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
     client_control_shopify_order_note: shopifyOrderNote || "",
@@ -536,6 +567,8 @@ export async function POST(request: NextRequest) {
     photo_dopo_dietro: answerPhotoDopoDietro || undefined,
     second_shopify_order: secondShopifyOrder,
     shopify_note_order: shopifyNoteOrder,
+    shopify_note_scope: body?.shopifyNoteScope || "selected",
+    shopify_note_orders: isDraft ? undefined : dayNoteOrders,
     custom_services: Array.isArray(body?.customServices)
       ? body.customServices.map((value: unknown) => textValue(value)).filter(Boolean)
       : [],
@@ -666,27 +699,24 @@ export async function POST(request: NextRequest) {
   }
 
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
-  const targetOrders = shopifyNoteOrder
+  const targetOrders = useDayPayments ? dayNoteOrders : shopifyNoteOrder
     ? extractShopifyOrderCodes(shopifyNoteOrder)
     : extractShopifyOrderCodes(body?.shopifyOrder);
 
+  let noteSync = { succeeded: [] as string[], failed: [] as string[] };
   if (!isDraft && targetOrders.length > 0) {
     const writerName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(" e ") || "Staff");
     const collaboratorName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(", ") || "");
 
-    await Promise.all(targetOrders.map(async (singleOrder) => {
-      await appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato")
-        .catch((err) => {
-          console.error(`Failed to append note to Shopify order ${singleOrder}:`, err);
-          return false;
-        });
-      updateShopifyOrderMetafields(
+    noteSync = await syncClientControlNotes(targetOrders,
+      singleOrder => appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato"),
+      singleOrder => updateShopifyOrderMetafields(
         singleOrder,
         isNoShow ? "No Show" : "Controllato",
         customNote || "",
         collaboratorName
-      ).catch((err) => console.error(`Failed to update Shopify metafields for order ${singleOrder}:`, err));
-    }));
+      ),
+    );
   }
 
   // AUTO-UPDATE APPOINTMENT STATUS TO COMPLETATO
@@ -718,6 +748,12 @@ export async function POST(request: NextRequest) {
     id: response.id,
     operation,
     draft: isDraft,
+    noteSync,
+    warning: noteSync.failed.length
+      ? `Scheda salvata, ma la nota non è stata completata sugli ordini ${noteSync.failed.map(order => `#${order}`).join(", ")}. Premi di nuovo Conferma controllo per riprovare.`
+      : !isDraft && useDayPayments && !targetOrders.length
+        ? "Scheda salvata. Nessun pagamento del giorno verificato: la nota non è stata inviata a Shopify."
+        : undefined,
     createdAt: response.created_at.toISOString(),
   });
 }

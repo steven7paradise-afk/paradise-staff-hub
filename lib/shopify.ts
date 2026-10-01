@@ -619,6 +619,51 @@ async function getShopifyOrderByNameOrId(orderName: string): Promise<any | null>
   return null;
 }
 
+/** Resolve paid orders on the appointment day using the booking's Shopify identity. */
+export async function getShopifyAppointmentDayPayments(bookingOrder: string, start: string, customer: { email?: string | null; phone?: string | null }) {
+  const { appointmentDayPayments } = await import("./appointment-payment-match");
+  const date = new Date(start);
+  if (!Number.isFinite(date.getTime())) throw new Error("Data appuntamento non valida.");
+  const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  if (!shop || !token) throw new Error("Shopify non configurato.");
+  const normalizedBookingOrder = normalizeShopifyOrderReference(bookingOrder) || bookingOrder;
+  const anchor = bookingOrder ? await getShopifyOrderByNameOrId(normalizedBookingOrder) : null;
+  if (bookingOrder && !anchor) throw new Error("Impossibile verificare l’ordine della prenotazione.");
+  const reference = normalizeShopifyOrderReference(bookingOrder)?.replace(/^#/, "");
+  if (anchor && reference !== String(anchor.id) && reference !== String(anchor.name).replace(/^#/, "")) {
+    throw new Error("L’ordine trovato non corrisponde alla prenotazione.");
+  }
+  const params = new URLSearchParams({
+    status: "any", limit: "250", financial_status: "paid",
+    created_at_min: new Date(date.getTime() - 86400000).toISOString(),
+    created_at_max: new Date(date.getTime() + 86400000).toISOString(),
+    fields: "id,name,customer,email,phone,created_at,financial_status",
+  });
+  const raw: any[] = [];
+  let url: string | null = `https://${shop}/admin/api/2024-04/orders.json?${params}`;
+  while (url) {
+    if (new URL(url).origin !== `https://${shop}`) throw new Error("Risposta Shopify non valida.");
+    const result: Response = await fetch(url, {
+      cache: "no-store", signal: AbortSignal.timeout(10000),
+      headers: { "X-Shopify-Access-Token": token },
+    });
+    if (!result.ok) throw new Error("Impossibile verificare tutti i pagamenti del giorno. Riprova.");
+    const data = await result.json();
+    if (!Array.isArray(data.orders)) throw new Error("Elenco pagamenti non disponibile.");
+    raw.push(...data.orders);
+    url = result.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i)?.[1] ?? null;
+  }
+  if (anchor) raw.push(anchor);
+  return appointmentDayPayments(raw.map(order => ({
+    id: String(order.id), orderName: String(order.name),
+    customerId: order.customer?.id ? String(order.customer.id) : null,
+    email: order.customer?.email || order.email,
+    phone: order.customer?.phone || order.phone,
+    createdAt: order.created_at, financialStatus: order.financial_status,
+  })), customer, start, anchor?.name || bookingOrder);
+}
+
 export async function getShopifyOrderNoteText(orderName: string): Promise<string | null> {
   try {
     const order = await getShopifyOrderByNameOrId(orderName);

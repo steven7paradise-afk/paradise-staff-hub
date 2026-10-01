@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       if (emailParam) {
         fetchPromises.push(
           fetchAllPages(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at`
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at,source_name`
           )
         );
       }
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       if (phoneParam) {
         fetchPromises.push(
           fetchAllPages(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at`
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at,source_name`
           )
         );
       }
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       // The broad feed covers name-only matches when email/phone are unavailable.
       fetchPromises.push(
         fetchAllPages(
-          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at`
+          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,financial_status,line_items,note,created_at,source_name`
         )
       );
 
@@ -172,11 +172,13 @@ export async function GET(request: NextRequest) {
         return {
           id: String(order.id),
           orderName: order.name,
+          customerId: order.customer?.id ? String(order.customer.id) : null,
           clientName,
           firstName,
           lastName,
           totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
           financialStatus: order.financial_status || null,
+          sourceName: order.source_name || null,
           email: order.customer?.email || order.email || "",
           phone: order.customer?.phone || order.phone || address?.phone || "",
           addressLine,

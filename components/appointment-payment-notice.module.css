@@ -1,0 +1,46 @@
+.host { display:flex; justify-content:flex-end; padding:8px 0; }
+.daily { width:100%; min-width:0; }
+.dailyHeader { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; font-size:13px; color:#334155; }
+.tools { display:flex; align-items:center; gap:8px; }
+.tools button { min-height:44px; min-width:44px; padding:8px; border-radius:8px; }
+.tools button:hover { background:#f1f5f9; }
+.tools button:focus-visible { outline:2px solid #334155; outline-offset:2px; }
+.dailyList { display:flex; gap:12px; overflow-x:auto; list-style:none; padding:4px 2px 10px; margin:0; }
+.dailyList .notice { width:340px; flex:0 0 340px; max-width:100%; gap:12px; padding:12px 16px; border-radius:14px; box-shadow:none; }
+.dailyList .bag { width:40px; height:40px; border-radius:10px; background:#f1f5f9; color:#334155; }
+.dailyList .order { font-size:18px; }
+.dailyList .plus { width:44px; height:44px; border-radius:10px; border:1px solid #e9b5cb; background:#f8dce9; color:#71334f; }
+.dailyList .plus:hover:not(:disabled) { background:#f2cbdd; }
+.dailyList .notice.confirmed { border-color:#51a68a; background:#effaf5; box-shadow:inset 0 0 0 1px #51a68a; }
+.dailyList .confirmed .bag { background:#d8f2e5; color:#16634c; }
+.dailyList .confirmed .plus { background:#16634c; border-color:#16634c; color:white; }
+.confirmedLabel { display:inline-flex; align-items:flex-start; gap:4px; margin-top:5px; font-size:11px; font-weight:700; line-height:1.4; color:#16634c; }
+.confirmedLabel svg { flex-shrink:0; margin-top:1px; }
+.dialogHeader button { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; border:1px solid #e8e5e7; border-radius:12px; background:white; }
+.notice { display:flex; align-items:center; gap:16px; width:440px; max-width:100%; padding:16px 20px; border:1px solid #e7ebe3; border-radius:24px; background:white; box-shadow:0 4px 16px #2030100a; animation:arrive .2s ease-out; }
+.waiting { display:flex; align-items:center; gap:12px; max-width:100%; color:#665931; font-size:12px; }
+.waiting span { min-width:0; flex:1; overflow-wrap:anywhere; }
+.waiting button { display:grid; place-items:center; flex-shrink:0; width:44px; height:44px; border-radius:12px; }
+.waiting button:disabled { opacity:.5; }
+.bag { display:grid; place-items:center; flex-shrink:0; width:64px; height:64px; border-radius:50%; background:#171916; color:#a4d759; }
+.content { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }
+.eyebrow { font-size:10px; font-weight:800; color:#396918; letter-spacing:.04em; text-transform:uppercase; }
+.order { font-size:24px; line-height:1.15; letter-spacing:-.04em; color:#141613; overflow-wrap:anywhere; }
+.name { font-size:13px; line-height:1.35; color:#242721; overflow-wrap:anywhere; }
+.meta { font-size:11px; line-height:1.4; color:#676d61; }
+.amount { margin-top:3px; font-size:15px; color:#396918; font-variant-numeric:tabular-nums; }
+.plus { display:grid; place-items:center; width:64px; height:64px; flex-shrink:0; border:1px solid #e9b5cb; border-radius:18px; background:#f8dce9; color:#71334f; }
+.plus:hover:not(:disabled) { background:#f2cbdd; }
+.plus:disabled { cursor:default; }
+.selection { display:flex; align-items:center; flex-direction:column; gap:6px; flex-shrink:0; }
+.selection span { font-size:10px; font-weight:700; color:#396918; }
+.otherOrders { align-self:flex-start; min-height:32px; color:#676d61; font-size:11px; text-decoration:underline; text-underline-offset:3px; }
+.notice button:focus-visible, .waiting button:focus-visible, .dialog button:focus-visible { outline:3px solid #337417; outline-offset:3px; }
+.dialog { margin:auto; width:min(800px, calc(100vw - 24px)); max-height:85dvh; padding:0; border:1px solid #e7e3e6; border-radius:24px; background:white; color:#1f1f1f; box-shadow:0 24px 80px #0003; }
+.dialog::backdrop { background:#15191566; }
+.dialogInner { padding:16px; }
+.dialogHeader { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
+.dialogHeader h2 { font-size:18px; font-weight:800; }
+@keyframes arrive { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { .notice { animation:none; } }
+@media (max-width:480px) { .notice { gap:12px; padding:12px; border-radius:20px; } .bag { width:46px; height:46px; } .plus { width:48px; height:52px; border-radius:14px; } .order { font-size:21px; } }
