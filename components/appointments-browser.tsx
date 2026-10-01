@@ -1,7 +1,7 @@
 "use client";
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
-import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isClockedInAppointmentWorker, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
+import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
 import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation";
 import { hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
 
@@ -3314,7 +3314,7 @@ export function AppointmentsBrowser({
     ? clientControlEmployeeOptions.find(employee => employee.id === matchedConfirmationSelf.id)
     : undefined;
   const confirmationWorkers = filteredClientControlEmployees.filter(employee =>
-    confirmationAttendance.some(worker => worker.id === employee.id && isClockedInAppointmentWorker(worker)),
+    isAvailableAppointmentServiceWorker(employee, confirmationAttendance, clientControlForm.salon),
   );
   useEffect(() => {
     if (!workerConfirmationOpen || !clientControlOpen) return;
@@ -6041,7 +6041,7 @@ export function AppointmentsBrowser({
       ) : null}
       {clientControlOpen && workerConfirmationOpen ? <AppointmentWorkerConfirmation
         key={clientControlForm.bookingId}
-        name={confirmationSelf?.name?.split(" ")[0] || ""}
+        name={confirmationSelf ? appointmentStaffDisplayName(confirmationSelf.name, confirmationSelf.id).split(" ")[0] : ""}
         self={confirmationSelf}
         workers={confirmationWorkers.map(employee => ({ ...employee, status: confirmationAttendance.find(worker => worker.id === employee.id)?.status }))}
         workersLoading={confirmationAttendanceLoading}

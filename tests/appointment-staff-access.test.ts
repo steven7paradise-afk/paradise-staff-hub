@@ -7,7 +7,31 @@ import {
   employeeMatchesAppointmentLocation,
   appointmentOperatorInSalon,
   isClockedInAppointmentWorker,
+  isAvailableAppointmentServiceWorker,
 } from "../lib/appointment-staff-access";
+
+test("Francesca titolare compare da Ufficio in entrambi i saloni anche senza timbratura", () => {
+  const owner = { id: "cmqf02qgq0001jx0913ddfys1", name: "Franci", role: "ADMIN", locationName: "Ufficio Paradise" };
+  for (const salon of ["Salone Buenos Aires", "Salone Duomo"]) {
+    assert.equal(suggestEmployeeForAppointmentSalon(owner, salon), true);
+    assert.equal(appointmentOperatorInSalon([owner], owner, salon)?.id, owner.id);
+    assert.equal(appointmentOperatorInSalon([owner], { id: "kiosk-selected-worker", name: "Francesca" }, salon)?.id, owner.id);
+    assert.equal(isAvailableAppointmentServiceWorker(owner, [], salon), true);
+    assert.equal(isAvailableAppointmentServiceWorker(owner, [{ id: owner.id, status: "OUT", clockedInAt: null }], salon), true);
+    assert.equal(isAvailableAppointmentServiceWorker({ ...owner, name: "Profilo rinominato" }, [], salon), true);
+  }
+});
+
+test("la disponibilità della titolare non estende l'eccezione ad altri profili", () => {
+  const salon = "Salone Buenos Aires";
+  const worker = { id: "worker", name: "Aurora", role: "DIPENDENTE", locationName: salon };
+  const attendance = [{ id: worker.id, status: "IN", clockedInAt: "2026-10-01T08:00:00Z" }];
+  assert.equal(isAvailableAppointmentServiceWorker(worker, attendance, salon), true);
+  assert.equal(isAvailableAppointmentServiceWorker(worker, [], salon), false);
+  assert.equal(isAvailableAppointmentServiceWorker(worker, [{ ...attendance[0], status: "OUT" }], salon), false);
+  assert.equal(isAvailableAppointmentServiceWorker(worker, attendance, "Salone Duomo"), false);
+  assert.equal(isAvailableAppointmentServiceWorker({ ...worker, role: "ADMIN", locationName: "Ufficio Paradise" }, attendance, salon), false);
+});
 
 test("suggerisce solo la sede reale senza cambiare i permessi di ufficio e admin", () => {
   const office = { id: "office", name: "Operatore", role: "ADMIN", locationName: "Ufficio Paradise" };

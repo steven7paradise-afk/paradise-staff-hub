@@ -7,8 +7,9 @@ export function canWorkAcrossAppointmentLocations(role?: string | null) {
 
 type AssignmentEmployee = { id: string; name: string; role?: string | null; locationName?: string | null };
 const normalizeAssignmentName = (value?: string | null) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\|.*$/, "").replace(/\s+/g, " ").trim();
-/** Picker suggestions are based on the actual salon, not cross-location access. */
+/** Respect the existing always-active owner exception; other staff need the actual salon. */
 export function suggestEmployeeForAppointmentSalon(employee: AssignmentEmployee, salon: string) {
+  if (isAlwaysActiveAppointmentStaff(employee.name, employee.id)) return true;
   const normalize = (value?: string | null) => {
     const name = normalizeAssignmentName(value);
     if (!name || name.includes("ufficio")) return "";
@@ -29,13 +30,25 @@ export function appointmentOperatorInSalon(employees: AssignmentEmployee[], oper
   }
   const name = normalizeAssignmentName(operator.name);
   if (!name) return undefined;
-  const matches = eligible.filter(employee => normalizeAssignmentName(employee.name) === name);
+  const matches = eligible.filter(employee => normalizeAssignmentName(employee.name) === name ||
+    normalizeAssignmentName(appointmentStaffDisplayName(employee.name, employee.id)) === name);
   return matches.length === 1 ? matches[0] : undefined;
 }
 
 export function isClockedInAppointmentWorker(worker: { status?: string; clockedInAt?: string | null }) {
   return ["IN", "BREAK"].includes(worker.status || "") &&
     Boolean(worker.clockedInAt && Number.isFinite(Date.parse(worker.clockedInAt)));
+}
+
+export function isAvailableAppointmentServiceWorker(
+  employee: AssignmentEmployee,
+  attendance: { id: string; status?: string; clockedInAt?: string | null }[],
+  salon: string,
+) {
+  return suggestEmployeeForAppointmentSalon(employee, salon) && (
+    isAlwaysActiveAppointmentStaff(employee.name, employee.id) ||
+    attendance.some(worker => worker.id === employee.id && isClockedInAppointmentWorker(worker))
+  );
 }
 
 export function employeeMatchesAppointmentLocation(employee: AssignmentEmployee, salon: string) {

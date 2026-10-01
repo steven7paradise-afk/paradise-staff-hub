@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import styles from "./appointment-worker-confirmation.module.css";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { appointmentStaffDisplayName, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 type Worker = { id: string; name: string; photoUrl?: string | null; status?: string };
 
@@ -59,14 +60,14 @@ export function AppointmentWorkerConfirmation({ name, self, workers, workersLoad
     </div>
     {!loading && showQuestion && <WorkerPhoto worker={self!} large />}
     <h2 id="worker-confirm-title">{loading ? "Carico il personale…" : showQuestion ? `Ciao ${name}, hai seguito tu ${clientName || "questa cliente"}?` : `Chi ha seguito ${clientName || "questa cliente"}?`}</h2>
-    <p className={styles.description}>{loading ? "Un momento, verifico la scheda." : showQuestion ? "Conferma e continua a compilare la nota." : "Scegli tra il personale del salone che ha timbrato ed è ancora in servizio."}</p>
+    <p className={styles.description}>{loading ? "Un momento, verifico la scheda." : showQuestion ? "Conferma e continua a compilare la nota." : "Scegli chi ha seguito la cliente. La titolare è sempre disponibile; il personale del salone deve aver timbrato ed essere ancora in servizio."}</p>
     {loading ? <Loader2 className="animate-spin" aria-label="Caricamento" /> : showQuestion ?
       <div className={styles.actions}>
         <button type="button" className={styles.primary} disabled={Boolean(saving)} onClick={() => void assign(self!)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />} Sì, l’ho seguita io</button>
         <button type="button" disabled={Boolean(saving)} onClick={() => setChoose(true)}>No, scegli un’altra persona</button>
       </div> : workersLoading ? <p role="status">Verifico chi ha timbrato…</p> : workersError ? <p role="alert" className={styles.error}>{workersError}</p> : <div className={styles.list}>
         {workers.map(worker => <button type="button" key={worker.id} disabled={Boolean(saving)} onClick={() => void assign(worker)}>
-          <WorkerPhoto worker={worker} /><span className={styles.workerLabel}><strong>{worker.name}</strong><small>{worker.status === "BREAK" ? "In pausa · timbratura registrata" : "In servizio · timbratura registrata"}</small></span>{saving === worker.id ? <Loader2 className="animate-spin" size={18} /> : <span aria-hidden="true">→</span>}
+          <WorkerPhoto worker={worker} /><span className={styles.workerLabel}><strong>{appointmentStaffDisplayName(worker.name, worker.id)}</strong><small>{isAlwaysActiveAppointmentStaff(worker.name, worker.id) ? "Titolare · sempre disponibile" : worker.status === "BREAK" ? "In pausa · timbratura registrata" : "In servizio · timbratura registrata"}</small></span>{saving === worker.id ? <Loader2 className="animate-spin" size={18} /> : <span aria-hidden="true">→</span>}
         </button>)}
         {!workers.length && <p>Nessun collaboratore del salone risulta timbrato e ancora in servizio.</p>}
       </div>}
