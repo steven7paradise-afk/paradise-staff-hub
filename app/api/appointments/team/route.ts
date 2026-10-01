@@ -1,3 +1,4 @@
+import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
 import { NextRequest, NextResponse } from "next/server";
 import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
 import { saveAppointmentChange } from "@/lib/appointment-realtime";
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Appuntamento o collaboratrice mancante." }, { status: 400 });
     }
 
+    const operatorProfile = await prisma.user.findUnique({ where: { id: operationalUser!.id }, select: { location: { select: { name: true } } } });
     const requestedIds = [...new Set(requestedTeammates.map((teammate) => teammate.id))];
     const activeUsers = await prisma.user.findMany({
       where: { id: { in: requestedIds }, active: true },
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
     });
     const usersById = new Map(
       activeUsers
-        .filter((user) => isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
+        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
         .map((user) => [user.id, user]),
     );
     const teammates = requestedIds.flatMap((id) => {
@@ -145,7 +147,7 @@ export async function POST(request: NextRequest) {
     const shopifyTeammateNames = formatShopifyStaffNames(
       teammates.map((teammate) => teammate.name),
       salonRoster
-        .filter((user) => isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
+        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
         .map((user) => user.name),
     ).join(", ");
 

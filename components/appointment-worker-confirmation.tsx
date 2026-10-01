@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, Plus, X } from "lucide-react";
 import styles from "./appointment-worker-confirmation.module.css";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentStaffDisplayName, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
@@ -16,10 +16,12 @@ function WorkerPhoto({ worker, large = false }: { worker: Worker; large?: boolea
   </span>;
 }
 
-export function AppointmentWorkerConfirmation({ name, self, workers, workersLoading, workersError, clientName, loading, onAssign, onClose }: {
+export function AppointmentWorkerConfirmation({ name, self, workers, officeWorkers = [], canChooseOfficeStaff = false, workersLoading, workersError, clientName, loading, onAssign, onClose }: {
   name: string;
   self?: Worker;
   workers: Worker[];
+  officeWorkers?: Worker[];
+  canChooseOfficeStaff?: boolean;
   workersLoading: boolean;
   workersError: string;
   clientName: string;
@@ -28,6 +30,7 @@ export function AppointmentWorkerConfirmation({ name, self, workers, workersLoad
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [officeOpen, setOfficeOpen] = useState(false);
   const [choose, setChoose] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -71,6 +74,15 @@ export function AppointmentWorkerConfirmation({ name, self, workers, workersLoad
         </button>)}
         {!workers.length && <p>Nessun collaboratore del salone risulta timbrato e ancora in servizio.</p>}
       </div>}
+    {!loading && !showQuestion && canChooseOfficeStaff && <div className={styles.officeSection}>
+      <button type="button" className={styles.officeToggle} aria-expanded={officeOpen} aria-controls="office-worker-list" disabled={Boolean(saving)} onClick={() => setOfficeOpen(value => !value)}><Plus size={22} /><span>Personale Ufficio</span></button>
+      {officeOpen && <div id="office-worker-list" className={styles.list} aria-label="Personale Ufficio">
+        {officeWorkers.map(worker => <button type="button" key={worker.id} disabled={Boolean(saving)} onClick={() => void assign(worker)}>
+          <WorkerPhoto worker={worker} /><span className={styles.workerLabel}><strong>{appointmentStaffDisplayName(worker.name, worker.id)}</strong><small>Personale Ufficio</small></span>{saving === worker.id ? <Loader2 className="animate-spin" size={18} /> : <span aria-hidden="true">→</span>}
+        </button>)}
+        {!officeWorkers.length && <p>Nessun profilo attivo nella sede Ufficio.</p>}
+      </div>}
+    </div>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
   </dialog>;
 }

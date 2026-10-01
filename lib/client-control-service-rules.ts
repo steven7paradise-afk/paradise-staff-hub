@@ -11,6 +11,8 @@ export const CLIENT_CONTROL_SERVICE_OPTIONS = [
   "Consulenza",
 ] as const;
 
+export const SECONDARY_SERVICE_OPTIONS = ["Colore", "Piega", "Lavaggio"] as const;
+
 export type ClientControlService = (typeof CLIENT_CONTROL_SERVICE_OPTIONS)[number];
 
 function normalizeService(value: unknown) {

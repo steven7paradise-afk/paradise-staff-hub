@@ -1,3 +1,4 @@
+import { withProfessionalLevel } from "@/lib/professional-level";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
@@ -89,6 +90,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     let nextWorkforceData = data.workforceData !== undefined
       ? asRecord(data.workforceData)
       : { ...currentWorkforceData };
+    try {
+      nextWorkforceData = withProfessionalLevel(nextWorkforceData, data.professionalLevel);
+    } catch (error) {
+      return apiError(error instanceof Error ? error.message : "Livello professionale non valido.", 400);
+    }
     if (data.contractType !== undefined) nextWorkforceData.contractType = String(data.contractType ?? "").trim();
     if (data.contractRenewalStatus !== undefined) nextWorkforceData.contractRenewalStatus = String(data.contractRenewalStatus ?? "DA_VALUTARE");
     if (becomingFormerEmployee) {

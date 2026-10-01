@@ -6,9 +6,17 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ documentAccessExpired?: string }>;
+  searchParams: Promise<{ documentAccessExpired?: string; preview?: string }>;
 }) {
   const params = await searchParams;
+  if (process.env.NODE_ENV === "development" && params.preview === "services") {
+    const { DevWorkerServicesPreview } = await import("@/components/dev-worker-services-preview");
+    return <DevWorkerServicesPreview />;
+  }
+  if (process.env.NODE_ENV === "development" && params.preview === "office-staff") {
+    const { DevOfficeWorkerPreview } = await import("@/components/dev-office-worker-preview");
+    return <DevOfficeWorkerPreview />;
+  }
   const documentAccessExpired = params.documentAccessExpired === "1";
   const branding = await getBrandingTheme();
   const themeStyles = brandingCss(branding);

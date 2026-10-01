@@ -1,4 +1,4 @@
-import AppointmentsPage from "@/app/appointments/page";
+import AppointmentsPage from "@/components/appointments-page";
 
 export const dynamic = "force-dynamic";
 

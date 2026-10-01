@@ -22,3 +22,6 @@
 .dialog button:disabled { opacity:.6; cursor:wait; }
 .dialog button:focus-visible { outline:2px solid #974567; outline-offset:2px; }
 .error { color:#a32636; font-size:13px; margin-top:16px; }
+
+.officeSection { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e3e5e8; }
+.officeToggle { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border: 1px solid #e9b5cb; border-radius: 12px; background: #fbeaf2; color: #71334f; font-weight: 600; margin-bottom: 10px; }

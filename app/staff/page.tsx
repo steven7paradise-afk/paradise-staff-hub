@@ -1,3 +1,4 @@
+import { readProfessionalLevel } from "@/lib/professional-level";
 import { AppShell } from "@/components/app-shell";
 import { StaffDirectory } from "@/components/staff-directory";
 import { prisma } from "@/lib/prisma";
@@ -363,6 +364,7 @@ export default async function StaffPage({
             photoUrl: user.photo_url ?? "",
             whatsappPhone: user.whatsapp_phone ?? "",
             mansione: user.mansione ?? "",
+            professionalLevel: readProfessionalLevel(user.workforce_data),
             employeeStatus: user.employee_status,
             managerId: user.manager_id,
             managerName: user.manager?.name ?? "",

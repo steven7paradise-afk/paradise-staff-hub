@@ -2,6 +2,8 @@
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
 import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
+import { WorkerServiceSections } from "./worker-service-sections";
+import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, restoreWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation";
 import { hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
 
@@ -151,6 +153,8 @@ type ShopifyClientOrder = {
 };
 
 type ClientControlAppointmentForm = {
+  primaryStaffId?: string;
+  workerServices?: WorkerServiceSection[];
   salon: string;
   clientName: string;
   email: string;
@@ -1644,6 +1648,7 @@ export function AppointmentsBrowser({
   const [workerConfirmationContext, setWorkerConfirmationContext] = useState<{ id: string; name: string } | null>(null);
   const [confirmationAttendance, setConfirmationAttendance] = useState<ActivePcWorker[]>([]);
   const [confirmationAttendanceLoading, setConfirmationAttendanceLoading] = useState(false);
+  const [officeStaffAccess, setOfficeStaffAccess] = useState<{ allowed: boolean; workers: ClientControlEmployee[] }>({ allowed: false, workers: [] });
   const [confirmationAttendanceError, setConfirmationAttendanceError] = useState("");
   const [clientControlEmployees, setClientControlEmployees] = useState<
     ClientControlEmployee[]
@@ -1750,7 +1755,7 @@ export function AppointmentsBrowser({
     });
   const [maskClientPrivacy, setMaskClientPrivacy] = useState(true);
   const finalPaymentOptional = allowsMissingFinalPaymentOrder([
-    ...selectedServiceDetails,
+    ...(clientControlForm.workerServices?.flatMap(section => section.services) ?? selectedServiceDetails),
     clientControlForm.serviceTitle,
   ]);
   const clientControlFormRef = useRef(clientControlForm);
@@ -2287,45 +2292,11 @@ export function AppointmentsBrowser({
       });
     });
 
-    const result: ClientControlEmployee[] = [];
-    const norm = (val: string) =>
-      String(val || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .trim();
-
-    for (const emp of rawList) {
-      const empNorm = norm(emp.name);
-      if (!empNorm) continue;
-      const empFirstWord = empNorm.split(" ")[0];
-
-      const existingIndex = result.findIndex((item) => {
-        const itemNorm = norm(item.name);
-        if (itemNorm === empNorm) return true;
-        const itemFirstWord = itemNorm.split(" ")[0];
-        if (
-          itemFirstWord === empFirstWord &&
-          (itemNorm.split(" ").length === 1 || empNorm.split(" ").length === 1)
-        ) {
-          return true;
-        }
-        return false;
-      });
-
-      if (existingIndex >= 0) {
-        const existing = result[existingIndex];
-        const existingNorm = norm(existing.name);
-        if (empNorm.length > existingNorm.length) {
-          result[existingIndex] = emp;
-        }
-      } else {
-        result.push(emp);
-      }
-    }
-
-    return result.sort((a, b) => a.name.localeCompare(b.name, "it"));
-  }, [clientControlEmployees, corsoTeamOptions]);
+    // Keep every real identity, including office colleagues with the same first name.
+    const byId = new Map<string, ClientControlEmployee>();
+    [...rawList, ...officeStaffAccess.workers].forEach(employee => byId.set(employee.id, employee));
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
+  }, [clientControlEmployees, corsoTeamOptions, officeStaffAccess.workers]);
 
   const filteredClientControlEmployees = useMemo(() => {
     const selectedSalon = normalizeSalonName(clientControlForm.salon);
@@ -2472,7 +2443,7 @@ export function AppointmentsBrowser({
         salon: salonNameForBooking(booking),
         workerId: assignedTeam[0].id,
       });
-    setWorkerConfirmationOpen(!confirmedRecently);
+    setWorkerConfirmationOpen(assignedTeam.length < 2 && !confirmedRecently);
     setServiceDetailsModalOpen(openServiceDetails);
     setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);
@@ -2517,7 +2488,7 @@ export function AppointmentsBrowser({
         : "",
     );
     setSelectedAtteggiamento(inferredOfficeDetails.attitude);
-    setExtraNoteText(officeNote);
+    setExtraNoteText("");
     const detectedServiceDetails = inferredOfficeDetails.services;
     setSelectedServiceDetails(detectedServiceDetails);
     setIsDepositUnlockedManually(false);
@@ -2561,7 +2532,6 @@ export function AppointmentsBrowser({
           inferredOfficeDetails.length ? `Lunghezza: ${inferredOfficeDetails.length}` : "",
           inferredFasce ? `Fasce: ${inferredFasce}` : "",
           inferredOfficeDetails.attitude ? `Cliente: ${inferredOfficeDetails.attitude}` : "",
-          officeNote ? `Note: ${officeNote}` : "",
         ].filter(Boolean).join(" • "),
         notes: Boolean(officeNote),
         beforeMedia: false,
@@ -2645,9 +2615,6 @@ export function AppointmentsBrowser({
         const storedControlNote = String(
           existingAnswers.client_control_notes_text || current.customNoteText || bookingNotes?.shopifyNote || "",
         ).trim();
-        const synchronizedControlNote = officeNote && !storedControlNote.includes(officeNote)
-          ? `${storedControlNote}${storedControlNote ? "\n" : ""}Nota ufficio: ${officeNote}`
-          : storedControlNote;
         return {
           ...current,
           staffIds: preferredEmployeeId
@@ -2670,7 +2637,7 @@ export function AppointmentsBrowser({
           instagramTag: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.instagramTag] || ""),
           discoverySource: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.discoverySource] || ""),
           discoveryOther: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.discoveryOther] || ""),
-          customNoteText: synchronizedControlNote,
+          customNoteText: storedControlNote,
           notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]) || Boolean(officeNote),
           beforeMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
           afterMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.afterMedia]),
@@ -2687,6 +2654,21 @@ export function AppointmentsBrowser({
           : current.staffIds,
         customNoteText:
           current.customNoteText || bookingNotes?.shopifyNote || "",
+      };
+    });
+    setClientControlForm(current => {
+      if (current.bookingId !== booking.id) return current;
+      const boardEmployeeId = questionWorker ? matchEmployeeIdForTeammate(questionWorker, employees) : null;
+      const savedPrimary = typeof existingAnswers?.primary_staff_id === "string" ? existingAnswers.primary_staff_id : "";
+      const primaryStaffId = current.staffIds.includes(savedPrimary) ? savedPrimary
+        : boardEmployeeId && current.staffIds.includes(boardEmployeeId) ? boardEmployeeId : current.staffIds[0];
+      const staffIds = orderedServiceStaff(current.staffIds, primaryStaffId);
+      const workerServices = restoreWorkerServices(existingAnswers, staffIds, officeNote, {
+        services: detectedServiceDetails, grammi: inferredGrammi || "", lunghezza: inferredOfficeDetails.length || "",
+        fasce: inferredFasce || "", atteggiamento: inferredOfficeDetails.attitude || "",
+      });
+      return { ...current, staffIds, primaryStaffId, workerServices,
+        customNoteText: combinedWorkerServiceNote(workerServices, employees),
       };
     });
     setClientControlHistoryLoaded(true);
@@ -2727,31 +2709,12 @@ export function AppointmentsBrowser({
       if (existingAnswers.custom_atteggiamento) {
         setSelectedAtteggiamento(String(existingAnswers.custom_atteggiamento));
       }
-      if (existingAnswers.custom_extra_note) {
-        const storedExtraNote = String(existingAnswers.custom_extra_note).trim();
-        setExtraNoteText(
-          officeNote && !storedExtraNote.includes(officeNote)
-            ? `${storedExtraNote}\n${officeNote}`.trim()
-            : storedExtraNote,
-        );
-      }
+      if (existingAnswers.custom_extra_note) setExtraNoteText(String(existingAnswers.custom_extra_note));
       const storedServices = readStoredServiceDetails(existingAnswers.custom_services);
       const detectedServices = inferredOfficeDetails.services;
       const combinedServices = Array.from(new Set([...storedServices, ...detectedServices]));
       setSelectedServiceDetails(combinedServices);
-      if (combinedServices.length) {
-        setClientControlForm((current) => {
-          if (/\bServizi\s*:/i.test(current.customNoteText)) return current;
-          const serviceLine = `Servizi: ${combinedServices.join(", ")}`;
-          return {
-            ...current,
-            customNoteText: current.customNoteText.trim()
-              ? `${serviceLine}\n${current.customNoteText.trim()}`
-              : serviceLine,
-            notes: true,
-          };
-        });
-      }
+
     }
   }
 
@@ -2820,19 +2783,29 @@ export function AppointmentsBrowser({
       const customGrammiVal = selectedGrammi === "custom" ? customGrammiInput : selectedGrammi;
       const customFasceVal = selectedFasce === "custom" ? customFasceInput : selectedFasce;
 
+      const orderedStaffIds = orderedServiceStaff(formToSubmit.staffIds, formToSubmit.primaryStaffId);
+      const workerServices = reconcileWorkerServices(formToSubmit.workerServices || [], orderedStaffIds);
+      const structuredServices = formToSubmit.workerServices !== undefined;
+      const primaryService = workerServices[0];
+      const serviceNote = combinedWorkerServiceNote(workerServices, clientControlEmployeeOptions);
       const payload = {
         ...formToSubmit,
+        staffIds: orderedStaffIds,
+        primaryStaffId: orderedStaffIds[0],
+        workerServices: structuredServices ? workerServices : undefined,
+        customNoteText: structuredServices ? serviceNote : formToSubmit.customNoteText,
+        notes: structuredServices ? Boolean(serviceNote) : formToSubmit.notes,
         shopifyNoteOrder: selectedShopifyNoteOrder,
         shopifyNoteScope: selectedShopifyNoteOrder ? "selected" : "day",
         appointmentStart: initialBookings.find(booking => booking.id === formToSubmit.bookingId)?.startDate,
         manualPaymentMethod: manualPaymentMethodOverride ?? manualPaymentMethod ?? undefined,
         secondShopifyOrder: formToSubmit.secondShopifyOrder || "",
-        customGrammi: customGrammiVal || "",
-        customLunghezza: selectedLunghezza || "",
-        customFasce: customFasceVal || "",
-        customAtteggiamento: selectedAtteggiamento || "",
-        customExtraNote: extraNoteText || "",
-        customServices: selectedServiceDetails,
+        customGrammi: (structuredServices ? primaryService?.grammi : customGrammiVal) || "",
+        customLunghezza: (structuredServices ? primaryService?.lunghezza : selectedLunghezza) || "",
+        customFasce: (structuredServices ? primaryService?.fasce : customFasceVal) || "",
+        customAtteggiamento: (structuredServices ? primaryService?.atteggiamento : selectedAtteggiamento) || "",
+        customExtraNote: (structuredServices ? primaryService?.details.join("\n") : extraNoteText) || "",
+        customServices: structuredServices ? [...new Set(workerServices.flatMap(section => section.services))] : selectedServiceDetails,
         saveAsDraft,
         autoSave: saveAsDraft && keepOpen,
       };
@@ -2860,8 +2833,7 @@ export function AppointmentsBrowser({
       const targetBooking = targetBookingId
         ? initialBookings.find((booking) => booking.id === targetBookingId)
         : null;
-      const selectedStaff = clientControlEmployeeOptions
-        .filter((employee) => formToSubmit.staffIds.includes(employee.id))
+      const selectedStaff = orderedStaffIds.flatMap(id => clientControlEmployeeOptions.filter(employee => employee.id === id))
         .map((employee) => ({
           id: employee.id,
           name: employee.name,
@@ -3316,6 +3288,18 @@ export function AppointmentsBrowser({
   const confirmationWorkers = filteredClientControlEmployees.filter(employee =>
     isAvailableAppointmentServiceWorker(employee, confirmationAttendance, clientControlForm.salon),
   );
+  useEffect(() => {
+    if (!clientControlOpen) return;
+    const controller = new AbortController();
+    setOfficeStaffAccess({ allowed: false, workers: [] });
+    fetch("/api/appointments/office-staff", { cache: "no-store", signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!controller.signal.aborted) setOfficeStaffAccess({ allowed: data.allowed === true, workers: data.allowed === true && Array.isArray(data.workers) ? data.workers : [] });
+      }).catch(() => {});
+    return () => controller.abort();
+  }, [clientControlOpen, confirmationOperatorKey]);
   useEffect(() => {
     if (!workerConfirmationOpen || !clientControlOpen) return;
     const controller = new AbortController();
@@ -3808,13 +3792,12 @@ export function AppointmentsBrowser({
       clientControlFormRef.current.bookingId === booking.id
         ? [...clientControlFormRef.current.staffIds]
         : null;
-    const nextTeam = corsoTeamOptions.filter((option) =>
-      teammateIds.includes(option.id),
-    );
+    const assignableTeam = [...corsoTeamOptions, ...officeStaffAccess.workers.filter(worker => !corsoTeamOptions.some(option => option.id === worker.id))];
+    const nextTeam = teammateIds.flatMap(id => assignableTeam.filter(option => option.id === id));
 
     if (
       booking.inferredSalon !== "buenos-aires" &&
-      !nextTeam.every((teammate) => canWorkAcrossAppointmentLocations(teammate.role) || normalizeSearchValue(teammate.name) === "franci")
+      !nextTeam.every((teammate) => (officeStaffAccess.allowed && officeStaffAccess.workers.some(worker => worker.id === teammate.id)) || canWorkAcrossAppointmentLocations(teammate.role) || normalizeSearchValue(teammate.name) === "franci")
     ) {
       alert(
         "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
@@ -3910,8 +3893,9 @@ export function AppointmentsBrowser({
     const form = clientControlFormRef.current;
     const booking = initialBookings.find(item => item.id === form.bookingId);
     if (!booking || !clientControlHistoryLoaded || clientControlLoading || savingTeamId) return false;
-    if (!filteredClientControlEmployees.some(item => item.id === employee.id)) return false;
-    if (employee.id !== confirmationSelf?.id && !confirmationWorkers.some(item => item.id === employee.id)) return false;
+    const officeAllowed = officeStaffAccess.allowed && officeStaffAccess.workers.some(item => item.id === employee.id);
+    if (!officeAllowed && !filteredClientControlEmployees.some(item => item.id === employee.id)) return false;
+    if (!officeAllowed && employee.id !== confirmationSelf?.id && !confirmationWorkers.some(item => item.id === employee.id)) return false;
     const rememberConfirmation = () => rememberWorkerConfirmation(workerConfirmationSessionStorage(), {
       bookingId: booking.id,
       operatorId: confirmationOperatorKey,
@@ -3949,6 +3933,10 @@ export function AppointmentsBrowser({
     }
     if (savingTeamId === booking.id) return;
 
+    if (employeeId === (currentForm.primaryStaffId || currentForm.staffIds[0])) {
+      showPushToast("Lavoratrice principale", "La principale è quella della board. Per cambiarla, sposta l’appuntamento nella board corretta.", "error");
+      return;
+    }
     const isSelected = currentForm.staffIds.includes(employeeId);
     const nextEmployeeIds = isSelected
       ? currentForm.staffIds.filter((id) => id !== employeeId)
@@ -3963,9 +3951,7 @@ export function AppointmentsBrowser({
       return;
     }
 
-    const selectedEmployees = clientControlEmployeeOptions.filter((employee) =>
-      nextEmployeeIds.includes(employee.id),
-    );
+    const selectedEmployees = nextEmployeeIds.flatMap(id => clientControlEmployeeOptions.filter(employee => employee.id === id));
     const teammateIds = selectedEmployees
       .map((employee) => {
         const normalizedName = normalizeSearchValue(employee.name);
@@ -5622,285 +5608,21 @@ export function AppointmentsBrowser({
                   </span>
                 </div>
 
-                <div className={serviceDetailsStyles.layout}>
-                <aside aria-label="Nota del servizio" className={serviceDetailsStyles.noteColumn}>
-                  <div className={serviceDetailsStyles.noteContent}>
-                    <div>
-                      <span className="inline-flex items-center gap-2 text-sm font-bold text-[#22543D]">
-                        <FileText className="size-4" /> Nota del servizio
-                      </span>
-                      <p aria-live="polite" aria-atomic="true" className={`${serviceDetailsStyles.note} ${!clientControlForm.customNoteText.trim() ? serviceDetailsStyles.noteEmpty : ""}`}>
-                        {clientControlParagraph(clientControlForm.customNoteText) || "Scegli un servizio: qui vedrai la nota prendere forma."}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={polishClientControlNote}
-                        disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                        className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-[#22543D] transition hover:bg-emerald-100 disabled:opacity-45"
-                      >
-                        <Sparkles className="size-4" />
-                        {clientControlPolishing ? "Riformulo…" : "Riformula testo"}
-                      </button>
-                    </div>
-                    <div className="border-t border-[#dce6df] pt-5">
-                      <div className="flex items-center justify-between gap-2">
-                        <label htmlFor="client-service-extra-note" className="text-sm font-semibold text-[#35483c]">Aggiungi un dettaglio</label>
-                        <span className="text-xs text-neutral-500">Facoltativo</span>
-                      </div>
-                      <textarea
-                        id="client-service-extra-note"
-                        rows={3}
-                        maxLength={600}
-                        value={extraNoteText}
-                        onChange={(e) => {
-                          const text = e.target.value;
-                          setExtraNoteText(text);
-                          updateShopifyNote({ extraNote: text });
-                        }}
-                        className="mt-3 min-h-24 w-full resize-y rounded-xl border border-[#cddbd2] bg-white px-3 py-3 text-base leading-relaxed text-[#1F1F1F] placeholder:text-neutral-500"
-                        placeholder="Preferenze della cliente o dettagli sul lavoro…"
-                        aria-describedby="client-service-extra-count"
-                      />
-                      <p id="client-service-extra-count" className="mt-1 text-right text-xs text-neutral-500">{extraNoteText.length}/600</p>
-                    </div>
-                  </div>
-                </aside>
+                <WorkerServiceSections
+                  key={clientControlForm.bookingId}
+                  serviceDate={initialBookings.find(booking => booking.id === clientControlForm.bookingId)?.startDate}
+                  officeNote={String(paradiseNotes[clientControlForm.bookingId || ""] || initialBookings.find(booking => booking.id === clientControlForm.bookingId)?.paradiseNote || "")}
+                  workers={clientControlEmployeeOptions}
+                  sections={reconcileWorkerServices(clientControlForm.workerServices || [], orderedServiceStaff(clientControlForm.staffIds, clientControlForm.primaryStaffId))}
+                  disabled={clientControlLoading || !clientControlHistoryLoaded || Boolean(savingTeamId)}
+                  onChange={sections => setClientControlForm(current => ({ ...current,
+                    workerServices: [...(current.workerServices || []).filter(section => !current.staffIds.includes(section.staffId)), ...sections],
+                    primaryStaffId: sections[0]?.staffId,
+                    customNoteText: combinedWorkerServiceNote(sections, clientControlEmployeeOptions),
+                    notes: sections.some(section => section.services.length || section.details.length),
+                  }))}
+                />
                 <div id="client-service-fields" className={serviceDetailsStyles.fields}>
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-[#F8FAFC] p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] md:col-span-2">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
-                        <span className="grid size-6 place-items-center rounded-lg bg-[#334155] text-[10px] text-white">1</span>
-                        Servizi eseguiti
-                      </span>
-                      <span className="rounded-full bg-[#F1F5F9] px-2.5 py-1 text-[9px] font-semibold text-[#334155]">
-                        Puoi scegliere più servizi
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {CLIENT_CONTROL_SERVICE_OPTIONS.map((service) => {
-                        const selected = selectedServiceDetails.includes(service);
-                        return (
-                          <button
-                            key={service}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => {
-                              const next = selected
-                                ? selectedServiceDetails.filter((item) => item !== service)
-                                : [...selectedServiceDetails, service];
-                              setSelectedServiceDetails(next);
-                              updateShopifyNote({ services: next });
-                            }}
-                            className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
-                              selected
-                                ? "border-[#334155] bg-[#334155] text-white shadow-[0_6px_14px_rgba(15,23,42,0.20)]"
-                                : "border-[#DDE2E7] bg-white text-[#334155] hover:border-[#334155] hover:bg-[#F8FAFC]"
-                            }`}
-                          >
-                            {selected ? <Check className="size-4" /> : null}
-                            {service}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* 1. Quanti grammi? */}
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">2</span>
-                      Quanti grammi?
-                    </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {["100g", "150g", "200g"].map((gram) => {
-                        const selected = selectedGrammi === gram;
-                        return (
-                          <button
-                            key={gram}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => {
-                              const next = selected ? "" : gram;
-                              setSelectedGrammi(next);
-                              updateShopifyNote({ grammi: next });
-                            }}
-                            className={`min-h-11 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
-                              selected
-                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
-                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
-                            }`}
-                          >
-                            {gram}
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        aria-pressed={selectedGrammi === "custom"}
-                        onClick={() => {
-                          const isCustom = selectedGrammi === "custom";
-                          const next = isCustom ? "" : "custom";
-                          setSelectedGrammi(next);
-                          updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
-                        }}
-                        className={`min-h-11 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
-                          selectedGrammi === "custom"
-                            ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
-                            : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
-                        }`}
-                      >
-                        Personalizzato
-                      </button>
-                      {selectedGrammi === "custom" && (
-                        <input
-                          type="text"
-                          value={customGrammiInput}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCustomGrammiInput(val);
-                            updateShopifyNote({ grammi: val });
-                          }}
-                          placeholder="es. 250g"
-                          aria-label="Grammi personalizzati"
-                          className="h-11 w-28 rounded-xl border-2 border-[#334155] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#334155]/20"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 2. Lunghezza */}
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">3</span>
-                      Lunghezza
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {["55cm", "65cm", "75cm"].map((len) => {
-                        const selected = selectedLunghezza === len;
-                        return (
-                          <button
-                            key={len}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => {
-                              const next = selected ? "" : len;
-                              setSelectedLunghezza(next);
-                              updateShopifyNote({ lunghezza: next });
-                            }}
-                            className={`min-h-11 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
-                              selected
-                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
-                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
-                            }`}
-                          >
-                            {len}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* 3. Quante fasce? */}
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">4</span>
-                      Quante fasce?
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {["1", "2", "3", "4", "5"].map((num) => {
-                        const selected = selectedFasce === num;
-                        return (
-                          <button
-                            key={num}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => {
-                              const next = selected ? "" : num;
-                              setSelectedFasce(next);
-                              updateShopifyNote({ fasce: next });
-                            }}
-                            className={`grid size-11 place-items-center rounded-xl border text-sm font-semibold transition active:scale-95 ${
-                              selected
-                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
-                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
-                            }`}
-                          >
-                            {num}
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        aria-pressed={selectedFasce === "custom"}
-                        onClick={() => {
-                          const isCustom = selectedFasce === "custom";
-                          const next = isCustom ? "" : "custom";
-                          setSelectedFasce(next);
-                          updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
-                        }}
-                        className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
-                          selectedFasce === "custom"
-                            ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
-                            : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
-                        }`}
-                      >
-                        Personalizzato
-                      </button>
-                      {selectedFasce === "custom" && (
-                        <input
-                          type="text"
-                          value={customFasceInput}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCustomFasceInput(val);
-                            updateShopifyNote({ fasce: val });
-                          }}
-                          placeholder="es. 6"
-                          aria-label="Numero di fasce personalizzato"
-                          className="h-11 w-24 rounded-xl border-2 border-[#334155] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#334155]/20"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 4. Come era la cliente? */}
-                  <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)]">
-                    <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
-                      <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">5</span>
-                      Come era la cliente?
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { label: "Tranquilla", emoji: "😌" },
-                        { label: "Simpatica", emoji: "😊" },
-                        { label: "Esigente", emoji: "🧐" },
-                        { label: "Pretenziosa", emoji: "💅" },
-                      ].map((att) => {
-                        const selected = selectedAtteggiamento === att.label;
-                        return (
-                          <button
-                            key={att.label}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => {
-                              const next = selected ? "" : att.label;
-                              setSelectedAtteggiamento(next);
-                              updateShopifyNote({ atteggiamento: next });
-                            }}
-                            className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-semibold transition active:scale-95 ${
-                              selected
-                                ? "bg-[#334155] text-white border-[#334155] shadow-2xs"
-                                : "bg-white text-[#334155] border-[#DDE2E7] hover:bg-[#F1F5F9]"
-                            }`}
-                          >
-                            <span>{att.emoji}</span>
-                            <span>{att.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
                   <div className="rounded-2xl border border-[#DDE2E7] bg-white p-4 shadow-[0_5px_16px_rgba(15,23,42,0.05)] md:col-span-2">
                     <span className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#475569]">
                       <span className="grid size-6 place-items-center rounded-lg bg-[#F1F5F9] text-[10px] text-[#334155]">6</span>
@@ -5995,7 +5717,6 @@ export function AppointmentsBrowser({
                   </div>
 
                 </div>
-                </div>
               </section>
 
               {clientControlMessage ? (
@@ -6044,6 +5765,8 @@ export function AppointmentsBrowser({
         name={confirmationSelf ? appointmentStaffDisplayName(confirmationSelf.name, confirmationSelf.id).split(" ")[0] : ""}
         self={confirmationSelf}
         workers={confirmationWorkers.map(employee => ({ ...employee, status: confirmationAttendance.find(worker => worker.id === employee.id)?.status }))}
+        canChooseOfficeStaff={officeStaffAccess.allowed}
+        officeWorkers={officeStaffAccess.workers}
         workersLoading={confirmationAttendanceLoading}
         workersError={confirmationAttendanceError}
         clientName={maskClientPrivacy ? maskClientName(clientControlForm.clientName) : clientControlForm.clientName}

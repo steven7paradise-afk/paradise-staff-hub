@@ -1,5 +1,6 @@
 "use client";
 import "./contract-history.css";
+import { PROFESSIONAL_LEVELS, readProfessionalLevel, type ProfessionalLevel } from "@/lib/professional-level";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -33,6 +34,7 @@ type Employee = {
   photoUrl: string;
   whatsappPhone: string;
   mansione: string;
+  professionalLevel?: ProfessionalLevel;
   employeeStatus: string;
   managerId: string | null;
   managerName: string;
@@ -806,6 +808,7 @@ export function StaffDirectory({
           photoUrl: editForm.photoUrl || undefined,
           whatsappPhone: editForm.whatsappPhone || undefined,
           mansione: editForm.mansione || undefined,
+          professionalLevel: editForm.professionalLevel || "",
           active: editForm.active,
           employeeStatus: editForm.employeeStatus,
           managerId: editForm.managerId || null,
@@ -846,6 +849,7 @@ export function StaffDirectory({
         photoUrl: data.photo_url ?? "",
         whatsappPhone: data.whatsapp_phone ?? "",
         mansione: data.mansione ?? "",
+        professionalLevel: readProfessionalLevel(data.workforce_data),
         employeeStatus: data.employee_status,
         managerId: data.manager_id,
         managerName: mgrName,
@@ -943,6 +947,7 @@ export function StaffDirectory({
           photoUrl: newEmployeeForm.photoUrl || undefined,
           whatsappPhone: newEmployeeForm.whatsappPhone || undefined,
           mansione: newEmployeeForm.mansione || undefined,
+          professionalLevel: newEmployeeForm.professionalLevel || "",
           active: newEmployeeForm.active !== false,
           employeeStatus: newEmployeeForm.employeeStatus || "Attivo",
           managerId: newEmployeeForm.managerId || null,
@@ -978,6 +983,7 @@ export function StaffDirectory({
         photoUrl: data.photo_url ?? "",
         whatsappPhone: data.whatsapp_phone ?? "",
         mansione: data.mansione ?? "",
+        professionalLevel: readProfessionalLevel(data.workforce_data),
         employeeStatus: data.employee_status || "Attivo",
         managerId: data.manager_id,
         managerName: mgrName,
@@ -1682,6 +1688,14 @@ export function StaffDirectory({
                             className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
                           />
                         )}
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Livello professionale</span>
+                        <Select value={editForm.professionalLevel || ""} onChange={(e) => setEditForm(prev => prev ? { ...prev, professionalLevel: e.target.value as ProfessionalLevel } : null)}>
+                          <option value="">Non specificato</option>
+                          {PROFESSIONAL_LEVELS.map(level => <option key={level} value={level}>{level}</option>)}
+                        </Select>
                       </label>
 
                       <label className="block space-y-1">
@@ -2768,6 +2782,13 @@ export function StaffDirectory({
                           <option value="custom">+ Aggiungi altra mansione</option>
                         </Select>
                         {customMansioneCreate && <Field required value={newEmployeeForm.mansione || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)} placeholder="Scrivi la nuova mansione" className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200" />}
+                      </label>
+                      <label className="space-y-1.5 sm:col-span-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Livello professionale</span>
+                        <Select value={newEmployeeForm.professionalLevel || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, professionalLevel: e.target.value as ProfessionalLevel } : null)}>
+                          <option value="">Non specificato</option>
+                          {PROFESSIONAL_LEVELS.map(level => <option key={level} value={level}>{level}</option>)}
+                        </Select>
                       </label>
                       <label className="space-y-1.5">
                         <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Salone <b className="text-[#c23878]">*</b></span>

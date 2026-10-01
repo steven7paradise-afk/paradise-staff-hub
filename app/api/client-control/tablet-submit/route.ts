@@ -1,3 +1,6 @@
+import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
+import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, parseWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -156,6 +159,8 @@ export async function POST(request: NextRequest) {
     depositPaid?: string | number;
     paid?: string | number;
     staffIds?: string[];
+    primaryStaffId?: string;
+    workerServices?: unknown;
     shopifyOrder?: string;
     secondShopifyOrder?: string;
     shopifyNoteOrder?: string;
@@ -191,7 +196,16 @@ export async function POST(request: NextRequest) {
   const isDraft = !!body?.saveAsDraft;
   const salonName = textValue(body?.salon || tabletDevice?.location?.name);
   const clientName = textValue(body?.clientName);
-  const staffIds = Array.isArray(body?.staffIds) ? body!.staffIds.filter(Boolean) : [];
+  const staffIds = orderedServiceStaff(Array.isArray(body?.staffIds) ? body.staffIds.filter(id => typeof id === "string" && id) : [], body?.primaryStaffId);
+  let workerServices: WorkerServiceSection[] | undefined;
+  if (body?.workerServices !== undefined) {
+    try {
+      workerServices = parseWorkerServices(body.workerServices, staffIds);
+      workerServices = reconcileWorkerServices(workerServices, staffIds);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Servizi non validi." }, { status: 400 });
+    }
+  }
 
   const bookingIdFromBody = textValue(body?.bookingId);
   if (
@@ -226,14 +240,11 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: staffIds },
         active: true,
-        OR: [
-          { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
-          { name: { equals: "Franci", mode: "insensitive" } },
-        ],
       },
       select: {
         id: true,
         name: true,
+        role: true,
         sede_id: true,
         location: { select: { name: true } },
       },
@@ -241,13 +252,29 @@ export async function POST(request: NextRequest) {
     });
 
     staffForSalon = selectedStaff.filter((employee) =>
-      sameSalon(employee.location?.name, location.name) || isFranci(employee.name)
+      canAssignAppointmentOfficeStaff(noteAccessUser?.location?.name, employee.location?.name) ||
+      isAlwaysActiveAppointmentStaff(employee.name, employee.id) ||
+      (!["ZERO", "SUPER_ADMIN"].includes(employee.role) && sameSalon(employee.location?.name, location.name))
     );
     if (!isDraft && staffForSalon.length === 0) {
       return NextResponse.json({ error: "Nessun collaboratore attivo per questa sede." }, { status: 400 });
     }
   }
 
+  if (workerServices && staffForSalon.length !== staffIds.length) {
+    return NextResponse.json({ error: "Verifica le collaboratrici dei servizi: una persona non è più disponibile per questa sede." }, { status: 400 });
+  }
+  staffForSalon = staffIds.flatMap(id => staffForSalon.filter(person => person.id === id));
+  if (workerServices && body) {
+    const primary = workerServices[0];
+    body.customServices = [...new Set(workerServices.flatMap(section => section.services))];
+    body.customNoteText = combinedWorkerServiceNote(workerServices, staffForSalon);
+    body.customGrammi = primary?.grammi || "";
+    body.customLunghezza = primary?.lunghezza || "";
+    body.customFasce = primary?.fasce || "";
+    body.customAtteggiamento = primary?.atteggiamento || "";
+    body.customExtraNote = primary?.details.join("\n") || "";
+  }
   const staffNames = staffForSalon.map((s) => s.name);
   const activeSalonStaff = await prisma.user.findMany({
     where: {
@@ -553,6 +580,8 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.instagramTag]: textValue(body?.instagramTag),
     [CLIENT_CONTROL_FIELD_IDS.notes]: boolValue(body?.notes),
     client_control_notes_text: textValue(body?.customNoteText),
+    worker_service_sections: workerServices,
+    primary_staff_id: workerServices ? staffIds[0] : undefined,
     booking_id: textValue(body?.bookingId),
     [CLIENT_CONTROL_FIELD_IDS.beforeMedia]: boolValue(body?.beforeMedia),
     [CLIENT_CONTROL_FIELD_IDS.afterMedia]: boolValue(body?.afterMedia),

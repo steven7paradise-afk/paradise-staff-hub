@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import AppointmentsPage from "../page";
+import AppointmentsPage from "@/components/appointments-page";
 import { appointmentSalonSlugFromName, appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
