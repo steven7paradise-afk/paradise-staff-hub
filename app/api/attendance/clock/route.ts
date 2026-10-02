@@ -1,3 +1,4 @@
+import { sendWidgetUpdate } from "@/lib/mobile-widget-push";
 import { after, NextRequest, NextResponse } from "next/server";
 import { publishDailyResultBonus } from "@/lib/result-bonus-delivery";
 import { publishLiveChange } from "@/lib/salon-live";
@@ -198,6 +199,8 @@ export async function POST(request: NextRequest) {
       note: storedNote,
     },
   });
+
+  after(async () => { await sendWidgetUpdate(user.id).catch(() => console.warn("Widget push unavailable")); });
 
   if (type === "USCITA") after(async () => {
     // Keep the clock-out response fast; retry transient transaction/network failures.
