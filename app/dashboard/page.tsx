@@ -566,24 +566,34 @@ export default async function DashboardPage() {
   const canonicalEmployeeNames = allEmployees.map(e => e.name).filter((name): name is string => Boolean(name?.trim()));
   const clientControlFormIds = clientControlForms.filter(f => isClientControlFormName(f.name, f.category)).map(f => f.id);
   const range = { gte: romeInstantStart(statusToday), lt: romeInstantStart(statusTomorrow) };
-  const [bookings, teamSetting, statusSetting] = await Promise.all([
-    hasCowlendarToken() ? safe(getCowlendarBookingsForRange({ startDate: range.gte.toISOString(), endDate: new Date(range.lt.getTime() - 1).toISOString(), limit: 1500 }), null) : null,
+  const monthStart = new Date(statusToday);
+  monthStart.setUTCDate(1);
+  const [monthBookings, teamSetting, statusSetting] = await Promise.all([
+    hasCowlendarToken() ? safe(getCowlendarBookingsForRange({ startDate: romeInstantStart(monthStart).toISOString(), endDate: new Date(range.lt.getTime() - 1).toISOString(), limit: 5000 }), null) : null,
     safe(prisma.setting.findUnique({ where: { key: "appointment_team_overrides" } }), null),
     safe(prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }), null),
   ]);
+  const workerIdentity = { id: currentUser.id, name: currentUser.name || "" };
+  const bookings = monthBookings?.filter(booking => new Date(booking.start_date) >= range.gte && new Date(booking.start_date) < range.lt) ?? null;
+  const monthAssigned = monthBookings && teamSetting && statusSetting ? assignedDailyAppointments(
+    monthBookings, (teamSetting.value || {}) as any, (statusSetting.value || {}) as any, workerIdentity, canonicalEmployeeNames, [],
+  ) : null;
   const cards = clientControlFormIds.length ? await safe(prisma.serviceFormResponse.findMany({
     where: { form_id: { in: clientControlFormIds }, OR: [
       { created_at: range }, { updated_at: range },
-      ...(bookings || []).map(booking => ({ answers: { path: ["booking_id"], equals: String(booking.id) } })),
+      ...(monthAssigned || []).map(booking => ({ answers: { path: ["booking_id"], equals: String(booking.id) } })),
     ] },
     select: { id: true, created_at: true, answers: true, user: { select: { name: true } } },
     orderBy: { updated_at: "desc" },
   }), null) : [];
-  const workerIdentity = { id: currentUser.id, name: currentUser.name || "" };
   const currentWorkerPoints = cards ? countDailyCompletedCards(cards, workerIdentity, canonicalEmployeeNames) : null;
   const assignedAppointments = bookings && cards && teamSetting && statusSetting ? assignedDailyAppointments(
     bookings, (teamSetting.value || {}) as any, (statusSetting.value || {}) as any, workerIdentity, canonicalEmployeeNames, cards,
   ) : null;
+
+  const monthlyIncompleteCount = monthBookings && cards && teamSetting && statusSetting ? assignedDailyAppointments(
+    monthBookings, (teamSetting.value || {}) as any, (statusSetting.value || {}) as any, workerIdentity, canonicalEmployeeNames, cards,
+  ).filter(booking => !booking.noteCompleted).length : null;
 
   // Calculate Shift & Worked Hours for Logged-In User
   const myTodayShift = todayShiftEntries.find((e) => e.user_id === currentUser.id);
@@ -703,6 +713,7 @@ export default async function DashboardPage() {
           sedeId: currentUser.sede_id ?? null,
         }}
         assignedAppointments={assignedAppointments}
+        monthlyIncompleteCount={monthlyIncompleteCount}
         workerGoal={workerGoal}
         professionalLevel={readProfessionalLevel(currentUser.workforce_data)}
         currentWorkerPoints={currentWorkerPoints}

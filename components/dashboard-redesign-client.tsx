@@ -55,6 +55,7 @@ type Props = {
     sedeId?: string | null;
   };
   assignedAppointments?: AssignedDailyAppointment[] | null;
+  monthlyIncompleteCount?: number | null;
   workerGoal?: number | null;
   professionalLevel?: string;
   currentWorkerPoints?: number | null;
@@ -93,6 +94,7 @@ const statusLabels: Record<string, string> = {
 export function DashboardRedesignClient({
   currentUser,
   assignedAppointments = null,
+  monthlyIncompleteCount = null,
   workerGoal = null,
   professionalLevel = "",
   currentWorkerPoints = 0,
@@ -204,18 +206,18 @@ export function DashboardRedesignClient({
   return (
     <div className="worker-dashboard min-h-screen bg-transparent text-[#171717] dark:text-white">
       <main className="mx-auto w-full max-w-[1420px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-        <header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)]">
+        <header className="worker-dashboard-enter relative isolate overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-sm">
           <img src="/beta-login-hero.png" alt="" className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center" aria-hidden="true" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,8,21,0.88)_0%,rgba(78,20,48,0.62)_52%,rgba(66,14,39,0.18)_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(24,6,15,0.32),transparent_65%)]" />
-          <div className="relative flex min-h-48 flex-col justify-end gap-5 px-5 py-6 sm:min-h-56 sm:flex-row sm:items-end sm:justify-between sm:px-8 sm:py-8">
+          <div className="relative flex min-h-36 flex-col justify-center gap-5 px-5 py-5 sm:min-h-40 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-6">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white/70 bg-white/90 font-black text-[#7d294f] shadow-xl sm:size-20">
+            <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white/70 bg-white/90 font-black text-[#7d294f] shadow-sm sm:size-16">
               {currentUser.photo_url ? <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={userName} className="size-full object-cover" /> : initials}
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ffc3dc]">{todayIsRest ? "Giornata di riposo" : "La mia giornata"}</p>
-              <h1 className="mt-1 truncate text-3xl font-black tracking-[-0.04em] sm:text-5xl">{todayIsRest ? `Buon riposo, ${firstName}` : `${greeting}, ${firstName}`}</h1>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{todayIsRest ? `Buon riposo, ${firstName}` : `${greeting}, ${firstName}`}</h1>
               <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-white/70"><MapPin className="size-3.5 text-[#ffc3dc]" />{currentUser.locationName || "Sede non indicata"}</p>
               {todayIsRest && <p className="mt-2 text-xs font-black text-[#ffc3dc]">Ci vediamo {nextWorkDayLabel || "al prossimo turno"}.</p>}
             </div>
@@ -225,10 +227,10 @@ export function DashboardRedesignClient({
         </header>
 
         <section className="worker-dashboard-enter worker-dashboard-enter-delay-1 mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="min-w-0 rounded-[22px] border border-[#ecc6dc] bg-white p-5 shadow-sm">
+          <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Turno di oggi</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-500">Turno di oggi</p>
                 <p className="mt-2 text-2xl font-black tracking-tight">{todayShiftTime}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-black uppercase", attendance.status === "TURNO" ? "bg-emerald-50 text-emerald-700" : attendance.status === "PAUSA" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/50")}>
@@ -248,18 +250,18 @@ export function DashboardRedesignClient({
           </div>
 
           <div className="contents">
-            <div className="min-w-0 rounded-[22px] border border-[#ecc6dc] bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/40">Obiettivo personale · Oggi</p><Target className="size-4 shrink-0 text-[#c66170]" /></div>
+            <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-neutral-500">Obiettivo personale · Oggi</p><Target className="size-4 shrink-0 text-[#c66170]" /></div>
               {professionalLevel && <p className="mt-2 text-xs font-semibold text-[#98516d]">Livello {professionalLevel}</p>}
               <p className="mt-3 text-3xl font-black">{currentWorkerPoints ?? "—"}{workerGoal !== null && <span className="ml-1 text-sm text-black/45">/ {workerGoal}</span>}</p>
               <p className="mt-1 text-xs text-black/55">Schede cliente completate oggi</p>
               {workerGoal !== null && currentWorkerPoints !== null ? <>
                 <div role="progressbar" aria-label="Obiettivo personale di oggi" aria-valuemin={0} aria-valuemax={workerGoal} aria-valuenow={Math.min(currentWorkerPoints, workerGoal)} className="mt-4 h-2 overflow-hidden rounded-full bg-[#f7e5ef]"><div className={cn("h-full", goalReached ? "bg-emerald-500" : "bg-[#c66170]")} style={{ width: `${objectivePercent}%` }} /></div>
-                <p role="status" className={cn("mt-3 text-sm font-bold", goalReached ? "text-emerald-700" : "text-[#98516d]")}>{goalReached ? currentWorkerPoints > workerGoal ? "Brava, hai superato il tuo obiettivo! Continua così." : "Brava, obiettivo raggiunto! Continua così." : "Completa le schede e supera il tuo obiettivo personale."}</p>
+                <p role="status" className={cn("mt-3 text-sm font-bold", goalReached ? "text-emerald-700" : "text-[#98516d]")}>{goalReached ? currentWorkerPoints > workerGoal ? "Brava, hai superato il tuo obiettivo! Continua così." : "Brava, obiettivo raggiunto! Continua così." : "Completa e supera il tuo obiettivo di oggi."}</p>
               </> : <p className="mt-3 text-xs text-black/50">{currentWorkerPoints === null ? "Conteggio momentaneamente non disponibile." : "Obiettivo giornaliero da definire per il tuo livello."}</p>}
 
             </div>
-            <div className={cn("min-w-0 rounded-[22px] border p-5 shadow-sm", monthlyDelays.totalMinutes > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50/40")}>
+            <div className={cn("min-w-0 rounded-2xl border p-5 shadow-sm", monthlyDelays.totalMinutes > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-neutral-200 bg-white")}>
               <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[0.14em]">Ritardi del mese</p><ClockAlert className="size-4" /></div>
               <p className="mt-3 text-3xl font-black">{formatDelayMinutes(monthlyDelays.totalMinutes)}</p>
               <dl className="mt-3 space-y-2 text-xs"><div className="flex justify-between gap-2"><dt>Ingresso</dt><dd className="font-bold">{formatDelayMinutes(monthlyDelays.entryMinutes)}</dd></div><div className="flex justify-between gap-2"><dt>Rientro dalla pausa</dt><dd className="font-bold">{formatDelayMinutes(monthlyDelays.breakMinutes)}</dd></div></dl>
@@ -272,32 +274,38 @@ export function DashboardRedesignClient({
               document.getElementById("daily-assigned-appointments")?.focus({ preventScroll: true });
               document.getElementById("daily-assigned-appointments")?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
-            className={cn("flex min-w-0 flex-col items-stretch justify-start rounded-[22px] border p-5 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#98516d] focus-visible:ring-offset-2 disabled:cursor-default", incompleteCount === null ? "border-[#ecc6dc] bg-white" : incompleteCount > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50/40 text-emerald-800")}>
-            <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.14em]">Note non completate</p><FileText className="size-4 shrink-0" /></div>
+            className={cn("flex min-w-0 flex-col items-stretch justify-start rounded-2xl border p-5 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#98516d] focus-visible:ring-offset-2 disabled:cursor-default", incompleteCount === null ? "border-[#ecc6dc] bg-white" : incompleteCount > 0 ? "border-[#e5ccd8] bg-[#fcf8fa] text-[#793752]" : "border-neutral-200 bg-white text-emerald-800")}>
+            <div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.14em]">Schede da completare</p><FileText className="size-4 shrink-0" /></div>
             <p className="mt-3 text-3xl font-black">{incompleteCount ?? "—"}</p>
             <p className="mt-1 text-xs">Schede cliente di oggi da completare</p>
-            <p className="mt-4 text-sm font-bold">{incompleteCount === null ? "Conteggio non disponibile" : incompleteCount > 0 ? "Apri le schede da completare →" : "Tutte le note sono complete"}</p>
+            <div className="mt-4 border-t border-current/10 pt-3">
+              <div className="flex items-baseline justify-between gap-3"><span className="text-xs font-semibold">Da completare nel mese</span><strong className="text-xl tabular-nums">{monthlyIncompleteCount ?? "—"}</strong></div>
+              <p className="mt-1 text-[11px] opacity-75">Dal primo del mese a oggi · include oggi</p>
+              {monthlyIncompleteCount === null && <p className="mt-1 text-[11px]">Conteggio mensile non disponibile</p>}
+            </div>
+            <p className="mt-4 text-sm font-bold">{incompleteCount === null ? "Conteggio non disponibile" : incompleteCount > 0 ? "Completa le schede →" : "Tutte le note sono complete"}</p>
           </button>
         </section>
 
-        <section id="daily-assigned-appointments" tabIndex={-1} className="mt-5 scroll-mt-6 rounded-[28px] border border-[#ecc6dc] bg-white p-5 outline-none sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-black">{showIncompleteOnly ? "Schede con note non completate" : "I tuoi appuntamenti di oggi"}{visibleAppointments ? ` · ${visibleAppointments.length}` : ""}</h2><Link href="/appointments" className="text-sm font-bold text-[#98516d]">Apri agenda →</Link></div>
+        <section id="daily-assigned-appointments" tabIndex={-1} className="mt-6 scroll-mt-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm outline-none sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold tracking-tight">{showIncompleteOnly ? "Schede da completare" : "Appuntamenti di oggi"}{visibleAppointments ? ` · ${visibleAppointments.length}` : ""}</h2><Link href="/appointments" className="inline-flex min-h-10 items-center rounded-lg border border-neutral-200 px-3 text-xs font-semibold text-[#793752] transition hover:bg-[#fcf8fa]">Apri agenda →</Link></div>
           {assignedAppointments !== null && <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Mostra schede cliente">
             <button type="button" aria-pressed={!showIncompleteOnly} onClick={() => setShowIncompleteOnly(false)} className={cn("rounded-full border px-3 py-2 text-xs font-bold", !showIncompleteOnly ? "border-[#98516d] bg-[#faf0f5] text-[#98516d]" : "border-neutral-200")}>Tutte · {assignedAppointments.length}</button>
-            <button type="button" aria-pressed={showIncompleteOnly} onClick={() => setShowIncompleteOnly(true)} className={cn("rounded-full border px-3 py-2 text-xs font-bold", showIncompleteOnly ? "border-red-300 bg-red-50 text-red-700" : "border-neutral-200")}>Da completare · {incompleteCount}</button>
+            <button type="button" aria-pressed={showIncompleteOnly} onClick={() => setShowIncompleteOnly(true)} className={cn("rounded-full border px-3 py-2 text-xs font-bold", showIncompleteOnly ? "border-[#98516d] bg-[#faf0f5] text-[#98516d]" : "border-neutral-200")}>Da completare · {incompleteCount}</button>
           </div>}
           {assignedAppointments === null ? <p className="mt-3 text-sm text-black/50">Appuntamenti momentaneamente non disponibili.</p> : <>
-            {assignedAppointments.some(item => !item.noteCompleted) && <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">Note cliente non fatte: {assignedAppointments.filter(item => !item.noteCompleted).length}. Completa la scheda al termine di ogni appuntamento.</p>}
+            <p className="mt-3 text-xs leading-5 text-neutral-500">Apri un appuntamento per consultare i dettagli e completare la scheda al termine del servizio.</p>
             {!visibleAppointments?.length && <p className="mt-3 text-sm text-black/50">{showIncompleteOnly ? "Nessuna nota da completare per oggi." : "Nessun appuntamento assegnato oggi."}</p>}
-            <div className="mt-3 divide-y divide-[#f1e5ec]">{visibleAppointments?.map(item => <Link key={item.id} href={`/appointments?booking=${encodeURIComponent(item.id)}&focus=${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(item.start))}`} className="flex flex-wrap items-center justify-between gap-3 py-4">
-              <div className="min-w-0"><p className="font-bold">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(item.start))} · {item.client}</p><p className="mt-1 text-sm text-black/50">{item.service}</p></div>
-              <span className={cn("rounded-full px-3 py-1.5 text-xs font-bold", item.noteCompleted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{item.noteCompleted ? "Scheda completata" : "Nota cliente non fatta →"}</span>
+            <div className="mt-4 divide-y divide-neutral-100">{visibleAppointments?.map(item => <Link key={item.id} href={`/appointments?booking=${encodeURIComponent(item.id)}&focus=${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(item.start))}`} className="group flex items-center gap-3 rounded-lg px-2 py-4 transition hover:bg-[#fcf8fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#98516d] sm:gap-5">
+              <time dateTime={item.start} className="shrink-0 rounded-lg bg-neutral-50 px-2.5 py-3 text-sm font-semibold tabular-nums text-neutral-700">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(item.start))}</time>
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-neutral-900 sm:text-base">{item.client}</p><p className="mt-1 break-words text-xs leading-5 text-neutral-500">{item.service}</p><span className={cn("mt-1 inline-block text-xs sm:hidden", item.noteCompleted ? "text-emerald-700" : "text-[#793752]")}>{item.noteCompleted ? "Completata" : "Da compilare"}</span></div>
+              <span className={cn("hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium sm:inline-flex", item.noteCompleted ? "bg-emerald-50 text-emerald-700" : "bg-[#faf0f5] text-[#793752]")}>{item.noteCompleted ? <><Check className="size-3.5" />Completata</> : "Compila scheda"}</span><ArrowRight className="size-4 shrink-0 text-neutral-400 transition group-hover:translate-x-0.5 group-hover:text-[#793752]" />
             </Link>)}</div>
           </>}
         </section>
 
         <section className="worker-dashboard-enter worker-dashboard-enter-delay-2 mt-5 overflow-hidden rounded-[28px] border border-[#ecc6dc] bg-white shadow-[0_14px_38px_rgba(59,24,42,0.06)]">
-          <div className="flex items-center justify-between border-b border-[#ecc6dc] bg-[#f5c1e2] px-5 py-4 sm:px-6">
+          <div className="flex items-center justify-between border-b border-neutral-200 bg-[#faf7f9] px-5 py-4 sm:px-6">
             <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/55">Planning personale</p><h2 className="mt-1 text-xl font-black">Turni di questa settimana</h2></div>
             <Link href="/my-shifts" className="inline-flex items-center gap-2 text-[10px] font-black uppercase">Calendario <ArrowRight className="size-4" /></Link>
           </div>

@@ -1,3 +1,5 @@
+import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
+import { profilePerformance, type ProfilePerformance } from "@/lib/profile-performance";
 import Link from "next/link";
 import { CalendarDays, ChevronRight, FileCheck2, FileText, IdCard, LockKeyhole, User, Mail, Fingerprint, Briefcase, ShieldAlert, MapPin, Sparkles } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -13,6 +15,27 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { attendanceActualMinutes } from "@/lib/scheduled-attendance";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
+
+function romeInstantStart(calendarDate: Date) {
+  const year = calendarDate.getUTCFullYear();
+  const month = calendarDate.getUTCMonth();
+  const day = calendarDate.getUTCDate();
+  const noon = new Date(Date.UTC(year, month, day, 12));
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(noon);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value || 0);
+  const representedAsUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
+  const offset = representedAsUtc - noon.getTime();
+  return new Date(Date.UTC(year, month, day) - offset);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +132,22 @@ export default async function ProfilePage() {
     }),
   ]);
   
+  let performance: ProfilePerformance | null = null;
+  if (hasCowlendarToken()) {
+    try {
+      const firstDay = new Date(Date.UTC(todayYear, todayMonth - 1, 1));
+      const nextDay = new Date(todayCalendarDate);
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const [bookings, teams, statuses, staff] = await Promise.all([
+        getCowlendarBookingsForRange({ startDate: romeInstantStart(firstDay).toISOString(), endDate: new Date(romeInstantStart(nextDay).getTime() - 1).toISOString(), limit: 5000 }),
+        prisma.setting.findUnique({where: {key: "appointment_team_overrides"}}),
+        prisma.setting.findUnique({where: {key: "appointment_status_overrides"}}),
+        prisma.user.findMany({select: {name: true}}),
+      ]);
+      performance = profilePerformance(bookings, (teams?.value || {}) as Parameters<typeof profilePerformance>[1], (statuses?.value || {}) as Parameters<typeof profilePerformance>[2], {id: user.id, name: user.name}, staff.map(person => person.name), now);
+    } catch { console.error("Profile appointment performance temporarily unavailable"); }
+  }
+
   const hours = monthlyPersonalHours(year, month, schedules, logs, records);
   const plannedHours = hours.reduce((total, row) => total + row.plannedHours, 0);
   const workedHours = hours.reduce((total, row) => total + row.workedHours, 0);
@@ -161,6 +200,7 @@ export default async function ProfilePage() {
   return (
     <AppShell title="Profilo" role={session.user.role as Role} hideHeader={true} transparentMobileHeader={true} edgeToEdgeMain>
       <ClientProfile
+        performance={performance}
         user={{
           id: user.id,
           name: user.name,
@@ -207,17 +247,7 @@ export default async function ProfilePage() {
           medicalCode: request.medical_code,
           createdAt: request.created_at.toISOString(),
         }))}
-        settingsNode={
-          <ProfileSettings
-            photoUrl={user.photo_url}
-            name={user.name}
-            role={user.role}
-            calendarSync={user.google_calendar_sync}
-            calendarId={user.google_calendar_id}
-            headerColor={user.header_color}
-            sidebarColor={user.sidebar_color}
-          />
-        }
+
       />
     </AppShell>
   );

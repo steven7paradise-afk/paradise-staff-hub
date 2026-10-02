@@ -11,7 +11,7 @@ export default async function LoginPage({
   const params = await searchParams;
   if (process.env.NODE_ENV === "development" && params.preview === "dashboard") {
     const { DashboardRedesignClient } = await import("@/components/dashboard-redesign-client");
-    return <DashboardRedesignClient currentUser={{ id: "demo", name: "Giulia · Esempio", locationName: "Salone di esempio" }} workerGoal={5} currentWorkerPoints={3} professionalLevel="Junior" monthlyDelays={{ entryMinutes: 65, breakMinutes: 20, totalMinutes: 85 }} assignedAppointments={[
+    return <DashboardRedesignClient currentUser={{ id: "demo", name: "Giulia · Esempio", locationName: "Salone di esempio" }} workerGoal={5} currentWorkerPoints={3} monthlyIncompleteCount={7} professionalLevel="Junior" monthlyDelays={{ entryMinutes: 65, breakMinutes: 20, totalMinutes: 85 }} assignedAppointments={[
       { id: "demo-1", client: "Cliente di esempio", service: "Colore e piega", start: "2026-10-01T14:00:00+02:00", noteCompleted: false },
       { id: "demo-2", client: "Cliente completata di esempio", service: "Taglio", start: "2026-10-01T10:00:00+02:00", noteCompleted: true },
     ]} />;

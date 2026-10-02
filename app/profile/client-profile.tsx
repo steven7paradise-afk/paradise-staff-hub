@@ -24,11 +24,14 @@ import {
   Send,
   X,
 } from "lucide-react";
+import type { ProfilePerformance } from "@/lib/profile-performance";
+import profileStyles from "./profile.module.css";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
-import { LogoutButton } from "@/components/logout-button";
+
 
 type ClientProfileProps = {
+  performance?: ProfilePerformance | null;
   user: {
     id: string;
     name: string;
@@ -98,7 +101,7 @@ type ClientProfileProps = {
     year: number | null;
     createdAt: string;
   }>;
-  settingsNode: React.ReactNode;
+
 };
 
 type ShiftAttendance = { type: string; time: string; timestamp: string; minutes: number };
@@ -169,6 +172,7 @@ function elapsedLabel(milliseconds: number) {
 }
 
 export function ClientProfile({
+  performance = null,
   user,
   colleagues,
   stats,
@@ -176,10 +180,9 @@ export function ClientProfile({
   shiftWeeks,
   holidayRequests,
   documentsList = [],
-  settingsNode
 }: ClientProfileProps) {
   const [userPhoto, setUserPhoto] = useState(user.photoUrl);
-  const [activeTab, setActiveTab] = useState<"overview" | "info" | "security">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "info" | "performance">("overview");
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [visibleShiftWeekIndex, setVisibleShiftWeekIndex] = useState(0);
   const [selectedShiftDate, setSelectedShiftDate] = useState(() => shiftWeeks[0]?.days.find((day) => day.isToday)?.dateKey || shiftWeeks[0]?.days[0]?.dateKey || "");
@@ -338,94 +341,52 @@ export function ClientProfile({
   const workedPercent = Math.min(100, Math.round((stats.workedHours / Math.max(1, stats.plannedHours)) * 100));
 
   return (
-    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-3 overflow-hidden px-2.5 pb-16 pt-0 font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-4 sm:px-6 sm:pb-20 lg:px-8 xl:grid xl:grid-cols-[280px_minmax(0,1fr)] xl:items-start xl:gap-4 xl:space-y-0 xl:pt-20">
+    <div className={`${profileStyles.page} profile-liquid-page relative isolate min-h-dvh w-full space-y-3 overflow-hidden px-2.5 pb-16 pt-0 font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-4 sm:px-6 sm:pb-20 lg:px-8 lg:grid lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)] lg:items-start lg:gap-4 lg:space-y-0 lg:pt-12`}>
       
-      {/* Profilo professionale con banner e riepilogo operativo */}
-      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none rounded-[24px] border border-white/55 bg-white/75 p-3 shadow-[0_18px_55px_rgba(44,24,15,0.12)] backdrop-blur-2xl sm:p-4 xl:contents">
-        <div className="grid gap-4 xl:contents">
-          <section className="profile-glass-inset profile-page-enter overflow-hidden rounded-[22px] border border-neutral-200 bg-neutral-50 text-left xl:row-span-3 xl:row-start-1 xl:self-start">
-            <div className="relative h-28 overflow-hidden sm:h-36">
-              <img src={user.coverUrl ? resolveDrivePhotoUrl(user.coverUrl) : "/beta-login-hero.png"} alt="" className="size-full object-cover object-center" aria-hidden="true" />
-              <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(35,8,21,0.12),rgba(64,14,39,0.5))]" />
-              <span className="absolute right-3 top-3 inline-flex max-w-[70%] items-center gap-1.5 rounded-full border border-white/45 bg-white/90 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#8f2857] shadow-sm backdrop-blur-md dark:border-white/15 dark:bg-[#21191f]/90 dark:text-[#f4a6c9]">
-                <Briefcase className="size-3 shrink-0" aria-hidden="true" />
-                <span className="truncate">{roleLabel}</span>
-              </span>
-            </div>
-            <div className="relative px-4 pb-5 pt-12 text-center sm:px-5 sm:pb-6 sm:pt-14 sm:text-left">
-              <div className="absolute -top-10 left-1/2 grid size-20 -translate-x-1/2 place-items-center overflow-hidden rounded-full border-[3px] border-white bg-[#f6e8ee] text-xl font-serif text-[#7d294f] shadow-[0_12px_30px_rgba(35,18,10,0.2)] sm:-top-12 sm:left-5 sm:size-24 sm:translate-x-0 sm:rounded-[18px]">
-                {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="size-full object-cover" /> : user.name.slice(0, 2).toUpperCase()}
-              </div>
-              <h1 className="truncate text-2xl font-serif font-light text-neutral-900 sm:text-3xl">{user.name}</h1>
-              <p className="mt-1 truncate text-[10px] font-semibold text-neutral-500 sm:text-[11px]">{user.email}</p>
-              <p className="mt-3 inline-flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-500 sm:justify-start"><MapPin className="size-3" aria-hidden="true" /> {user.locationName}</p>
-
-              <div className="mt-5 border-t border-neutral-200 pt-4 text-left dark:border-white/10">
-                <p className="text-[8px] font-black uppercase tracking-[0.24em] text-[#b63870] dark:text-[#f080b7]">Dati registrati</p>
-                <h2 className="mt-1 text-base font-black text-neutral-900">Dati anagrafici</h2>
-                <div className="mt-4 space-y-3">
-                  {details.map(({ label, value, copyable }) => (
-                    <div key={label} className="border-b border-neutral-200 pb-2.5 last:border-0 last:pb-0 dark:border-white/10">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-[8px] font-black uppercase tracking-[0.12em] text-neutral-500">{label}</span>
-                        {copyable ? (
-                          <button type="button" onClick={() => handleCopy(value, label)} className="min-h-7 rounded-full px-2 text-[8px] font-black uppercase text-[#a12d61] transition hover:bg-[#f8dce8] dark:text-[#f080b7] dark:hover:bg-white/10" title={`Copia ${label}`}>
-                            {copiedField === label ? "Copiato" : "Copia"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 break-words text-[11px] font-bold text-neutral-800">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div className="profile-page-enter profile-page-enter-delay-1 flex min-w-0 flex-col gap-3 xl:col-start-2 xl:row-start-1">
-            <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:grid xl:grid-cols-5 xl:overflow-visible xl:px-0 xl:pb-0">
-              {profileSummary.map(({ label, value, icon: Icon }) => (
-                <article key={label} className="flex min-h-24 w-[132px] shrink-0 snap-start flex-col justify-between rounded-[16px] border border-neutral-200 bg-neutral-50 p-3 text-left text-neutral-900 dark:border-white/10 dark:bg-[#232329] dark:text-white xl:w-auto xl:min-w-0">
-                  <span className="grid size-7 place-items-center rounded-full bg-[#f8dce8] text-[#9f2f60] dark:bg-[#4b2738] dark:text-[#f4a6c9]"><Icon className="size-3.5" aria-hidden="true" /></span>
-                  <div>
-                    <p className="truncate text-xl font-black tabular-nums text-neutral-900 sm:text-2xl">{value}</p>
-                    <p className="mt-1 line-clamp-2 text-[7px] font-black uppercase leading-3 tracking-[0.08em] text-neutral-500 sm:text-[8px]">{label}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:grid xl:grid-cols-[1.15fr_0.85fr] xl:overflow-visible xl:px-0 xl:pb-0">
-              <section className="profile-glass-inset flex min-h-36 w-[86vw] max-w-md shrink-0 snap-start flex-col justify-between rounded-[18px] border border-neutral-200 bg-neutral-50 p-4 text-left dark:border-white/10 dark:bg-[#232329] xl:w-auto xl:max-w-none">
-                <div className="flex items-start justify-between gap-4">
-                  <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">Presenza mensile</p><h2 className="mt-1 text-base font-black text-neutral-900">Ore lavorate</h2></div>
-                  <span className="text-2xl font-black tabular-nums text-[#b63870] dark:text-[#f080b7]">{workedPercent}%</span>
-                </div>
-                <div>
-                  <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10"><div className="h-full rounded-full bg-[linear-gradient(90deg,#a52f64,#e16b9f)]" style={{ width: `${workedPercent}%` }} /></div>
-                  <div className="mt-2 flex justify-between text-[9px] font-bold uppercase tracking-wider text-neutral-500"><span>{formatHours(stats.workedHours)}h effettuate</span><span>{formatHours(stats.plannedHours)}h pianificate</span></div>
-                </div>
-              </section>
-
-              <section className="profile-glass-inset min-h-36 w-[86vw] max-w-md shrink-0 snap-start rounded-[18px] border border-neutral-200 bg-neutral-50 p-4 text-left dark:border-white/10 dark:bg-[#232329] xl:w-auto xl:max-w-none">
-                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">Stato personale</p>
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold text-neutral-700">Mansione</span><strong className="max-w-[60%] truncate text-xs text-[#b63870] dark:text-[#f080b7]">{roleLabel}</strong></div>
-                  <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-2 dark:border-white/10"><span className="text-xs font-bold text-neutral-700">Sede</span><strong className="max-w-[60%] truncate text-xs text-neutral-900">{user.locationName}</strong></div>
-                  <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-2 dark:border-white/10"><span className="text-xs font-bold text-neutral-700">Contratto</span><strong className="text-xs text-neutral-900">{user.contractEndLabel}</strong></div>
-                </div>
-              </section>
-            </div>
-          </div>
+      <header className={`${profileStyles.identity} overflow-hidden rounded-3xl border border-neutral-200 bg-white lg:col-span-2 lg:row-start-1`}>
+        <div className="relative h-48 overflow-hidden sm:h-64 lg:h-72">
+          <img src={user.coverUrl ? resolveDrivePhotoUrl(user.coverUrl) : "/beta-login-hero.png"} alt="" className="size-full object-cover object-center" aria-hidden="true" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+          <Link href="/dashboard" aria-label="Torna alla dashboard" className="absolute left-5 top-5 grid size-11 place-items-center rounded-full bg-white/90 text-neutral-800 shadow-sm hover:bg-white"><ChevronLeft className="size-5" /></Link>
         </div>
-      </div>
-
-        {/* Premium Underlined Navigation Tabs (Dior Style) */}
-        <div className="profile-glass-section profile-page-enter profile-page-enter-delay-2 grid grid-cols-3 gap-1 rounded-[16px] border border-neutral-200 bg-white p-1 sm:flex sm:items-center sm:gap-8 sm:overflow-x-auto sm:px-5 sm:pb-px sm:pt-0 xl:col-start-2 xl:row-start-2">
+        <div className="relative flex flex-col gap-4 px-5 pb-6 sm:px-8 lg:flex-row lg:items-start lg:gap-6">
+          <div className="-mt-16 grid size-32 shrink-0 place-items-center overflow-hidden rounded-full border-[5px] border-white bg-[#f6e8ee] text-3xl font-semibold text-[#7d294f] shadow-sm lg:-mt-14 lg:size-40">
+            {userPhoto ? <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="size-full object-cover" /> : user.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1 lg:pt-5">
+            <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl">{user.name}</h1>
+            <p className="mt-2 text-sm font-semibold text-[#96365f]">{roleLabel}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-neutral-500">
+              <p className="flex items-center gap-1.5"><MapPin className="size-4 shrink-0" />{user.locationName}</p>
+              <p className="flex items-center gap-1.5"><CalendarDays className="size-4 shrink-0" /><span>Data di nascita: {user.birthDateLabel}</span></p>
+              <p className="hidden items-center gap-1.5 lg:flex"><Fingerprint className="size-4 shrink-0" /><span>Codice fiscale: {user.fiscalCode}</span><button type="button" onClick={() => handleCopy(user.fiscalCode, "Codice Fiscale / ID")} aria-label="Copia codice fiscale" className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#96365f] hover:bg-[#faf0f5]">{copiedField === "Codice Fiscale / ID" ? "Copiato" : "Copia"}</button></p>
+            </div>
+            <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-3">
+              {details.filter(item => ["Email di Servizio", "Codice Fiscale / ID"].includes(item.label)).map(({ label, value, icon: Icon, copyable }) => <div key={label} className={cn("min-w-0", label === "Codice Fiscale / ID" && "lg:hidden")}>
+                <dt className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500"><Icon className="size-3.5" />{label}</dt>
+                <dd className="mt-1 flex items-center gap-2 text-sm text-neutral-800"><span className="break-all">{value}</span>{copyable && <button type="button" onClick={() => handleCopy(value, label)} aria-label={`Copia ${label}`} className="shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold text-[#96365f] hover:bg-[#faf0f5]">{copiedField === label ? "Copiato" : "Copia"}</button>}</dd>
+              </div>)}
+            </dl>
+          </div>
+          <Link href="/profile/settings" className="flex min-h-11 shrink-0 items-center justify-center gap-3 rounded-xl lg:mt-6 bg-[#96365f] px-5 text-sm font-semibold text-white transition hover:bg-[#792b4c]">Gestisci il tuo profilo<ChevronRight className="size-4" /></Link>
+        </div>
+      <section aria-label="Periodo contrattuale" className="px-5 pb-6 sm:px-8 lg:pl-[216px]">
+        <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-[#232329] sm:p-5">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-neutral-700"><Briefcase className="size-4 text-[#96365f]" />Periodo contrattuale</div>
+          <dl className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+            <div className="flex items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-[#96365f] dark:bg-white/10"><CalendarCheck2 className="size-5" /></span><div><dt className="text-xs text-neutral-500">Data di inizio</dt><dd className="mt-1 text-base font-semibold text-neutral-900">{user.contractStartLabel}</dd></div></div>
+            <div aria-hidden="true" className="hidden items-center gap-2 text-neutral-300 sm:flex"><span className="h-px w-6 bg-neutral-200" /><ChevronRight className="size-4" /><span className="h-px w-6 bg-neutral-200" /></div>
+            <div className="flex items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-neutral-500 dark:bg-white/10"><CalendarDays className="size-5" /></span><div><dt className="text-xs text-neutral-500">Data di scadenza</dt><dd className="mt-1 text-base font-semibold text-neutral-900">{user.contractEndLabel}</dd></div></div>
+          </dl>
+        </div>
+      </section>
+      </header>
+        <div id="profile-navigation" className="scroll-mt-6 profile-glass-section profile-page-enter profile-page-enter-delay-2 grid grid-cols-3 gap-1 rounded-[16px] border border-neutral-200 bg-white p-1 sm:flex sm:items-center sm:gap-8 sm:overflow-x-auto sm:px-5 sm:pb-px sm:pt-0 lg:col-span-2 lg:row-start-2">
           {[
-            { id: "overview", label: "PARADISE", mobileLabel: "Paradise" },
+            { id: "overview", label: "La mia attività", mobileLabel: "Attività" },
+            { id: "performance", label: "Performance", mobileLabel: "Performance" },
             { id: "info", label: "Documenti", mobileLabel: "Documenti" },
-            { id: "security", label: "Impostazioni & Sicurezza", mobileLabel: "Account" }
+
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -434,7 +395,7 @@ export function ClientProfile({
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
                   "min-h-11 rounded-xl border text-[9px] font-bold uppercase tracking-[0.08em] transition duration-200 sm:-mb-px sm:whitespace-nowrap sm:rounded-none sm:border-x-0 sm:border-t-0 sm:py-4 sm:text-xs sm:tracking-[0.25em]",
-                  isActive 
+                  isActive
                     ? "border-neutral-900 bg-neutral-900 text-white font-black sm:bg-transparent sm:text-neutral-900"
                     : "border-transparent text-neutral-500 hover:text-neutral-700"
                 )}
@@ -446,11 +407,38 @@ export function ClientProfile({
           })}
         </div>
 
+
+
+      {activeTab === "overview" && <section className={`${profileStyles.summary} lg:col-span-2 lg:row-start-3`} aria-label="Riepilogo del mese">
+        <div><p className={profileStyles.eyebrow}>Riepilogo personale</p><h2 className={profileStyles.sectionTitle}>Questo mese</h2>
+          <div className={profileStyles.metrics}>{profileSummary.map(({ label, value, icon: Icon }) => <div key={label}><div className={profileStyles.metricLabel}>{label}<Icon size={15} /></div><strong>{value}</strong></div>)}</div>
+        </div>
+        <aside className={profileStyles.monthCard}>
+          <div className="flex items-center justify-between gap-3"><h3 className="text-lg font-semibold">Presenza mensile</h3><Clock className="size-5 text-[#96365f]" /></div>
+          <p className="mt-4 text-3xl font-semibold tabular-nums">{formatHours(stats.workedHours)}<span className="ml-1 text-sm font-normal text-neutral-500">/ {formatHours(stats.plannedHours)} ore</span></p>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/5" role="progressbar" aria-label="Ore lavorate rispetto alle ore pianificate" aria-valuenow={workedPercent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-[#96365f]" style={{width: `${workedPercent}%`}} /></div>
+          <p className="mt-3 text-xs text-neutral-600">{workedPercent}% delle ore pianificate nel mese</p>
+        </aside>
+      </section>}
+
+      {activeTab === "performance" && <section className={`${profileStyles.performance} profile-glass-section rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5 lg:col-span-2 lg:row-start-4`} aria-label="Performance appuntamenti">
+        <h2 className="text-lg font-semibold tracking-tight">Appuntamenti completati</h2>
+        <p className="mt-1 text-xs leading-5 text-neutral-500">{performance?.monthLabel || "Mese corrente"} · Dal primo del mese a oggi. Solo appuntamenti segnati come completati in agenda.</p>
+        {!performance ? <p role="status" className="mt-6 text-sm">Dati momentaneamente non disponibili. Riprova più tardi.</p> : <>
+          <div className="mt-4 grid grid-cols-3 gap-2">{[{label:"Appuntamenti completati",value:performance.total},{label:"Giorni attivi",value:performance.activeDays},{label:"Media per giorno attivo",value:performance.activeDays ? (performance.total / performance.activeDays).toLocaleString("it-IT",{maximumFractionDigits:1}) : "—"}].map(item => <div key={item.label} className="rounded-xl border border-neutral-200 p-3"><p className="text-xs text-neutral-500">{item.label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p></div>)}</div>
+          <h3 className="mt-5 text-sm font-semibold">Andamento giornaliero</h3>
+          {performance.total === 0 && <p className="mt-1 text-xs leading-5 text-neutral-500">Nessun appuntamento completato nel mese finora.</p>}
+          <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200 p-3"><div className="flex h-32 items-end gap-1.5" style={{minWidth: Math.max(260, performance.daily.length * 24)}}>{performance.daily.map(day => <div key={day.date} className="flex h-full min-w-5 flex-1 flex-col items-center justify-end gap-1" title={`${day.date}: ${day.count} appuntamenti completati`}><span className="text-xs tabular-nums">{day.count}</span><div className="w-full max-w-8 rounded-t bg-[#96365f]" style={{height: day.count ? `${day.count / Math.max(1,...performance.daily.map(item => item.count)) * 80}px` : "2px",opacity:day.count ? 1 : .15}} /><span className="text-[10px] text-neutral-500">{day.date.slice(-2)}</span></div>)}</div></div>
+          <h3 className="mt-5 text-sm font-semibold">Servizi degli appuntamenti completati</h3>
+          <div className="mt-3 divide-y divide-neutral-100">{performance.services.map(service => <div key={service.name} className="flex items-center justify-between gap-3 py-2.5 text-xs leading-5"><span>{service.name}</span><strong className="tabular-nums">{service.count}</strong></div>)}</div>
+        </>}
+      </section>}
+
       {/* TAB 1: RIEPILOGO OPERATIVO */}
       {activeTab === "overview" && (
-        <div className="profile-page-enter profile-page-enter-delay-3 flex flex-col gap-4 xl:col-start-2 xl:row-start-3">
+        <div className={`${profileStyles.activity} profile-page-enter flex flex-col gap-6 lg:col-span-2 lg:row-start-4`}>
           {/* WEEKLY PERSONAL SHIFTS */}
-          <div className="profile-glass-section order-1 flex flex-col gap-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:gap-5 sm:p-6">
+          <div className={`${profileStyles.workPanel} profile-glass-section order-1 flex flex-col gap-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:gap-5 sm:p-6`}>
             <div className="order-1 flex flex-col gap-3 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-[#b63870] dark:text-[#f080b7]">I MIEI TURNI</span>
@@ -464,7 +452,7 @@ export function ClientProfile({
 
             <div className="order-2 space-y-3">
               <div className="overflow-hidden rounded-[20px] border border-[#b63870]/30 bg-neutral-50 dark:border-[#f080b7]/25 dark:bg-[#232329]">
-                <div className="flex flex-col gap-4 bg-[linear-gradient(135deg,#7e244d,#bd3d76)] p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                <div className="flex flex-col gap-4 bg-[linear-gradient(135deg,#71304e,#96365f)] p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/20">
                       <Clock className="size-5" aria-hidden="true" />
@@ -543,7 +531,7 @@ export function ClientProfile({
           </div>
 
           {/* PERSONAL HOLIDAYS */}
-          <div className="profile-glass-section order-2 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6">
+          <div className={`${profileStyles.requestsPanel} profile-glass-section order-2 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6`}>
             <div className="flex flex-col gap-4 border-b border-neutral-100 pb-5 text-left sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">LE MIE RICHIESTE</span>
@@ -563,7 +551,7 @@ export function ClientProfile({
             {holidayMessage ? <p role="status" className={cn("rounded-xl border px-4 py-3 text-xs font-bold", holidayMessage.includes("correttamente") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>{holidayMessage}</p> : null}
 
             {visibleHolidayRequests.length ? (
-              <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-3">
+              <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 lg:grid-cols-3">
                 {(showAllHolidayRequests ? visibleHolidayRequests : visibleHolidayRequests.slice(0, 3)).map((request) => {
                   const status = holidayStatus(request.status);
                   return (
@@ -665,7 +653,7 @@ export function ClientProfile({
 
       {/* TAB 2: DOCUMENTI PROPRI */}
       {activeTab === "info" && (
-        <div className="profile-page-enter profile-page-enter-delay-3 xl:col-start-2 xl:row-start-3">
+        <div className="profile-page-enter profile-page-enter-delay-3 lg:col-span-2 lg:row-start-4">
           <div className="profile-glass-section space-y-6 rounded-[28px] border border-neutral-200 bg-white p-5 text-left shadow-2xs sm:p-8">
             <div className="border-b border-neutral-100 pb-4">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">ARCHIVIO UFFICIALE</span>
@@ -754,24 +742,7 @@ export function ClientProfile({
       )}
 
       {/* 🔒 TAB 3: IMPOSTAZIONI & SICUREZZA */}
-      {activeTab === "security" && (
-        <div className="profile-page-enter profile-page-enter-delay-3 space-y-8 xl:col-start-2 xl:row-start-3">
-          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 text-left">
-            <div className="border-b border-neutral-100 pb-4">
-              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">PREFERENZE</span>
-              <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
-                Sicurezza & Account
-              </h2>
-            </div>
 
-            {settingsNode}
-
-            <div className="pt-6 border-t border-neutral-100 flex justify-end">
-              <LogoutButton className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-[0.2em] px-8 py-3.5 rounded-xl transition duration-200 text-center active:scale-98" />
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
