@@ -1,3 +1,4 @@
+import { formatResultBonusPoints } from "./result-bonus-points-display";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { buildResultBonusData, isBuenosAiresActor } from "@/lib/result-bonus-data";
@@ -28,9 +29,9 @@ export async function saveDailyBonusPublication(tx: Prisma.TransactionClient, in
   if (previous?.exitId === exitId || (previous?.exitTime && previous.exitTime >= exitTime)) return false;
   const value = { date, amount, exitId, exitTime, publishedAt: new Date().toISOString() };
   await tx.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
-  const money = amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+  const points = formatResultBonusPoints(amount);
   const day = new Date(`${date}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" });
-  const notification = { user_id: userId, title: "Il tuo guadagno della giornata", message: `Il ${day} hai guadagnato ${money}.`, type: "PREMIO_RISULTATO", action_url: "/notifications" };
+  const notification = { user_id: userId, title: "I tuoi punti della giornata", message: `Il ${day} hai ottenuto ${points}.`, type: "PREMIO_RISULTATO", action_url: "/notifications" };
   const notificationId = `result-bonus:${userId}:${date}`;
   await tx.notification.upsert({ where: { id: notificationId }, create: { id: notificationId, ...notification }, update: { ...notification, read: false } });
   return true;

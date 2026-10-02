@@ -1,3 +1,4 @@
+import { resultBonusNotificationText } from "@/lib/result-bonus-points-display";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { NotificationManager } from "@/components/notification-manager";
@@ -47,7 +48,7 @@ export default async function NotificationsPage({
         initialSection={params.section === "sent" ? "SENT" : "BLOG"}
         openCommunicationDirectly={params.direct === "1"}
         internalEmailUnread={internalEmailUnread}
-        notifications={notifications.map((notification) => ({
+        notifications={notifications.map(resultBonusNotificationText).map((notification) => ({
           id: notification.id,
           title: notification.title,
           message: notification.message,

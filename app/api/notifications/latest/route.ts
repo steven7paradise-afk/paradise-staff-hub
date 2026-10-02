@@ -1,3 +1,4 @@
+import { resultBonusNotificationText } from "@/lib/result-bonus-points-display";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +10,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
 
   try {
-    const [count, latest, items, communication] = await Promise.all([
+    const [count, rawLatest, rawItems, communication] = await Promise.all([
       prisma.notification.count({ where: { user_id: session.user.id, read: false } }),
       prisma.notification.findFirst({
         where: { user_id: session.user.id, read: false },
@@ -32,6 +33,8 @@ export async function GET() {
       }),
     ]);
 
+    const latest = rawLatest ? resultBonusNotificationText(rawLatest) : null;
+    const items = rawItems.map(resultBonusNotificationText);
     return NextResponse.json({
       count,
       communication: communication[0] ? { id: communication[0].id, title: communication[0].title, message: communication[0].message, createdAt: communication[0].created_at.toISOString() } : null,

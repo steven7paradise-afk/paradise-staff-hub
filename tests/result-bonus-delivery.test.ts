@@ -30,6 +30,6 @@ test("uscita ripetuta non duplica notifiche; una nuova uscita aggiorna la stessa
   assert.equal(await saveDailyBonusPublication(tx, { ...input, exitId: "old", exitTime: "2026-09-29T16:00:00Z" }), false);
   assert.equal(await saveDailyBonusPublication(tx, { ...input, exitId: "exit2", exitTime: "2026-09-29T18:00:00Z", amount: 23 }), true);
   assert.equal(notifications.size, 1);
-  assert.match([...notifications.values()][0].message, /23,00/);
-  assert.doesNotMatch([...notifications.values()][0].message, /punti|ritardo|penalità/i);
+  assert.match([...notifications.values()][0].message, /23 punti/);
+  assert.doesNotMatch([...notifications.values()][0].message, /€|euro|guadagnato|ritardo|penalità/i);
 });
