@@ -1,3 +1,4 @@
+import { AnalyticsView } from "./analytics-view";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ClientControlDashboard } from "@/app/client-control/client-control-dashboard";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
-export default async function ClientControlPage({ searchParams }: { searchParams: Promise<{ date?: string; hour?: string }> }) {
+export default async function ClientControlPage({ searchParams }: { searchParams: Promise<{ date?: string; hour?: string; month?: string; view?: string }> }) {
   const params = await searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -27,6 +28,12 @@ export default async function ClientControlPage({ searchParams }: { searchParams
 
   if (!canAccessPage) {
     redirect("/dashboard");
+  }
+
+  if (params.view !== "archive" && !params.date && !params.hour) {
+    return <AppShell title="Controllo Cliente" subtitle="Analisi delle note per collaboratore" role={role} hideHeader>
+      <AnalyticsView requestedMonth={params.month} />
+    </AppShell>;
   }
 
   await ensureClientControlForm(session.user.id);
