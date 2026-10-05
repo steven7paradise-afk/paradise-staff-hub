@@ -7,7 +7,7 @@ import { ClientControlChecks } from "./client-control-checks";
 import { WorkerServiceSections } from "./worker-service-sections";
 import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, restoreWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation";
-import { hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
+import { isPastCompletedAppointment, hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
 
 import { useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
@@ -2448,7 +2448,10 @@ export function AppointmentsBrowser({
         salon: salonNameForBooking(booking),
         workerId: assignedTeam[0].id,
       });
-    setWorkerConfirmationOpen(assignedTeam.length < 2 && !confirmedRecently);
+    setWorkerConfirmationOpen(
+      !isPastCompletedAppointment(booking.startDate, getBookingStatus(booking)) &&
+      assignedTeam.length < 2 && !confirmedRecently,
+    );
     setServiceDetailsModalOpen(openServiceDetails);
     setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);

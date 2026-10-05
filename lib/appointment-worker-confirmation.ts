@@ -51,3 +51,9 @@ export function workerConfirmationSessionStorage(): ConfirmationStorage | null {
     return null;
   }
 }
+
+/** Viewing a completed historical appointment must not ask who performed it again. */
+export function isPastCompletedAppointment(startDate: string, status: string, now = Date.now()) {
+  const start = Date.parse(startDate);
+  return status === "COMPLETATO" && Number.isFinite(start) && start < now;
+}
