@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   appointmentDateKey,
+  appointmentMonthRange,
   appointmentDayBoundaryIso,
   initialAppointmentDateFilter,
   isAppointmentDateKey,
@@ -28,4 +29,11 @@ test("produce chiavi data di Roma e rifiuta date impossibili", () => {
   assert.equal(appointmentDateKey(new Date("2026-09-09T22:30:00.000Z")), "2026-09-10");
   assert.equal(isAppointmentDateKey("2026-02-29"), false);
   assert.equal(isAppointmentDateKey("2028-02-29"), true);
+});
+
+test("archivio limitato al mese scelto, anche storico e bisestile", () => {
+  assert.deepEqual(appointmentMonthRange("2026-09-15"), { start: "2026-09-01", end: "2026-09-30" });
+  assert.deepEqual(appointmentMonthRange("2024-02-02"), { start: "2024-02-01", end: "2024-02-29" });
+  assert.deepEqual(appointmentMonthRange("2026-12-31"), { start: "2026-12-01", end: "2026-12-31" });
+  assert.throws(() => appointmentMonthRange("2026-02-30"));
 });

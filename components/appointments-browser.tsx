@@ -9,7 +9,7 @@ import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff
 import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation";
 import { hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -1527,8 +1527,10 @@ export function AppointmentsBrowser({
     }
     const base = navigationBasePath || appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon);
     const target = `${base}?${params.toString()}`;
-    if (options?.replace) router.replace(target, { scroll: false });
-    else router.push(target, { scroll: false });
+    startTransition(() => {
+      if (options?.replace) router.replace(target, { scroll: false });
+      else router.push(target, { scroll: false });
+    });
   }
 
   useEffect(() => {
@@ -3060,13 +3062,13 @@ export function AppointmentsBrowser({
     (booking) => booking.isCanceled,
   ).length;
   const dateFilterLabel = useMemo(() => {
-    if (dateFilter.mode === "all") return "Tutte le date";
+    if (dateFilter.mode === "all") return `Archivio · ${new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(dateFromLocalKey(dateFilter.from) || anchorDate)}`;
     if (dateFilter.mode === "today") return "Oggi";
     if (dateFilter.mode === "tomorrow") return "Domani";
     const from = formatDate(dateFilter.from);
     const to = formatDate(dateFilter.to);
     return from === to ? from : `${from} - ${to}`;
-  }, [dateFilter]);
+  }, [dateFilter, anchorDate]);
 
   const availableStaffList = useMemo(() => {
     const set = new Set<string>();
@@ -6094,7 +6096,7 @@ export function AppointmentsBrowser({
                     <div className="grid gap-2">
                       {[
                         {
-                          label: "Tutte le date",
+                          label: "Archivio del mese",
                           mode: "all" as AppointmentDateFilterMode,
                           from: dateFilter.from,
                           to: dateFilter.to,
@@ -6140,6 +6142,23 @@ export function AppointmentsBrowser({
                         </button>
                       ))}
                     </div>
+                    <label className="mt-3 grid gap-2 text-xs font-semibold text-[#4E382C]">
+                      Cerca in un mese dello storico
+                      <input
+                        type="month"
+                        aria-label="Mese dello storico appuntamenti"
+                        value={dateFilter.from.slice(0, 7)}
+                        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2"
+                        onChange={(event) => {
+                          if (!/^\d{4}-\d{2}$/.test(event.target.value)) return;
+                          const monthStart = dateFromLocalKey(`${event.target.value}-01`);
+                          if (!monthStart) return;
+                          setIsDatePickerOpen(false);
+                          navigateToAppointmentRange("month", monthStart, { scopeAll: true });
+                        }}
+                      />
+                      <span className="font-normal">Lo storico viene consultato un mese alla volta.</span>
+                    </label>
                     <div className="mt-3 grid gap-2 border-t border-[#E8D8CF] pt-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8D5E49]">
                         Da giorno a giorno

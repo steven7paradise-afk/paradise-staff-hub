@@ -87,3 +87,13 @@ export function initialAppointmentDateFilter(options: {
   if (from === tomorrow && to === tomorrow) return { mode: "tomorrow" as const, from, to };
   return { mode: "custom" as const, from, to };
 }
+
+/** A bounded archive window, including historic dates and leap years. */
+export function appointmentMonthRange(focus: string) {
+  if (!isAppointmentDateKey(focus)) throw new Error("Mese appuntamenti non valido.");
+  const [year, month] = focus.split("-").map(Number);
+  return {
+    start: `${focus.slice(0, 7)}-01`,
+    end: new Date(Date.UTC(year, month, 0, 12)).toISOString().slice(0, 10),
+  };
+}

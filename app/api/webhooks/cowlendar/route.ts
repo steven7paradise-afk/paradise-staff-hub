@@ -46,6 +46,11 @@ export async function POST(request: Request) {
         { key: { startsWith: "cowlendar_cache_bookings_" } },
         { key: { startsWith: "cowlendar_cache_range_" } },
       ] } });
+      // Invalidate freshness, never delete the persistent archive on an external event.
+      await tx.appointmentArchiveSync.updateMany({
+        where: { completed_at: { not: null }, lease_until: null },
+        data: { lease_until: new Date(0) },
+      });
       const revision = randomUUID();
       await tx.setting.upsert({ where: { key: APPOINTMENT_REVISION_KEY },
         create: { key: APPOINTMENT_REVISION_KEY, value: revision }, update: { value: revision } });

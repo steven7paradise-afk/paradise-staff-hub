@@ -213,6 +213,10 @@ async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
 
 async function clearCowlendarBookingCaches() {
   try {
+    await prisma.appointmentArchiveSync.updateMany({
+      where: { completed_at: { not: null }, lease_until: null },
+      data: { lease_until: new Date(0) },
+    });
     await prisma.setting.deleteMany({
       where: {
         OR: [
@@ -552,15 +556,20 @@ export function hasCowlendarToken() {
 }
 
 // Reporting must never silently truncate a month or use a stale partial cache.
-export async function getCompleteCowlendarBookingsForRange(startDate: string, endDate: string) {
+export async function getCompleteCowlendarBookingsForRange(startDate: string, endDate: string, signal?: AbortSignal) {
   const bookings = new Map<string, CowlendarBooking>();
   const cursors = new Set<string>();
   let cursor: string | null = null;
   for (let page = 0; page < 200; page += 1) {
     const query = new URLSearchParams({ start: startDate, end: endDate, limit: "100", sort: "start_date" });
     if (cursor) query.set("cursor", cursor);
-    const result = await cowlendarFetch<CowlendarBooking>(`/bookings?${query}`);
-    for (const booking of result.data ?? []) bookings.set(booking.id, booking);
+    signal?.throwIfAborted();
+    const result = await cowlendarFetch<CowlendarBooking>(`/bookings?${query}`, signal ? { signal: AbortSignal.any([signal, AbortSignal.timeout(COWLENDAR_READ_TIMEOUT_MS)]) } : undefined);
+    if (!Array.isArray(result.data)) throw new Error("Calendario incompleto: risposta non valida");
+    for (const booking of result.data) {
+      if (!booking.id || !Number.isFinite(Date.parse(booking.start_date))) throw new Error("Calendario incompleto: appuntamento non valido");
+      bookings.set(booking.id, booking);
+    }
     if (!result.pagination?.has_more) return Array.from(bookings.values());
     const next = result.pagination.next_cursor;
     if (!next || cursors.has(next) || !result.data?.length) throw new Error("Calendario incompleto");

@@ -1,3 +1,6 @@
+import { readAppointmentArchive, scheduleAppointmentArchive } from "@/lib/appointment-archive";
+import { AppointmentArchiveStatus } from "@/components/appointment-archive-status";
+import { AppointmentArchiveBrowser } from "@/components/appointment-archive-browser";
 import { redirect } from "next/navigation";
 import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
 import { cookies } from "next/headers";
@@ -8,14 +11,12 @@ import { auth } from "@/lib/auth";
 import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
-import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
+import { hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
-import { getShopifyOrderNamesBulk } from "@/lib/shopify";
-import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
-import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey } from "@/lib/appointment-date";
+import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
 import { syncSystemazioneFasceTable } from "@/lib/systemazione-fasce-table";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -71,18 +72,6 @@ function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: s
   return containsMatches.length === 1 ? containsMatches[0] : null;
 }
 
-async function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((resolve) => {
-    timer = setTimeout(() => resolve(fallback), timeoutMs);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 function parseLocalDateParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
   return isAppointmentDateKey(raw) ? raw : null;
@@ -91,11 +80,7 @@ function parseLocalDateParam(value: string | string[] | undefined) {
 function resolveAppointmentsRange(params: { [key: string]: string | string[] | undefined }) {
   const today = appointmentDateKey();
   if (params.scope === "all") {
-    const [year, month] = today.split("-").map(Number);
-    return {
-      start: new Date(Date.UTC(year, month - 2, 1, 12)).toISOString().slice(0, 10),
-      end: new Date(Date.UTC(year, month + 3, 0, 12)).toISOString().slice(0, 10),
-    };
+    return appointmentMonthRange(parseLocalDateParam(params.focus) || today);
   }
   const requestedStart = parseLocalDateParam(params.from);
   const requestedEnd = parseLocalDateParam(params.to);
@@ -352,21 +337,14 @@ export default async function AppointmentsPage({
 
   if (!canView) redirect("/dashboard");
 
-  const bookingsPromise: Promise<Awaited<ReturnType<typeof getCowlendarBookingsForRange>>> = hasCowlendarToken()
-    ? resolveWithin(
-        getCowlendarBookingsForRange({
-          startDate: appointmentDayBoundaryIso(appointmentRange.start),
-          endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
-          limit: resolvedSearchParams.scope === "all" ? 5000 : 1500,
-          forceRefresh,
-        }),
-        [],
-        6_000,
-      ).catch((error) => {
-        console.error("Errore nel caricamento appuntamenti:", error);
-        return [];
-      })
-    : Promise.resolve([]);
+  const isArchive = resolvedSearchParams.scope === "all";
+  const archive = await readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
+    ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
+  });
+  if (hasCowlendarToken()) after(async () => {
+    for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
+  });
+  const bookingsPromise = Promise.resolve(archive.bookings);
 
   // These reads are independent. Starting Cowlendar together with the local
   // lookups saves an entire network round-trip on every appointments load.
@@ -426,32 +404,11 @@ export default async function AppointmentsPage({
   const corsoTeamOptions = [...cowlendarTeamOptionsByName.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
   const [shopifyOrderNames, statusSetting, botUpdateSetting, teamOverrideSetting, rawSheetStatusOverrides, officeNoteSettings] = await Promise.all([
-    getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
+    Promise.resolve(new Map(safeBookings.filter(b => b.order_id && b.archiveOrderName).map(b => [String(b.order_id), String(b.archiveOrderName)]))),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_bot_updates" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_team_overrides" } }).catch(() => null),
-    resolveWithin(
-      getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
-        id: String(booking.id),
-        customerName:
-          booking.customer?.name?.trim() ||
-          [booking.form_data?.firstname, booking.form_data?.lastname]
-            .map((value: unknown) => String(value || "").trim())
-            .filter(Boolean)
-            .join(" ") ||
-          booking.booking_str ||
-          "",
-        customerPhone:
-          booking.customer?.phone ||
-          booking.form_data?.["Numero telefono"] ||
-          booking.form_data?.phone ||
-          booking.form_data?.telefono ||
-          null,
-        startDate: booking.start_date,
-      }))).catch(() => ({})),
-      {},
-      4_000,
-    ),
+    Promise.resolve(archive.sheets),
     prisma.setting.findMany({
       where: {
         key: {
@@ -657,7 +614,7 @@ export default async function AppointmentsPage({
     })
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
-  after(async () => {
+  if (!isArchive) after(async () => {
     try {
       await syncSystemazioneFasceTable(serializedBookings);
     } catch (error) {
@@ -684,7 +641,15 @@ export default async function AppointmentsPage({
         </div>
       ) : null}
 
-      <AppointmentsBrowser
+      <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} updatedAt={archive.updatedAt} stale={archive.stale} />
+      {isArchive ? <AppointmentArchiveBrowser
+        month={appointmentRange.start.slice(0, 7)} query={String(resolvedSearchParams.q || "")}
+        page={archive.page} count={archive.count} ready={archive.ready}
+        rows={safeBookings.map(b => ({ id: b.id, startDate: b.start_date,
+          customerName: b.customer?.name || [b.form_data?.firstname, b.form_data?.lastname].filter(Boolean).join(" ") || b.booking_str || "Cliente",
+          service: b.service?.title || "", orderName: String(b.archiveOrderName || ""),
+        }))}
+      /> : !archive.ready && !safeBookings.length ? <div className="m-4 rounded-2xl bg-white p-6 text-sm">{archive.failed ? "Il recupero degli appuntamenti non è riuscito. Riprova tra un minuto." : "Sto preparando l’agenda. Gli appuntamenti compariranno automaticamente al termine dell’importazione."}</div> : <AppointmentsBrowser
         initialBookings={serializedBookings}
         corsoTeamOptions={corsoTeamOptions}
         isPC={isPC}
@@ -706,7 +671,7 @@ export default async function AppointmentsPage({
           locationName: pcDisplayUser?.location?.name || accessUser?.location?.name,
           isPC,
         })}
-      />
+      />}
     </AppShell>
   );
 }
