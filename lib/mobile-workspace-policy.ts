@@ -2,6 +2,7 @@ import { canAccess, canEdit, type PermissionSet, type Role } from "./roles";
 import { appointmentSalonSlugFromName } from "./appointment-salon-url";
 
 export const nativeModules = [
+  { id: "attendance", title: "Presenze", subtitle: "Registro delle timbrature", symbol: "clock.badge.checkmark", path: "/attendance" },
   { id: "appointments", title: "Appuntamenti", subtitle: "Agenda e note ufficio", symbol: "calendar", path: "/appointments" },
   { id: "employees", title: "Staff", subtitle: "Persone e sedi", symbol: "person.2", path: "/employees" },
   { id: "locations", title: "Sedi", subtitle: "Contatti dei saloni", symbol: "building.2", path: "/locations" },
@@ -10,7 +11,7 @@ export const nativeModules = [
 export function workspaceModules(user: { role: string; mansione?: string | null } | null, permissions?: PermissionSet) {
   // A device is not a staff identity. Salon mode only exposes its agenda, read-only.
   return nativeModules.filter((item) => user
-    ? canAccess(item.path, user.role as Role, user.mansione ?? undefined, permissions)
+    ? (item.id !== "attendance" || isWorkspaceAdmin(user.role)) && canAccess(item.path, user.role as Role, user.mansione ?? undefined, permissions)
     : item.id === "appointments").map((item) => ({
       ...item,
       canEdit: !!user && canEdit(item.path, user.role as Role, user.mansione ?? undefined, permissions),

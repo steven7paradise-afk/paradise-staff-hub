@@ -18,7 +18,7 @@ test("admin menu uses effective permissions, not an unconditional role bypass", 
 
 test("default administrators see each implemented native module", () => {
   const modules = workspaceModules({ role: "ADMIN" }, defaultRolePermissions().ADMIN);
-  assert.deepEqual(modules.map((item) => item.id), ["appointments", "employees", "locations"]);
+  assert.deepEqual(modules.map((item) => item.id), ["attendance", "appointments", "employees", "locations"]);
 });
 
 test("employees do not receive the staff directory by default", () => {
@@ -44,4 +44,14 @@ test("shared office note text is preserved verbatim for optimistic concurrency",
   assert.equal(officeNoteText({ text: "150g 2 fasce\nby ufficio" }), "150g 2 fasce\nby ufficio");
   assert.equal(officeNoteText({ text: 12 }), "");
   assert.equal(officeNoteText(null), "");
+});
+
+test("attendance requires an admin role and effective permission", () => {
+  for (const role of ["ADMIN", "SUPER_ADMIN", "ZERO"]) {
+    assert.equal(workspaceModules({ role }, { view: ["/attendance"], edit: [] }).some(m => m.id === "attendance"), true);
+    assert.equal(workspaceModules({ role }, { view: [], edit: [] }).some(m => m.id === "attendance"), role === "ZERO");
+  }
+  for (const role of ["RESPONSABILE", "DIPENDENTE", "MAGAZZINO"]) {
+    assert.equal(workspaceModules({ role }, { view: ["/attendance"], edit: [] }).some(m => m.id === "attendance"), false);
+  }
 });

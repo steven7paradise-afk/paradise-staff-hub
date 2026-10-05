@@ -33,6 +33,7 @@ export function staffDashboardItem(worker: Worker, now: Date) {
   if (comparison.absent) categories.push("absent");
   if (vacation) categories.push("vacation");
   if (sick) categories.push("sick");
+  if (comparison.rest || worker.leave_requests.some(l => l.type === "RIPOSO")) categories.push("rest");
   if (lateMinutes > 0) categories.push("late");
   const enteredMinutes = state.firstEntry ? attendanceActualMinutes(state.firstEntry) : null;
   const actualStart = enteredMinutes === null ? null : `${String(Math.floor(enteredMinutes / 60)).padStart(2, "0")}:${String(enteredMinutes % 60).padStart(2, "0")}`;

@@ -8,7 +8,7 @@ test("absence requires an elapsed scheduled shift; future shifts and rest are ex
   assert.deepEqual(staffDashboardItem(worker, now).categories, ["absent"]);
   assert.deepEqual(staffDashboardItem({ ...worker, schedule_entries: [] }, now).categories, []);
   assert.deepEqual(staffDashboardItem(worker, new Date("2026-09-25T07:00:00Z")).categories, []);
-  assert.deepEqual(staffDashboardItem({ ...worker, schedule_entries: [{ ...worker.schedule_entries[0], category: { ...worker.schedule_entries[0].category, name: "Riposo" } }] }, now).categories, []);
+  assert.deepEqual(staffDashboardItem({ ...worker, schedule_entries: [{ ...worker.schedule_entries[0], category: { ...worker.schedule_entries[0].category, name: "Riposo" } }] }, now).categories, ["rest"]);
 });
 test("leave excludes absence and is not duplicated with planning", () => {
   assert.deepEqual(staffDashboardItem({ ...worker, leave_requests: [{ type: "FERIE", start_time: null, end_time: null }] }, now).categories, ["vacation"]);
@@ -40,4 +40,8 @@ test("actual entry uses recorded clock time and not the later synchronization ti
   ] }, now);
   assert.equal(result.actualStart, "09:58");
   assert.equal(result.lateMinutes, 0);
+});
+
+test("approved rest is counted and does not become absence", () => {
+  assert.deepEqual(staffDashboardItem({ ...worker, leave_requests: [{ type: "RIPOSO", start_time: null, end_time: null }] }, now).categories, ["rest"]);
 });

@@ -15,7 +15,7 @@ function workShift(shift: Shift) {
 }
 
 export function monthlyProgress(logs: Log[], shifts: Shift[], leaves: Leave[], breakMinutes: number, now: Date, today: string) {
-  let workedSeconds = 0, plannedSeconds = 0, lateMinutes = 0;
+  let workedSeconds = 0, plannedSeconds = 0, lateMinutes = 0, lateCount = 0;
   let running = false, incompleteDays = 0;
   const groups = new Map<string, Log[]>();
   for (const log of logs.filter(log => log.timestamp <= now)) {
@@ -58,9 +58,14 @@ export function monthlyProgress(logs: Log[], shifts: Shift[], leaves: Leave[], b
         && (scheduleTimeToMinutes(l.start_time) ?? 0) <= actual && (scheduleTimeToMinutes(l.end_time) ?? 1440) >= actual);
       const deadline = scheduledEntryPolicy({ plannedStart: shift.start_time ?? shift.category.start_time,
         plannedEnd: shift.end_time ?? shift.category.end_time, locationName: shift.location?.name }).deadlineMinutes;
-      if (!excused && deadline !== null) lateMinutes += Math.max(0, actual - deadline);
+      if (!excused && deadline !== null && actual > deadline) {
+        lateMinutes += actual - deadline;
+        lateCount++;
+      }
     }
-    lateMinutes += summarizeLateBreakReturns(ordered, breakMinutes).lateMinutes;
+    const breaks = summarizeLateBreakReturns(ordered, breakMinutes);
+    lateMinutes += breaks.lateMinutes;
+    lateCount += breaks.lateCount;
   }
-  return { workedSeconds: Math.floor(workedSeconds), plannedSeconds: Math.floor(plannedSeconds), lateMinutes, running, incompleteDays };
+  return { workedSeconds: Math.floor(workedSeconds), plannedSeconds: Math.floor(plannedSeconds), lateMinutes, lateCount, running, incompleteDays };
 }
