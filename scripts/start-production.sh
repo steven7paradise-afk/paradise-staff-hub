@@ -72,6 +72,7 @@ trap stop_children INT TERM HUP
 
 restart_delay=2
 while [ "$shutdown_requested" -eq 0 ]; do
+  server_started_at=$(date +%s)
   echo "Starting Next.js with a ${runtime_heap_mb} MB V8 heap limit."
   ./node_modules/.bin/next start &
   server_pid=$!
@@ -110,6 +111,13 @@ while [ "$shutdown_requested" -eq 0 ]; do
 
   if [ "$shutdown_requested" -ne 0 ]; then
     exit 0
+  fi
+
+  # Back off only for a crash loop. A later failure after a stable run must
+  # not inherit the 30-second outage penalty from earlier incidents.
+  server_uptime=$(($(date +%s) - server_started_at))
+  if [ "$server_uptime" -ge 300 ]; then
+    restart_delay=2
   fi
 
   echo "Next.js stopped unexpectedly (exit ${server_exit_code}); restarting in ${restart_delay}s." >&2
