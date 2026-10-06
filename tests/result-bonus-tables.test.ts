@@ -44,3 +44,18 @@ test("legge nomi completi da Staff: nelle note senza attribuire altri nomi citat
   const data = sheet([row("1", "28/08: Staff: Aurora Dassisti e Melissa Jaku Grammi: 100. Note: piega con Melissa Valente"), row("2", "Fatta da Aurora. Staff: Aurora Dassisti Stato cambiato"), row("3", "Staff: Melissa Paradise")]);
   assert.deepEqual(resultBonusTableOccurrences([data], "2026-09", people).map((item) => item.userId), ["a", "m", "a"]);
 });
+
+test("dashboard include righe da verificare senza cambiare il conteggio bonus", () => {
+  const pending = { ...row("pending", "Aurora Dassisti"), reviewedAt: null };
+  const data = sheet([pending, row("checked", "Aurora Dassisti"), row("other-month", "Aurora Dassisti", "2026-08-15T10:00:00Z")]);
+  assert.equal(resultBonusTableOccurrences([data], "2026-09", people, { includeUnreviewed: true }).length, 2);
+  assert.equal(resultBonusTableOccurrences([data], "2026-09", people).length, 1);
+});
+
+test("separa chi ha eseguito la sistemazione da chi compare in app precedente", () => {
+  const data = sheet([row("1", "Aurora Dassisti")]);
+  assert.deepEqual(resultBonusTableOccurrences([data], "2026-09", people).map(r => r.userId), ["a"]);
+  assert.deepEqual(resultBonusTableOccurrences([data], "2026-09", people, { staffColumn: "performed" }).map(r => r.userId), ["v"]);
+  data.rows[0].reviewedAt = null;
+  assert.equal(resultBonusTableOccurrences([data], "2026-09", people, { staffColumn: "performed" }).length, 0);
+});

@@ -1,0 +1,57 @@
+.canvas { padding: 16px 10px; background: #f7f9fc !important; color: #2d3748; border-radius: 16px; }
+.frame { padding: 16px !important; background: transparent; }
+.frame section, .frame header, .metric { border: 0; border-radius: 16px; box-shadow: 0 3px 12px rgb(20 30 50 / 3%); }
+.frame section { background: #fff; }
+.frame h2 { letter-spacing: -.025em; color: #2d3748; }
+.frame header { min-height: 180px; }
+.metrics { display: grid; gap: 16px; grid-template-columns: repeat(4,minmax(0,1fr)); background: transparent !important; box-shadow: none !important; }
+.metric { min-width: 0; padding: 18px; background: #fff; align-self: start; }
+.metricTop { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.label { font-size: 11px; font-weight: 600; color: #718096; }
+.value { margin-top: 6px; font-size: 23px; font-weight: 700; letter-spacing: -.035em; line-height:1.25; font-variant-numeric:tabular-nums; }
+.icon { display:grid; place-items:center; flex-shrink:0; width:40px; height:40px; border-radius:12px; background:#319f97; color:white; }
+.alert { background: #fff5f5; color:#b91c1c; }
+.alert .label { color:#b91c1c; }
+.alert .icon { background:#dc2626; }
+.frame :global(#daily-assigned-appointments) > div:first-child { padding-bottom:12px; border-bottom:1px solid #edf2f7; }
+.frame :global(#daily-assigned-appointments) a:global(.group):hover { background:#f3fafa; }
+.frame section[aria-label="Servizi eseguiti oggi"] { justify-content:center; }
+.frame section[aria-label="Servizi eseguiti oggi"] :global(.bg-\[\#a14c73\]) { background: #319f97; }
+:global(.dark) .canvas { background:#171b24 !important; color:#edf2f7; }
+:global(.dark) .frame section, :global(.dark) .metric { background:#232936; }
+:global(.dark) .frame h2 { color:#edf2f7; }
+:global(.dark) .label { color:#a0aec0; }
+:global(.dark) .alert { background:#42252a; color:#fca5a5; }
+@media(max-width:1199px) { .metrics {grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media(max-width:639px) { .canvas {padding:4px;} .frame {padding:8px !important;} .metrics {gap:10px;} .metric {padding:12px;} .icon {width:30px;height:30px;border-radius:9px;} .value {font-size:20px;} .metricTop {gap:5px;} }
+@media(max-width:379px) { .metrics {grid-template-columns:1fr;} }
+
+/* Editorial layout: restrained surfaces and a strong numerical hierarchy. */
+.canvas { background:#f4f3f5 !important; border-radius:0; padding:12px; }
+.frame { padding:16px !important; }
+.frame section, .frame header, .metric { border-radius:8px; box-shadow:none; }
+.frame section { border:1px solid #e8e5e9; }
+.metrics { border:0 !important; gap:1px; background:#e8e5e9 !important; border-radius:8px !important; overflow:hidden; }
+.metric { border:0; border-radius:0; padding:20px; align-self:stretch; }
+.label { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:#77717a; }
+.value { font-size:28px; font-weight:600; }
+.icon { border-radius:8px; background:#f6edf2; color:#913956; width:36px; height:36px; }
+.alert .icon { background:#fee2e2; color:#b91c1c; }
+.frame header { min-height:145px; }
+.frame :global(.text-teal-700), .frame :global(.text-teal-600) { color:#913956; }
+.frame :global(.bg-teal-50) { background:#faf0f5; }
+.frame :global(.bg-teal-500), .frame :global(.bg-teal-600),
+.frame section[aria-label="Servizi eseguiti oggi"] :global(.bg-\[\#a14c73\]) { background:#913956; }
+.frame :global(.border-teal-200) { border-color:#e3bfd0; }
+.frame :global(#daily-assigned-appointments) a:global(.group):hover { background:#faf7f9; }
+.frame :global(#daily-assigned-appointments) { border-top:3px solid #29232b; }
+.frame section[aria-label="Sistemazione fasce del mese"] { border-top:3px solid #913956; }
+.frame section[aria-label="Servizi eseguiti oggi"] { border-top:3px solid #913956; }
+:global(.dark) .canvas { background:#19171c !important; }
+:global(.dark) .metrics { background:#373039 !important; }
+:global(.dark) .frame section { border-color:#373039; }
+:global(.dark) .icon { background:#3d2834; color:#f0b4d0; }
+@media(max-width:639px) {
+  .canvas {padding:4px;} .frame {padding:8px !important;}
+  .metrics {gap:1px;} .metric {padding:14px;} .value {font-size:22px;}
+}

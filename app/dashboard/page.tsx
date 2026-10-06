@@ -1,6 +1,8 @@
+import { ASSISTANCE_TABLES_KEY, normalizeAssistanceSheets } from "@/lib/assistance-tables";
+import { resultBonusTableOccurrences } from "@/lib/result-bonus-tables";
 import { dashboardDelaySummary } from "@/lib/dashboard-delay-summary";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
-import { countDailyCompletedCards, dailyPersonalTarget, assignedDailyAppointments } from "@/lib/daily-personal-goal";
+import { countDailyCompletedCards, dailyPersonalTarget, assignedDailyAppointments, dailyPerformedServices } from "@/lib/daily-personal-goal";
 import { readProfessionalLevel } from "@/lib/professional-level";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -480,6 +482,7 @@ export default async function DashboardPage() {
 
   // Parallel Data Queries
   const [
+    assistanceTableSetting,
     dashboardSettingRaw,
     clientControlForms,
     todayAttendanceLogs,
@@ -493,6 +496,7 @@ export default async function DashboardPage() {
     unreadCommunications,
     unreadNotificationsCount,
   ] = await Promise.all([
+    safe(prisma.setting.findUnique({ where: { key: ASSISTANCE_TABLES_KEY } }), null),
     safe(prisma.setting.findUnique({ where: { key: DASHBOARD_SETTINGS_KEY } }), null),
     safe(prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }), []),
     safe(prisma.attendanceLog.findMany({
@@ -553,6 +557,21 @@ export default async function DashboardPage() {
       }
     }), 0),
   ]);
+
+  const tablePeople = allEmployees.map(person => ({ id: person.id, name: person.name || "" }));
+  const assistanceSheets = normalizeAssistanceSheets(assistanceTableSetting?.value);
+  const reworkMonth = monthRange().key;
+  const personalRows = (staffColumn: "previous" | "performed", includeUnreviewed: boolean) => resultBonusTableOccurrences(
+    assistanceSheets, reworkMonth, tablePeople, { includeUnreviewed, staffColumn },
+  ).filter(row => row.userId === currentUser.id);
+  const reworkSummary = (column: "previous" | "performed") => {
+    const rows = personalRows(column, false);
+    return { reviewed: rows.length, pending: personalRows(column, true).length - rows.length, rows };
+  };
+  const monthlyReworks = assistanceTableSetting ? {
+    monthLabel: new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "Europe/Rome" }).format(new Date()),
+    performed: reworkSummary("performed"),
+  } : null;
 
   // Parse Dashboard Settings (Goals, Promos, Products, Announcements, Worker Bonus Map)
   const dashboardVal = (dashboardSettingRaw?.value as any) || {};
@@ -712,7 +731,9 @@ export default async function DashboardPage() {
           locationName: currentUser.location?.name ?? null,
           sedeId: currentUser.sede_id ?? null,
         }}
+        performedServices={cards ? dailyPerformedServices(cards, workerIdentity, canonicalEmployeeNames) : null}
         assignedAppointments={assignedAppointments}
+        monthlyReworks={monthlyReworks}
         monthlyIncompleteCount={monthlyIncompleteCount}
         workerGoal={workerGoal}
         professionalLevel={readProfessionalLevel(currentUser.workforce_data)}

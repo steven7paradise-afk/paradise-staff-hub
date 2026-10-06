@@ -6,17 +6,17 @@ function normalized(value: string) {
 function nameKey(value: string) { return normalized(value).split(" ").sort().join(" "); }
 
 /** Uses the row's insertion month, not updatedAt: editing must not move a charge to a new month. */
-export function resultBonusTableOccurrences(sheets: AssistanceSheet[], month: string, people: Array<{ id: string; name: string }>) {
+export function resultBonusTableOccurrences(sheets: AssistanceSheet[], month: string, people: Array<{ id: string; name: string }>, options: { includeUnreviewed?: boolean; staffColumn?: "previous" | "performed" } = {}) {
   const matches: Array<{ id: string; userId: string; date: string; reference: string }> = [];
   const seen = new Set<string>();
   for (const sheet of sheets) {
     if (!/^sistemazione fasc(?:e|ie)$/.test(normalized(sheet.name))) continue;
-    const previous = sheet.columns.find((column) => /^app(?:untamento)? precedente$/.test(normalized(column.label)));
+    const previous = sheet.columns.find((column) => (options.staffColumn === "performed" ? /^sistemazione$/ : /^app(?:untamento)? precedente$/).test(normalized(column.label)));
     const order = sheet.columns.find((column) => /^(numero )?ordine( shopify)?$/.test(normalized(column.label)));
     if (!previous) continue;
     for (const row of sheet.rows) {
       // Automatic attribution is not approval: only reviewed rows affect the bonus.
-      if (!row.reviewedAt || !Number.isFinite(new Date(row.reviewedAt).getTime())) continue;
+      if (!options.includeUnreviewed && (!row.reviewedAt || !Number.isFinite(new Date(row.reviewedAt).getTime()))) continue;
       const time = new Date(row.createdAt);
       if (!row.id || !Number.isFinite(time.getTime())) continue;
       const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(time);

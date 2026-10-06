@@ -70,3 +70,37 @@ export function assignedDailyAppointments(
     id: booking.id, client: booking.customer?.name || "Cliente", service: booking.service?.title || "Servizio", start: booking.start_date, noteCompleted: completed.has(String(booking.id)),
   }));
 }
+
+/** Counts each service once per booking, using only this worker's completed sections. */
+export function dailyPerformedServices(cards: Card[], worker: { id: string; name: string }, canonicalNames: string[], today = new Date()) {
+  const counted = new Set<string>();
+  const totals = new Map<string, number>();
+  const seenBookings = new Set<string>();
+  for (const card of cards) {
+    const a = (card.answers || {}) as Record<string, unknown>;
+    const booking = String(a.booking_id || card.id);
+    // Queries provide newest revisions first. Never revive an older saved revision.
+    if (seenBookings.has(booking)) continue;
+    seenBookings.add(booking);
+    if (a.client_control_is_draft === true || String(a.client_control_correctness || "").trim().toLowerCase() !== "controllato") continue;
+    const completedAt = a.client_control_completed_at ? new Date(String(a.client_control_completed_at)) : card.created_at;
+    if (!Number.isFinite(completedAt.getTime()) || dayKey(completedAt) !== dayKey(today)) continue;
+    const sections = Array.isArray(a.worker_service_sections) ? a.worker_service_sections as Array<{ staffId?: string; services?: unknown }> : [];
+    let services: string[] = [];
+    if (sections.length) services = sections.filter(section => section?.staffId === worker.id).flatMap(section => Array.isArray(section.services) ? section.services.filter((value): value is string => typeof value === "string") : []);
+    else {
+      const selected = names(a.client_control_service_staff);
+      const assigned = selected.length ? selected : names(a.client_control_service_owner);
+      // Legacy shared notes do not identify who performed each individual service.
+      if (assigned.length === 1 && resolveDashboardStaffName(assigned[0], canonicalNames) === resolveDashboardStaffName(worker.name, canonicalNames)) services = names(a.custom_services);
+    }
+    for (const raw of services) {
+      const service = raw.trim();
+      const key = `${booking}:${service.toLocaleLowerCase("it")}`;
+      if (!service || counted.has(key)) continue;
+      counted.add(key);
+      totals.set(service, (totals.get(service) || 0) + 1);
+    }
+  }
+  return [...totals].map(([service, count]) => ({ service, count })).sort((a, b) => b.count - a.count || a.service.localeCompare(b.service, "it"));
+}
