@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
+import { SocialAudience } from "@/components/social-audience";
 import { SocialCalendar } from "@/components/social-calendar";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,7 @@ export default async function SocialCalendarPage() {
 
   return (
     <AppShell title="Programmazione Social" subtitle="Organizza, pianifica e gestisci la pubblicazione dei video e dei contenuti per i tuoi canali social.">
+      <SocialAudience />
       <SocialCalendar initialPosts={serializedPosts} currentUserId={session.user.id} />
     </AppShell>
   );

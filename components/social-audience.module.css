@@ -1,0 +1,28 @@
+.audience {margin-bottom:22px;}
+.audienceHeading {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 13px;}
+.audienceHeading h2 {font-size:18px;font-weight:700;color:#382e40;margin:0;}
+.audienceHeading p {font-size:12px;color:#86778c;margin-top:3px;}
+.audienceHeading > span {font-size:10px;color:#897990;}
+.audienceGrid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+.audienceCard {--social-color:#347fd3;padding:18px;border:1px solid #e3dfe9;border-radius:14px;background:linear-gradient(125deg,#fff,#f2f7fd);}
+.audienceCard[data-channel="INSTAGRAM"] {--social-color:#be5089;background:linear-gradient(125deg,#fff,#fceef6);}
+.audienceCard[data-channel="TIKTOK"] {--social-color:#47546d;background:linear-gradient(125deg,#fff,#eff4f7);}
+.audienceCard header {display:flex;align-items:center;gap:9px;font-size:13px;}
+.audienceIcon {color:var(--social-color);font-size:26px;line-height:1;}
+.audienceCard header small {margin-left:auto;font-size:10px;color:#827488;}
+.audienceNumber {font-size:32px;font-weight:750;letter-spacing:-1px;margin:16px 0 12px;color:#322d3b;}
+.audienceNumber > span {font-size:11px;font-weight:400;letter-spacing:0;color:#8b7f91;margin-left:8px;}
+.audienceGoal {display:flex;align-items:center;gap:6px;font-size:11px;color:#75667c;}
+.audienceGoal strong {margin-left:auto;color:var(--social-color);}
+.audienceTrack {height:5px;background:#e6dfe9;border-radius:8px;margin:9px 0;overflow:hidden;}
+.audienceTrack span {display:block;height:100%;background:var(--social-color);}
+.audienceCard > p,.audienceCard time {font-size:10px;color:#887b8e;display:block;}
+.audienceEdit {margin-top:12px;font-size:11px;font-weight:600;color:var(--social-color);}
+.audienceForm {display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;font-size:11px;}
+.audienceForm label {width:100%;}.audienceForm input {display:block;background:white;border:1px solid #cfc0d5;border-radius:5px;padding:6px;width:100%;margin-top:4px;}
+.audienceForm button {padding:5px 10px;background:#e9dfed;border-radius:5px;}
+.audienceError {font-size:12px;color:#ad395d;margin-bottom:10px;}
+@media(max-width:767px) {.audienceGrid{grid-template-columns:1fr;}.audienceHeading{align-items:flex-start;flex-direction:column;}.audienceCard{padding:15px;}.audienceNumber{margin:10px 0;font-size:28px;}}
+:global(.dark) .audienceCard {background:#2f2636;border-color:#514257;}
+:global(.dark) .audienceHeading h2,:global(.dark) .audienceNumber {color:#f1eaf5;}
+

@@ -10,7 +10,7 @@ The long-running Node server checks every five minutes. Opening the page also ca
 
 Targets use social.goal.PLATFORM settings and can be changed only by ADMIN, SUPER_ADMIN, ZERO; API checks this server-side. Staff see targets and progress. Targets are absolute follower totals, not a daily increment.
 
-Local token configured and live test completed on 2026-10-06: Instagram 107329 followers, TikTok 66000. Facebook returned not_available for https://www.facebook.com/paradisebeauty.it/; confirm the correct public Page URL before enabling its results. Total reported charge for the three runs: $0.0176 of free credit. No paid subscription created. Audience cards remain hidden. Production still requires APIFY_API_TOKEN in server environment and deployment/restart. Background polling requires a persistent Node process; serverless deployments require an external scheduler.
+Local token configured and live test completed on 2026-10-06: Instagram 107329 followers, TikTok 66000. Facebook returned not_available for https://www.facebook.com/paradisebeauty.it/; confirm the correct public Page URL before enabling its results. Total reported charge for the three runs: $0.0176 of free credit. No paid subscription created. Audience cards are displayed above the social calendar. Production still requires APIFY_API_TOKEN in server environment and deployment/restart. Background polling requires a persistent Node process; serverless deployments require an external scheduler.
 
 References:
 https://apify.com/pricing
