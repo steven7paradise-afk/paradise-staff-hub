@@ -227,11 +227,8 @@ export default async function ResponsabileDiTurnoPage() {
       role: person.mansione || "Staff",
       photoUrl: person.photo_url ? resolveDrivePhotoUrl(person.photo_url) : null,
       shiftTime: `${startTime} – ${endTime}`,
-      clockIn,
-      delayMinutes,
-      attendanceStatus,
-      pauseSummary,
-      workedHoursFormatted,
+      showAttendanceDetails: session.user.role !== "RESPONSABILE",
+      ...(session.user.role !== "RESPONSABILE" ? { clockIn, delayMinutes, attendanceStatus, pauseSummary, workedHoursFormatted } : {}),
     }];
   });
   const workspacePeople = responsabili.map((person) => {

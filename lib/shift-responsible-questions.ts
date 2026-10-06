@@ -34,6 +34,7 @@ export type StaffChecklistDisplayRow = {
   staff: string;
   control: string;
   outcome: "Sì" | "No";
+  note?: string;
 };
 
 /**
@@ -63,9 +64,16 @@ export function staffChecklistDisplayRows(
         staff: String(entry.name || "-"),
         control,
         outcome: selected ? "Sì" as const : "No" as const,
+        ...(!selected && entry.notes && typeof entry.notes === "object" && typeof (entry.notes as Record<string, unknown>)[control] === "string" ? {note: String((entry.notes as Record<string, unknown>)[control]).trim()} : {}),
       }];
     });
   });
+}
+
+// These sections record exceptions: an empty answer means no event to report.
+export function isShiftEventReport(question: Pick<ShiftResponsibleQuestion, "title">): boolean {
+  const title = question.title.toLocaleLowerCase("it-IT").replace(/[^a-z0-9]+/g, " ").trim();
+  return ["posto lampo", "posti lampo", "clienti problematiche", "servizi rifiutati non eseguiti", "problemi ancora aperti"].includes(title);
 }
 
 export function normalizeShiftResponsibleQuestions(value: unknown): ShiftResponsibleQuestion[] {
@@ -101,7 +109,7 @@ export function normalizeShiftResponsibleQuestions(value: unknown): ShiftRespons
       rows: Array.isArray(raw.rows) ? raw.rows.map((row) => String(row).trim().slice(0, 120)).filter(Boolean).slice(0, 12) : [],
       scaleMin: Number(raw.scaleMin) === 0 ? 0 : 1,
       scaleMax: Math.max(2, Math.min(10, Number(raw.scaleMax) || 5)),
-      required: raw.required !== false,
+      required: !isShiftEventReport({ title }) && raw.required !== false,
       allowOther: ["MULTIPLE_CHOICE", "CHECKBOXES"].includes(answerType) && raw.allowOther === true,
       followUpYes: String(raw.followUpYes ?? "").trim().slice(0, 160),
       followUpNo: String(raw.followUpNo ?? "").trim().slice(0, 160),

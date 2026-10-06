@@ -214,7 +214,25 @@ export async function GET(request: NextRequest) {
     if (isOrderNumber) {
       const details = await getShopifyOrderDetails(normalizedOrderReference!);
       if (!details) {
-        return NextResponse.json({ error: `Ordine ${query} non trovato su Shopify.` }, { status: 404 });
+        // A missing historical order is not proof that it does not exist:
+        // Shopify limits standard order scopes to the last 60 days.
+        try {
+          const scopesResponse = await fetch(`https://${shop}/admin/oauth/access_scopes.json`, {
+            headers: { "X-Shopify-Access-Token": token },
+            cache: "no-store",
+            signal: AbortSignal.timeout(5000),
+          });
+          if (scopesResponse.ok) {
+            const scopes = await scopesResponse.json() as { access_scopes?: Array<{ handle: string }> };
+            if (Array.isArray(scopes.access_scopes) && !scopes.access_scopes.some(scope => scope.handle === "read_all_orders")) {
+              return NextResponse.json({
+                code: "ORDER_NOT_FOUND_HISTORY_RESTRICTED",
+                error: `Ordine ${query} non trovato tra quelli accessibili. Il collegamento Shopify legge gli ultimi 60 giorni: se l’ordine è precedente, l’ufficio deve abilitare l’accesso allo storico nell’app Shopify. Verifica anche il numero inserito.`,
+              }, { status: 404 });
+            }
+          }
+        } catch { /* Scope diagnostics must not mask the lookup result. */ }
+        return NextResponse.json({ error: `Ordine ${query} non trovato tra gli ordini accessibili su Shopify. Verifica il numero e i permessi del collegamento.` }, { status: 404 });
       }
       return NextResponse.json({
         ...details,

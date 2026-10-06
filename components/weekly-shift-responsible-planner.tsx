@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -50,6 +51,7 @@ export function WeeklyShiftResponsiblePlanner({
   const [activeDay, setActiveDay] = useState(days.some((day) => day.date === today) ? today : days[0]?.date);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [status, setStatus] = useState("");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const dayButtons = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectedDay = days.find((day) => day.date === activeDay);
@@ -71,6 +73,7 @@ export function WeeklyShiftResponsiblePlanner({
         });
         if (!response.ok) throw new Error("Errore durante il salvataggio");
         setStatus("Programmazione aggiornata");
+        router.refresh();
       } catch {
         setStatus("Salvataggio non riuscito. Riprova la selezione.");
       }

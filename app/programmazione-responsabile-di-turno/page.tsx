@@ -31,7 +31,7 @@ export default async function ControlloRisposteTurnoPage({ searchParams }: { sea
   const query = await searchParams;
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const dates = weekDays(query.week || today);
-  const [people, assignmentSetting, questionsSetting, answersSetting, accessSetting] = await Promise.all([
+  const [people, assignmentSetting, questionsSetting, answersSetting, accessSetting, staffDirectory] = await Promise.all([
     prisma.user.findMany({
       where: { active: true, employee_status: { not: "Ex dipendente" }, mansione: { contains: "responsabile salone", mode: "insensitive" } },
       select: { id: true, name: true, photo_url: true, mansione: true, schedule_entries: { where: { date: { in: dates.map((date) => new Date(`${date}T00:00:00.000Z`)) } }, select: { date: true, start_time: true, end_time: true, category: { select: { name: true, start_time: true, end_time: true } } } } },
@@ -41,17 +41,23 @@ export default async function ControlloRisposteTurnoPage({ searchParams }: { sea
     prisma.setting.findUnique({ where: { key: SHIFT_RESPONSIBLE_QUESTIONS_KEY } }),
     prisma.setting.findUnique({ where: { key: SHIFT_RESPONSIBLE_ANSWERS_KEY } }),
     prisma.setting.findUnique({ where: { key: SHIFT_RESPONSIBLE_ACCESS_KEY } }),
+    prisma.user.findMany({ select: { id: true, name: true, photo_url: true } }),
   ]);
 
   return (
     <AppShell title="Controllo risposte turno" role={session.user.role as Role} edgeToEdgeMain transparentMain>
       <main className="shift-responsible-programming-page min-h-screen bg-transparent">
           <ShiftResponsibleResponseDashboard
+            key={dates[0]}
             questions={normalizeShiftResponsibleQuestions(questionsSetting?.value)}
             answers={normalizeShiftResponsibleAnswers(answersSetting?.value)}
             assignments={normalizeShiftResponsibleAssignments(assignmentSetting?.value)}
-            people={people.map((person) => ({ id: person.id, name: person.name, photoUrl: person.photo_url }))}
+            people={people.map((person) => ({ id: person.id, name: person.name, photoUrl: person.photo_url, shifts: Object.fromEntries(person.schedule_entries.map(entry => { const start = entry.start_time || entry.category.start_time; const end = entry.end_time || entry.category.end_time; return [entry.date.toISOString().slice(0, 10), start && end ? `${start}–${end}` : entry.category.name]; })) }))}
+            staffDirectory={staffDirectory.map(person => ({ id: person.id, name: person.name, photoUrl: person.photo_url }))}
             access={normalizeShiftResponsibleAccess(accessSetting?.value)}
+            weekDates={dates}
+            previousWeekHref={`/programmazione-responsabile-di-turno?week=${shiftedWeek(dates[0], -1)}`}
+            nextWeekHref={`/programmazione-responsabile-di-turno?week=${shiftedWeek(dates[0], 1)}`}
             fullPage
             monthlyReport={<ShiftMonthlyReportPanel initialMonth={today.slice(0, 7)} />}
             planner={

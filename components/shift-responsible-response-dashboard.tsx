@@ -1,5 +1,9 @@
 "use client";
 
+import { StaffDirectoryContext, StaffIdentity } from "@/components/shift-staff-identity";
+import { ShiftAttendanceProvider, ShiftAttendanceComparison } from "@/components/shift-attendance-comparison";
+import { ShiftResponseAnalytics } from "@/components/shift-response-analytics";
+import { shiftResponseProgress, shiftResponseDays, shiftResponseState } from "@/lib/shift-response-progress";
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -7,9 +11,11 @@ import { ArrowRight, CalendarDays, CalendarRange, CheckCircle2, ChevronDown, Dow
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { ShiftResponsibleComments } from "@/components/shift-responsible-comments";
 import type { ShiftResponsibleAccess } from "@/lib/shift-responsible-access";
-import { activeShiftFollowUps, staffChecklistDisplayRows, type ShiftResponsibleAnswers, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
+import { isShiftEventReport, activeShiftFollowUps, staffChecklistDisplayRows, type ShiftResponsibleAnswers, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 
-type ResponsiblePerson = { id: string; name: string; photoUrl: string | null };
+type ResponsiblePerson = { id: string; name: string; photoUrl: string | null; shifts?: Record<string, string> };
+
+
 
 function formatDay(day: string, long = false) {
   return new Intl.DateTimeFormat("it-IT", long ? { weekday: "long", day: "2-digit", month: "long", year: "numeric" } : { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${day}T12:00:00`));
@@ -32,7 +38,7 @@ function answerLabel(value: string, question?: ShiftResponsibleQuestion) {
       }
       if (Array.isArray(record.staffChecks)) {
         return staffChecklistDisplayRows(record.staffChecks, question?.staffResponseMode)
-          .map((row) => `${row.staff}: ${row.control}: ${row.outcome}`)
+          .map((row) => `${row.staff}: ${row.control}: ${row.outcome}${row.note ? ` — ${row.note}` : ""}`)
           .join(" · ") || "Nessuna selezione";
       }
       if (Array.isArray(record.clientNotes)) {
@@ -67,43 +73,40 @@ function answerLabel(value: string, question?: ShiftResponsibleQuestion) {
   return value;
 }
 
-function isComplete(questions: ShiftResponsibleQuestion[], answers: Record<string, string>) {
-  const required = questions.filter((question) => question.required !== false);
-  const completed = required.filter((question) => {
-    const primary = answers[question.id];
-    if (!primary) return false;
-    return activeShiftFollowUps(question, primary).every((followUp) => Boolean(answers[`${question.id}::${followUp.key}`]));
-  }).length;
-  return { completed, total: required.length, percent: required.length ? Math.round(completed / required.length * 100) : 100 };
-}
-
-export function ShiftResponsibleResponseDashboard({ questions, answers, assignments, people, access, planner, monthlyReport, fullPage = false }: {
+export function ShiftResponsibleResponseDashboard({ questions, answers, assignments, people, staffDirectory = people, access, planner, monthlyReport, weekDates = [], previousWeekHref, nextWeekHref, fullPage = false }: {
   questions: ShiftResponsibleQuestion[];
   answers: ShiftResponsibleAnswers;
   assignments: Record<string, string>;
   people: ResponsiblePerson[];
+  staffDirectory?: ResponsiblePerson[];
   access: ShiftResponsibleAccess;
   planner?: ReactNode;
   monthlyReport?: ReactNode;
+  weekDates?: string[];
+  previousWeekHref?: string;
+  nextWeekHref?: string;
   fullPage?: boolean;
 }) {
-  const [search, setSearch] = useState("");
+  const [planningOpen, setPlanningOpen] = useState(false);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const [month, setMonth] = useState(today.slice(0, 7));
   const peopleById = useMemo(() => Object.fromEntries(people.map((person) => [person.id, person])), [people]);
-  const rows = useMemo(() => Object.entries(answers).filter(([, values]) => Object.keys(values).length > 0).map(([day, values]) => {
-    const progress = isComplete(questions, values);
+  const allRows = useMemo(() => Array.from(new Set([...shiftResponseDays(assignments, answers), ...weekDates])).map((day) => {
+    const values = answers[day] || {};
+    const progress = shiftResponseProgress(questions, values);
     const audit = access[day]?.audit ?? [];
     const lastEdit = audit[audit.length - 1];
     const assigned = peopleById[assignments[day]];
-    return { day, values, progress, assigned, actorName: lastEdit?.actorName || assigned?.name || "Responsabile", updatedAt: lastEdit?.at };
-  }).sort((a, b) => b.day.localeCompare(a.day)), [access, answers, assignments, peopleById, questions]);
-  const filteredRows = rows.filter((row) => `${row.actorName} ${row.assigned?.name ?? ""} ${formatDay(row.day)}`.toLocaleLowerCase("it-IT").includes(search.toLocaleLowerCase("it-IT")));
-  const [selectedDay, setSelectedDay] = useState(rows[0]?.day ?? "");
+    return { day, values, progress, state: shiftResponseState(day, today, progress, values), assigned, actorName: lastEdit?.actorName || assigned?.name || "Responsabile", updatedAt: lastEdit?.at };
+  }).sort((a, b) => b.day.localeCompare(a.day)), [access, answers, assignments, peopleById, questions, today, weekDates]);
+  const rows = allRows.filter(row => row.day.startsWith(month));
+  const weekRows = weekDates.map(day => allRows.find(row => row.day === day)!).filter(Boolean);
+  const [selectedDay, setSelectedDay] = useState(weekDates.includes(today) ? today : weekDates[0] || rows[0]?.day || "");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const detailRef = useRef<HTMLDivElement>(null);
-  const selected = filteredRows.find((row) => row.day === selectedDay) ?? filteredRows[0];
-  const average = rows.length ? Math.round(rows.reduce((sum, row) => sum + row.progress.percent, 0) / rows.length) : 0;
-
+  const selected = allRows.find(row => row.day === selectedDay) ?? weekRows[0];
+  const missing = selected ? questions.filter(question => question.required !== false && shiftResponseProgress([question], selected.values).percent < 100) : [];
   function openDay(day: string) {
     setSelectedDay(day);
     window.requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -337,75 +340,43 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
   }
 
   return (
-    <div className={fullPage ? "min-h-screen bg-[color:var(--card)] px-3 pb-5 pt-[76px] sm:px-6 sm:pb-7 sm:pt-[84px] xl:px-10 xl:pb-9 xl:pt-[100px]" : "mt-5 bg-transparent p-3 sm:p-5"}>
-      <div className="mx-auto max-w-[1680px] space-y-5">
-        <header className="rounded-[26px] border border-black/[0.06] bg-white p-5 shadow-[0_18px_55px_rgba(47,28,38,0.06)] sm:p-7">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c43f78]">Gestione responsabili</p>
-              <h3 className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#1f1b1d] sm:text-3xl">Programmazione responsabile di turno</h3>
-              <p className="mt-2 text-xs leading-relaxed text-black/50 sm:text-sm">Assegna i responsabili della settimana e controlla, in un unico posto, le giornate compilate.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-              <Link href="#organizza-turni" className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#171417] px-4 text-[10px] font-black text-white shadow-sm sm:col-span-1"><CalendarRange className="size-4" />Organizza settimana</Link>
-              <Link href="/programmazione-responsabile-di-turno/modulo" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-[10px] font-black text-[#303034]"><FilePenLine className="size-4 text-[#c43f78]" />Modifica modulo</Link>
-              <button type="button" onClick={() => void generatePdf()} disabled={!selected || isGeneratingPdf} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-[10px] font-black text-[#303034] disabled:opacity-40">{isGeneratingPdf ? <LoaderCircle className="size-4 animate-spin" /> : <Printer className="size-4 text-[#c43f78]" />}{isGeneratingPdf ? "Creazione…" : "Stampa PDF"}</button>
-              <button type="button" onClick={exportCsv} disabled={!rows.length} className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-[10px] font-black text-[#303034] disabled:opacity-40 sm:col-span-1"><Download className="size-4 text-[#c43f78]" />Esporta dati</button>
-            </div>
-          </div>
-          {pdfError ? <p role="alert" className="mt-3 text-right text-[10px] font-bold text-[#b8374f]">{pdfError}</p> : null}
+    <StaffDirectoryContext.Provider value={staffDirectory}><div className={fullPage ? "min-h-screen bg-[#fcfafb] px-3 pb-8 pt-20 sm:px-6 lg:px-8" : "p-4"}>
+      <div className="mx-auto max-w-[1400px] space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-4 py-3">
+          <div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#c32965]">Gestione turni</p><h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">Programmazione responsabile di turno</h1><p className="mt-1 text-sm text-neutral-500">Organizza, controlla e verifica le attività giornaliere del team.</p></div>
+          <button onClick={() => setPlanningOpen(!planningOpen)} aria-expanded={planningOpen} className="inline-flex items-center gap-2 rounded-xl bg-[#c32965] px-4 py-3 text-xs font-bold text-white"><CalendarRange className="size-4" />Organizza settimana</button>
         </header>
-
-        {monthlyReport}
-
-        {planner ? <section id="organizza-turni" className="scroll-mt-4 overflow-hidden rounded-[26px] border border-black/[0.06] bg-white shadow-[0_14px_40px_rgba(47,28,38,0.05)]">
-          <div className="flex items-start gap-3 border-b border-black/[0.06] px-5 py-5 sm:px-7">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#ffe6f1] text-xs font-black text-[#b7356d]">1</span>
-            <div><h4 className="text-base font-black text-[#242124]">Programma la settimana</h4><p className="mt-1 text-[10px] leading-relaxed text-black/45">Seleziona un giorno e assegna la persona responsabile del turno.</p></div>
-          </div>
-          {planner}
-        </section> : null}
-
-        <section className="overflow-hidden rounded-[26px] border border-black/[0.06] bg-white shadow-[0_14px_40px_rgba(47,28,38,0.05)]" aria-label="Controllo giornate">
-          <div className="flex flex-col gap-4 border-b border-black/[0.06] p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#ffe6f1] text-xs font-black text-[#b7356d]">2</span>
-              <div><h4 className="text-base font-black text-[#242124]">Controlla le giornate</h4><p className="mt-1 text-[10px] leading-relaxed text-black/45">Apri una giornata per leggere le risposte e stampare il verbale.</p></div>
-            </div>
-            <label className="flex h-11 w-full items-center gap-2 rounded-xl border border-black/[0.07] bg-[#faf8f9] px-4 text-[#303833] lg:max-w-sm"><Search className="size-4 text-black/35" /><span className="sr-only">Cerca risposte</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cerca data o responsabile" className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-black/35" /></label>
-          </div>
-
-          <div className="grid gap-3 bg-[#fbf9fa] p-4 sm:grid-cols-3 sm:p-5">
-            <Metric label="Giornate compilate" value={String(rows.length)} note="totale registrato" />
-            <Metric label="Completamento medio" value={`${average}%`} note="domande obbligatorie" accent="green" />
-            <Metric label="Da completare" value={String(rows.filter((row) => row.progress.percent < 100).length)} note="richiedono attenzione" accent="pink" />
-          </div>
-
-          {rows.length ? (
-            <><div className="border-t border-black/[0.06] p-4 sm:p-5">
-              <div className="mb-3 flex items-end justify-between gap-3">
-                <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-black/35">Giornate registrate</p><p className="mt-1 text-xs font-bold text-[#302c2e]">Scegli la giornata da consultare</p></div>
-                <span className="shrink-0 rounded-full bg-[#f5f1f3] px-2.5 py-1 text-[9px] font-black text-black/45">{filteredRows.length} risultati</span>
-              </div>
-              {filteredRows.length ? <nav className="flex snap-x gap-3 overflow-x-auto pb-3" aria-label="Giornate compilate">
-                {filteredRows.map((row) => {
-                  const isSelected = selected?.day === row.day;
-                  return <button key={row.day} type="button" onClick={() => openDay(row.day)} aria-pressed={isSelected} className={`min-w-[220px] snap-start rounded-[18px] border p-4 text-left transition sm:min-w-[240px] ${isSelected ? "border-[#d94c88] bg-[#fff1f7] shadow-[0_8px_24px_rgba(190,59,112,0.12)]" : "border-black/[0.07] bg-white hover:border-[#e6a4c1] hover:bg-[#fffafb]"}`}>
-                    <span className="flex items-start justify-between gap-3"><span className="flex items-center gap-2 text-[11px] font-black capitalize text-[#282426]"><CalendarDays className={`size-4 ${isSelected ? "text-[#c43f78]" : "text-black/30"}`} />{formatDay(row.day, true)}</span><span className={`shrink-0 rounded-full px-2 py-1 text-[8px] font-black ${row.progress.percent === 100 ? "bg-[#e8f7e9] text-[#2f7a36]" : "bg-[#fff3dc] text-[#976100]"}`}>{row.progress.percent === 100 ? "Completa" : `${row.progress.percent}%`}</span></span>
-                    <span className="mt-4 flex items-center gap-2.5"><Avatar person={row.assigned} /><span className="min-w-0"><span className="block truncate text-[10px] font-black text-[#202124]">{row.assigned?.name || "Non assegnato"}</span><span className="mt-0.5 block truncate text-[8px] text-black/40">Firmata da {row.actorName}</span></span></span>
-                    <span className="mt-4 block h-1.5 overflow-hidden rounded-full bg-black/[0.06]"><span className={`block h-full rounded-full ${row.progress.percent === 100 ? "bg-[#42a957]" : "bg-[#d94c88]"}`} style={{ width: `${row.progress.percent}%` }} /></span>
-                    <span className="mt-1.5 block text-[8px] font-bold text-black/35">{row.progress.completed} risposte su {row.progress.total}</span>
-                  </button>;
-                })}
-              </nav> : <p className="rounded-2xl border border-dashed border-black/10 px-4 py-10 text-center text-xs font-semibold text-black/40">Nessun risultato trovato.</p>}
-
-              {selected ? <div ref={detailRef} className="mt-2 scroll-mt-24 space-y-4"><ResponseDetail row={selected} questions={questions} /><ShiftResponsibleComments key={selected.day} day={selected.day} initialComments={access[selected.day]?.comments ?? []} /></div> : null}
-            </div>
-            {selected ? <AuditTrail entries={access[selected.day]?.audit ?? []} questions={questions} /> : null}</>
-          ) : <div className="border-t border-black/[0.06] px-5 py-16 text-center text-[#303833]"><span className="mx-auto grid size-14 place-items-center rounded-full bg-[#fff1f7]"><FileText className="size-6 text-[#c43f78]" /></span><p className="mt-4 text-sm font-black">Ancora nessuna risposta</p><p className="mt-1 text-[10px] text-black/40">Le giornate compilate compariranno qui automaticamente.</p></div>}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white p-3 text-xs font-semibold">
+          <Link href={previousWeekHref || "?"} className="rounded-lg border border-black/10 px-3 py-2">← Settimana precedente</Link>
+          <span className="flex items-center gap-2"><CalendarDays className="size-4" />{weekDates.length ? `${formatDay(weekDates[0])} – ${formatDay(weekDates[6])}` : "Giornate registrate"}<Link href="/programmazione-responsabile-di-turno" className="ml-2 rounded-lg bg-neutral-100 px-3 py-2">Oggi</Link></span>
+          <Link href={nextWeekHref || "?"} className="rounded-lg border border-black/10 px-3 py-2">Settimana successiva →</Link>
+          <Link href="/programmazione-responsabile-di-turno/modulo" className="px-3 py-2 text-[#a83260]">Modifica modulo</Link>
+        </div>
+        {planningOpen && planner ? <section id="organizza-turni" className="rounded-2xl border border-pink-100 bg-white p-3">{planner}</section> : null}
+        <section className="rounded-2xl border border-black/5 bg-white p-3 sm:p-4">
+          <h2 className="flex items-center gap-3 text-sm font-bold"><span className="grid size-7 place-items-center rounded-lg bg-pink-100 text-[#c32965]">1</span>Programma la settimana</h2><p className="mb-4 ml-10 text-xs text-neutral-500">Seleziona un giorno per vedere i dettagli e controllare le attività.</p>
+          <nav aria-label="Giorni della settimana" className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            {weekRows.map(row => <button type="button" key={row.day} onClick={() => setSelectedDay(row.day)} aria-pressed={selected?.day === row.day} className={`flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-4 text-center ${selected?.day === row.day ? "border-pink-400 bg-pink-50" : "border-black/5 bg-white hover:bg-pink-50/40"}`}>
+              <span className="text-[10px] uppercase">{new Intl.DateTimeFormat("it-IT", {weekday:"short"}).format(new Date(`${row.day}T12:00:00`))}</span><span className="text-2xl font-bold leading-none">{row.day.slice(8)}</span><Avatar person={row.assigned} /><span className="max-w-full truncate text-xs font-bold">{row.assigned?.name || "Da assegnare"}</span><span className="text-[10px] text-neutral-500">{row.assigned?.shifts?.[row.day] || "Orario non disponibile"}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${row.progress.percent === 100 ? "bg-emerald-50 text-emerald-700" : row.day > today ? "bg-neutral-100 text-neutral-500" : "bg-orange-50 text-orange-700"}`}>{!row.assigned && !Object.keys(row.values).length ? "Non assegnato" : row.state}</span>
+            </button>)}
+          </nav>
         </section>
+        {selected ? <section ref={detailRef} className="scroll-mt-20 space-y-4 rounded-2xl border border-black/5 bg-white p-3 sm:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-3 text-sm font-bold"><span className="grid size-7 place-items-center rounded-lg bg-pink-100 text-[#c32965]">2</span>Controllo giornata <span className="capitalize text-[#c32965]">{formatDay(selected.day, true)}</span></h2><button onClick={() => void generatePdf()} disabled={isGeneratingPdf} className="flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-xs"><Download className="size-4" />{isGeneratingPdf ? "Creazione…" : "Scarica report giornata"}</button></div>
+          {pdfError ? <p role="alert" className="text-sm text-red-600">{pdfError}</p> : null}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="col-span-2 rounded-xl border border-black/5 p-4"><p className="text-xs">Completamento giornata</p><div className="mt-1 flex items-end justify-between"><strong className="text-3xl">{selected.progress.percent}%</strong><span className="text-xs text-neutral-500">{selected.progress.completed} / {selected.progress.total} controlli obbligatori</span></div><div className="mt-3 h-2 rounded-full bg-neutral-100"><div className="h-2 rounded-full bg-[#e63779]" style={{width:`${selected.progress.percent}%`}} /></div></div>
+            <div className="rounded-xl bg-emerald-50 p-4"><CheckCircle2 className="mb-2 size-5 text-emerald-600" /><strong className="text-2xl">{selected.progress.completed}</strong><p className="text-xs">Controlli compilati</p></div>
+            <div className="rounded-xl bg-orange-50 p-4"><FileText className="mb-2 size-5 text-orange-600" /><strong className="text-2xl">{missing.length}</strong><p className="text-xs">{selected.day > today ? "Controlli previsti" : "Da completare"}</p></div>
+          </div>
+          {missing.length > 0 && selected.day <= today ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-pink-100 bg-pink-50 p-4"><div><p className="text-sm font-bold text-[#c32965]">{missing.length} controlli richiedono la compilazione</p><p className="mt-1 text-xs text-neutral-500">{missing.slice(0,3).map(q => q.title).join(" · ")}{missing.length > 3 ? ` · altri ${missing.length-3}` : ""}</p></div><Link href="/responsabile-di-turno" className="rounded-lg bg-[#c32965] px-4 py-2 text-xs font-semibold text-white">Pagina del responsabile →</Link></div> : null}
+          <ShiftAttendanceProvider key={`attendance-${selected.day}`} day={selected.day}><ResponseDetail key={`detail-${selected.day}`} row={selected} questions={questions} /></ShiftAttendanceProvider>
+          <ShiftResponsibleComments key={`comments-${selected.day}`} day={selected.day} initialComments={access[selected.day]?.comments ?? []} />
+          <AuditTrail entries={access[selected.day]?.audit ?? []} questions={questions} />
+        </section> : null}
+        <details className="rounded-2xl border border-black/5 bg-white p-4"><summary className="cursor-pointer text-sm font-bold">Analisi e report mensili</summary><div className="mt-5 space-y-5"><label className="flex items-center gap-3 text-sm">Mese di analisi<input type="month" value={month} onChange={event => {if(event.target.value) setMonth(event.target.value)}} className="rounded-lg border p-2" /></label><p className="text-xs text-neutral-500">Conteggi basati sul modulo attualmente configurato.</p><ShiftResponseAnalytics rows={rows.filter(row => assignments[row.day] || answers[row.day])} today={today} questions={questions} onDay={openDay} /><button onClick={exportCsv} className="rounded-lg border px-4 py-2 text-xs">Esporta dati CSV</button>{monthlyReport}</div></details>
       </div>
-    </div>
+    </div></StaffDirectoryContext.Provider>
   );
 }
 
@@ -448,7 +419,7 @@ function AuditTrail({ entries, questions }: { entries: ShiftResponsibleAccess[st
             </div>
             <div className="min-w-0">
               {hasLatestComparison ? <p className="flex min-w-0 items-center gap-2 text-[9px]"><span className="max-w-[42%] truncate text-black/45">{latest.previousValue ? answerLabel(latest.previousValue, question) : "Nessuna risposta"}</span><ArrowRight className="size-3 shrink-0 text-black/25" /><span className="max-w-[42%] truncate font-bold text-[#16883a]">{answerLabel(latest.nextValue || "", question)}</span></p> : <p className="text-[9px] text-black/35">Confronto precedente non disponibile</p>}
-              <p className="mt-1 text-[8px] text-black/40">Ultima firma: <span className="font-bold text-black/55">{latest.actorName}</span></p>
+              <p className="mt-1 text-[8px] text-black/40">Ultima firma: <StaffIdentity name={latest.actorName} /></p>
             </div>
             <span className="flex items-center justify-between gap-3 sm:justify-end"><time className="whitespace-nowrap text-[8px] font-bold text-black/40">{formatDay(latest.at.slice(0, 10))} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(latest.at))}</time><ChevronDown className="size-4 text-black/35 transition group-open:rotate-180" /></span>
           </summary>
@@ -456,7 +427,7 @@ function AuditTrail({ entries, questions }: { entries: ShiftResponsibleAccess[st
             {questionEntries.map((entry, entryIndex) => {
               const hasComparison = typeof entry.nextValue === "string";
               return <article key={entry.id} className="grid gap-2 border-b border-black/[0.06] py-4 last:border-b-0 sm:grid-cols-[170px_minmax(0,1fr)] sm:gap-5">
-                <div><p className="text-[9px] font-bold text-[#303833]">{entry.actorName}</p><time className="mt-1 block text-[8px] text-black/40">{formatDay(entry.at.slice(0, 10))} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(entry.at))}</time><p className="mt-1 text-[8px] text-black/30">Modifica {questionEntries.length - entryIndex}</p></div>
+                <div><StaffIdentity name={entry.actorName} /><time className="mt-1 block text-[8px] text-black/40">{formatDay(entry.at.slice(0, 10))} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(entry.at))}</time><p className="mt-1 text-[8px] text-black/30">Modifica {questionEntries.length - entryIndex}</p></div>
                 {hasComparison ? <div className="grid gap-2 sm:grid-cols-[1fr_22px_1fr] sm:items-center">
                   <div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-wide text-black/35">Prima</p><p className="mt-1 whitespace-pre-wrap break-words text-[9px] leading-relaxed text-[#5f6368]">{entry.previousValue ? answerLabel(entry.previousValue, question) : "Nessuna risposta"}</p></div>
                   <ArrowRight className="hidden size-3.5 text-black/20 sm:block" />
@@ -479,6 +450,13 @@ function Avatar({ person }: { person?: ResponsiblePerson }) {
   return <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-[8px] font-black text-black/45">{person?.photoUrl ? <img src={resolveDrivePhotoUrl(person.photoUrl)} alt="" className="size-full object-cover" /> : <UserRound className="size-4" />}</span>;
 }
 
+
+function StaffResponseCards({ rows, mode }: { rows: string[][]; mode?: "attendance" | "pause" }) {
+  const groups = new Map<string, string[][]>();
+  for (const [name, ...details] of rows) groups.set(name, [...(groups.get(name) ?? []), details]);
+  return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{[...groups].map(([name, entries]) => <article key={name} className="overflow-hidden rounded-xl border border-black/5 bg-white"><header className="border-b border-black/5 bg-pink-50/40 p-3"><StaffIdentity name={name} /></header><div className="divide-y divide-black/5 px-3">{mode ? <p className="pt-2 text-[10px] font-bold uppercase text-neutral-400">Dichiarazione responsabile</p> : null}{entries.map((entry, index) => <div key={index} className="flex items-start justify-between gap-3 py-2.5 text-xs"><span className="whitespace-pre-wrap text-neutral-600">{entry[0]}{entry[2] ? <span className="mt-2 block rounded-lg bg-rose-50 p-2 text-rose-800">{entry[2]}</span> : null}</span>{entry[1] ? <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${entry[1] === "Sì" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{entry[1]}</span> : null}</div>)}</div>{mode ? <ShiftAttendanceComparison name={name} mode={mode} declared={entries.filter(entry => entry[1] === "Sì").map(entry => entry[0])} /> : null}</article>)}</div>;
+}
+
 function StructuredResponse({ value, question }: { value: string; question?: ShiftResponsibleQuestion }) {
   if (value === "YES" || value === "NO") {
     const positive = value === "YES";
@@ -491,13 +469,13 @@ function StructuredResponse({ value, question }: { value: string; question?: Shi
   }
   if (parsed && typeof parsed === "object") {
     if (Array.isArray(parsed.staffNotes)) {
-      return <ResponseTable headers={["Staff", "Nota"]} rows={parsed.staffNotes.flatMap((item) => item && typeof item === "object" ? [[String((item as Record<string, unknown>).name || "-"), String((item as Record<string, unknown>).note || "-")]] : [])} />;
+      return <StaffResponseCards rows={parsed.staffNotes.flatMap((item) => item && typeof item === "object" ? [[String((item as Record<string, unknown>).name || "-"), String((item as Record<string, unknown>).note || "-")]] : [])} />;
     }
     if (Array.isArray(parsed.staffChecks)) {
       const rows = staffChecklistDisplayRows(parsed.staffChecks, question?.staffResponseMode)
-        .map((row) => [row.staff, row.control, row.outcome]);
+        .map((row) => [row.staff, row.control, row.outcome, row.note || ""]);
       return rows.length
-        ? <ResponseTable headers={["Staff", "Controllo", "Esito"]} rows={rows} />
+        ? <StaffResponseCards rows={rows} mode={/tutti presenti/i.test(question?.title || "") ? "attendance" : /^pause?$/i.test(question?.title.trim() || "") ? "pause" : undefined} />
         : <p className="text-[10px] italic text-black/35">Nessuna risposta selezionata.</p>;
     }
     if (Array.isArray(parsed.clientNotes)) {
@@ -511,7 +489,7 @@ function StructuredResponse({ value, question }: { value: string; question?: Shi
     }
     if (typeof parsed.taskTitle === "string") {
       const assignees = Array.isArray(parsed.assignees) ? parsed.assignees.flatMap((item) => item && typeof item === "object" ? [String((item as Record<string, unknown>).name || "")].filter(Boolean) : []) : [];
-      return <div className="rounded-xl border border-black/[0.07] bg-[#f7faf8] p-3"><p className="text-[10px] font-bold text-[#303833]">{parsed.taskTitle}</p>{assignees.length ? <p className="mt-1.5 text-[8px] font-semibold text-black/45">Assegnata a: {assignees.join(", ")}</p> : null}</div>;
+      return <div className="rounded-xl border border-black/[0.07] bg-[#f7faf8] p-3"><p className="text-[10px] font-bold text-[#303833]">{parsed.taskTitle}</p>{assignees.length ? <p className="mt-1.5 text-[8px] font-semibold text-black/45">{assignees.map(name => <StaffIdentity key={name} name={name} />)}</p> : null}</div>;
     }
   }
   return <p className="whitespace-pre-wrap break-words text-[10px] font-semibold leading-relaxed text-[#555d57]">{answerLabel(value, question)}</p>;
@@ -527,22 +505,26 @@ function ResponseTable({ headers, rows }: { headers: string[]; rows: string[][] 
 }
 
 function ResponseDetail({ row, questions }: { row: { day: string; values: Record<string, string>; assigned?: ResponsiblePerson; actorName: string; updatedAt?: string; progress: { percent: number; completed: number; total: number } }; questions: ShiftResponsibleQuestion[] }) {
+  const [expanded, setExpanded] = useState<string[]>([]);
   return <aside className="overflow-hidden rounded-[22px] border border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(47,28,38,0.05)]" aria-label={`Risposte del ${formatDay(row.day)}`}>
     <div className="flex flex-col gap-4 border-b border-black/[0.08] bg-[#fff7fa] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
       <div className="flex min-w-0 items-center gap-3.5"><span className="scale-110"><Avatar person={row.assigned} /></span><div className="min-w-0"><span className="text-[8px] font-black uppercase tracking-[0.14em] text-[#b7356d]">Verbale della giornata</span><h4 className="mt-0.5 truncate text-base font-black text-[#202124]">{row.assigned?.name || row.actorName}</h4><p className="mt-1 text-[9px] capitalize text-black/45">{formatDay(row.day, true)}{row.updatedAt ? ` · aggiornata alle ${new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.updatedAt))}` : ""}</p></div></div>
       <div className="flex items-center gap-3 sm:justify-end"><div className="text-right"><p className="text-[8px] font-black uppercase tracking-wide text-black/35">Compilazione</p><p className="mt-0.5 text-[10px] font-bold text-[#343034]">{row.progress.completed} di {row.progress.total} risposte</p></div><span className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border bg-white px-3 text-[9px] font-black ${row.progress.percent === 100 ? "border-[#ccebd2] text-[#277b38]" : "border-[#f1d49c] text-[#8b5a00]"}`}><CheckCircle2 className={`size-4 ${row.progress.percent === 100 ? "text-[#49a852]" : "text-[#d7a23a]"}`} />{row.progress.percent}%</span></div>
     </div>
-    <div className="divide-y divide-black/[0.07]">
+    <div className="flex items-center justify-between px-4 py-3"><h3 className="text-sm font-bold">Controlli e attività</h3><button className="text-xs font-semibold text-[#c32965]" onClick={() => setExpanded(expanded.length === questions.length ? [] : questions.map(q => q.id))}>{expanded.length === questions.length ? "Comprimi tutti" : "Espandi tutti"}</button></div><div className="divide-y divide-black/[0.07]">
       {questions.map((question, index) => {
         const value = row.values[question.id];
         const branches = activeShiftFollowUps(question, value).flatMap((followUp) => {
           const branchValue = row.values[`${question.id}::${followUp.key}`];
           return branchValue ? [{ ...followUp, value: branchValue }] : [];
         });
-        return <article key={question.id} className="shift-response-row grid gap-4 px-4 py-5 transition hover:bg-[#fdfbfc] sm:px-6 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.35fr)] md:gap-8">
-          <div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#ffe7f1] text-[9px] font-black text-[#b7356d]">{index + 1}</span><div><p className="text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Domanda</p><p className="mt-1 text-[11px] font-black leading-relaxed text-[#302c2e]">{question.title}</p></div></div>
-          <div className="min-w-0 rounded-xl bg-[#faf8f9] p-3.5 sm:p-4"><p className="mb-2 text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Risposta</p>{value ? <StructuredResponse value={value} question={question} /> : <p className="text-[10px] italic text-black/35">Non compilata</p>}{branches.map((branch) => <div key={branch.key} className="mt-3 border-t border-black/[0.07] pt-3"><p className="mb-2 text-[8px] font-black uppercase tracking-wide text-[#9b667c]">{branch.prompt}</p><StructuredResponse value={branch.value} /></div>)}</div>
-        </article>;
+        const complete = Boolean(value?.trim()) && activeShiftFollowUps(question, value).every(branch => row.values[`${question.id}::${branch.key}`]?.trim());
+        const isOpen = expanded.includes(question.id);
+        return <div key={question.id} className="shift-response-row">
+          <button type="button" aria-expanded={isOpen} onClick={() => setExpanded(current => isOpen ? current.filter(id => id !== question.id) : [...current, question.id])} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-pink-50/30"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-pink-50 text-xs font-bold text-[#c32965]">{index + 1}</span><span className="min-w-0 flex-1 text-xs font-semibold">{question.title}</span><span className={`rounded-full px-2 py-1 text-[10px] ${complete ? "bg-emerald-50 text-emerald-700" : "bg-orange-50 text-orange-700"}`}>{complete ? "Compilato" : isShiftEventReport(question) && !value?.trim() ? "Nessuna segnalazione" : question.required === false ? "Facoltativo" : "Da completare"}</span><ChevronDown className={`size-4 shrink-0 transition ${isOpen ? "rotate-180" : ""}`} /></button>
+          {isOpen ? <div className="mx-4 mb-4 rounded-xl bg-[#faf8f9] p-4">{value ? <StructuredResponse value={value} question={question} /> : <p className="text-xs text-neutral-500">{isShiftEventReport(question) ? "Nessun evento segnalato per questa giornata." : "Nessuna risposta registrata."}</p>}{branches.map(branch => <div key={branch.key} className="mt-3 border-t pt-3"><p className="mb-2 text-xs font-semibold">{branch.prompt}</p><StructuredResponse value={branch.value} /></div>)}</div> : null}
+        </div>;
+
       })}
     </div>
   </aside>;

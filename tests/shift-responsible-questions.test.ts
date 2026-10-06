@@ -166,3 +166,11 @@ test("prepara per la task un commento leggibile senza JSON o identificativi", ()
   assert.doesNotMatch(context.readableText, /Problemi aperti/);
   assert.doesNotMatch(context.readableText, /staffNotes|clientNotes|textEntries/);
 });
+
+ test("negative staff checks display their note without leaking it into positive answers", () => {
+ const entries = [{ name: "Laura", responses: { Divisa: "NO", Capelli: "YES" }, notes: { Divisa: "Divisa incompleta", Capelli: "Vecchia nota" } }];
+ const rows = staffChecklistDisplayRows(entries, "YES_NO");
+ assert.equal(rows[0].note, "Divisa incompleta");
+ assert.equal(rows[1].note, undefined);
+ assert.equal(staffChecklistDisplayRows([{name:"Laura", responses:{Divisa:"NO"}}], "YES_NO")[0].note, undefined);
+ });

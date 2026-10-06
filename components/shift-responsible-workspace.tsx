@@ -28,6 +28,7 @@ type ShiftStaffMember = {
   attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" | "FERIE" | "MALATTIA" | "RIPOSO";
   pauseSummary?: string | null;
   workedHoursFormatted?: string | null;
+  showAttendanceDetails?: boolean;
 };
 
 type TaskAssignee = { id: string; name: string; group: "Ufficio" | "Responsabile" };

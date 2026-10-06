@@ -3,7 +3,7 @@
 import { ShiftNoteTextarea } from "@/components/shift-note-textarea";
 import { useState, useTransition } from "react";
 import { AlertCircle, CalendarClock, Check, CheckCircle2, ListTodo, LoaderCircle, Plus, Star, Trash2, Upload, UserRound, X } from "lucide-react";
-import { activeShiftFollowUps, type ShiftResponsibleAnswer, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
+import { isShiftEventReport, activeShiftFollowUps, type ShiftResponsibleAnswer, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 import type { ShiftAppointmentClient } from "@/lib/shift-responsible-appointments";
 
 type SaveStatus = "saving" | "saved" | "error";
@@ -18,6 +18,7 @@ type ShiftStaffMember = {
   attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" | "FERIE" | "MALATTIA" | "RIPOSO";
   pauseSummary?: string | null;
   workedHoursFormatted?: string | null;
+  showAttendanceDetails?: boolean;
 };
 type TaskAssignee = { id: string; name: string; group: "Ufficio" | "Responsabile" };
 
@@ -148,7 +149,7 @@ export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointm
             <div className={`absolute bottom-6 left-0 top-6 w-0.5 rounded-full ${answers[question.id] ? "bg-[#2ed65d]" : "bg-transparent"}`} />
             <div className="min-w-0">
                 <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#80868b]">Domanda {index + 1} di {questions.length}</p>
-                <h2 className="mt-2 text-sm font-semibold leading-snug text-[#202124] sm:text-base">{question.title}{question.required !== false ? <span className="ml-1 text-[#d93025]">*</span> : null}</h2>
+                <h2 className="mt-2 text-sm font-semibold leading-snug text-[#202124] sm:text-base">{question.title}{question.required !== false ? <span className="ml-1 text-[#d93025]">*</span> : null}</h2>{isShiftEventReport(question) ? <p className="mt-2 text-xs text-neutral-500">Compila solo se ci sono eventi da segnalare. Se lasci vuoto, non ci sono segnalazioni e il completamento non diminuisce. Se inserisci un evento, ricorda di salvarlo.</p> : null}
                 {question.description ? <p className="mt-1.5 text-[10px] leading-relaxed text-[#5f6368] sm:text-xs">{question.description}</p> : null}
                 {question.followUpYes || question.followUpNo || Object.keys(question.followUps ?? {}).length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -437,7 +438,7 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
                 </div>
 
                 {/* Badges metriche timbrature, pause e ore lavorate */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[9px] font-bold">
+                {person.showAttendanceDetails ? <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[9px] font-bold">
                   {/* Badge Entrata / Stato */}
                   {person.attendanceStatus === "FERIE" ? (
                     <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-sky-800">
@@ -480,7 +481,7 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
                       <span>⏱️</span> Ore fatte: {person.workedHoursFormatted}
                     </span>
                   ) : null}
-                </div>
+                </div> : null}
               </div>
 
               {/* Textarea note */}
@@ -529,11 +530,18 @@ function parseStaffChecklist(value?: string) {
 function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: { question: ShiftResponsibleQuestion; staff: ShiftStaffMember[]; selected?: string; status?: SaveStatus; onAnswer: (value: string) => void }) {
   const mode = question.staffResponseMode === "CHECKBOXES" ? "CHECKBOXES" : "YES_NO";
   const criteria = question.options ?? [];
+  const [notes, setNotes] = useState<Record<string, Record<string, string>>>(() => {
+    try {
+      const parsed = JSON.parse(selected || "{}");
+      return Object.fromEntries((parsed.staffChecks || []).map((entry: {staffId:string; notes?:Record<string,string>}) => [entry.staffId, entry.notes || {}]));
+    } catch { return {}; }
+  });
   const savedResponses = parseStaffChecklist(selected);
   const [responses, setResponses] = useState<Record<string, Record<string, StaffChecklistValue>>>(savedResponses);
   const prepared = staff.map((person) => ({
     staffId: person.id,
     name: person.name,
+    ...(Object.keys(notes[person.id] || {}).some(key => responses[person.id]?.[key] === "NO" && notes[person.id][key]?.trim()) ? {notes: Object.fromEntries(criteria.filter(key => responses[person.id]?.[key] === "NO" && notes[person.id]?.[key]?.trim()).map(key => [key, notes[person.id][key].trim()]))} : {}),
     responses: Object.fromEntries(criteria.map((criterion) => [criterion, mode === "CHECKBOXES" ? responses[person.id]?.[criterion] === "CHECKED" ? "CHECKED" : "UNCHECKED" : responses[person.id]?.[criterion]])),
   }));
   const isComplete = mode === "CHECKBOXES" || prepared.every((entry) => criteria.every((criterion) => entry.responses[criterion] === "YES" || entry.responses[criterion] === "NO"));
@@ -563,7 +571,7 @@ function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: {
                 <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-black/35 ring-2 ring-white shadow-sm">{person.photoUrl ? <img src={person.photoUrl} alt="" className="size-full object-cover" /> : <UserRound className="size-5" />}</span>
                 <div className="min-w-0"><h3 className="truncate text-sm font-black text-[#202124]">{person.name}</h3><p className="mt-0.5 truncate text-[10px] text-[#5f6368]">{person.role} · Orario: {person.shiftTime}</p></div>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
+              {person.showAttendanceDetails ? <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
                 {person.attendanceStatus === "FERIE" ? <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-sky-800">🏖️ In ferie</span>
                   : person.attendanceStatus === "MALATTIA" ? <span className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-rose-800">🤒 In malattia</span>
                     : person.attendanceStatus === "RIPOSO" ? <span className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-800">Riposo / Permesso</span>
@@ -571,7 +579,7 @@ function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: {
                         : <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">⚠ Non ancora timbrato</span>}
                 {person.attendanceStatus !== "FERIE" && person.attendanceStatus !== "MALATTIA" && person.attendanceStatus !== "RIPOSO" ? <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-purple-900">☕ {person.pauseSummary || "Nessuna pausa"}</span> : null}
                 {person.workedHoursFormatted ? <span className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-100 px-2 py-1 text-slate-800">⏱ Ore fatte: {person.workedHoursFormatted}</span> : null}
-              </div>
+              </div> : null}
             </div>
             <div className="border-t border-black/[0.06] bg-[#fbfcfb] px-4 py-3 sm:px-5 lg:border-t-0">
               <p className="mb-2 text-[8px] font-black uppercase tracking-[0.12em] text-black/35">Controlli per {person.name.split(" ")[0]}</p>
@@ -582,7 +590,7 @@ function StaffChecklistAnswer({ question, staff, selected, status, onAnswer }: {
                   const checked = value === "CHECKED";
                   return <button key={criterion} type="button" onClick={() => setResponse(person.id, criterion, checked ? "UNCHECKED" : "CHECKED")} aria-pressed={checked} className={`flex min-h-11 w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${checked ? "border-[#2ed65d] bg-[#f0fcf4] text-[#16883a] shadow-sm" : "border-black/[0.08] bg-white text-[#3c4043] hover:border-[#2ed65d]/40"}`}><span className={`grid size-5 shrink-0 place-items-center rounded-md border ${checked ? "border-[#2ed65d] bg-[#2ed65d] text-white" : "border-black/20 bg-white text-transparent"}`}><Check className="size-3.5" strokeWidth={3} /></span><span className="text-[10px] font-bold leading-snug">{criterion}</span></button>;
                 }
-                return <div key={criterion} className="grid min-h-14 gap-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-center"><p className="text-[10px] font-semibold leading-snug text-[#3c4043]">{criterion}</p><div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => setResponse(person.id, criterion, "YES")} aria-pressed={value === "YES"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "YES" ? "border-[#2ed65d] bg-[#f0fcf4] text-[#16883a]" : "border-black/10 bg-white text-black/45"}`}>Sì</button><button type="button" onClick={() => setResponse(person.id, criterion, "NO")} aria-pressed={value === "NO"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "NO" ? "border-[#dc6b7f] bg-[#fff1f3] text-[#a12f45]" : "border-black/10 bg-white text-black/45"}`}>No</button></div></div>;
+                return <div key={criterion} className="grid min-h-14 gap-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-center"><p className="text-[10px] font-semibold leading-snug text-[#3c4043]">{criterion}</p><div className="grid grid-cols-2 gap-1.5"><button type="button" onClick={() => setResponse(person.id, criterion, "YES")} aria-pressed={value === "YES"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "YES" ? "border-[#2ed65d] bg-[#f0fcf4] text-[#16883a]" : "border-black/10 bg-white text-black/45"}`}>Sì</button><button type="button" onClick={() => setResponse(person.id, criterion, "NO")} aria-pressed={value === "NO"} className={`min-h-9 rounded-lg border text-[9px] font-black ${value === "NO" ? "border-[#dc6b7f] bg-[#fff1f3] text-[#a12f45]" : "border-black/10 bg-white text-black/45"}`}>No</button></div>{value === "NO" ? <label className="sm:col-span-2"><span className="text-xs font-semibold text-[#a12f45]">Cosa non va?</span><ShiftNoteTextarea aria-label={`Nota per ${person.name}: ${criterion}`} value={notes[person.id]?.[criterion] || ""} onChange={event => setNotes(current => ({...current, [person.id]: {...current[person.id], [criterion]: event.target.value}}))} rows={2} placeholder="Descrivi il problema riscontrato…" className="mt-2 w-full rounded-lg border border-rose-200 bg-white p-3 text-xs" /><span className="text-[10px] text-neutral-500">La nota viene inviata con “Salva controlli staff”.</span></label> : null}</div>;
               })}
               </div>
             </div>
