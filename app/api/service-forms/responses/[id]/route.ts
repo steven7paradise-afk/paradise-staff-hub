@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { orderReference, ORDER_BLOCK_STATES } from "@/lib/shopify-order-block";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getOperationalUser } from "@/lib/operational-session";
@@ -200,13 +201,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Automatically sync status change notes to the matching Shopify order
     if (status) {
       const title = String((updatedResponse.answers as any)?.order_title || "").trim();
-      let shopifyOrderName: string | null = null;
+      const orderAnswers = (updatedResponse.answers as Record<string, unknown>) || {};
+      const exactReference = orderReference(orderAnswers.order_shopify_order) || orderReference(orderAnswers.field_1782221517924);
+      let shopifyOrderName: string | null = exactReference ? `#${exactReference}` : null;
       const titleMatch = title.match(/#\d+/);
-      if (titleMatch) {
+      if (!shopifyOrderName && titleMatch) {
         shopifyOrderName = titleMatch[0];
-      } else if (/^22\d{3}$/.test(title)) {
+      } else if (!shopifyOrderName && /^22\d{3}$/.test(title)) {
         shopifyOrderName = `#${title}`;
-      } else {
+      } else if (!shopifyOrderName) {
         const answersObj = (updatedResponse.answers as Record<string, any>) || {};
         for (const val of Object.values(answersObj)) {
           if (typeof val === "string") {
@@ -232,7 +235,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           READY: "Arrivato / pronto",
           COMPLETED: "Completato",
         };
-        const statusLabelText = STATUS_LABELS[status] || status;
+        const statusLabelText = response.form.name === "Modulo Ordine"
+          ? ORDER_BLOCK_STATES[status as keyof typeof ORDER_BLOCK_STATES] || status
+          : STATUS_LABELS[status] || status;
         
         // 1. Sync custom status note as an order note (comment history on Shopify)
         if (statusNote && statusNote.trim()) {

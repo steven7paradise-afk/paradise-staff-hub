@@ -1,0 +1,9 @@
+api_version = "2026-01"
+[[extensions]]
+name = "Gestione ordine Paradise"
+handle = "paradise-order-status"
+uid = "0fabff27-ecd2-f93b-7002-addb02cac66c2f13b816"
+type = "ui_extension"
+[[extensions.targeting]]
+target = "admin.order-details.block.render"
+module = "./src/OrderBlock.jsx"

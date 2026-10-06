@@ -1,0 +1,17 @@
+{
+  "name": "paradise-shopify-extensions",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "shopify app build --config production"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.3",
+    "@shopify/ui-extensions": "2026.1.0",
+    "preact": "^10.27.0"
+  },
+  "devDependencies": {
+    "@shopify/cli": "^3.89.0",
+    "typescript": "^5.7.2"
+  }
+}
