@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { uploadSocialCover } from "@/lib/supabase-storage";
+import { uploadSocialCoverToGoogleDrive } from "@/lib/google-drive";
+import { randomUUID } from "node:crypto";
+
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -28,13 +31,22 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.formData();
     const file = data.get("file");
-    if (!(file instanceof File) || !file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "Carica un'immagine valida fino a 10 MB." }, { status: 400 });
+    if (!(file instanceof File) || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size === 0 || file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: "Carica una foto JPG, PNG, WebP o GIF fino a 10 MB." }, { status: 400 });
     }
 
-    const coverUrl = await uploadSocialCover(session.user.id, file);
-    return NextResponse.json({ coverUrl });
+    const extension = {"image/jpeg":"jpg", "image/png":"png", "image/webp":"webp", "image/gif":"gif"}[file.type];
+    const uploaded = await uploadSocialCoverToGoogleDrive(
+      Buffer.from(await file.arrayBuffer()),
+      `social-${session.user.id}-${randomUUID()}.${extension}`,
+      file.type,
+    );
+    return NextResponse.json({ coverUrl: uploaded.photoUrl, driveFileId: uploaded.id });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Errore nel caricamento della copertina." }, { status: 500 });
+    console.error("Social cover upload to Google Drive failed", error instanceof Error ? error.message : "Unknown error");
+    const missingCredentials = error instanceof Error && error.message === "Google credentials are not configured";
+    return NextResponse.json({ error: missingCredentials
+      ? "Google Drive non è configurato su questo server. L’amministratore deve collegare l’account Google e la cartella Social Calendar."
+      : "Caricamento su Google Drive non riuscito. Riprova tra poco o verifica la cartella e i permessi Drive." }, { status: missingCredentials ? 503 : 500 });
   }
 }

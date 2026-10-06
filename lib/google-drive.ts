@@ -867,3 +867,37 @@ export async function downloadGoogleDriveFile(fileId: string) {
     mimeType: meta.data.mimeType || "application/octet-stream",
   };
 }
+
+/** Social media stays in Drive; app previews use the authenticated image proxy. */
+export async function uploadSocialCoverToGoogleDrive(buffer: Buffer, fileName: string, mimeType: string) {
+  const rootFolderId = firstDriveFolderId([
+    process.env.GOOGLE_DRIVE_SOCIAL_FOLDER_ID,
+    process.env.GOOGLE_DRIVE_FOLDER_ID,
+    process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
+  ], "0ABkOsn4uZjSQUk9PVA");
+  const drive = getDriveClient();
+  // Use inherited folder permissions, without creating public sharing links.
+  async function ensureFolder(parent: string, name: string) {
+    const existing = await drive.files.list({
+      q: `'${parent.replace(/'/g, "\\'")}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: "files(id)", supportsAllDrives: true, includeItemsFromAllDrives: true,
+    });
+    if (existing.data.files?.[0]?.id) return existing.data.files[0].id;
+    const created = await drive.files.create({
+      requestBody: {name, mimeType:"application/vnd.google-apps.folder", parents:[parent]},
+      fields:"id", supportsAllDrives:true,
+    });
+    if (!created.data.id) throw new Error("Impossibile creare la cartella Social Calendar su Drive.");
+    return created.data.id;
+  }
+  const socialFolder = await ensureFolder(rootFolderId, "Social Calendar");
+  const month = new Intl.DateTimeFormat("en-CA", {timeZone:"Europe/Rome", year:"numeric", month:"2-digit"}).format(new Date());
+  const monthFolder = await ensureFolder(socialFolder, month);
+  const uploaded = await drive.files.create({
+    requestBody: {name:cleanDriveName(fileName), parents:[monthFolder]},
+    media: {mimeType, body:Readable.from(buffer)},
+    fields:"id,name,webViewLink", supportsAllDrives:true,
+  });
+  if (!uploaded.data.id) throw new Error("Google Drive non ha restituito il file caricato.");
+  return {id:uploaded.data.id, photoUrl:directDriveImageUrl(uploaded.data.id), webViewLink:uploaded.data.webViewLink};
+}

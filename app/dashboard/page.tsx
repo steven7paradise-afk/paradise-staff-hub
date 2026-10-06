@@ -1,3 +1,4 @@
+import { isTaskOfficeUser } from "@/lib/task-access";
 import { ASSISTANCE_TABLES_KEY, normalizeAssistanceSheets } from "@/lib/assistance-tables";
 import { resultBonusTableOccurrences } from "@/lib/result-bonus-tables";
 import { dashboardDelaySummary } from "@/lib/dashboard-delay-summary";
@@ -722,6 +723,7 @@ export default async function DashboardPage() {
       transparentMain={true}
     >
       <DashboardRedesignClient
+        officeMode={isTaskOfficeUser(currentUser.role, currentUser.mansione, currentUser.location?.name)}
         currentUser={{
           id: currentUser.id,
           name: currentUser.name || "Paradise Staff",

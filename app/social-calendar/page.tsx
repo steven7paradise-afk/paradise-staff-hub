@@ -1,3 +1,4 @@
+import { reconcileScheduledSocialPosts } from "@/lib/social-post-scheduler";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +28,8 @@ export default async function SocialCalendarPage() {
   if (!isAllowed) {
     redirect("/dashboard");
   }
+
+  await reconcileScheduledSocialPosts();
 
   // Fetch initial posts list
   const posts = await prisma.socialPost.findMany({

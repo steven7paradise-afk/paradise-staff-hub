@@ -1141,7 +1141,7 @@ model SocialPost {
   description              String?
   scheduled_at             DateTime
   platform                 String // Memorizzato come stringa separata da virgole, es: "INSTAGRAM,TIKTOK"
-  status                   String              @default("DRAFT") // "DRAFT", "PLANNED", "PUBLISHED"
+  status                   String              @default("DRAFT") // "RECORDED", "DRAFT", "PLANNED", "PUBLISHED"
   cover_url                String?
   video_url                String?
   notes                    String?

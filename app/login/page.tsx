@@ -9,9 +9,9 @@ export default async function LoginPage({
   searchParams: Promise<{ documentAccessExpired?: string; preview?: string }>;
 }) {
   const params = await searchParams;
-  if (process.env.NODE_ENV === "development" && params.preview === "dashboard") {
+  if (process.env.NODE_ENV === "development" && ["dashboard", "dashboard-office"].includes(params.preview || "")) {
     const { DashboardRedesignClient } = await import("@/components/dashboard-redesign-client");
-    return <DashboardRedesignClient currentUser={{ id: "demo", name: "Giulia · Esempio", locationName: "Salone di esempio" }} workerGoal={5} currentWorkerPoints={3} monthlyIncompleteCount={7} professionalLevel="Junior" monthlyDelays={{ entryMinutes: 65, breakMinutes: 20, totalMinutes: 85, entryCount: 2, breakCount: 1, totalCount: 3 }} assignedAppointments={[
+    return <DashboardRedesignClient officeMode={params.preview === "dashboard-office"} currentUser={{ id: "demo", name: "Giulia · Esempio", locationName: params.preview === "dashboard-office" ? "Ufficio · Esempio" : "Salone di esempio" }} workerGoal={5} currentWorkerPoints={3} monthlyIncompleteCount={7} professionalLevel="Junior" monthlyDelays={{ entryMinutes: 65, breakMinutes: 20, totalMinutes: 85, entryCount: 2, breakCount: 1, totalCount: 3 }} assignedAppointments={[
       { id: "demo-1", client: "Cliente di esempio", service: "Colore e piega", start: "2026-10-01T14:00:00+02:00", noteCompleted: false },
       { id: "demo-2", client: "Cliente completata di esempio", service: "Taglio", start: "2026-10-01T10:00:00+02:00", noteCompleted: true },
     ]} />;
