@@ -6,7 +6,7 @@ type Shift = { date: Date; start_time?: string | null; end_time?: string | null;
 export function dashboardDelaySummary(logs: Log[], shifts: Shift[], locationName: string | null | undefined, breakLimit: number) {
   const days = new Map<string, Log[]>();
   for (const log of logs) { const key = log.date.toISOString().slice(0, 10); days.set(key, [...(days.get(key) || []), log]); }
-  let entryMinutes = 0, entryCount = 0, breakMinutes = 0;
+  let entryMinutes = 0, entryCount = 0, breakCount = 0, breakMinutes = 0;
   const seen = new Set<string>();
   for (const shift of shifts) {
     const key = shift.date.toISOString().slice(0, 10);
@@ -20,11 +20,17 @@ export function dashboardDelaySummary(logs: Log[], shifts: Shift[], locationName
     }
   }
   for (const dailyLogs of days.values()) {
-    breakMinutes += summarizeLateBreakReturns(dailyLogs, breakLimit).lateMinutes;
+    const summary = summarizeLateBreakReturns(dailyLogs, breakLimit);
+    breakMinutes += summary.lateMinutes;
+    breakCount += summary.lateCount;
   }
-  return { entryMinutes, breakMinutes, entryCount, totalMinutes: entryMinutes + breakMinutes };
+  return { entryMinutes, breakMinutes, entryCount, breakCount, totalCount: entryCount + breakCount, totalMinutes: entryMinutes + breakMinutes };
 }
 export function formatDelayMinutes(minutes: number) {
   const value = Math.max(0, Math.floor(minutes));
   return value < 60 ? `${value} min` : `${Math.floor(value / 60)} h${value % 60 ? ` ${value % 60} min` : ""}`;
+}
+
+export function formatDelayCount(count: number) {
+  return `${count} ${count === 1 ? "ritardo" : "ritardi"}`;
 }

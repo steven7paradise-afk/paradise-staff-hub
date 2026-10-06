@@ -1,6 +1,6 @@
 "use client";
 import dashboardStyles from "./dashboard-redesign.module.css";
-import { formatDelayMinutes } from "@/lib/dashboard-delay-summary";
+import { formatDelayCount } from "@/lib/dashboard-delay-summary";
 import type { AssignedDailyAppointment } from "@/lib/daily-personal-goal";
 
 import { useEffect, useMemo, useState } from "react";
@@ -77,7 +77,7 @@ type Props = {
   todayShiftStartTime?: string | null;
   weeklyShifts?: WeeklyShift[];
   monthlyLateCount?: number;
-  monthlyDelays?: { entryMinutes: number; breakMinutes: number; totalMinutes: number };
+  monthlyDelays?: { entryMinutes: number; breakMinutes: number; totalMinutes: number; entryCount: number; breakCount: number; totalCount: number };
   todayLateMinutes?: number;
   workerRequests?: WorkerRequest[];
   todayIsRest?: boolean;
@@ -111,7 +111,7 @@ export function DashboardRedesignClient({
   recentLogs = [],
   weeklyShifts = [],
   monthlyLateCount = 0,
-  monthlyDelays = { entryMinutes: 0, breakMinutes: 0, totalMinutes: 0 },
+  monthlyDelays = { entryMinutes: 0, breakMinutes: 0, totalMinutes: 0, entryCount: 0, breakCount: 0, totalCount: 0 },
   todayLateMinutes = 0,
   workerRequests = [],
   todayIsRest = false,
@@ -120,7 +120,8 @@ export function DashboardRedesignClient({
 }: Props) {
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [showAllServices, setShowAllServices] = useState(false);
-  const [appointmentsOpen, setAppointmentsOpen] = useState(false);
+  const [appointmentsOpen, setAppointmentsOpen] = useState(true);
+  const [showAllAppointments, setShowAllAppointments] = useState(false);
   const incompleteCount = assignedAppointments?.filter(item => !item.noteCompleted).length ?? null;
   const visibleAppointments = assignedAppointments?.filter(item => !showIncompleteOnly || !item.noteCompleted);
   const [communicationsOpen, setCommunicationsOpen] = useState(false);
@@ -211,38 +212,15 @@ export function DashboardRedesignClient({
   };
 
   return (
-    <div className={cn(dashboardStyles.canvas, "worker-dashboard min-h-screen text-[#171717] dark:text-white")}>
+    <div className={cn(dashboardStyles.canvas, "worker-dashboard text-[#171717] dark:text-white")}>
       <main className={cn(dashboardStyles.frame, "mx-auto w-full max-w-[1440px]")}>
-        <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#98516d]">Paradise Staff</p><h2 className="mt-1 text-xl font-semibold tracking-tight">La tua giornata</h2></div><Link href="/appointments" className="rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-[#793752] shadow-sm transition hover:bg-rose-50">Apri agenda <span aria-hidden="true">↗</span></Link></div>
-
-        <section aria-label="Riepilogo personale" className={dashboardStyles.metrics}>
-          <article className={dashboardStyles.metric}>
-            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Turno di oggi</p><p className={dashboardStyles.value}>{todayShiftTime}</p></div><span className={dashboardStyles.icon}><Clock className="size-5" /></span></div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs"><span className={attendance.status === "TURNO" ? "text-emerald-700" : attendance.status === "PAUSA" ? "text-amber-700" : "text-neutral-500"}>{attendance.status === "TURNO" ? "In turno" : attendance.status === "PAUSA" ? "In pausa" : "Fuori turno"}</span><span className="font-mono tabular-nums">{formatDuration(attendance.status === "PAUSA" ? attendance.breakSeconds : attendance.workedSeconds)}</span></div>
-            <p className="mt-1 text-[10px] text-neutral-500">{attendance.status === "PAUSA" ? "Durata della pausa corrente" : `Tempo lavorato · registrato ${workedHoursFormatted}`}</p>
-            {todayLateMinutes > 10 && <p className="mt-2 text-xs font-semibold text-red-700">Ingresso in ritardo di {todayLateMinutes} min</p>}
-          </article>
-          <article className={dashboardStyles.metric}>
-            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Obiettivo di oggi</p><p className={dashboardStyles.value}>{currentWorkerPoints ?? "—"}<span className="ml-1 text-sm text-neutral-400">/ {workerGoal ?? "—"}</span></p></div><span className={dashboardStyles.icon}><Target className="size-5" /></span></div>
-            {currentWorkerPoints !== null && workerGoal !== null && <div role="progressbar" aria-label="Obiettivo personale di oggi" aria-valuemin={0} aria-valuemax={workerGoal} aria-valuenow={Math.min(currentWorkerPoints, workerGoal)} className="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div className="h-full rounded-full bg-teal-500" style={{width: `${objectivePercent}%`}} /></div>}
-            <p className="mt-2 text-[11px] leading-4 text-neutral-500">{goalReached ? "Brava, obiettivo raggiunto! Continua così." : "Schede completate · completa e supera il tuo obiettivo."}</p>
-          </article>
-          <article className={cn(dashboardStyles.metric, monthlyDelays.totalMinutes > 0 && dashboardStyles.alert)}>
-            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Ritardi del mese</p><p className={dashboardStyles.value}>{formatDelayMinutes(monthlyDelays.totalMinutes)}</p></div><span className={dashboardStyles.icon}><ClockAlert className="size-5" /></span></div>
-            <details className="mt-3 text-xs"><summary className="min-h-7 cursor-pointer text-neutral-500">Ingresso e pausa</summary><dl className="mt-2 space-y-1"><div className="flex justify-between"><dt>Ingresso</dt><dd>{formatDelayMinutes(monthlyDelays.entryMinutes)}</dd></div><div className="flex justify-between"><dt>Rientro dalla pausa</dt><dd>{formatDelayMinutes(monthlyDelays.breakMinutes)}</dd></div></dl></details>
-          </article>
-          <button type="button" disabled={incompleteCount === null} aria-controls="daily-assigned-appointments" aria-pressed={showIncompleteOnly} onClick={() => {setShowIncompleteOnly(true); setAppointmentsOpen(true); document.getElementById("daily-assigned-appointments")?.focus({preventScroll:true}); document.getElementById("daily-assigned-appointments")?.scrollIntoView({behavior:"smooth",block:"start"});}} className={cn(dashboardStyles.metric,"text-left transition hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600")}>
-            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Schede da completare</p><p className={dashboardStyles.value}>{incompleteCount ?? "—"}<span className="ml-2 text-xs font-normal text-neutral-400">oggi</span></p></div><span className={dashboardStyles.icon}><FileText className="size-5" /></span></div>
-            <p className="mt-3 text-xs text-neutral-500">Nel mese <strong className="text-neutral-800">{monthlyIncompleteCount ?? "—"}</strong><span className="float-right font-semibold text-teal-700">Apri schede →</span></p>
-            <p className="mt-1 text-[10px] text-neutral-400">Dal primo del mese a oggi</p>
-          </button>
-        </section>
-        <div className="mt-5 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <header className="worker-dashboard-enter relative isolate overflow-hidden rounded-2xl border border-black/[0.06] bg-[#7d294f] text-white shadow-sm">
+        <div className={dashboardStyles.pageHeading}><div><p className={dashboardStyles.eyebrow}>Paradise · Area personale</p><h2>La tua giornata, in ordine.</h2></div><Link href="/appointments" className={dashboardStyles.agendaLink}>Apri agenda <ArrowRight className="size-4" /></Link></div>
+        <div className={dashboardStyles.welcomeRow}>
+<header className="worker-dashboard-enter relative isolate overflow-hidden rounded-2xl border border-black/[0.06] bg-[#7d294f] text-white shadow-sm">
           <img src="/beta-login-hero.png" alt="" className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center" aria-hidden="true" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(35,8,21,0.88)_0%,rgba(78,20,48,0.62)_52%,rgba(66,14,39,0.18)_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(24,6,15,0.32),transparent_65%)]" />
-          <div className="relative flex min-h-28 flex-col justify-center gap-5 px-5 py-5 sm:min-h-28 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-4">
+          <div className="relative flex min-h-28 flex-col justify-center gap-5 px-5 py-5 sm:min-h-32 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-4">
           <div className="flex min-w-0 items-center gap-4">
             <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white/70 bg-white/90 font-black text-[#7d294f] shadow-sm sm:size-16">
               {currentUser.photo_url ? <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={userName} className="size-full object-cover" /> : initials}
@@ -256,29 +234,25 @@ export function DashboardRedesignClient({
           </div>
 
           </div>
-        </header>
-        <section aria-label="Servizi eseguiti oggi" className="flex flex-col rounded-2xl border border-white/80 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">Servizi eseguiti oggi</h2><p className="mt-1 text-xs text-neutral-500">Il tuo lavoro nelle schede completate</p></div><strong className="text-2xl font-semibold tabular-nums">{performedServices ? performedServices.reduce((sum, row) => sum + row.count, 0) : "—"}</strong></div>
-          {performedServices === null ? <p className="mt-5 text-xs text-neutral-500">Servizi momentaneamente non disponibili.</p> : performedServices.length ? <ul id="performed-services-list" className="mt-5 space-y-4">
-            {(showAllServices ? performedServices : performedServices.slice(0, 3)).map(row => <li key={row.service}><div className="mb-1.5 flex justify-between gap-3 text-xs"><span className="font-medium">{row.service}</span><strong className="tabular-nums">{row.count}</strong></div><div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-[#f6edf2]"><div className="h-full rounded-full bg-[#a14c73]" style={{width: `${row.count / Math.max(...performedServices.map(item => item.count)) * 100}%`}} /></div></li>)}
-          </ul> : <p className="my-auto py-6 text-sm text-neutral-500">Nessun servizio ancora registrato nelle tue schede completate di oggi.</p>}
-          {performedServices && performedServices.length > 3 && <button type="button" aria-expanded={showAllServices} aria-controls="performed-services-list" onClick={() => setShowAllServices(value => !value)} className="mt-3 min-h-11 self-start rounded-lg px-2 text-xs font-semibold text-[#793752] transition hover:bg-[#fcf8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#98516d]">{showAllServices ? "Mostra meno" : `Vedi altri (${performedServices.length - 3})`}</button>}
-          <p className="mt-4 border-t border-neutral-100 pt-3 text-[10px] leading-4 text-neutral-500">Ogni servizio conta una volta per appuntamento. Una scheda può includere più servizi.</p>
-        </section>
+        </header>          <button type="button" disabled={incompleteCount === null} aria-controls="daily-assigned-appointments" aria-pressed={showIncompleteOnly} onClick={() => {setShowIncompleteOnly(true); setAppointmentsOpen(true); document.getElementById("daily-assigned-appointments")?.focus({preventScroll:true}); document.getElementById("daily-assigned-appointments")?.scrollIntoView({behavior:"smooth",block:"start"});}} className={dashboardStyles.priority}>
+            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Schede da completare</p><p className={dashboardStyles.value}>{incompleteCount ?? "—"}<span className="ml-2 text-xs font-normal text-neutral-400">oggi</span></p></div><span className={dashboardStyles.icon}><FileText className="size-5" /></span></div>
+            <p className="mt-3 text-xs text-neutral-500">Nel mese <strong className="text-neutral-800">{monthlyIncompleteCount ?? "—"}</strong><span className="float-right font-semibold text-teal-700">Apri schede →</span></p>
+            <p className="mt-1 text-[10px] text-neutral-400">Dal primo del mese a oggi</p>
+          </button>
         </div>
+        <div className={dashboardStyles.workspace}>
+          <div className={dashboardStyles.primaryColumn}>
 
-
-        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
-        <section id="daily-assigned-appointments" tabIndex={-1} className="scroll-mt-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm outline-none sm:p-6">
+<section id="daily-assigned-appointments" tabIndex={-1} className="scroll-mt-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm outline-none sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-base font-semibold tracking-tight">{showIncompleteOnly ? "Schede da completare" : "Appuntamenti di oggi"}{visibleAppointments ? ` · ${visibleAppointments.length}` : ""}</h2><Link href="/appointments" className="inline-flex min-h-10 items-center rounded-lg border border-neutral-200 px-3 text-xs font-semibold text-teal-700 transition hover:bg-[#fcf8fa]">Apri agenda →</Link></div>
-          <p className="mt-2 text-xs text-slate-400">Riepilogo degli appuntamenti assegnati e delle schede cliente</p>
-          {assignedAppointments !== null && <div className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <p className="mt-2 text-xs text-slate-400">Clienti assegnati e avanzamento delle schede di oggi</p>
+          {assignedAppointments !== null && <div className={dashboardStyles.appointmentStats}>
             {[
               {color: "#3b82f6", background: "#eff6ff", label: "Assegnati", value: assignedAppointments.length, ratio: assignedAppointments.length ? 100 : 0, icon: CalendarDays},
               {color: "#059669", background: "#ecfdf5", label: "Schede complete", value: assignedAppointments.length - (incompleteCount || 0), ratio: assignedAppointments.length ? (assignedAppointments.length - (incompleteCount || 0)) / assignedAppointments.length * 100 : 0, icon: Check},
               {color: "#d97706", background: "#fffbeb", label: "Da completare", value: incompleteCount || 0, ratio: assignedAppointments.length ? (incompleteCount || 0) / assignedAppointments.length * 100 : 0, icon: FileText},
               {color: "#7c3aed", background: "#f5f3ff", label: "Completamento", value: `${assignedAppointments.length ? Math.round((assignedAppointments.length - (incompleteCount || 0)) / assignedAppointments.length * 100) : 0}%`, ratio: assignedAppointments.length ? (assignedAppointments.length - (incompleteCount || 0)) / assignedAppointments.length * 100 : 0, icon: Target},
-            ].map(stat => <div key={stat.label} className="min-w-0 rounded-xl p-3" style={{backgroundColor: stat.background}}><div className="flex items-center gap-2"><span className="grid size-7 shrink-0 place-items-center rounded-md text-white" style={{backgroundColor: stat.color}}><stat.icon className="size-3.5" aria-hidden="true" /></span><span className="text-[11px] font-semibold text-slate-600">{stat.label}</span></div><p className="mt-2 text-xl font-semibold tabular-nums text-slate-700">{stat.value}</p><div aria-hidden="true" className="mt-2 h-[3px] max-w-28 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full" style={{width: `${stat.ratio}%`, backgroundColor: stat.color}} /></div></div>)}
+            ].map(stat => <div key={stat.label} className={dashboardStyles.appointmentStat}><div className="flex items-center gap-2"><span className={dashboardStyles.statIcon}><stat.icon className="size-3.5" aria-hidden="true" /></span><span className="text-[11px] font-semibold text-slate-600">{stat.label}</span></div><p className="mt-2 text-xl font-semibold tabular-nums text-slate-700">{stat.value}</p><div aria-hidden="true" className="mt-2 h-[3px] max-w-28 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full" style={{width: `${stat.ratio}%`, backgroundColor: stat.color}} /></div></div>)}
           </div>}
           <button type="button" aria-expanded={appointmentsOpen} aria-controls="appointment-list-panel" onClick={() => setAppointmentsOpen(value => !value)} className="flex min-h-10 w-full items-center justify-between border-t border-slate-100 pt-3 text-xs font-semibold text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"><span>{appointmentsOpen ? "Nascondi appuntamenti" : "Vedi appuntamenti"}</span><ArrowRight className={cn("size-4 transition-transform", appointmentsOpen && "rotate-90")} /></button>
           <div id="appointment-list-panel" hidden={!appointmentsOpen}>
@@ -290,18 +264,45 @@ export function DashboardRedesignClient({
             <p className="mt-3 text-xs leading-5 text-neutral-500">Apri un appuntamento per consultare i dettagli e completare la scheda al termine del servizio.</p>
             {!visibleAppointments?.length && <p className="mt-3 text-sm text-black/50">{showIncompleteOnly ? "Nessuna nota da completare per oggi." : "Nessun appuntamento assegnato oggi."}</p>}
             <div aria-hidden="true" className="mt-5 hidden grid-cols-[60px_1fr_130px_16px] gap-5 border-b border-neutral-100 px-2 pb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:grid"><span>Ora</span><span>Cliente / servizio</span><span>Scheda cliente</span><span /></div>
-            <div className="divide-y divide-neutral-100">{visibleAppointments?.map(item => <Link key={item.id} href={`/appointments?booking=${encodeURIComponent(item.id)}&focus=${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(item.start))}`} className="group flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-[#fcf8fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#98516d] sm:gap-5">
+            <div className="divide-y divide-neutral-100">{(showAllAppointments ? visibleAppointments : visibleAppointments?.slice(0, 3))?.map(item => <Link key={item.id} href={`/appointments?booking=${encodeURIComponent(item.id)}&focus=${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(item.start))}`} className="group flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-[#fcf8fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#98516d] sm:gap-5">
               <time dateTime={item.start} className="shrink-0 rounded-lg bg-slate-50 px-2.5 py-3 text-sm font-semibold tabular-nums text-neutral-700">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(item.start))}</time>
               <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-neutral-900 sm:text-base">{item.client}</p><p className="mt-1 break-words text-xs leading-5 text-neutral-500">{item.service}</p><span className={cn("mt-1 inline-block text-xs sm:hidden", item.noteCompleted ? "text-emerald-700" : "text-teal-700")}>{item.noteCompleted ? "Completata" : "Da compilare"}</span></div>
               <span className={cn("hidden items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium sm:inline-flex", item.noteCompleted ? "bg-emerald-50 text-emerald-700" : "bg-teal-50 text-teal-700")}>{item.noteCompleted ? <><Check className="size-3.5" />Completata</> : "Compila scheda"}</span><ArrowRight className="size-4 shrink-0 text-neutral-400 transition group-hover:translate-x-0.5 group-hover:text-teal-700" />
             </Link>)}</div>
+            {!!visibleAppointments && visibleAppointments.length > 3 && <button type="button" onClick={() => setShowAllAppointments(value => !value)} aria-expanded={showAllAppointments} className={dashboardStyles.moreAppointments}>{showAllAppointments ? "Mostra meno" : `Vedi altri ${visibleAppointments.length - 3} appuntamenti`} <ArrowRight className="size-4" /></button>}
           </>}
           </div>
         </section>
 
-        <aside className="grid min-w-0 gap-4">
 
-        <section aria-label="Sistemazione fasce del mese" className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+          </div>
+          <aside className={dashboardStyles.secondaryColumn} aria-label="Il tuo riepilogo">
+
+<section aria-label="Riepilogo personale" className={dashboardStyles.metrics}>
+          <article className={dashboardStyles.metric}>
+            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Turno di oggi</p><p className={dashboardStyles.value}>{todayShiftTime}</p></div><span className={dashboardStyles.icon}><Clock className="size-5" /></span></div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs"><span className={attendance.status === "TURNO" ? "text-emerald-700" : attendance.status === "PAUSA" ? "text-amber-700" : "text-neutral-500"}>{attendance.status === "TURNO" ? "In turno" : attendance.status === "PAUSA" ? "In pausa" : "Fuori turno"}</span><span className="font-mono tabular-nums">{formatDuration(attendance.status === "PAUSA" ? attendance.breakSeconds : attendance.workedSeconds)}</span></div>
+            <p className="mt-1 text-[10px] text-neutral-500">{attendance.status === "PAUSA" ? "Durata della pausa corrente" : `Tempo lavorato · registrato ${workedHoursFormatted}`}</p>
+            {todayLateMinutes > 10 && <p className="mt-2 text-xs font-semibold text-red-700">Ingresso in ritardo di {todayLateMinutes} min</p>}
+          </article>
+          <article className={dashboardStyles.metric}>
+            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Obiettivo di oggi</p><p className={dashboardStyles.value}>{currentWorkerPoints ?? "—"}<span className="ml-1 text-sm text-neutral-400">/ {workerGoal ?? "—"}</span></p></div><span className={dashboardStyles.icon}><Target className="size-5" /></span></div>
+            {currentWorkerPoints !== null && workerGoal !== null && <div role="progressbar" aria-label="Obiettivo personale di oggi" aria-valuemin={0} aria-valuemax={workerGoal} aria-valuenow={Math.min(currentWorkerPoints, workerGoal)} className="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div className="h-full rounded-full bg-teal-500" style={{width: `${objectivePercent}%`}} /></div>}
+            <p className="mt-2 text-[11px] leading-4 text-neutral-500">{goalReached ? "Brava, obiettivo raggiunto! Continua così." : "Schede completate · completa e supera il tuo obiettivo."}</p>
+          </article>
+          <article className={cn(dashboardStyles.metric, monthlyDelays.totalCount > 0 && dashboardStyles.alert)}>
+            <div className={dashboardStyles.metricTop}><div><p className={dashboardStyles.label}>Ritardi del mese</p><p className={dashboardStyles.value}>{formatDelayCount(monthlyDelays.totalCount)}</p></div><span className={dashboardStyles.icon}><ClockAlert className="size-5" /></span></div>
+            <details className="mt-3 text-xs"><summary className="min-h-7 cursor-pointer text-neutral-500">Ingresso e pausa</summary><dl className="mt-2 space-y-1"><div className="flex justify-between"><dt>Ingresso</dt><dd>{formatDelayCount(monthlyDelays.entryCount)}</dd></div><div className="flex justify-between"><dt>Rientro dalla pausa</dt><dd>{formatDelayCount(monthlyDelays.breakCount)}</dd></div></dl></details>
+          </article>
+
+        </section><section aria-label="Servizi eseguiti oggi" className="flex flex-col rounded-2xl border border-white/80 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">Servizi eseguiti oggi</h2><p className="mt-1 text-xs text-neutral-500">Il tuo lavoro nelle schede completate</p></div><strong className="text-2xl font-semibold tabular-nums">{performedServices ? performedServices.reduce((sum, row) => sum + row.count, 0) : "—"}</strong></div>
+          {performedServices === null ? <p className="mt-5 text-xs text-neutral-500">Servizi momentaneamente non disponibili.</p> : performedServices.length ? <ul id="performed-services-list" className="mt-5 space-y-4">
+            {(showAllServices ? performedServices : performedServices.slice(0, 3)).map(row => <li key={row.service}><div className="mb-1.5 flex justify-between gap-3 text-xs"><span className="font-medium">{row.service}</span><strong className="tabular-nums">{row.count}</strong></div><div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-[#f6edf2]"><div className="h-full rounded-full bg-[#a14c73]" style={{width: `${row.count / Math.max(...performedServices.map(item => item.count)) * 100}%`}} /></div></li>)}
+          </ul> : <p className="my-auto py-6 text-sm text-neutral-500">Nessun servizio ancora registrato nelle tue schede completate di oggi.</p>}
+          {performedServices && performedServices.length > 3 && <button type="button" aria-expanded={showAllServices} aria-controls="performed-services-list" onClick={() => setShowAllServices(value => !value)} className="mt-3 min-h-11 self-start rounded-lg px-2 text-xs font-semibold text-[#793752] transition hover:bg-[#fcf8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#98516d]">{showAllServices ? "Mostra meno" : `Vedi altri (${performedServices.length - 3})`}</button>}
+          <p className="mt-4 border-t border-neutral-100 pt-3 text-[10px] leading-4 text-neutral-500">Ogni servizio conta una volta per appuntamento. Una scheda può includere più servizi.</p>
+        </section><section aria-label="Sistemazione fasce del mese" className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
           <div className="p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">Sistemazione fasce</h2>
@@ -327,26 +328,9 @@ export function DashboardRedesignClient({
             </div>
           </details>}
         </section>
-
-        </aside>
-
+          </aside>
         </div>
-
-        <section className="mt-5 overflow-hidden rounded-2xl bg-white p-5">
-          <div className="mb-5 flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">La tua settimana</h2><p className="mt-1 text-xs text-slate-400">Turni e giornate di riposo</p></div><Link href="/my-shifts" className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-teal-700">Calendario <ArrowRight className="size-4" /></Link></div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-            {weeklyShifts.map(shift => <div key={shift.date} aria-current={shift.isToday ? "date" : undefined} className={cn("min-w-0 rounded-xl border p-3", shift.isToday ? "border-[#913956] bg-[#fdf0f6] ring-2 ring-[#913956]/20" : shift.isRest ? "border-slate-200 bg-slate-50" : "border-[#d7eee9] bg-[#f1faf7]")}>
-              <div className="flex items-center gap-2"><span className={cn("grid size-7 shrink-0 place-items-center rounded-md",shift.isToday ? "bg-[#913956] text-white" : shift.isRest ? "bg-slate-100 text-slate-400" : "bg-[#3ac8bc] text-white")}><CalendarDays className="size-3.5" aria-hidden="true" /></span><span className="text-[11px] font-semibold uppercase text-slate-400">{shift.dayLabel}</span>{shift.isToday && <span className="ml-auto text-[10px] font-semibold text-[#913956]">{!shift.isRest && attendance.status === "TURNO" ? "In corso" : "Oggi"}</span>}</div>
-              <p className="mt-2 text-xl font-semibold tabular-nums text-slate-700">{shift.dayNumber}</p>
-              <p className="mt-1 text-xs font-medium text-slate-600">{shift.isRest ? "Riposo" : shift.categoryName}</p>
-              <p className="mt-1 text-[11px] tabular-nums text-slate-400">{shift.isRest ? "Giornata libera" : shift.time}</p>
-              <div aria-hidden="true" className={cn("mt-3 h-[3px] rounded-full",shift.isToday ? "bg-[#913956]" : shift.isRest ? "bg-slate-200" : "bg-[#3ac8bc]")} />
-            </div>)}
-          </div>
-
-        </section>
-
-        <section className="worker-dashboard-enter worker-dashboard-enter-delay-3 mt-5 grid gap-5 lg:grid-cols-[1fr_0.7fr]">
+<section className={cn(dashboardStyles.supportCards, "grid gap-4 sm:grid-cols-2")}>
           <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_14px_38px_rgba(59,24,42,0.05)]">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-teal-700">Assenze personali</p><h2 className="mt-1 text-base font-semibold">Permessi e prossime ferie</h2></div><Umbrella className="size-5 text-teal-600" /></div>
             <div className="divide-y divide-slate-100">
@@ -359,6 +343,19 @@ export function DashboardRedesignClient({
             <div className="flex items-center gap-3"><span className={dashboardStyles.icon}><Bell className="size-5" /></span><div><h2 className="text-base font-semibold">Comunicazioni</h2><p className="mt-1 text-xs text-slate-400">La bacheca della direzione</p></div><span className="ml-auto rounded-lg bg-teal-50 px-3 py-1.5 text-sm font-semibold text-teal-700">{communicationCount}</span></div>
             <p className="my-4 text-sm text-slate-500">{communicationCount > 0 ? "Consulta gli avvisi e i messaggi per il personale." : "Nessuna nuova comunicazione."}</p><span className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-teal-700">Apri bacheca <ArrowRight className="size-4 transition group-hover:translate-x-1" /></span>
           </button>
+        </section>
+<section className={dashboardStyles.schedule}>
+          <div className="mb-5 flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">I miei orari</h2><p className="mt-1 text-xs text-slate-400">Turni e giornate di riposo</p></div><Link href="/my-shifts" className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-teal-700">Calendario <ArrowRight className="size-4" /></Link></div>
+          <div className={dashboardStyles.weekGrid}>
+            {weeklyShifts.map(shift => <div key={shift.date} aria-current={shift.isToday ? "date" : undefined} className={cn(dashboardStyles.weekDay, "min-w-0 rounded-xl border p-3", shift.isToday ? "border-[#913956] bg-[#fdf0f6] ring-2 ring-[#913956]/20" : shift.isRest ? "border-slate-200 bg-slate-50" : "border-[#d7eee9] bg-[#f1faf7]")}>
+              <div className="flex items-center gap-2"><span className={cn("grid size-7 shrink-0 place-items-center rounded-md",shift.isToday ? "bg-[#913956] text-white" : shift.isRest ? "bg-slate-100 text-slate-400" : "bg-[#3ac8bc] text-white")}><CalendarDays className="size-3.5" aria-hidden="true" /></span><span className="text-[11px] font-semibold uppercase text-slate-400">{shift.dayLabel}</span>{shift.isToday && <span className="ml-auto text-[10px] font-semibold text-[#913956]">{!shift.isRest && attendance.status === "TURNO" ? "In corso" : "Oggi"}</span>}</div>
+              <p className="mt-2 text-xl font-semibold tabular-nums text-slate-700">{shift.dayNumber}</p>
+              <p className="mt-1 text-xs font-medium text-slate-600">{shift.isRest ? "Riposo" : shift.categoryName}</p>
+              <p className="mt-1 text-[11px] tabular-nums text-slate-400">{shift.isRest ? "Giornata libera" : shift.time}</p>
+              <div aria-hidden="true" className={cn("mt-3 h-[3px] rounded-full",shift.isToday ? "bg-[#913956]" : shift.isRest ? "bg-slate-200" : "bg-[#3ac8bc]")} />
+            </div>)}
+          </div>
+
         </section>
       </main>
 
