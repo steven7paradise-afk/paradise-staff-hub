@@ -1,3 +1,4 @@
+import { qualityAffectsPreviousBonus } from "./shift-quality";
 import type { AssistanceSheet } from "@/lib/assistance-tables";
 
 function normalized(value: string) {
@@ -15,6 +16,7 @@ export function resultBonusTableOccurrences(sheets: AssistanceSheet[], month: st
     const order = sheet.columns.find((column) => /^(numero )?ordine( shopify)?$/.test(normalized(column.label)));
     if (!previous) continue;
     for (const row of sheet.rows) {
+      if (options.staffColumn !== "performed" && !qualityAffectsPreviousBonus(row.values, row.reviewedAt)) continue;
       // Automatic attribution is not approval: only reviewed rows affect the bonus.
       if (!options.includeUnreviewed && (!row.reviewedAt || !Number.isFinite(new Date(row.reviewedAt).getTime()))) continue;
       const time = new Date(row.createdAt);

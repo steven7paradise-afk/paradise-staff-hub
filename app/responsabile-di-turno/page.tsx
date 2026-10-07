@@ -1,3 +1,4 @@
+import { loadUpcomingResponsibles, resolveShiftResponsible } from "@/lib/shift-responsible-selection-data";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ShiftResponsibleWorkspace } from "@/components/shift-responsible-workspace";
@@ -147,7 +148,8 @@ export default async function ResponsabileDiTurnoPage() {
     })
     .slice(0, 4);
   const assignments = normalizeShiftResponsibleAssignments(setting?.value);
-  const selectedResponsibleId = assignments[day] || responsabili[0]?.id;
+  const selectedResponsibleId = await resolveShiftResponsible(day, assignments[day]);
+  const upcomingResponsibles = await loadUpcomingResponsibles(day);
   const questions = normalizeShiftResponsibleQuestions(questionsSetting?.value);
   const answers = normalizeShiftResponsibleAnswers(answersSetting?.value);
   const access = normalizeShiftResponsibleAccess(accessSetting?.value);
@@ -249,12 +251,13 @@ export default async function ResponsabileDiTurnoPage() {
 
   return (
     <AppShell title="Responsabile di turno" role={session.user.role} edgeToEdgeMain>
-      <div className="shift-responsible-page min-h-screen bg-white px-3 pb-32 pt-5 sm:px-6 sm:pb-24 sm:pt-8 xl:px-10 xl:pb-16 xl:pt-24">
+      <div className="shift-responsible-page min-h-screen bg-[#faf7f9] px-3 pb-32 pt-5 sm:px-6 sm:pb-24 sm:pt-8 xl:px-10 xl:pb-16 xl:pt-8">
         <ShiftResponsibleWorkspace
           day={day}
           currentUserId={session.user.id}
           currentUserName={session.user.name || "Utente"}
           selectedResponsibleId={selectedResponsibleId}
+          upcomingResponsibles={upcomingResponsibles}
           people={workspacePeople}
           questions={questions}
           shiftStaff={shiftStaff}

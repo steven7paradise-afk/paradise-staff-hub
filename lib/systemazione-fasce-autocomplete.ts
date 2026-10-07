@@ -63,8 +63,8 @@ export function completePendingSystemazioneRows(sheets: AssistanceSheet[], appoi
         customerPhone: text(row, c.phone) || source.customerPhone };
       const values = { ...row.values };
       for (const [key, response] of [
-        [c.previous, c.previous && missing(values[c.previous]) ? findPreviousApplication(appointment, responses) : null],
-        [c.current, c.current && missing(values[c.current]) ? findSystemazioneControl(appointment, responses) : null],
+        [c.previous, c.previous && values.__previousStaffManual !== "true" && missing(values[c.previous]) ? findPreviousApplication(appointment, responses) : null],
+        [c.current, c.current && values.__currentStaffManual !== "true" && missing(values[c.current]) ? findSystemazioneControl(appointment, responses) : null],
       ] as const) {
         const staff = previousApplicationStaff(response);
         if (key && missing(values[key]) && staff) { values[key] = staff; filledCells += 1; }

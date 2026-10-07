@@ -107,6 +107,7 @@ type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
 type AppointmentDateFilterMode = "all" | "today" | "tomorrow" | "custom";
 type AppointmentStatusValue =
   | "PRENOTATO"
+  | "RIPROGRAMMATO"
   | "NON_PRESENTATO"
   | "INIZIATO"
   | "IN_ATTESA"
@@ -476,6 +477,7 @@ const appointmentStatusOptions: Array<{
 }> = [
   { value: "PRENOTATO", label: "Confermato" },
   { value: "NON_PRESENTATO", label: "Non presentato" },
+  { value: "RIPROGRAMMATO", label: "Riprogrammato" },
   { value: "IN_ATTESA", label: "Arrivata" },
   { value: "INIZIATO", label: "In lavorazione" },
   { value: "COMPLETATO", label: "Completato" },
@@ -483,6 +485,7 @@ const appointmentStatusOptions: Array<{
 
 const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "Confermato",
+  RIPROGRAMMATO: "Riprogrammato",
   NON_PRESENTATO: "Non presentato",
   INIZIATO: "In lavorazione",
   IN_ATTESA: "Arrivata",
@@ -493,6 +496,7 @@ const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
 
 const appointmentStatusClasses: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "border-sky-100 bg-sky-50 text-sky-700",
+  RIPROGRAMMATO: "border-violet-200 bg-violet-50 text-violet-800",
   NON_PRESENTATO: "border-red-100 bg-red-50 text-red-700",
   INIZIATO: "border-[#EAC4D6] bg-[#FBE8F0] text-[#843B5B]",
   IN_ATTESA: "border-amber-100 bg-amber-50 text-amber-700",
@@ -873,6 +877,7 @@ function normalizeAppointmentStatus(
     .replace(/[\s-]+/g, "_")
     .trim();
 
+  if (["RIPROGRAMMATO", "SPOSTATO", "RESCHEDULED"].includes(normalized)) return "RIPROGRAMMATO";
   if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW")
     return "NON_PRESENTATO";
   // I vecchi stati di ingresso confluiscono nello stato operativo "Arrivata".
@@ -6020,6 +6025,11 @@ export function AppointmentsBrowser({
                     count: noShowBookingsCount,
                   },
                   {
+                    value: "RIPROGRAMMATO",
+                    label: "Riprogrammato",
+                    count: initialBookings.filter(b=>!b.isCanceled&&getBookingStatus(b)==="RIPROGRAMMATO").length,
+                  },
+                  {
                     value: "ANNULLATO",
                     label: "Annullato",
                     count: canceledBookingsCount,
@@ -6728,6 +6738,8 @@ export function AppointmentsBrowser({
                                 className={`appointments-board-card w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)] ${
                                   booking.isCanceled || status === "NON_PRESENTATO"
                                     ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
+                                    : status === "RIPROGRAMMATO"
+                                    ? "border-violet-200 border-l-violet-500 bg-violet-50"
                                     : status === "COMPLETATO"
                                     ? "border-[#B9DFC5] border-l-[#45A96A] bg-[#F1FAF4]"
                                     : status === "INIZIATO"

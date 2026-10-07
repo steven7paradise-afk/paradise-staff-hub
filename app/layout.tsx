@@ -31,7 +31,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const currentVersion = process.env.NEXT_PUBLIC_APP_BUILD_VERSION || "unknown";
   return (
     <html lang="it" suppressHydrationWarning>
-      <body className="min-h-screen antialiased">
+      {/* Browser extensions can add attributes to body before hydration. */}
+      <body className="min-h-screen antialiased" suppressHydrationWarning>
         <AppVersionWatcher currentVersion={currentVersion} />
         <RemoteScreenShare />
         {children}

@@ -1,0 +1,42 @@
+'use client';
+import {useCallback,useEffect,useId,useState} from 'react';
+import {CLIENT_SOLUTIONS,needsClientApproval,type ClientCase} from '@/lib/shift-client-cases';
+type Report={clients:{id:string;name:string;time:string;service:string}[];staff:{id:string;name:string}[];performers:{id:string;name:string}[];cases:ClientCase[];version:string|null;threshold:number;canApprove:boolean};
+export function ShiftClientCasesPanel({day,onCount,reviewOnly=false}:{day:string;onCount?:(n:number)=>void;reviewOnly?:boolean}){
+ const listId=useId();const [data,setData]=useState<Report|null>(null);const [cases,setCases]=useState<ClientCase[]>([]);const [dirty,setDirty]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');
+ const accept=useCallback((d:Report)=>{setData(d);setCases(d.cases);setDirty(false);onCount?.(d.cases.length);},[onCount]);
+ const load=useCallback(async()=>{try{const r=await fetch(`/api/shift-client-cases?day=${day}`,{cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error);accept(d);setError('');}catch(e){setError(e instanceof Error?e.message:'Errore caricamento');}},[day,accept]);useEffect(()=>{void load();},[load]);
+ function edit(id:string,update:Partial<ClientCase>){setCases(old=>old.map(c=>c.id===id?{...c,...update}:c));setDirty(true);setMessage('');}
+ async function submit(extra:object={}){setBusy(true);setError('');try{const r=await fetch('/api/shift-client-cases',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({day,cases,version:data?.version,...extra})});const d=await r.json();if(!r.ok)throw new Error(d.error);accept(d);setMessage('Casi salvati');}catch(e){setError(e instanceof Error?e.message:'Salvataggio non riuscito');}finally{setBusy(false);}}
+ return <section className="shift-team-panel space-y-4 rounded-2xl border border-[#eadfe5] bg-white p-4 sm:p-6" aria-label="Casi clienti">
+ <header><p className="text-xs font-bold uppercase text-[#963b62]">Facoltativo</p><h2 className="mt-1 text-xl font-bold text-[#392936]">Clienti</h2><p className="mt-2 text-sm text-neutral-600">Un caso per ogni reclamo o problema. Ogni soluzione con un costo richiede importo e autorizzatore.</p></header>
+ {error&&<p role="alert" className="text-red-800">{error} <button type="button" className="team-button" onClick={()=>void load()}>Ricarica casi salvati</button></p>}
+ {!data?<p>Caricamento clienti…</p>:<>
+ {!cases.length&&<p className="rounded-xl bg-[#faf3f7] p-4 text-sm">Nessun caso segnalato. Se non ci sono problemi, non devi compilare nulla.</p>}
+ {cases.map((c,index)=>{const requires=needsClientApproval(c,data.threshold);return <article key={c.id} className="space-y-4 rounded-2xl border-2 border-[#c786a3] p-4">
+ <div className="flex flex-wrap justify-between gap-2"><h3 className="font-bold">Caso {index+1}</h3><span className="rounded-full bg-[#faeaf2] px-3 py-1 text-xs font-semibold">{c.status==='PENDING'?'In attesa della direzione':c.status==='APPROVED'?'Autorizzato dalla direzione':c.status==='DENIED'?'Non autorizzato':c.status==='RECORDED'?'Registrato':'Da salvare'}</span></div>
+ <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Cliente e ora<ClientSearch clients={data.clients} bookingId={c.bookingId} listId={`${listId}-${c.id}`} disabled={busy||reviewOnly} onChange={bookingId=>edit(c.id,{bookingId})}/><datalist id={`${listId}-${c.id}`}>{data.clients.map(b=><option key={b.id} value={`${b.name} · ${b.time} · ${b.service}`}>{b.service}</option>)}</datalist></label>
+ <label className="text-xs font-semibold">Chi ha svolto il servizio<select className="team-field mt-1" disabled={busy||reviewOnly} value={c.performedBy||''} onChange={e=>edit(c.id,{performedBy:e.target.value})}><option value="">Seleziona staff del salone</option>{data.performers.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
+ <label className="block text-xs font-semibold">Cosa è successo<textarea className="team-field mt-1" rows={3} disabled={busy||reviewOnly} maxLength={5000} value={c.description} onChange={e=>edit(c.id,{description:e.target.value})}/></label>
+ <div className="grid gap-4 lg:grid-cols-[2fr_1fr]"><fieldset><legend className="mb-2 text-xs font-semibold">Soluzione adottata</legend><div className="flex flex-wrap gap-2">{CLIENT_SOLUTIONS.map(solution=><button key={solution} type="button" className="team-button" disabled={busy||reviewOnly} aria-pressed={c.solution===solution} onClick={()=>edit(c.id,{solution,...(solution==='Nessun costo'?{amount:'0'}:{})})}>{solution}</button>)}</div></fieldset><label className="text-xs font-semibold">Chi ha autorizzato<select className="team-field mt-1" disabled={busy||reviewOnly} value={c.authorizedBy} onChange={e=>edit(c.id,{authorizedBy:e.target.value})}><option value="">Seleziona responsabile</option>{data.staff.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}{c.authorizedBy&&!data.staff.some(p=>p.id===c.authorizedBy)&&<option value={c.authorizedBy} disabled>{c.authorizedBy==='ADMIN'?'Admin (seleziona persona)':c.authorizedBy==='RESPONSABILE'?'Responsabile (seleziona persona)':'Autorizzatore precedente'}</option>}</select></label></div>
+ {c.solution==='Rimborso'&&<p className="rounded-xl border border-[#e4b6cd] bg-[#fff1f7] p-3 text-sm text-[#74304e]">Compila qui importo, motivo e chi ha autorizzato. Premendo “Salva casi” viene inviata una notifica agli admin e al responsabile selezionato. Il rimborso resta in attesa dell’ok della direzione.</p>}
+ <div className="grid gap-3 sm:grid-cols-2">{c.solution!=='Nessun costo'&&<label className="text-xs font-semibold">Importo (€)<input className="team-field mt-1" disabled={busy||reviewOnly} inputMode="decimal" value={c.amount} onChange={e=>edit(c.id,{amount:e.target.value})}/></label>}<fieldset><legend className="mb-2 text-xs font-semibold">Risolto</legend><div className="flex gap-2">{[true,false].map(value=><button key={String(value)} type="button" disabled={busy||reviewOnly} className="team-button" aria-pressed={c.resolved===value} onClick={()=>edit(c.id,{resolved:value})}>{value?'Sì':'No'}</button>)}</div></fieldset></div>
+ {requires&&c.status!=='APPROVED'&&c.status!=='DENIED'&&<p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Questa soluzione richiede l’autorizzazione della direzione. Il caso resta in attesa fino all’ok.</p>}
+ {c.approvedBy&&<p className="text-xs text-neutral-600">Decisione di {c.approvedBy} · {c.approvedAt&&new Date(c.approvedAt).toLocaleString('it-IT',{timeZone:'Europe/Rome'})}</p>}
+ {data.canApprove&&c.status==='PENDING'&&<div className="flex flex-wrap gap-2"><button type="button" className="team-button" disabled={busy||dirty} onClick={()=>void submit({action:'decide',id:c.id,decision:'APPROVED'})}>Autorizza</button><button type="button" className="team-button" disabled={busy||dirty} onClick={()=>void submit({action:'decide',id:c.id,decision:'DENIED'})}>Non autorizzare</button></div>}
+ {!reviewOnly&&!c.status&&<button type="button" className="team-button" disabled={busy} onClick={()=>{setCases(old=>old.filter(o=>o.id!==c.id));setDirty(true);}}>Rimuovi caso non salvato</button>}
+ </article>;})}
+ {!reviewOnly&&<div className="flex flex-wrap gap-3"><button type="button" disabled={busy} className="team-button" onClick={()=>{setCases(old=>[...old,{id:crypto.randomUUID(),bookingId:'',description:'',solution:'Nessun costo',amount:'0',authorizedBy:'',resolved:null}]);setDirty(true);}}>+ Aggiungi caso</button><button type="button" disabled={busy||!dirty} className="team-button" data-primary="true" onClick={()=>void submit()}>{busy?'Salvataggio…':'Salva casi'}</button></div>}
+ {message&&<p role="status" className="text-sm text-emerald-800">{message}</p>}
+ </>}
+ </section>;
+}
+
+function ClientSearch({clients,bookingId,listId,disabled,onChange}:{clients:Report['clients'];bookingId:string;listId:string;disabled:boolean;onChange:(id:string)=>void}) {
+ const label=(b:Report['clients'][number])=>`${b.name} · ${b.time} · ${b.service}`;
+ const selected=clients.find(b=>b.id===bookingId);
+ const selectedLabel=selected?label(selected):'';
+ const [text,setText]=useState(selectedLabel);
+ useEffect(()=>{if(bookingId)setText(selectedLabel);},[bookingId,selectedLabel]);
+ return <input type="search" placeholder="Cerca cliente…" list={listId} className="team-field mt-1" disabled={disabled} value={text} onChange={e=>{setText(e.target.value);onChange(clients.find(b=>label(b)===e.target.value)?.id||'');}}/>;
+}

@@ -314,10 +314,12 @@ export function applySystemazioneAppointmentsToSheet({
     setTextIfBlank(values, emailColumn, appointment.customerEmail?.trim() || "");
     setTextIfBlank(values, notesColumn, appointment.notesText?.trim().slice(0, 1200) || "");
     setTextIfBlank(values, orderColumn, order);
-    if (previousStaff) updateAutoValue(values, previousColumn, previousStaff);
-    else setTextIfBlank(values, previousColumn, VERIFY_PREVIOUS_STAFF_LABEL);
-    if (currentStaff) updateAutoValue(values, systemazioneColumn, currentStaff);
-    else if (!existing || existing.id.startsWith(AUTO_ROW_PREFIX)) {
+    if (values.__previousStaffManual !== "true") {
+      if (previousStaff) updateAutoValue(values, previousColumn, previousStaff);
+      else setTextIfBlank(values, previousColumn, VERIFY_PREVIOUS_STAFF_LABEL);
+    }
+    if (currentStaff && values.__currentStaffManual !== "true") updateAutoValue(values, systemazioneColumn, currentStaff);
+    else if (values.__currentStaffManual !== "true" && (!existing || existing.id.startsWith(AUTO_ROW_PREFIX))) {
       setTextIfBlank(values, systemazioneColumn, VERIFY_PREVIOUS_STAFF_LABEL);
     }
     if (photoColumn && previousPhoto && !values[photoColumn.id]) values[photoColumn.id] = previousPhoto;

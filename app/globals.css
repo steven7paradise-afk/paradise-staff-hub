@@ -3057,17 +3057,35 @@ html.dark .app-content-surface .notification-register :is(
   -webkit-text-fill-color: #94a3b8 !important;
 }
 
-/* Responsabile di turno: superficie operativa unica, bianca e opaca. Il
-   canvas globale usa vetro e gradienti; questa pagina li disattiva per evitare
-   stacchi di colore durante lo scorrimento del questionario. */
+/* A single soft background makes the report cards distinct from the canvas. */
 .app-content-surface:has(.shift-responsible-page),
 .app-content-surface:has(.shift-responsible-page) .app-liquid-canvas,
 .app-content-surface .app-liquid-canvas .shift-responsible-page {
-  background: #ffffff !important;
-  background-color: #ffffff !important;
+  background: #f7f2f5 !important;
+  background-color: #f7f2f5 !important;
   color-scheme: light;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+.shift-responsible-page .shift-report-card {
+  min-width: 0;
+  border: 1.5px solid #d9c5cf !important;
+  border-radius: 18px !important;
+  background: #fff !important;
+  box-shadow: 0 3px 10px rgba(70, 37, 54, .045) !important;
+  padding: 20px !important;
+}
+.shift-responsible-page .shift-report-card[data-needs-attention="true"] {
+  border-color: #bf6287 !important;
+  background: #fffafb !important;
+}
+.shift-responsible-page .shift-report-card:hover,
+.shift-responsible-page .shift-report-card:focus-visible {
+  border-color: #963b62 !important;
+  box-shadow: 0 8px 22px rgba(100, 45, 70, .12) !important;
+}
+@media (max-width: 639px) {
+  .shift-responsible-page .shift-report-card { padding: 16px !important; }
 }
 
 .app-content-surface:has(.shift-responsible-programming-page),
@@ -3443,4 +3461,87 @@ html.dark .app-content-surface .notification-register :is(
   .administrative-night-page :is(button, a)[class*="min-h-"] {
     touch-action: manipulation;
   }
+}
+
+/* Explicit control surfaces remain visible inside the liquid page theme. */
+.shift-responsible-page .shift-quality-cause {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 48px; padding: 12px 16px !important;
+  border: 2px solid #c786a3 !important; border-radius: 12px !important;
+  background: #faeaf2 !important; color: #71304f !important;
+  font-size: 14px; font-weight: 700; text-align: left; cursor: pointer;
+}
+.shift-responsible-page .shift-quality-cause:hover { background: #f4d4e3 !important; border-color: #963b62 !important; }
+.shift-responsible-page .shift-quality-cause[aria-pressed="true"] { background: #963b62 !important; border-color: #963b62 !important; color: white !important; }
+.shift-responsible-page .shift-quality-cause-check { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border: 2px solid currentColor; border-radius: 6px; }
+.shift-responsible-page .shift-quality-cause:focus-visible,
+.shift-responsible-page .shift-quality-select:focus-visible { outline: 3px solid #963b62 !important; outline-offset: 3px; }
+.shift-responsible-page .shift-quality-cause:disabled { opacity: .55; cursor: wait; }
+.shift-responsible-page .shift-quality-select { border: 2px solid #c786a3 !important; background-color: #fff7fb !important; border-radius: 12px !important; min-height: 48px; }
+
+.shift-responsible-page .shift-quality-performer {
+  display: block; margin-top: 20px; padding: 16px;
+  border: 1px solid #dba9bf !important; border-radius: 14px;
+  background: #faeaf2 !important;
+}
+.shift-responsible-page .shift-quality-performer-title {
+  display: block; font-size: 16px !important; font-weight: 800 !important; color: #71304f !important;
+}
+.shift-responsible-page .shift-quality-performer-control { display: block; position: relative; margin-top: 10px; }
+.shift-responsible-page .shift-quality-performer .shift-quality-select {
+  appearance: none; display: block; width: 100%; max-width: none; margin-top: 0;
+  min-height: 52px; padding: 12px 48px 12px 16px !important;
+  border: 2px solid #963b62 !important; background: white !important;
+  color: #392936 !important; font-size: 16px !important; font-weight: 600 !important;
+  cursor: pointer; box-shadow: 0 2px 5px rgb(113 48 79 / 8%);
+}
+.shift-responsible-page .shift-quality-performer-arrow {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-55%);
+  pointer-events: none; color: #963b62; font-size: 28px; font-weight: 700;
+}
+
+.shift-responsible-page .shift-team-panel .team-button {
+  min-height: 42px; padding: 9px 13px !important; border: 1.5px solid #ad587d !important;
+  border-radius: 10px !important; background: #fff5fa !important; color: #71304f !important;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.shift-responsible-page .shift-team-panel .team-button[aria-pressed="true"],
+.shift-responsible-page .shift-team-panel .team-button[data-primary="true"] { background: #713e5a !important; color: white !important; }
+.shift-responsible-page .shift-team-panel .team-button:disabled { opacity: .45; cursor: default; }
+.shift-responsible-page .shift-team-panel .team-field { width: 100%; min-height: 42px; padding: 8px 10px !important; border: 1px solid #caa1b6 !important; border-radius: 9px !important; background: white !important; color: #392936 !important; font-size: 14px; }
+.shift-responsible-page .shift-team-panel :is(.team-field,.team-button):focus-visible { outline: 3px solid #a3547a !important; outline-offset: 2px; }
+
+/* Team: attendance colors from the daily report reference. */
+.shift-responsible-page .team-attendance-panel thead tr { background: #f5f2f4 !important; color: #737073 !important; }
+.shift-responsible-page .team-attendance-panel tr[data-attendance="normal"] { background: #ffffff !important; }
+.shift-responsible-page .team-attendance-panel tr[data-attendance="attention"] { background: #fff6fa !important; }
+.shift-responsible-page .team-attendance-panel tr[data-attendance="inactive"] { background: #ffffff !important; }
+.shift-responsible-page .team-attendance-panel tr[data-attendance="inactive"] > :is(td,th) { color: #8a878a !important; font-weight: 400; }
+.shift-responsible-page .team-attendance-panel td[data-time-state="ontime"] { color: #187848 !important; font-weight: 700; }
+.shift-responsible-page .team-attendance-panel td[data-time-state="alert"] { color: #c92546 !important; font-weight: 700; }
+.shift-responsible-page .team-attendance-panel .team-button { background: #ffffff !important; border-color: #c15c88 !important; color: #59404f !important; }
+.shift-responsible-page .team-attendance-panel .team-button[aria-pressed="true"],
+.shift-responsible-page .team-attendance-panel .team-button[data-primary="true"] { background: #604153 !important; border-color: #604153 !important; color: #ffffff !important; }
+.shift-responsible-page .team-attendance-panel .team-field { border-color: #eadce4 !important; background: #fff9fc !important; }
+
+.shift-responsible-page .shift-report-card[data-complete="true"] {
+  background: #ecf9f0 !important;
+  border-color: #72bc8b !important;
+}
+.shift-responsible-page .shift-report-card[data-complete="true"]:hover,
+.shift-responsible-page .shift-report-card[data-complete="true"]:focus-visible {
+  background: #e1f5e8 !important;
+  border-color: #25824b !important;
+  outline-color: #25824b !important;
+}
+.shift-responsible-page .shift-report-card[data-complete="true"] > div:first-child,
+.shift-responsible-page .shift-report-card[data-complete="true"] > span {
+  color: #216c40 !important;
+  border-color: #b9ddc5 !important;
+}
+.shift-responsible-page .shift-report-card[data-complete="true"] > div:first-child > span:first-child,
+.shift-responsible-page .shift-report-card[data-complete="true"] > span.self-start,
+.shift-responsible-page .shift-report-card[data-complete="true"] > span:last-child > span {
+  background: #d5efdf !important;
+  color: #216c40 !important;
 }

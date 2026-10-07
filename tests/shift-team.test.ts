@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {buildTeamPerson,emptyTeamNotes,teamPending} from '../lib/shift-team';
+const base={id:'one',name:'Nome Cognome',category:'Lavoro',start:'10:00',end:'19:00',logs:[]};
+const now=new Date('2026-10-07T12:00:00+02:00');
+test('one minute late is an anomaly with no tolerance',()=>{const row=buildTeamPerson({...base,logs:[{type:'ENTRATA',timestamp:'2026-10-07T10:01:00+02:00'}]},now);assert.equal(row.issues[0].type,'entry');assert.match(row.entry,/\+1 min/);});
+test('future shift is not missing attendance',()=>assert.equal(buildTeamPerson({...base,start:'15:00'},now).issues.length,0));
+test('absence is not inferred as sickness',()=>{const row=buildTeamPerson(base,now);assert.equal(row.issues[0].type,'missing');assert.equal(row.sicknessPending,false);});
+test('leave and rest do not generate pause or attendance problems',()=>{for(const category of ['malattia approvata','ferie approvata','Riposo']){const row=buildTeamPerson({...base,category},now);assert.equal(row.inactive,true);assert.deepEqual(row.issues,[]);assert.equal(row.pause,'—');}});
+test('pause minute 61 counts as one minute overtime',()=>{const row=buildTeamPerson({...base,logs:[{type:'ENTRATA',timestamp:'2026-10-07T10:00:00+02:00'},{type:'PAUSA',timestamp:'2026-10-07T13:00:00+02:00'},{type:'RIENTRO',timestamp:'2026-10-07T14:01:00+02:00'}]},new Date('2026-10-07T15:00:00+02:00'));assert.match(row.pause,/\+1 min/);assert.equal(row.issues[0].type,'pause');});
+test('early exit needs a reason; all regular presentation completes otherwise clean team',()=>{const row=buildTeamPerson({...base,logs:[{type:'ENTRATA',timestamp:'2026-10-07T10:00:00+02:00'},{type:'USCITA',timestamp:'2026-10-07T18:40:00+02:00'}]},new Date('2026-10-07T19:00:00+02:00'));const notes=emptyTeamNotes();notes.presentation='all';assert.equal(teamPending([row],notes),1);notes.decisions['one:exit']={choice:'',note:'Autorizzata'};assert.equal(teamPending([row],notes),0);});

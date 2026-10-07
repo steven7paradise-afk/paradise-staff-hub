@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   ArrowLeft,
   Download,
@@ -24,6 +24,7 @@ import type {
 } from "@/lib/assistance-tables";
 import { Button, Field, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import styles from "./assistance-tables-manager.module.css";
 
 type RowForm = {
   nome: string;
@@ -125,11 +126,49 @@ function renderCellValue(value: AssistanceCellValue, column: AssistanceTableColu
   return <span className="line-clamp-2 whitespace-pre-wrap break-words text-black/65 dark:text-white/65">{value || "-"}</span>;
 }
 
-export function AssistanceTablesManager({ initialSheets }: { initialSheets: AssistanceSheet[] }) {
+function InlineTableCell({ value, column, disabled, onSave, label }: {
+  value: AssistanceCellValue; column: AssistanceTableColumn; disabled: boolean;
+  onSave: (value: AssistanceCellValue) => Promise<boolean>; label: string;
+}) {
+  const [draft, setDraft] = useState(typeof value === "string" ? value : "");
+  const [error, setError] = useState("");
+  useEffect(() => { setDraft(typeof value === "string" ? value : ""); }, [value]);
+  const dirty = draft !== (typeof value === "string" ? value : "");
+  return <div onClick={event => event.stopPropagation()} className="space-y-1">
+    {column.type === "text" ? <>
+      <textarea aria-label={label} value={draft} disabled={disabled} rows={2}
+        onChange={event => setDraft(event.target.value)}
+        className="w-full resize-y rounded-md border border-transparent bg-transparent p-1 text-xs focus:border-pink-300 focus:bg-white focus:outline-none dark:focus:bg-neutral-900" />
+      {dirty && <div className="flex flex-wrap gap-1">
+        <button type="button" disabled={disabled} onClick={() => void onSave(draft)} className="rounded-md bg-[#B85B68] px-2 py-1 text-xs font-semibold text-white">Salva</button>
+        <button type="button" disabled={disabled} onClick={() => setDraft(typeof value === "string" ? value : "")} className="px-1 text-xs">Annulla</button>
+      </div>}
+    </> : <>
+      {renderCellValue(value, column)}
+      <label className="block cursor-pointer rounded-md bg-pink-50 p-1 text-xs text-pink-800">
+        {isAttachment(value) ? "Sostituisci" : "Carica"}
+        <input type="file" aria-label={label} disabled={disabled} accept={column.type === "image" ? "image/*" : undefined} className="sr-only" onChange={async event => {
+          const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
+          try { setError(""); await onSave(await fileToAttachment(file)); } catch (error) { setError(error instanceof Error ? error.message : "Caricamento non riuscito"); }
+        }} />
+      </label>
+      {isAttachment(value) && <button type="button" disabled={disabled} onClick={() => void onSave("")} className="text-xs text-red-700">Rimuovi</button>}
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+    </>}
+  </div>;
+}
+
+export function AssistanceTablesManager({ initialSheets, previousStaffOptions = [] }: {
+  initialSheets: AssistanceSheet[];
+  previousStaffOptions?: { id: string; name: string }[];
+}) {
   const [sheets, setSheets] = useState<AssistanceSheet[]>(initialSheets);
+  useEffect(() => { setSheets(initialSheets); }, [initialSheets]);
   const [openedSheetId, setOpenedSheetId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [columnFilter, setColumnFilter] = useState("all");
+  const [summaryFilter, setSummaryFilter] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState(() => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit" }).format(new Date()));
   const [sheetName, setSheetName] = useState("");
   const [columnName, setColumnName] = useState("");
   const [columnType, setColumnType] = useState<AssistanceColumnType>("text");
@@ -149,9 +188,26 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
     ? activeSheet?.columns.map((column) => cellSearchText(selectedRow.values?.[column.id] ?? "")).find(Boolean) || "Dettaglio riga"
     : "";
 
+  const previousStaffColumn = hasReview ? activeSheet?.columns.find(column => /^(?:app|add|appuntamento)\.?\s+precedente$/i.test(column.label.trim())) : undefined;
+  const monthRows = useMemo(() => (activeSheet?.rows ?? []).filter(row => !hasReview || new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit" }).format(new Date(row.createdAt)) === selectedMonth), [activeSheet?.rows, hasReview, selectedMonth]);
+  const previousNeedsReviewRows = useMemo(() => previousStaffColumn
+    ? monthRows.filter(row => cellSearchText(row.values[previousStaffColumn.id] ?? "").trim().toLowerCase() === "da verificare")
+    : [], [monthRows, previousStaffColumn]);
+
+  const systemazioneColumn = hasReview ? activeSheet?.columns.find(column => /^sistemazione$/i.test(column.label.trim())) : undefined;
+  const unfinishedIds = useMemo(() => new Set(monthRows.filter(row => {
+    const value = systemazioneColumn ? cellSearchText(row.values[systemazioneColumn.id] ?? "").trim().toLowerCase() : "";
+    return !value || value === "-" || value === "da verificare";
+  }).map(row => row.id)), [monthRows, systemazioneColumn]);
+
   const filteredRows = useMemo(() => {
     const term = query.trim().toLowerCase();
-    const rows = activeSheet?.rows ?? [];
+    const pendingIds = new Set(previousNeedsReviewRows.map(row => row.id));
+    const rows = [...previousNeedsReviewRows, ...monthRows.filter(row => !pendingIds.has(row.id))].filter(row => {
+      if (!hasReview || summaryFilter === "all") return true;
+      if (summaryFilter === "previous") return pendingIds.has(row.id);
+      return summaryFilter === "upcoming" ? unfinishedIds.has(row.id) : !unfinishedIds.has(row.id);
+    });
     if (!term) return rows;
     return rows.filter((row) => {
       if (columnFilter.startsWith("custom:")) {
@@ -166,7 +222,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
         row.file?.name ?? "",
       ].join(" ").toLowerCase().includes(term);
     });
-  }, [activeSheet?.rows, columnFilter, query]);
+  }, [monthRows, previousNeedsReviewRows, columnFilter, query, hasReview, summaryFilter, unfinishedIds]);
 
   async function setReviewed(row: AssistanceTableRow, checked: boolean) {
     if (!activeSheet || reviewSaving || isPending) return;
@@ -180,6 +236,29 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
       setMessage(checked ? "Riga controllata e salvata." : "Check rimosso.");
     } catch (error) { setReviewError(error instanceof Error ? error.message : "Check non salvato. Riprova."); }
     finally { setReviewSaving(null); }
+  }
+
+  const [cellSaving, setCellSaving] = useState<string | null>(null);
+  const [cellError, setCellError] = useState<{rowId: string; message: string} | null>(null);
+  async function savePreviousStaff(row: AssistanceTableRow, columnId: string, value: AssistanceCellValue, action = "previousStaff"): Promise<boolean> {
+    if (!activeSheet || cellSaving || reviewSaving || isPending) return false;
+    const sheetId = activeSheet.id;
+    setCellSaving(row.id); setCellError(null);
+    try {
+      const response = await fetch("/api/tables", { method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, sheetId, rowId: row.id, columnId, value, updatedAt: row.updatedAt }) });
+      const result = await response.json();
+      if (response.status === 409 && result.row) {
+        setSheets(current => current.map(sheet => sheet.id === sheetId ? { ...sheet,
+          rows: sheet.rows.map(item => item.id === row.id ? result.row : item) } : sheet));
+      }
+      if (!response.ok) throw new Error(result.error || "Modifica non salvata. Riprova.");
+      setSheets(current => current.map(sheet => sheet.id === sheetId ? { ...sheet, updatedAt: result.row.updatedAt,
+        rows: sheet.rows.map(item => item.id === row.id ? result.row : item) } : sheet));
+      setMessage("Modifica salvata.");
+      return true;
+    } catch (error) { setCellError({rowId: row.id, message: error instanceof Error ? error.message : "Modifica non salvata."}); return false; }
+    finally { setCellSaving(null); }
   }
 
   function reviewControl(row: AssistanceTableRow) {
@@ -449,7 +528,7 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
                 className="mt-1 w-full bg-transparent text-3xl font-black outline-none"
               />
               <p className="mt-1 text-xs font-semibold text-black/40 dark:text-white/40">
-                {filteredRows.length} visibili su {activeSheet.rows.length} · {isPending ? "Salvataggio..." : message}
+                {filteredRows.length} visibili su {monthRows.length}{hasReview ? " del mese" : ""} · {isPending ? "Salvataggio..." : message}
               </p>
             </div>
           </div>
@@ -458,13 +537,31 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
               <Plus className="size-4" />
               Nuova riga
             </Button>
-            <Button type="button" variant="soft" onClick={deleteActiveSheet} disabled={sheets.length <= 1}>
+            {!hasReview && <Button type="button" variant="soft" onClick={deleteActiveSheet} disabled={sheets.length <= 1}>
               <Trash2 className="size-4" />
               Elimina sheet
-            </Button>
+            </Button>}
           </div>
         </div>
       </div>
+
+      {hasReview && <section aria-label="Riepilogo sistemazioni del mese" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-bold">Riepilogo del mese · {selectedMonth.split("-").reverse().join("/")}</h2>
+          <button type="button" aria-pressed={summaryFilter === "all"} onClick={() => { setSummaryFilter("all"); setQuery(""); }} className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold dark:bg-white/5">Tutte · {monthRows.length}</button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { id: "done", label: "Effettuate", count: monthRows.length - unfinishedIds.size, detail: "Personale indicato in Sistemazione", color: "border-emerald-200 bg-emerald-50 text-emerald-900" },
+            { id: "upcoming", label: "Da sistemare", count: unfinishedIds.size, detail: "Sistemazione vuota o da verificare", color: "border-amber-200 bg-amber-50 text-amber-900" },
+            { id: "previous", label: "App. precedente da verificare", count: previousNeedsReviewRows.length, detail: "Da verificare chi ha svolto il servizio precedente", color: "border-pink-200 bg-pink-50 text-pink-900" },
+          ].map(item => <button key={item.id} type="button" aria-pressed={summaryFilter === item.id} onClick={() => { setSummaryFilter(item.id); setQuery(""); }} className={cn("rounded-2xl border p-5 text-left transition hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2", item.color, summaryFilter === item.id && "ring-2 ring-current ring-offset-2")}>
+            <span className="block text-sm font-semibold">{item.label}</span>
+            <span className="my-2 block text-4xl font-bold tabular-nums">{item.count}</span>
+            <span className="block text-xs opacity-80">{item.detail}</span>
+          </button>)}
+        </div>
+      </section>}
 
       <div className="rounded-[22px] border border-black/5 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
         <div className="grid gap-3 lg:grid-cols-[1.5fr_220px_auto] lg:items-end">
@@ -492,6 +589,15 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
             Search
           </Button>
         </div>
+        {hasReview && <label className="mt-4 flex flex-wrap items-center gap-3 text-sm font-semibold">
+          Mese di inserimento
+          <input type="month" aria-label="Mese di inserimento" value={selectedMonth} onChange={event => { if (event.target.value) setSelectedMonth(event.target.value); }} className="rounded-xl border border-black/15 bg-transparent px-3 py-2 dark:border-white/20" />
+        </label>}
+        {previousStaffColumn && <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#fce7f0] px-4 py-2 text-sm font-semibold text-[#943959]">
+          <span aria-hidden="true" className="size-2 rounded-full bg-[#d97aa0]" />
+          App. precedente da verificare · {previousNeedsReviewRows.length} righe in rosa, mostrate per prime
+        </p>}
+        {!hasReview && <>
         <div className="mt-4 grid gap-2 border-t border-black/5 pt-4 dark:border-white/10 md:grid-cols-[1fr_180px_auto]">
           <Field
             value={columnName}
@@ -524,11 +630,22 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
             ))}
           </div>
         ) : null}
+        </>}
       </div>
 
       <div className="overflow-hidden rounded-[18px] border border-black/10 bg-white shadow-sm dark:border-white/10 dark:bg-[#101014]">
-        <div className="overflow-auto">
-          <table className="min-w-[900px] w-full border-collapse text-left text-sm">
+        <div className={styles.tableViewport}>
+          <table className={styles.table}>
+            <colgroup>
+              <col style={{width: "2%"}} />
+              {activeSheet.columns.map(column => <col key={column.id} style={{width:
+                /precedente|^sistemazione$/i.test(column.label.trim()) ? "14%" :
+                /foto/i.test(column.label) ? "3%" : /note/i.test(column.label) ? "5%" :
+                /ordine/i.test(column.label) ? "6%" : undefined }} />)}
+              <col style={{width: "6%"}} /><col style={{width: "6%"}} />
+              {hasReview && <col style={{width: "8%"}} />}
+              <col style={{width: "7%"}} />
+            </colgroup>
             <thead>
               <tr className="bg-[#f3f6ff] text-[11px] font-black uppercase tracking-[0.12em] text-white">
                 <th className="sticky left-0 z-10 border border-white/70 bg-[#B85B68] px-3 py-3 text-center dark:border-white/10">#</th>
@@ -547,16 +664,36 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
               {filteredRows.length ? filteredRows.map((row, index) => (
                 <tr
                   key={row.id}
-                  onClick={() => setSelectedRowId(row.id)}
+                  onClick={hasReview ? undefined : () => setSelectedRowId(row.id)}
                   className={cn(
                     "cursor-pointer transition hover:bg-[#fff7e8] dark:hover:bg-white/5",
-                    selectedRowId === row.id && "bg-paradise-softPink/25 dark:bg-white/10"
+                    selectedRowId === row.id && "bg-paradise-softPink/25 dark:bg-white/10",
+                    previousNeedsReviewRows.some(pending => pending.id === row.id) && styles.needsReviewRow
                   )}
                 >
                   <td className="sticky left-0 z-10 border border-black/10 bg-white px-3 py-2 text-center font-mono text-xs font-bold text-black/45 dark:border-white/10 dark:bg-[#101014] dark:text-white/45">{index + 1}</td>
                   {(activeSheet.columns ?? []).map((column) => (
-                    <td key={column.id} className="min-w-[180px] border border-black/10 px-3 py-2 dark:border-white/10">
-                      {renderCellValue(row.values?.[column.id] ?? "", column)}
+                    <td key={column.id} className="border border-black/10 px-3 py-2 dark:border-white/10">
+                      {hasReview && /^(?:(?:app|add|appuntamento)\.?\s+precedente|sistemazione)$/i.test(column.label.trim()) ? (
+                        <div onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                          <Select aria-label={`${column.label}, riga ${index + 1}`}
+                            title={String(row.values?.[column.id] || "Seleziona personale")}
+                            value={typeof row.values?.[column.id] === "string" ? String(row.values[column.id]) : ""}
+                            disabled={Boolean(cellSaving) || Boolean(reviewSaving) || isPending}
+                            onChange={event => void savePreviousStaff(row, column.id, event.target.value)}>
+                            <option value="">Seleziona personale…</option>
+                            {/precedente$/i.test(column.label.trim()) && <option value="Da verificare">Da verificare</option>}
+                            {typeof row.values?.[column.id] === "string" && row.values[column.id] && !(row.values[column.id] === "Da verificare" && /precedente$/i.test(column.label.trim())) && !previousStaffOptions.some(person => person.name === row.values[column.id]) &&
+                              <option value={String(row.values[column.id])}>{String(row.values[column.id])}</option>}
+                            {previousStaffOptions.map(person => <option key={person.id} value={person.name}>{person.name}</option>)}
+                          </Select>
+                          {cellSaving === row.id && <p role="status" className="mt-1 text-xs text-neutral-500">Salvataggio…</p>}
+                          {cellError?.rowId === row.id && <p role="alert" className="mt-1 text-xs text-red-700">{cellError.message}</p>}
+                        </div>
+                      ) : hasReview ? <>
+                        <InlineTableCell value={row.values?.[column.id] ?? ""} column={column} label={`${column.label}, riga ${index + 1}`} disabled={Boolean(cellSaving) || Boolean(reviewSaving) || isPending} onSave={value => savePreviousStaff(row, column.id, value, "cell")} />
+                        {cellError?.rowId === row.id && <p role="alert" className="text-xs text-red-700">{cellError.message}</p>}
+                      </> : renderCellValue(row.values?.[column.id] ?? "", column)}
                     </td>
                   ))}
                   <td className="border border-black/10 px-3 py-2 text-xs text-black/50 dark:border-white/10 dark:text-white/50">{compactDate(row.createdAt)}</td>
@@ -564,13 +701,13 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
                   {hasReview && <td className="border border-black/10 px-3 py-2 dark:border-white/10">{reviewControl(row)}</td>}
                   <td className="border border-black/10 px-3 py-2 dark:border-white/10">
                     <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-                      <button type="button" onClick={() => setSelectedRowId(row.id)} className="grid size-9 place-items-center rounded-full bg-black/5 text-black/55 hover:bg-paradise-pink hover:text-paradise-noir">
+                      {!hasReview && <><button type="button" onClick={() => setSelectedRowId(row.id)} className="grid size-7 place-items-center rounded-full bg-black/5 text-black/55 hover:bg-paradise-pink hover:text-paradise-noir">
                         <Eye className="size-4" />
                       </button>
-                      <button type="button" onClick={() => editRow(row)} className="grid size-9 place-items-center rounded-full bg-paradise-pink/15 text-[#B85B68] hover:bg-paradise-pink/25">
+                      <button type="button" onClick={() => editRow(row)} className="grid size-7 place-items-center rounded-full bg-paradise-pink/15 text-[#B85B68] hover:bg-paradise-pink/25">
                         <Pencil className="size-4" />
-                      </button>
-                      <button type="button" onClick={() => deleteRow(row.id)} className="grid size-9 place-items-center rounded-full bg-black/5 text-black/45 hover:bg-red-50 hover:text-red-600">
+                      </button></>}
+                      <button type="button" onClick={() => deleteRow(row.id)} className="grid size-7 place-items-center rounded-full bg-black/5 text-black/45 hover:bg-red-50 hover:text-red-600">
                         <Trash2 className="size-4" />
                       </button>
                     </div>
@@ -651,6 +788,22 @@ export function AssistanceTablesManager({ initialSheets }: { initialSheets: Assi
               <div className="mt-5 grid gap-3">
                 {(activeSheet.columns ?? []).length ? activeSheet.columns.map((column) => {
                   const value = form.values[column.id] ?? "";
+                  const previousStaffColumn = hasReview && /^(?:(?:app|add|appuntamento)\.?\s+precedente|sistemazione)$/i.test(column.label.trim());
+                  if (previousStaffColumn) {
+                    const selected = typeof value === "string" ? value : "";
+                    const existingValue = selected && !(selected === "Da verificare" && /precedente$/i.test(column.label.trim())) && !previousStaffOptions.some(person => person.name === selected);
+                    return <label key={column.id} className="grid gap-2 text-sm font-semibold">
+                      {column.label}
+                      <Select aria-label={column.label} value={selected}
+                        onChange={event => setForm(current => ({ ...current, values: { ...current.values, [column.id]: event.target.value } }))}>
+                        <option value="">Seleziona personale Corso Buenos Aires</option>
+                        {/precedente$/i.test(column.label.trim()) && <option value="Da verificare">Da verificare</option>}
+                        {existingValue && <option value={selected}>{selected} (valore precedente)</option>}
+                        {previousStaffOptions.map(person => <option key={person.id} value={person.name}>{person.name}</option>)}
+                      </Select>
+                      <span className="text-xs font-normal text-neutral-500">Personale del salone Corso Buenos Aires</span>
+                    </label>;
+                  }
                   if (column.type === "text") {
                     return (
                       <Field

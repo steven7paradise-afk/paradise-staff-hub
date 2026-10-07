@@ -1,0 +1,10 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { selectShiftResponsible } from "../lib/shift-responsible-selection";
+const manager = { id: "manager", vice: false, working: true, resting: false, clockedIn: true };
+const deputy = { ...manager, id: "deputy", vice: true };
+test("manager has priority even if deputy was assigned", () => assert.equal(selectShiftResponsible([manager, deputy], "deputy"), "manager"));
+test("rest day delegates to clocked deputy", () => assert.equal(selectShiftResponsible([{ ...manager, working: false, resting: true, clockedIn: false }, deputy]), "deputy"));
+test("unclocked manager is not a rest day", () => assert.equal(selectShiftResponsible([{ ...manager, clockedIn: false }, deputy]), undefined));
+test("unclocked deputy cannot take over", () => assert.equal(selectShiftResponsible([{ ...manager, working: false, resting: true }, { ...deputy, clockedIn: false }]), undefined));
+test("no eligible staff has no default assignment", () => assert.equal(selectShiftResponsible([]), undefined));

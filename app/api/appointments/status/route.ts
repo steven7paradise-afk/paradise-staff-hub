@@ -10,6 +10,7 @@ const SETTING_KEY = "appointment_status_overrides";
 const allowedStatuses = new Set([
   "PRENOTATO",
   "NON_PRESENTATO",
+  "RIPROGRAMMATO",
   "INIZIATO",
   "IN_ATTESA",
   "COMPLETATO",
@@ -17,9 +18,10 @@ const allowedStatuses = new Set([
   "PAGATO",
 ]);
 
-const statusLabels: Record<CowlendarAppointmentStatus, string> = {
+const statusLabels: Record<CowlendarAppointmentStatus | "RIPROGRAMMATO", string> = {
   PRENOTATO: "Confermato",
   NON_PRESENTATO: "Non presentato",
+  RIPROGRAMMATO: "Riprogrammato",
   INIZIATO: "In lavorazione",
   IN_ATTESA: "In attesa",
   COMPLETATO: "Completato",
@@ -179,9 +181,10 @@ export async function POST(request: NextRequest) {
 
     let cowlendarSync:
       | Awaited<ReturnType<typeof updateCowlendarBookingStatus>>
-      | { ok: false; error: string };
+      | { ok: false; error: string }
+      | { ok: true; skipped: true };
     try {
-      cowlendarSync = await Promise.race([
+      cowlendarSync = status === "RIPROGRAMMATO" ? {ok:true,skipped:true} : await Promise.race([
         updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus),
         new Promise<{ ok: false; error: string }>((resolve) => {
           setTimeout(

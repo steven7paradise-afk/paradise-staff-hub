@@ -1,0 +1,28 @@
+.tableViewport { width: 100%; min-width: 0; }
+.table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 12px; }
+.table th, .table td { min-width: 0; padding: 10px 7px; overflow-wrap: anywhere; vertical-align: top; }
+.table th { font-size: 10px; letter-spacing: .03em; }
+.table th:first-child, .table td:first-child { width: auto; }
+.table th:last-child, .table td:last-child { width: auto; }
+.table td:last-child > div { flex-wrap: wrap; justify-content: center; }
+.table td select { width: 100%; min-width: 0; max-width: 100%; min-height: 36px; border-radius: 8px; padding: 6px 3px; font-size: 12px; }
+.table td label { max-width: 100%; white-space: normal; padding: 5px 3px; font-size: 11px; }
+.table td input[type="checkbox"] { flex-shrink: 0; width: 16px; height: 16px; }
+.table td a { max-width: 100%; flex-wrap: wrap; }
+.table td span { -webkit-line-clamp: unset; }
+.table td img { max-width: 100%; object-fit: cover; }
+.table td time { white-space: normal; }
+@media (max-width: 767px) {
+ .table { font-size: 10px; }
+ .table th, .table td { padding: 7px 3px; }
+ .table th { font-size: 9px; letter-spacing: 0; }
+ .table th:first-child, .table td:first-child { width: 23px; }
+ .table th:last-child, .table td:last-child { width: 40px; }
+ .table td select { font-size: 10px; }
+}
+
+.table .needsReviewRow > td { background-color: #fff0f6; }
+.table .needsReviewRow:hover > td { background-color: #fce3ee; }
+.table .needsReviewRow > td:first-child { box-shadow: inset 3px 0 #d97aa0; }
+:global(.dark) .table .needsReviewRow > td { background-color: #382331; }
+:global(.dark) .table .needsReviewRow:hover > td { background-color: #492c3e; }

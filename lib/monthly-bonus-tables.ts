@@ -1,3 +1,4 @@
+import { qualityAffectsPreviousBonus } from "./shift-quality";
 import type { AssistanceSheet } from './assistance-tables';
 import { BONUS_START_DATE, romeBonusDay } from './monthly-bonus';
 
@@ -14,6 +15,7 @@ export function tableReworks(sheets:AssistanceSheet[],people:TableBonusPerson[],
   if(!previous)continue;
   const performed=sheet.columns.find(c=>normalize(c.label)==='sistemazione');
   for(const row of sheet.rows){
+   if(!qualityAffectsPreviousBonus(row.values,row.reviewedAt))continue;
    const raw=row.values[previous.id];
    if(typeof raw!=='string'||!raw.trim()||normalize(raw)==='da verificare')continue;
    // Automatically imported bookings count only once Controllo Cliente confirms the service.

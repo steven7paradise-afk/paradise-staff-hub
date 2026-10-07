@@ -1,3 +1,4 @@
+import { resolveShiftResponsible } from "@/lib/shift-responsible-selection-data";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deriveAttendanceState } from "@/lib/attendance-state";
@@ -24,7 +25,7 @@ async function context(userId: string, day: string) {
   ]);
   const access = normalizeShiftResponsibleAccess(accessSetting?.value);
   const dayAccess = access[day] ?? emptyShiftAccessDay();
-  const selectedResponsibleId = normalizeShiftResponsibleAssignments(assignmentSetting?.value)[day];
+  const selectedResponsibleId = await resolveShiftResponsible(day, normalizeShiftResponsibleAssignments(assignmentSetting?.value)[day]);
   return { access, dayAccess, selectedResponsibleId, canEdit: hasShiftWriteAccess(dayAccess, userId, selectedResponsibleId) };
 }
 
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
     const labels = { IN: "In turno", BREAK: "In pausa", OUT: state.firstEntry ? "Turno terminato" : "Non timbrato" } as const;
     value.dayAccess.acknowledgements[session.user.id] = { at: now, clockIn: state.firstEntry?.time ?? null, shiftStatus: labels[state.status] };
   } else if (body?.action === "REQUEST") {
+    if (!value.selectedResponsibleId) return NextResponse.json({ error: "Nessun responsabile in servizio ha ancora timbrato" }, { status: 409 });
     if (session.user.id === value.selectedResponsibleId) return NextResponse.json({ error: "Sei già il responsabile del turno" }, { status: 400 });
     value.dayAccess.permissions[session.user.id] = { status: "PENDING", requestedAt: now };
     if (value.selectedResponsibleId) await prisma.notification.create({ data: { user_id: value.selectedResponsibleId, title: "Richiesta modifica turno", message: `${session.user.name || "Un responsabile"} chiede il permesso di modificare il controllo di oggi.`, type: "TURNO", action_url: "/responsabile-di-turno" } });

@@ -1,0 +1,5 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {hasSavedServiceNotes,buildAgendaReport,emptyAgendaNotes} from '../lib/shift-agenda';
+test('notes count without correctness confirmation, even saved draft notes',()=>{assert.ok(hasSavedServiceNotes({client_control_notes_text:'Servizio eseguito',client_control_is_draft:true}));assert.equal(hasSavedServiceNotes({client_control_correctness:'Controllato'}),false);assert.equal(hasSavedServiceNotes({client_control_notes_text:'  '}),false);});
+test('latest notes and one booking count; cancelled excluded',()=>{const b={id:'1',start_date:'2026-10-07T10:00:00+02:00',service:{title:'BUENOS AIRES'}};const controls=[{answers:{booking_id:'1',custom_extra_note:'Nota salvata'},updated_at:new Date()}];assert.equal(buildAgendaReport('2026-10-07',[b,b],controls,{},{},emptyAgendaNotes()).totals.completed,1);assert.equal(buildAgendaReport('2026-10-07',[b],controls,{'1':{status:'ANNULLATO'}},{},emptyAgendaNotes()).totals.completed,0);});

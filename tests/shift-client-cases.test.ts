@@ -1,0 +1,9 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {needsClientApproval,validClientCase,clientCaseFingerprint,type ClientCase} from '../lib/shift-client-cases';
+const c:ClientCase={id:'1',bookingId:'b',description:'Problema',solution:'Omaggio prodotto',amount:'18',authorizedBy:'s',resolved:true};
+test('threshold is strictly above 30; discounts and refunds always need approval',()=>{assert.equal(needsClientApproval(c),false);assert.equal(needsClientApproval({...c,amount:'30'}),false);assert.equal(needsClientApproval({...c,amount:'30,01'}),true);for(const solution of ['Sconto','Rimborso'])assert.equal(needsClientApproval({...c,solution,amount:'1'}),true);});
+test('require identified client, cost and a named authorized person',()=>{for(const authorizedBy of ['ADMIN','RESPONSABILE'])assert.equal(validClientCase({...c,authorizedBy},new Set(['b']),new Set()),false);assert.equal(validClientCase({...c,authorizedBy:'DIPENDENTE'},new Set(['b']),new Set()),false);assert.ok(validClientCase(c,new Set(['b']),new Set(['s'])));assert.equal(validClientCase({...c,authorizedBy:''},new Set(['b']),new Set(['s'])),false);assert.equal(validClientCase({...c,resolved:null},new Set(['b']),new Set(['s'])),false);assert.ok(validClientCase({...c,solution:'Nessun costo',authorizedBy:'',amount:''},new Set(['b']),new Set()));});
+test('changing financial terms invalidates approval fingerprint',()=>assert.notEqual(clientCaseFingerprint(c),clientCaseFingerprint({...c,amount:'50'})));
+
+test('performer must belong to salon staff and is distinct from authorizer',()=>{assert.ok(validClientCase({...c,performedBy:'worker'},new Set(['b']),new Set(['s']),new Set(['worker'])));assert.equal(validClientCase({...c,performedBy:'s'},new Set(['b']),new Set(['s']),new Set(['worker'])),false);assert.equal(validClientCase(c,new Set(['b']),new Set(['s']),new Set(['worker'])),false);});

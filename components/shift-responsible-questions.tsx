@@ -1,8 +1,16 @@
 "use client";
 
+import { ShiftTomorrowPanel } from "@/components/shift-tomorrow-panel";
+import { ShiftCashPanel } from "@/components/shift-cash-panel";
+import { ShiftClientCasesPanel } from "@/components/shift-client-cases-panel";
+import { ShiftProductsPanel } from "@/components/shift-products-panel";
+import { ShiftHairPanel } from "@/components/shift-hair-panel";
+import { ShiftTeamPanel, type TeamSummary } from "@/components/shift-team-panel";
+import { ShiftQualityPanel, type QualitySummary } from "@/components/shift-quality-panel";
+import { ShiftAgendaPanel, type AgendaSummary } from "@/components/shift-agenda-panel";
 import { ShiftNoteTextarea } from "@/components/shift-note-textarea";
 import { useState, useTransition } from "react";
-import { AlertCircle, CalendarClock, Check, CheckCircle2, ListTodo, LoaderCircle, Plus, Star, Trash2, Upload, UserRound, X } from "lucide-react";
+import { ArrowUpRight, FileText, AlertCircle, CalendarClock, Check, CheckCircle2, ListTodo, LoaderCircle, Plus, Star, Trash2, Upload, UserRound, X } from "lucide-react";
 import { isShiftEventReport, activeShiftFollowUps, type ShiftResponsibleAnswer, type ShiftResponsibleQuestion } from "@/lib/shift-responsible-questions";
 import type { ShiftAppointmentClient } from "@/lib/shift-responsible-appointments";
 
@@ -26,7 +34,15 @@ function answerTypeName(type: ShiftResponsibleQuestion["answerType"]) {
   return ({ SHORT_TEXT: "Risposta breve", TEXT: "Paragrafo", MULTI_TEXT: "Risposte scritte multiple", TIMELINE: "Timeline ora + nota", MULTIPLE_CHOICE: "Scelta multipla", CHECKBOXES: "Caselle di controllo", DROPDOWN: "Elenco a discesa", FILE_UPLOAD: "Caricamento file", LINEAR_SCALE: "Scala lineare", RATING: "Classificazione", MULTIPLE_CHOICE_GRID: "Griglia a scelta multipla", CHECKBOX_GRID: "Griglia con caselle", DATE: "Data", TIME: "Ora", STAFF_NOTE: "Collega allo staff", STAFF_CHECKLIST: "Controlli per ogni staff", CLIENT_NOTE: "Collega a cliente", TASK: "Genera task", YES_NO: "SÌ / NO" } as Record<ShiftResponsibleQuestion["answerType"], string>)[type];
 }
 
-export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointmentClients, taskAssignees, initialAnswers, onSaved }: { day: string; questions: ShiftResponsibleQuestion[]; shiftStaff: ShiftStaffMember[]; appointmentClients: ShiftAppointmentClient[]; taskAssignees: TaskAssignee[]; initialAnswers: Record<string, string>; onSaved?: () => void | Promise<void> }) {
+export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointmentClients, taskAssignees, initialAnswers, onSaved, overview = false, responsibleName }: { overview?: boolean; responsibleName?: string; day: string; questions: ShiftResponsibleQuestion[]; shiftStaff: ShiftStaffMember[]; appointmentClients: ShiftAppointmentClient[]; taskAssignees: TaskAssignee[]; initialAnswers: Record<string, string>; onSaved?: () => void | Promise<void> }) {
+  const [cashComplete, setCashComplete] = useState(false);
+  const [clientCaseCount, setClientCaseCount] = useState(0);
+  const [productsComplete, setProductsComplete] = useState(false);
+  const [hairComplete, setHairComplete] = useState(false);
+  const [teamSummary, setTeamSummary] = useState<TeamSummary | null>(null);
+  const [qualitySummary, setQualitySummary] = useState<QualitySummary | null>(null);
+  const [agendaSummary, setAgendaSummary] = useState<AgendaSummary | null>(null);
+  const [activeBlock, setActiveBlock] = useState<string | null>(null);
   const [answers, setAnswers] = useState(initialAnswers);
   const [drafts, setDrafts] = useState<Record<string, string>>(initialAnswers);
   const [saveStatuses, setSaveStatuses] = useState<Record<string, SaveStatus>>({});
@@ -90,21 +106,94 @@ export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointm
     });
   }
 
-  if (questions.length === 0) return null;
-  const progressQuestions = questions.filter((question) => question.required !== false);
+  const visibleQuestions = overview ? questions.filter(question => {
+    const title = question.title.toLocaleLowerCase("it").replace(/[^a-zà-ù0-9]+/g, " ").trim();
+    return !["team", "products", "clients", "cash", "tomorrow"].includes(blockFor(question)) && !["posto lampo", "posti lampo", "servizi rifiutati non eseguiti"].includes(title);
+  }) : questions;
+  if (questions.length === 0 && !overview) return null;
+  const progressQuestions = visibleQuestions.filter((question) => question.required !== false);
   const isQuestionComplete = (question: ShiftResponsibleQuestion) => {
     const primaryAnswer = answers[question.id];
     if (!primaryAnswer) return false;
     return activeShiftFollowUps(question, primaryAnswer).every((followUp) => Boolean(answers[`${question.id}::${followUp.key}`]));
   };
-  const completedQuestionIds = new Set(questions.filter(isQuestionComplete).map((question) => question.id));
-  const completedQuestions = progressQuestions.filter(isQuestionComplete).length;
-  const completion = progressQuestions.length ? Math.round((completedQuestions / progressQuestions.length) * 100) : 100;
+  const completedQuestionIds = new Set(visibleQuestions.filter(isQuestionComplete).map((question) => question.id));
+  const requiredCount = progressQuestions.length + (overview ? 6 : 0);
+  const completedQuestions = (overview && cashComplete ? 1 : 0) + (overview && productsComplete ? 1 : 0) + (overview && hairComplete ? 1 : 0) + (overview && teamSummary?.pending === 0 ? 1 : 0) + progressQuestions.filter(isQuestionComplete).length + (overview && agendaSummary?.complete ? 1 : 0) + (overview && qualitySummary?.pending === 0 ? 1 : 0);
+  const completion = requiredCount ? Math.round((completedQuestions / requiredCount) * 100) : 100;
   const dayLabel = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${day}T12:00:00`));
+
+  const blocks = [
+    { id: "agenda", title: "Agenda", description: "Appuntamenti, note inserite e attese", tag: "APPUNTAMENTI · EVENTI" },
+    { id: "team", title: "Team", description: "Presenze, puntualità, pause e presentabilità", tag: "PRESENZE · CONTROLLI STAFF" },
+    { id: "quality", title: "Qualità tecnica", description: "Sistemazioni fasce, cause e verifica del lavoro precedente", tag: "SISTEMAZIONI · CAUSE" },
+    { id: "clients", title: "Clienti", description: "Problematiche delle clienti e segnalazioni", tag: "CLIENTI · SOLUZIONI" },
+    { id: "products", title: "Capelli e prodotti", description: "Capelli in bassa scorta e prodotti da portare in salone", tag: "CAPELLI · MAGAZZINO" },
+    { id: "cash", title: "Cassa", description: "Discrepanze e conferma della chiusura cassa", tag: "CASSA · CHIUSURA" },
+    { id: "tomorrow", title: "Domani", description: "Problemi aperti, note finali e valutazione", tag: "PASSAGGIO DI CONSEGNE" },
+  ];
+  function blockFor(question: ShiftResponsibleQuestion) {
+    const title = question.title.toLocaleLowerCase("it");
+    if (/present|paus|puntual|team/.test(title)) return "team";
+    if (/posto lampo|rifiutat|non eseguit|agenda/.test(title)) return "agenda";
+    if (/client/.test(title)) return "clients";
+    if (/qualit|sistemaz/.test(title)) return "quality";
+    if (/pulizia|ordine|capelli|prodott/.test(title)) return "products";
+    if (/cassa/.test(title)) return "cash";
+    return "tomorrow";
+  }
+  const activeBlockInfo = blocks.find(block => block.id === activeBlock);
+  const activeBlockQuestions = visibleQuestions.filter(question => blockFor(question) === activeBlock);
 
   return (
     <section className="mx-auto mt-7 max-w-6xl" aria-label="Domande del turno">
-      <div className="mb-6 border-b border-black/[0.08] px-1 pb-6 sm:px-2 sm:pb-7">
+      {overview && <div hidden={activeBlock !== null && activeBlock !== "tomorrow"} className="mb-5"><ShiftTomorrowPanel day={day} editing={activeBlock === "tomorrow"} /></div>}
+      {overview && <>
+        {activeBlock === null ? <>
+          <header className="mb-5 rounded-2xl border border-[#eadfe5] bg-white p-4">
+            <div className="w-full">
+              <p className="text-sm text-neutral-600">Controlli obbligatori: <strong className="text-[#392936]">{completedQuestions} su {requiredCount}</strong></p>
+              <div role="progressbar" aria-label="Controlli obbligatori completati" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100} className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#eee7eb]"><div className="h-full rounded-full bg-[#654759]" style={{ width: `${completion}%` }} /></div>
+              <p className="mt-2 text-xs text-neutral-500">Dati delle risposte salvate</p>
+            </div>
+          </header>
+          <div className="grid gap-4 md:grid-cols-2">
+            {blocks.map((block, index) => {
+              const items = visibleQuestions.filter(question => blockFor(question) === block.id);
+              const required = items.filter(question => question.required !== false);
+              const missing = (block.id === "cash" && !cashComplete ? 1 : 0) + (block.id === "products" && (!hairComplete || !productsComplete) ? 1 : 0) + (block.id === "team" && (!teamSummary || teamSummary.pending > 0) ? 1 : 0) + (block.id === "quality" && (!qualitySummary || qualitySummary.pending > 0) ? 1 : 0) + required.filter(question => !isQuestionComplete(question)).length + (block.id === "agenda" && !agendaSummary?.complete ? 1 : 0);
+              const status = block.id === "quality" ? (!qualitySummary ? "Caricamento dati" : qualitySummary.pending ? `${qualitySummary.pending} da verificare` : "Completo") : block.id === "tomorrow" ? "Facoltativo" : block.id === "cash" ? (cashComplete ? "Completo" : "Da compilare") : block.id === "clients" ? (clientCaseCount ? `${clientCaseCount} casi` : "Facoltativo") : block.id === "products" ? (hairComplete && productsComplete ? "Completo" : "Da compilare") : block.id === "team" ? (teamSummary ? teamSummary.pending ? `${teamSummary.pending} da completare` : "Completo" : "Caricamento dati") : block.id === "agenda" ? (!agendaSummary ? "Caricamento dati" : missing ? `${agendaSummary.unresolved + required.filter(question => !isQuestionComplete(question)).length} da verificare` : "Completo") : !items.length ? "Da configurare" : missing ? `${missing} da completare` : required.length ? "Completo" : "Facoltativo";
+              return <button key={block.id} type="button" onClick={() => setActiveBlock(block.id)} aria-label={`Apri scheda ${block.title}`} data-needs-attention={missing > 0} data-complete={status === "Completo"} className={`shift-report-card group flex min-h-44 cursor-pointer flex-col rounded-[20px] border-2 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-[#a23d64] hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a23d64] sm:p-6 ${missing ? "border-[#d8769b]" : "border-[#eadfe5]"}`}>
+                <div className="mb-3 flex items-center gap-2 text-[#9b365b]"><span className="grid size-9 place-items-center rounded-xl bg-[#fae3ed]"><FileText className="size-5" aria-hidden="true" /></span><span className="text-[10px] font-bold uppercase tracking-[0.14em]">Scheda {index + 1}</span></div>
+                <div className="flex flex-wrap items-start justify-between gap-3"><h2 className="text-lg font-bold text-[#392936]">{block.title}</h2><span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${missing ? "bg-[#fae3ed] text-[#9b365b]" : status === "Completo" ? "bg-emerald-100 text-emerald-800" : "bg-[#f0edef] text-neutral-600"}`}>{status}</span></div>
+                <p className="mt-3 text-sm leading-relaxed text-neutral-600">{block.description}</p>
+                <p className="mt-2 text-xs text-neutral-500">{block.id === "quality" ? (qualitySummary ? `${qualitySummary.total} sistemazioni di oggi` : "Sistemazioni automatiche dalle schede cliente") : block.id === "tomorrow" ? "Nota, assegnazione e valutazione" : block.id === "cash" ? "Discrepanze e dichiarazione obbligatoria" : block.id === "clients" ? "Reclami, soluzioni e autorizzazioni" : block.id === "products" ? "Tonalità dal catalogo Magazzino" : block.id === "team" && teamSummary ? `${teamSummary.total} persone · presenze automatiche` : block.id === "agenda" && agendaSummary ? `${agendaSummary.planned} previsti · ${agendaSummary.completed} fatti` : items.length ? `${items.length} controlli disponibili` : "Contenuto da definire insieme"}</p>
+                <span className="mt-4 self-start rounded-md bg-[#fae3ed] px-2 py-1 text-[10px] font-bold tracking-wide text-[#9b365b]">{block.tag}</span>
+                <span className="mt-5 flex w-full items-center justify-between border-t border-[#eadfe5] pt-4 text-sm font-bold text-[#9b365b]">
+                  Apri scheda
+                  <span className="grid size-8 place-items-center rounded-full bg-[#fae3ed] transition group-hover:bg-[#9b365b] group-hover:text-white"><ArrowUpRight className="size-4" aria-hidden="true" /></span>
+                </span>
+              </button>;
+            })}
+          </div>
+          <footer className="mt-5 flex flex-col gap-4 rounded-[20px] border border-[#eadfe5] bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 className="font-bold text-[#392936]">Chiudi la giornata</h2><p className="mt-1 text-sm text-neutral-500">Le regole di chiusura saranno definite con i nuovi blocchi.</p></div>
+            <button type="button" disabled className="min-h-12 rounded-xl bg-[#c9b8c3] px-6 text-sm font-bold text-white">Chiusura da configurare</button>
+          </footer>
+        </> : <header className="mb-5 rounded-[20px] border border-[#eadfe5] bg-white p-5">
+          <button type="button" onClick={() => setActiveBlock(null)} className="min-h-11 text-sm font-semibold text-[#9b365b]">← Torna alla panoramica</button>
+          <h1 className="mt-2 text-2xl font-bold text-[#392936]">{activeBlockInfo?.title}</h1>
+          <p className="mt-2 text-sm text-neutral-600">{activeBlockInfo?.description}</p>
+          {activeBlock !== "agenda" && activeBlock !== "quality" && activeBlock !== "team" && activeBlock !== "products" && activeBlock !== "clients" && activeBlock !== "cash" && activeBlock !== "tomorrow" && !activeBlockQuestions.length && <p className="mt-6 rounded-xl bg-[#faf3f7] p-4 text-sm text-[#79435b]">Questa sezione è pronta per i contenuti che definiremo insieme.</p>}
+        </header>}
+      </>}
+      {overview && <div hidden={activeBlock !== "cash"}><ShiftCashPanel day={day} onComplete={setCashComplete} /></div>}
+      {overview && <div hidden={activeBlock !== "clients"}><ShiftClientCasesPanel day={day} onCount={setClientCaseCount} /></div>}
+      {overview && <div hidden={activeBlock !== "products"}><ShiftHairPanel day={day} onComplete={setHairComplete} /><ShiftProductsPanel day={day} onComplete={setProductsComplete} /></div>}
+      {overview && <div hidden={activeBlock !== "team"}><ShiftTeamPanel day={day} onSummary={setTeamSummary} /></div>}
+      {overview && <div hidden={activeBlock !== "agenda"} className="rounded-[20px] border border-[#eadfe5] bg-white px-4 sm:px-6"><ShiftAgendaPanel day={day} onSummary={setAgendaSummary} /></div>}
+      {overview && <div hidden={activeBlock !== "quality"} className="mt-5 rounded-[20px] border border-[#eadfe5] bg-white px-4 sm:px-6"><ShiftQualityPanel day={day} onSummary={setQualitySummary} /></div>}
+      {!overview && <><div className="mb-6 border-b border-black/[0.08] px-1 pb-6 sm:px-2 sm:pb-7">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#16883a]">Controllo giornaliero</p>
@@ -122,18 +211,19 @@ export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointm
       <div className="mb-4 xl:hidden">
         <p className="mb-2 text-[9px] font-black uppercase tracking-[0.14em] text-[#7b847e]">Vai a una domanda</p>
         <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Vai a una domanda">
-          {questions.map((question, index) => {
+          {visibleQuestions.map((question, index) => {
             const complete = completedQuestionIds.has(question.id);
             return <a key={question.id} href={`#turno-domanda-${index + 1}`} aria-label={`Vai alla domanda ${index + 1}: ${question.title}`} className={`relative grid size-10 shrink-0 place-items-center rounded-full border text-[10px] font-black ${complete ? "border-[#2ed65d] bg-[#2ed65d] text-white" : "border-black/10 bg-white text-[#7b847e]"}`}>{index + 1}{complete ? <Check className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-white p-0.5 text-[#16883a]" strokeWidth={4} /> : null}</a>;
           })}
         </nav>
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[230px_minmax(0,1fr)]">
-        <aside className="sticky top-24 hidden border-r border-black/[0.08] py-2 pr-5 xl:block">
+      </>}
+      <div className={overview ? "rounded-[20px] bg-white px-3 sm:px-6" : "grid items-start gap-5 xl:grid-cols-[230px_minmax(0,1fr)]"} hidden={overview && activeBlock === null}>
+        {!overview && <aside className="sticky top-24 hidden border-r border-black/[0.08] py-2 pr-5 xl:block">
           <p className="px-3 pb-2 pt-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#7b847e]">Domande del turno</p>
           <nav className="space-y-1" aria-label="Indice delle domande">
-            {questions.map((question, index) => {
+            {visibleQuestions.map((question, index) => {
               const complete = completedQuestionIds.has(question.id);
               return <a key={question.id} href={`#turno-domanda-${index + 1}`} className="group flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-[#f3faf5]">
                 <span className={`grid size-7 shrink-0 place-items-center rounded-full text-[9px] font-black ${complete ? "bg-[#2ed65d] text-white" : "bg-[#f0f3f1] text-[#7b847e]"}`}>{complete ? <Check className="size-3.5" strokeWidth={3} /> : index + 1}</span>
@@ -141,14 +231,14 @@ export function ShiftResponsibleQuestions({ day, questions, shiftStaff, appointm
               </a>;
             })}
           </nav>
-        </aside>
+        </aside>}
 
         <div>
-        {questions.map((question, index) => (
-          <article id={`turno-domanda-${index + 1}`} key={question.id} className="relative scroll-mt-24 border-b border-black/[0.08] px-1 py-7 transition last:border-b-0 sm:px-3 sm:py-9">
+        {visibleQuestions.map((question, index) => (
+          <article hidden={overview && blockFor(question) !== activeBlock} id={`turno-domanda-${index + 1}`} key={question.id} className="relative scroll-mt-24 border-b border-black/[0.08] px-1 py-7 transition last:border-b-0 sm:px-3 sm:py-9">
             <div className={`absolute bottom-6 left-0 top-6 w-0.5 rounded-full ${answers[question.id] ? "bg-[#2ed65d]" : "bg-transparent"}`} />
             <div className="min-w-0">
-                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#80868b]">Domanda {index + 1} di {questions.length}</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#80868b]">Domanda {index + 1} di {visibleQuestions.length}</p>
                 <h2 className="mt-2 text-sm font-semibold leading-snug text-[#202124] sm:text-base">{question.title}{question.required !== false ? <span className="ml-1 text-[#d93025]">*</span> : null}</h2>{isShiftEventReport(question) ? <p className="mt-2 text-xs text-neutral-500">Compila solo se ci sono eventi da segnalare. Se lasci vuoto, non ci sono segnalazioni e il completamento non diminuisce. Se inserisci un evento, ricorda di salvarlo.</p> : null}
                 {question.description ? <p className="mt-1.5 text-[10px] leading-relaxed text-[#5f6368] sm:text-xs">{question.description}</p> : null}
                 {question.followUpYes || question.followUpNo || Object.keys(question.followUps ?? {}).length ? (

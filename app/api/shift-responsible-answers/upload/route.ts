@@ -1,3 +1,4 @@
+import { resolveShiftResponsible } from "@/lib/shift-responsible-selection-data";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { uploadFileToGoogleDrive } from "@/lib/google-drive";
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     prisma.setting.findUnique({ where: { key: WEEKLY_SHIFT_RESPONSIBLES_SETTING_KEY } }),
   ]);
   const dayAccess = normalizeShiftResponsibleAccess(accessSetting?.value)[day] ?? emptyShiftAccessDay();
-  const selectedResponsibleId = normalizeShiftResponsibleAssignments(assignmentSetting?.value)[day];
+  const selectedResponsibleId = await resolveShiftResponsible(day, normalizeShiftResponsibleAssignments(assignmentSetting?.value)[day]);
   if (!hasShiftWriteAccess(dayAccess, session.user.id, selectedResponsibleId)) return NextResponse.json({ error: "Attiva la presa visione e ottieni il permesso prima di caricare file" }, { status: 403 });
   const candidate = form?.get("file");
   if (!candidate || typeof candidate === "string") return NextResponse.json({ error: "Seleziona un file" }, { status: 400 });

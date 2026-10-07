@@ -1,3 +1,4 @@
+import { resolveShiftResponsible } from "@/lib/shift-responsible-selection-data";
 import { isValidShiftNote, SHIFT_ANSWER_PAYLOAD_LIMIT, SHIFT_NOTE_LIMIT } from "@/lib/shift-note-limits";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -80,7 +81,7 @@ export async function PUT(request: NextRequest) {
   ]);
   const access = normalizeShiftResponsibleAccess(accessSetting?.value);
   const dayAccess = access[day] ?? emptyShiftAccessDay();
-  const selectedResponsibleId = normalizeShiftResponsibleAssignments(assignmentSetting?.value)[day];
+  const selectedResponsibleId = await resolveShiftResponsible(day, normalizeShiftResponsibleAssignments(assignmentSetting?.value)[day]);
   if (!hasShiftWriteAccess(dayAccess, session.user.id, selectedResponsibleId)) {
     return NextResponse.json({ error: dayAccess.acknowledgements[session.user.id] ? "Serve il permesso del responsabile di turno" : "Attiva la presa visione prima di scrivere" }, { status: 403 });
   }

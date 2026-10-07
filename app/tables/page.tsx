@@ -1,3 +1,4 @@
+import { previousApplicationStaffWhere } from "@/lib/assistance-table-staff";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { AssistanceTablesManager } from "@/components/assistance-tables-manager";
@@ -32,6 +33,11 @@ export default async function TablesPage() {
   }
 
   const sheets = await loadAutocompletedAssistanceSheets();
+  const previousStaffOptions = await prisma.user.findMany({
+    where: previousApplicationStaffWhere,
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 
   return (
     <AppShell
@@ -39,7 +45,7 @@ export default async function TablesPage() {
       subtitle="Fogli operativi per assistenza: crea sheet, registra nominativi, note, immagini e file."
       role={role}
     >
-      <AssistanceTablesManager initialSheets={sheets.length ? sheets : [defaultAssistanceSheet()]} />
+      <AssistanceTablesManager previousStaffOptions={previousStaffOptions} initialSheets={sheets.length ? sheets : [defaultAssistanceSheet()]} />
     </AppShell>
   );
 }
