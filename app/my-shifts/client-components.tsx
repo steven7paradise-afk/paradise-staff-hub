@@ -8,6 +8,8 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { expectedShiftEndTime, romeMinutesForInstant } from "@/lib/scheduled-attendance";
 
+import { shiftCountdownTarget } from "@/lib/shift-countdown-time";
+
 type TodayLog = {
   id?: string;
   type: "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA";
@@ -16,6 +18,7 @@ type TodayLog = {
 };
 
 type TodayCountdownProps = {
+  initialNow: string;
   shiftName: string;
   shiftTime: string;
   startTime: string | null;
@@ -32,10 +35,12 @@ export function MonthSelector({
   currentMonth,
   currentYear,
   allowedMonths,
+  targetUserId,
 }: {
   currentMonth: number;
   currentYear: number;
   allowedMonths?: AllowedMonth[];
+  targetUserId?: string;
 }) {
   const router = useRouter();
   
@@ -46,7 +51,7 @@ export function MonthSelector({
   
   const handleSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const [m, y] = e.target.value.split("-");
-    router.push(`/my-shifts?month=${m}&year=${y}&weekOffset=0`);
+    router.push(`/my-shifts?month=${m}&year=${y}&weekOffset=0${targetUserId ? `&userId=${encodeURIComponent(targetUserId)}` : ""}`);
   };
 
   const options = [];
@@ -185,15 +190,6 @@ export function CurrentlyAtWork({ activeClockInTime }: { activeClockInTime: stri
   );
 }
 
-function parseLocalTarget(time: string | null) {
-  if (!time) return null;
-  const [hours, minutes] = time.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-  const target = new Date();
-  target.setHours(hours, minutes, 0, 0);
-  return target;
-}
-
 function formatCountdown(milliseconds: number) {
   const safe = Math.max(0, milliseconds);
   const totalSeconds = Math.floor(safe / 1000);
@@ -214,6 +210,7 @@ function formatElapsed(milliseconds: number) {
 }
 
 export function TodayShiftCountdown({
+  initialNow,
   shiftName,
   shiftTime,
   startTime,
@@ -223,7 +220,7 @@ export function TodayShiftCountdown({
   initialLogs,
 }: TodayCountdownProps) {
   const [logs, setLogs] = useState<TodayLog[]>(initialLogs);
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date(initialNow));
 
   // Notification states
   const [notified5Min, setNotified5Min] = useState(false);
@@ -277,6 +274,7 @@ export function TodayShiftCountdown({
   };
 
   useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     const refresh = setInterval(async () => {
       const response = await fetch("/api/attendance/my-today", { cache: "no-store" }).catch(() => null);
@@ -300,8 +298,8 @@ export function TodayShiftCountdown({
     locationName,
     actualEntryMinutes: firstEntry ? romeMinutesForInstant(new Date(firstEntry.timestamp)) : null,
   });
-  const start = parseLocalTarget(startTime);
-  const end = parseLocalTarget(effectiveEndTime ?? endTime);
+  const start = shiftCountdownTarget(startTime, now);
+  const end = shiftCountdownTarget(effectiveEndTime ?? endTime, now);
   const hasShift = Boolean(start && end && shiftName !== "Non programmato");
 
   // Determine remaining break time if currently on break
@@ -355,7 +353,7 @@ export function TodayShiftCountdown({
       title = remaining > 0 ? "Rientro pausa tra" : "Pausa oltre il limite";
       countdownLabel = `Pausa ${breakDurationMinutes} min`;
       countdown = remaining > 0 ? formatCountdown(remaining) : `+${formatElapsed(Math.abs(remaining))}`;
-      subtext = `Pausa iniziata alle ${latest.time ?? new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(pauseStart)}. Il timer lavoro resta fermo.`;
+      subtext = `Pausa iniziata alle ${latest.time ?? new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(pauseStart)}. Il timer lavoro resta fermo.`;
       tone = remaining > 0 ? "pause" : "late";
     } else if (latest?.type === "ENTRATA" || latest?.type === "RIENTRO") {
       const remaining = end.getTime() - now.getTime();
@@ -363,14 +361,14 @@ export function TodayShiftCountdown({
       title = remaining > 0 ? "Fine turno tra" : "Turno oltre orario";
       countdownLabel = "Tempo rimanente";
       countdown = remaining > 0 ? formatCountdown(remaining) : `+${formatElapsed(Math.abs(remaining))}`;
-      subtext = lastEntry ? `Timer avviato dalla timbratura delle ${lastEntry.time ?? new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(new Date(lastEntry.timestamp))}.` : `Turno previsto ${shiftTime}`;
+      subtext = lastEntry ? `Timer avviato dalla timbratura delle ${lastEntry.time ?? new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(lastEntry.timestamp))}.` : `Turno previsto ${shiftTime}`;
       tone = remaining > 0 ? "work" : "late";
     } else if (latest?.type === "USCITA") {
       status = "Turno chiuso";
       title = "Uscita registrata";
       countdownLabel = "Giornata";
       countdown = latest.time ?? "Completata";
-      subtext = `Ultima uscita alle ${latest.time ?? new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(new Date(latest.timestamp))}.`;
+      subtext = `Ultima uscita alle ${latest.time ?? new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(latest.timestamp))}.`;
       progress = 100;
       tone = "done";
     } else if (now < start) {
