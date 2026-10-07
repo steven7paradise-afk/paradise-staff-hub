@@ -1,11 +1,15 @@
 'use client';
-import {useCallback,useEffect,useId,useState} from 'react';
+import {useCallback,useEffect,useId,useState,useRef} from 'react';
 import {CLIENT_SOLUTIONS,needsClientApproval,type ClientCase} from '@/lib/shift-client-cases';
 type Report={clients:{id:string;name:string;time:string;service:string}[];staff:{id:string;name:string}[];performers:{id:string;name:string}[];cases:ClientCase[];version:string|null;threshold:number;canApprove:boolean};
-export function ShiftClientCasesPanel({day,onCount,reviewOnly=false}:{day:string;onCount?:(n:number)=>void;reviewOnly?:boolean}){
+export function ShiftClientCasesPanel({day,onCount,onComplete,reviewOnly=false}:{day:string;onCount?:(n:number)=>void;onComplete?:(complete:boolean)=>void;reviewOnly?:boolean}){
+ const newCaseRef=useRef<HTMLDetailsElement|null>(null);const [newCaseId,setNewCaseId]=useState<string|null>(null);
  const listId=useId();const [data,setData]=useState<Report|null>(null);const [cases,setCases]=useState<ClientCase[]>([]);const [dirty,setDirty]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');
  const accept=useCallback((d:Report)=>{setData(d);setCases(d.cases);setDirty(false);onCount?.(d.cases.length);},[onCount]);
+ useEffect(()=>{onComplete?.(!dirty&&cases.length>0&&cases.every(c=>c.resolved===true&&(c.status==='RECORDED'||c.status==='APPROVED')));},[cases,dirty,onComplete]);
  const load=useCallback(async()=>{try{const r=await fetch(`/api/shift-client-cases?day=${day}`,{cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error);accept(d);setError('');}catch(e){setError(e instanceof Error?e.message:'Errore caricamento');}},[day,accept]);useEffect(()=>{void load();},[load]);
+ useEffect(()=>{if(newCaseId){newCaseRef.current?.scrollIntoView({block:'nearest',behavior:'auto'});newCaseRef.current?.querySelector<HTMLInputElement>('input')?.focus({preventScroll:true});}},[newCaseId]);
+ function addCase(){const id=crypto.randomUUID();setCases(old=>[...old,{id,bookingId:'',description:'',solution:'Nessun costo',amount:'0',authorizedBy:'',resolved:null}]);setNewCaseId(id);setDirty(true);setMessage('');}
  function edit(id:string,update:Partial<ClientCase>){setCases(old=>old.map(c=>c.id===id?{...c,...update}:c));setDirty(true);setMessage('');}
  async function submit(extra:object={}){setBusy(true);setError('');try{const r=await fetch('/api/shift-client-cases',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({day,cases,version:data?.version,...extra})});const d=await r.json();if(!r.ok)throw new Error(d.error);accept(d);setMessage('Casi salvati');}catch(e){setError(e instanceof Error?e.message:'Salvataggio non riuscito');}finally{setBusy(false);}}
  return <section className="shift-team-panel space-y-4 rounded-2xl border border-[#eadfe5] bg-white p-4 sm:p-6" aria-label="Casi clienti">
@@ -13,8 +17,10 @@ export function ShiftClientCasesPanel({day,onCount,reviewOnly=false}:{day:string
  {error&&<p role="alert" className="text-red-800">{error} <button type="button" className="team-button" onClick={()=>void load()}>Ricarica casi salvati</button></p>}
  {!data?<p>Caricamento clienti…</p>:<>
  {!cases.length&&<p className="rounded-xl bg-[#faf3f7] p-4 text-sm">Nessun caso segnalato. Se non ci sono problemi, non devi compilare nulla.</p>}
- {cases.map((c,index)=>{const requires=needsClientApproval(c,data.threshold);return <article key={c.id} className="space-y-4 rounded-2xl border-2 border-[#c786a3] p-4">
- <div className="flex flex-wrap justify-between gap-2"><h3 className="font-bold">Caso {index+1}</h3><span className="rounded-full bg-[#faeaf2] px-3 py-1 text-xs font-semibold">{c.status==='PENDING'?'In attesa della direzione':c.status==='APPROVED'?'Autorizzato dalla direzione':c.status==='DENIED'?'Non autorizzato':c.status==='RECORDED'?'Registrato':'Da salvare'}</span></div>
+ {cases.map((c,index)=>{const requires=needsClientApproval(c,data.threshold);const saved=data.cases.find(item=>item.id===c.id);const unchanged=!!saved&&JSON.stringify(saved)===JSON.stringify(c);const complete=unchanged&&c.resolved===true&&(c.status==='RECORDED'||c.status==='APPROVED');const client=data.clients.find(item=>item.id===c.bookingId);return <details key={`${c.id}-${!!saved}`} ref={c.id===newCaseId?newCaseRef:undefined} open={!unchanged||!complete} className={`rounded-2xl border-2 p-4 ${complete?'border-emerald-500 bg-emerald-50':'border-[#c786a3] bg-white'}`}>
+ <summary className={`cursor-pointer list-none ${complete?'text-emerald-900':''}`}><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">{client?client.name:`Nuovo caso ${index+1}`}</h3><span className={`rounded-full px-3 py-1 text-xs font-semibold ${complete?'bg-emerald-700 text-white':'bg-[#faeaf2]'}`}>{complete?'✓ Salvato e risolto':!unchanged?'Da salvare':c.status==='PENDING'?'In attesa della direzione':c.status==='DENIED'?'Non autorizzato':'Da risolvere'}</span></div>{saved&&<p className="mt-2 text-sm">{client?.time} · {c.solution}</p>}<p className="mt-2 text-xs underline underline-offset-2">Apri / chiudi dettagli</p></summary>
+ <div className="mt-4 space-y-4">
+
  <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Cliente e ora<ClientSearch clients={data.clients} bookingId={c.bookingId} listId={`${listId}-${c.id}`} disabled={busy||reviewOnly} onChange={bookingId=>edit(c.id,{bookingId})}/><datalist id={`${listId}-${c.id}`}>{data.clients.map(b=><option key={b.id} value={`${b.name} · ${b.time} · ${b.service}`}>{b.service}</option>)}</datalist></label>
  <label className="text-xs font-semibold">Chi ha svolto il servizio<select className="team-field mt-1" disabled={busy||reviewOnly} value={c.performedBy||''} onChange={e=>edit(c.id,{performedBy:e.target.value})}><option value="">Seleziona staff del salone</option>{data.performers.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label></div>
  <label className="block text-xs font-semibold">Cosa è successo<textarea className="team-field mt-1" rows={3} disabled={busy||reviewOnly} maxLength={5000} value={c.description} onChange={e=>edit(c.id,{description:e.target.value})}/></label>
@@ -25,8 +31,8 @@ export function ShiftClientCasesPanel({day,onCount,reviewOnly=false}:{day:string
  {c.approvedBy&&<p className="text-xs text-neutral-600">Decisione di {c.approvedBy} · {c.approvedAt&&new Date(c.approvedAt).toLocaleString('it-IT',{timeZone:'Europe/Rome'})}</p>}
  {data.canApprove&&c.status==='PENDING'&&<div className="flex flex-wrap gap-2"><button type="button" className="team-button" disabled={busy||dirty} onClick={()=>void submit({action:'decide',id:c.id,decision:'APPROVED'})}>Autorizza</button><button type="button" className="team-button" disabled={busy||dirty} onClick={()=>void submit({action:'decide',id:c.id,decision:'DENIED'})}>Non autorizzare</button></div>}
  {!reviewOnly&&!c.status&&<button type="button" className="team-button" disabled={busy} onClick={()=>{setCases(old=>old.filter(o=>o.id!==c.id));setDirty(true);}}>Rimuovi caso non salvato</button>}
- </article>;})}
- {!reviewOnly&&<div className="flex flex-wrap gap-3"><button type="button" disabled={busy} className="team-button" onClick={()=>{setCases(old=>[...old,{id:crypto.randomUUID(),bookingId:'',description:'',solution:'Nessun costo',amount:'0',authorizedBy:'',resolved:null}]);setDirty(true);}}>+ Aggiungi caso</button><button type="button" disabled={busy||!dirty} className="team-button" data-primary="true" onClick={()=>void submit()}>{busy?'Salvataggio…':'Salva casi'}</button></div>}
+ </div></details>;})}
+ {!reviewOnly&&<div className="flex flex-wrap gap-3"><button type="button" disabled={busy} className="team-button" onClick={addCase}>+ Aggiungi caso</button><button type="button" disabled={busy||!dirty} className="team-button" data-primary="true" onClick={()=>void submit()}>{busy?'Salvataggio…':'Salva casi'}</button></div>}
  {message&&<p role="status" className="text-sm text-emerald-800">{message}</p>}
  </>}
  </section>;
