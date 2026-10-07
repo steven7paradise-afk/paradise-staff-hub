@@ -1,3 +1,4 @@
+import { appointmentCustomerPhone } from "@/lib/appointment-visits";
 import { readAppointmentArchive, scheduleAppointmentArchive } from "@/lib/appointment-archive";
 import { AppointmentArchiveStatus } from "@/components/appointment-archive-status";
 import { AppointmentArchiveBrowser } from "@/components/appointment-archive-browser";
@@ -577,7 +578,7 @@ export default async function AppointmentsPage({
         id: booking.id,
         customerName: customerFullName,
         customerEmail: booking.customer?.email || null,
-        customerPhone: booking.customer?.phone || null,
+        customerPhone: appointmentCustomerPhone(booking.customer?.phone, booking.form_data),
         serviceTitle: booking.service?.title || "Servizio",
         serviceImageUrl: findImageUrl(booking.service) || findImageUrl(booking),
         bookingType: booking.booking_type || null,

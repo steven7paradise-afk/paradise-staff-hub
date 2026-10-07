@@ -1,4 +1,5 @@
 "use client";
+import { appointmentVisits } from "@/lib/appointment-visits";
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
 import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
@@ -4312,6 +4313,14 @@ export function AppointmentsBrowser({
 
   const visibleRecentBookings = recentBookings.slice(0, visibleCount);
 
+  const visitsByBooking = useMemo(() => {
+    const result = new Map<string, AppointmentRecord[]>();
+    for (const visit of appointmentVisits(filteredBookings)) {
+      for (const booking of visit) result.set(booking.id, visit);
+    }
+    return result;
+  }, [filteredBookings]);
+
   const appointmentBoardColumns = useMemo(() => {
     // While searching, the board is hidden. Avoid rebuilding all worker columns
     // so the compact results can appear without the cost of the full board.
@@ -6380,7 +6389,10 @@ export function AppointmentsBrowser({
 
               {filteredBookings.length ? (
                 <div className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
-                  {filteredBookings.slice(0, 30).map((booking) => {
+                  {appointmentVisits(filteredBookings).slice(0, 30).map(visit => <div key={visit[0].id} className={visit.length > 1 ? "rounded-2xl border-2 border-[#C979A0] bg-[#FFF5FA] p-2 sm:col-span-2" : ""}>
+                    {visit.length > 1 && <header className="px-2 py-3"><h3 className="font-bold text-[#352a33]">{visit[0].customerName}</h3><p className="text-sm text-[#97335d]">Unica visita · {visit.length} servizi · {formatDate(visit[0].startDate)}</p></header>}
+                    <div className={visit.length > 1 ? "grid gap-2 sm:grid-cols-2" : ""}>
+                    {visit.map((booking) => {
                     const status = getBookingStatus(booking);
                     const selectableStatus =
                       status === "ARRIVATO_IN_RITARDO"
@@ -6474,7 +6486,7 @@ export function AppointmentsBrowser({
                         </div>
                       </article>
                     );
-                  })}
+                  })}</div></div>)}
                 </div>
               ) : (
                 <div className="p-8 text-center">
@@ -6667,6 +6679,9 @@ export function AppointmentsBrowser({
 
                         <div className="flex-1 space-y-2.5">
                           {column.bookings.length ? column.bookings.map((booking, bookingIndex) => {
+                            const visit = visitsByBooking.get(booking.id) || [booking];
+                            if (column.bookings.slice(0, bookingIndex).some(previous => visit.some(item => item.id === previous.id))) return null;
+                            const visitEnd = visit.reduce((latest, item) => Date.parse(item.endDate || item.startDate) > Date.parse(latest) ? (item.endDate || item.startDate) : latest, visit[0].endDate || visit[0].startDate);
                             const status = getBookingStatus(booking);
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
                             const otherNotePreviews = getBookingNotePreviews(
@@ -6756,12 +6771,12 @@ export function AppointmentsBrowser({
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
                                     <p className="text-[9px] font-black uppercase tracking-wider text-[#7B6872]">{formatDate(booking.startDate)}</p>
-                                    <p className="mt-1 text-sm font-black tabular-nums text-[#241D21]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
-                                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(booking.startDate, booking.endDate)}</p>
+                                    <p className="mt-1 text-sm font-black tabular-nums text-[#241D21]">{formatTime(visit[0].startDate)} – {formatTime(visitEnd)}</p>
+                                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(visit[0].startDate, visitEnd)}</p>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <span className={`appointments-board-status rounded-full border px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
-                                      {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                                      {visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                                     </span>
                                     <button
                                       type="button"
@@ -6810,7 +6825,13 @@ export function AppointmentsBrowser({
                                   </div>
                                 </div>
                                 <p className="mt-3 truncate text-sm font-black text-[#241D21]">{booking.customerName}</p>
-                                <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#6F6269]">{booking.serviceTitle}</p>
+                                {visit.length > 1 ? <div className="mt-2 space-y-2" aria-label={`Servizi della visita di ${booking.customerName}`}>
+                                  <p className="text-xs font-semibold text-[#97335d]">Unica visita · {visit.length} servizi</p>
+                                  {visit.map(service => <button key={service.id} type="button" className="block w-full rounded-lg border border-[#E2CED8] bg-white p-2 text-left text-xs text-[#352a33]" onPointerDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); void openClientControlForBooking(service, undefined, false);}} onKeyDown={event => event.stopPropagation()}>
+                                    <span className="block font-semibold">{formatTime(service.startDate)} · {service.serviceTitle}</span>
+                                    <span className="mt-1 block text-[11px] text-[#71656d]">{getBookingTeam(service).map(worker => worker.name).join(", ")} · {appointmentStatusLabels[getBookingStatus(service)]}</span>
+                                  </button>)}
+                                </div> : <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#6F6269]">{booking.serviceTitle}</p>}
                                 {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
