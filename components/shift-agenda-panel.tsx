@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { agendaGroup, AGENDA_OUTCOMES, WAIT_REASONS, type AgendaNotes, type AgendaReport } from "@/lib/shift-agenda";
 export type AgendaSummary = { complete: boolean; planned: number; completed: number; unresolved: number };
 export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (summary: AgendaSummary | null) => void }) {
-  const [group, setGroup] = useState<ReturnType<typeof agendaGroup>>("review");
   const [showAllAppointments, setShowAllAppointments] = useState(false);
   const [report, setReport] = useState<AgendaReport | null>(null);
   const [notes, setNotes] = useState<AgendaNotes>({ outcomes: {}, waits: [] });
@@ -38,7 +37,7 @@ export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (
     } catch (e) { setError(e instanceof Error ? e.message : "Salvataggio non riuscito"); }
     finally { setBusy(false); }
   }
-  const unresolved = report?.appointments.filter(a => agendaGroup(a, report.updatedAt) === group) || [];
+  const unresolved = report?.appointments.filter(a => agendaGroup(a, report.updatedAt) === "review") || [];
   const field = "min-h-11 min-w-0 rounded-xl border border-[#d4a4b8] bg-white px-3 py-2 text-sm text-[#392936]";
   return <section className="space-y-5 py-5" aria-label="Numeri e controlli automatici Agenda">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-[#392936]">Numeri del giorno</h2><p className="mt-1 text-xs text-neutral-500">Dal calendario Buenos Aires e dalle schede cliente · aggiornamento ogni minuto</p></div><button type="button" disabled={busy || dirty} onClick={() => void refresh()} className={`${field} disabled:opacity-40`}>Aggiorna dati</button></div>
@@ -48,10 +47,9 @@ export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (
         [report.totals.planned, "Appuntamenti previsti"], [report.totals.completed, "Fatti · note inserite"], [report.totals.cancelled, "Annullati"], [report.totals.noShow, "No-show"], [report.totals.moved, "Spostati"], [report.totals.flash, "Posti lampo creati oggi"],
       ].map(([count, label]) => <div key={label} className="rounded-2xl bg-[#f6f0f4] p-4"><strong className="block text-3xl tabular-nums text-[#392936]">{count}</strong><span className="mt-2 block text-xs text-neutral-600">{label}</span></div>)}</div>
       <p className="text-xs text-neutral-500">I posti lampo contano gli appuntamenti di oggi creati oggi. Fatti conta gli appuntamenti con note del servizio salvate dal personale, senza richiedere “Controllato”.</p>
-      <div className="space-y-3"><h3 className="font-bold text-[#963b62]">Appuntamenti del salone · tutte le lavoratrici</h3>
-        <p className="text-sm text-neutral-600">Da verificare: appuntamenti con orario terminato e senza note del servizio salvate. Non significa che il servizio sia stato eseguito.</p>
-        <div className="shift-team-panel flex flex-wrap gap-2">{([['review','Da verificare'],['progress','In corso'],['upcoming','Da iniziare'],['resolved','No-show / annullati / spostati'],['completed','Note inserite']] as const).map(([key,label])=><button type="button" key={key} className="team-button" aria-pressed={group===key} onClick={()=>{setGroup(key);setShowAllAppointments(false);}}>{label} · {report.appointments.filter(a=>agendaGroup(a,report.updatedAt)===key).length}</button>)}</div>
-        {unresolved.length === 0 && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Nessun appuntamento in questa categoria.</p>}
+      <div className="space-y-3"><h3 className="font-bold text-[#963b62]">Appuntamenti da verificare · {unresolved.length}</h3>
+        <p className="text-sm text-neutral-600">Qui trovi solo gli appuntamenti terminati ancora da verificare. Quelli con note già inserite, no-show, annullati o spostati non compaiono nella lista.</p>
+        {unresolved.length === 0 && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Tutto verificato: non ci sono appuntamenti rimasti da controllare.</p>}
         {(showAllAppointments ? unresolved : unresolved.slice(0, 3)).map(a => <article key={a.id} className="rounded-2xl border border-[#cc7296] p-4">
           <p className="text-sm font-semibold text-[#392936]">{a.time} · {a.name}</p><p className="mt-1 text-sm text-neutral-600">{a.service} · {a.staff}</p>
           {agendaGroup(a, report.updatedAt) === "upcoming" && <p className="mt-1 text-xs text-neutral-500">Appuntamento non ancora iniziato</p>}
