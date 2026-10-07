@@ -1,8 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { agendaGroup, AGENDA_OUTCOMES, WAIT_REASONS, type AgendaNotes, type AgendaReport } from "@/lib/shift-agenda";
+import { remainingAgendaAppointments, agendaGroup, WAIT_REASONS, type AgendaNotes, type AgendaReport } from "@/lib/shift-agenda";
 export type AgendaSummary = { complete: boolean; planned: number; completed: number; unresolved: number };
 export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (summary: AgendaSummary | null) => void }) {
+  const [group, setGroup] = useState<ReturnType<typeof agendaGroup>>("review");
   const [showAllAppointments, setShowAllAppointments] = useState(false);
   const [report, setReport] = useState<AgendaReport | null>(null);
   const [notes, setNotes] = useState<AgendaNotes>({ outcomes: {}, waits: [] });
@@ -37,26 +38,27 @@ export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (
     } catch (e) { setError(e instanceof Error ? e.message : "Salvataggio non riuscito"); }
     finally { setBusy(false); }
   }
-  const unresolved = report?.appointments.filter(a => agendaGroup(a, report.updatedAt) === "review") || [];
+  const unresolved = report?.appointments.filter(a => agendaGroup(a, report.updatedAt) === group) || [];
   const field = "min-h-11 min-w-0 rounded-xl border border-[#d4a4b8] bg-white px-3 py-2 text-sm text-[#392936]";
   return <section className="space-y-5 py-5" aria-label="Numeri e controlli automatici Agenda">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-[#392936]">Numeri del giorno</h2><p className="mt-1 text-xs text-neutral-500">Dal calendario Buenos Aires e dalle schede cliente · aggiornamento ogni minuto</p></div><button type="button" disabled={busy || dirty} onClick={() => void refresh()} className={`${field} disabled:opacity-40`}>Aggiorna dati</button></div>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">{error}</p>}
     {!report ? <p role="status" className="py-6 text-sm text-neutral-500">{error ? "Conteggi non disponibili" : "Caricamento calendario e schede…"}</p> : <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{[
-        [report.totals.planned, "Appuntamenti previsti"], [report.totals.completed, "Fatti · note inserite"], [report.totals.cancelled, "Annullati"], [report.totals.noShow, "No-show"], [report.totals.moved, "Spostati"], [report.totals.flash, "Posti lampo creati oggi"],
+        [remainingAgendaAppointments(report.appointments), "Appuntamenti rimanenti"], [report.totals.completed, "Fatti · note inserite"], [report.totals.cancelled, "Annullati"], [report.totals.noShow, "No-show"], [report.totals.moved, "Spostati"], [report.totals.flash, "Posti lampo creati oggi"],
       ].map(([count, label]) => <div key={label} className="rounded-2xl bg-[#f6f0f4] p-4"><strong className="block text-3xl tabular-nums text-[#392936]">{count}</strong><span className="mt-2 block text-xs text-neutral-600">{label}</span></div>)}</div>
-      <p className="text-xs text-neutral-500">I posti lampo contano gli appuntamenti di oggi creati oggi. Fatti conta gli appuntamenti con note del servizio salvate dal personale, senza richiedere “Controllato”.</p>
-      <div className="space-y-3"><h3 className="font-bold text-[#963b62]">Appuntamenti da verificare · {unresolved.length}</h3>
-        <p className="text-sm text-neutral-600">Qui trovi solo gli appuntamenti terminati ancora da verificare. Quelli con note già inserite, no-show, annullati o spostati non compaiono nella lista.</p>
-        {unresolved.length === 0 && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Tutto verificato: non ci sono appuntamenti rimasti da controllare.</p>}
+      <p className="text-xs text-neutral-500">Il contatore rimanenti scende fino a zero: esclude note già inserite, no-show, annullati e spostati. I posti lampo contano gli appuntamenti di oggi creati oggi. Fatti conta gli appuntamenti con note del servizio salvate dal personale, senza richiedere “Controllato”.</p>
+      <div className="space-y-3"><h3 className="font-bold text-[#963b62]">Appuntamenti del salone · tutte le lavoratrici</h3>
+        <p className="text-sm text-neutral-600">Da verificare: appuntamenti con orario terminato e senza note del servizio salvate. Non significa che il servizio sia stato eseguito.</p>
+        <div className="shift-team-panel flex flex-wrap gap-2">{([['review','Da verificare'],['progress','In corso'],['upcoming','Da iniziare'],['resolved','No-show / annullati / spostati'],['completed','Note inserite']] as const).map(([key,label])=><button type="button" key={key} className="team-button" aria-pressed={group===key} onClick={()=>{setGroup(key);setShowAllAppointments(false);}}>{label} · {report.appointments.filter(a=>agendaGroup(a,report.updatedAt)===key).length}</button>)}</div>
+        {unresolved.length === 0 && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Nessun appuntamento in questa categoria.</p>}
         {(showAllAppointments ? unresolved : unresolved.slice(0, 3)).map(a => <article key={a.id} className="rounded-2xl border border-[#cc7296] p-4">
           <p className="text-sm font-semibold text-[#392936]">{a.time} · {a.name}</p><p className="mt-1 text-sm text-neutral-600">{a.service} · {a.staff}</p>
           {agendaGroup(a, report.updatedAt) === "upcoming" && <p className="mt-1 text-xs text-neutral-500">Appuntamento non ancora iniziato</p>}
-          {a.confirmed ? <p className="mt-3 text-sm font-semibold text-emerald-800">Note del servizio inserite</p> : a.automaticOutcome ? <p className="mt-3 inline-block rounded-full bg-[#f0edef] px-3 py-1 text-xs font-semibold">{a.outcome} · dal calendario</p> : <div className="mt-3 flex flex-wrap gap-2">{AGENDA_OUTCOMES.map(outcome => <button type="button" disabled={busy} key={outcome} aria-pressed={notes.outcomes[a.id] === outcome} onClick={() => edit({ ...notes, outcomes: { ...notes.outcomes, [a.id]: outcome } })} className={`min-h-11 rounded-xl border border-[#c77a9a] px-3 py-2 text-sm ${notes.outcomes[a.id] === outcome ? "bg-[#654759] text-white" : "bg-white text-[#654759]"}`}>{outcome}</button>)}</div>}
+          {a.confirmed && <p className="mt-3 text-sm font-semibold text-emerald-800">Note del servizio inserite</p>}
+          {['No-show', 'Spostato', 'Annullato'].includes(a.outcome) && <p className="mt-3 inline-block rounded-full bg-[#f0edef] px-3 py-1 text-xs font-semibold">{a.outcome} · {a.automaticOutcome ? 'dal calendario' : 'dal verbale'}</p>}
         </article>)}
         {unresolved.length > 3 && <button type="button" aria-expanded={showAllAppointments} onClick={() => setShowAllAppointments(value => !value)} className="min-h-11 rounded-xl border border-[#d4a4b8] bg-[#faf3f7] px-4 py-2 text-sm font-semibold text-[#963b62]">{showAllAppointments ? "Mostra solo 3" : `Vedi altri (${unresolved.length - 3})`}</button>}
-        <p className="text-xs text-neutral-500">Gli esiti inseriti qui sono annotazioni del verbale: non spostano né annullano prenotazioni nel calendario.</p>
       </div>
       <section className="space-y-3 rounded-2xl border border-[#cc7296] p-4"><h3 className="font-bold text-[#392936]">Clienti che hanno aspettato più di 10 minuti</h3><p className="text-xs text-neutral-500">Da compilare dalla responsabile, solo quando c’è stata un’attesa.</p>
         {notes.waits.map((wait, index) => <div key={index} className="grid gap-2 rounded-xl bg-[#faf4f7] p-3 sm:grid-cols-2">

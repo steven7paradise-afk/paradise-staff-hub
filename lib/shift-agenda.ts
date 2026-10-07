@@ -44,3 +44,8 @@ export function agendaGroup(a: AgendaAppointment, now: string): 'review' | 'upco
   if (a.end && new Date(a.end).getTime() > time) return 'progress';
   return 'review';
 }
+
+/** Unfinished appointments, including those still in progress or yet to start. */
+export function remainingAgendaAppointments(appointments: AgendaAppointment[]): number {
+  return appointments.filter(a => !a.confirmed && !['No-show', 'Annullato', 'Spostato'].includes(a.outcome)).length;
+}

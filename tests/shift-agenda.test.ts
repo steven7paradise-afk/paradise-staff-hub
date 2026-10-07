@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAgendaReport, emptyAgendaNotes, romeAgendaDate } from "../lib/shift-agenda";
+import { remainingAgendaAppointments, buildAgendaReport, emptyAgendaNotes, romeAgendaDate } from "../lib/shift-agenda";
 const day = "2026-10-07";
 const booking = (id: string, extra = {}) => ({ id, start_date: `${day}T10:00:00+02:00`, service: { title: "BUENOS AIRES - SERVIZIO" }, ...extra });
 test("deduplica appuntamenti, usa il giorno di Roma ed esclude altre sedi", () => {
@@ -41,4 +41,15 @@ test('separa schede mancanti da appuntamenti futuri, in corso e chiusi', async (
  assert.equal(agendaGroup(a,`${day}T12:00:00+02:00`),'review');
  for(const outcome of ['No-show','Annullato','Spostato']) assert.equal(agendaGroup({...a,outcome},`${day}T12:00:00+02:00`),'resolved');
  assert.equal(agendaGroup({...a,confirmed:true},`${day}T12:00:00+02:00`),'completed');
+});
+
+test("remaining counter excludes resolved appointments and reaches zero once notes are saved", () => {
+ const bookings = [booking("pending"), booking("future", { start_date: `${day}T19:00:00+02:00` }), booking("done"), booking("absent"), booking("cancelled"), booking("moved")];
+ const controls = [{ updated_at: `${day}T12:00:00Z`, answers: { booking_id: "done", client_control_notes_text: "Lavoro eseguito" } }];
+ const statuses = { absent: { status: "NON_PRESENTATO" }, cancelled: { status: "ANNULLATO" }, moved: { status: "RIPROGRAMMATO" } };
+ const report = buildAgendaReport(day, bookings, controls, statuses, {}, emptyAgendaNotes());
+ assert.equal(report.totals.planned, 6);
+ assert.equal(remainingAgendaAppointments(report.appointments), 2);
+ const completed = buildAgendaReport(day, bookings, [...controls, ...["pending", "future"].map(id => ({ updated_at: `${day}T19:30:00Z`, answers: { booking_id: id, client_control_notes_text: "Note salvate" } }))], statuses, {}, emptyAgendaNotes());
+ assert.equal(remainingAgendaAppointments(completed.appointments), 0);
 });
