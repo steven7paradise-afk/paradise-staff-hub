@@ -31,3 +31,14 @@ export function appointmentCustomerPhone(customerPhone: string | null | undefine
   }
   return null;
 }
+
+/** Share the read-only Shopify summary across a visit without copying notes or changing orders. */
+export function shopifyNotesForVisits<T extends VisitBooking>(bookings: T[], notes: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const visit of appointmentVisits(bookings)) {
+    const texts = [...new Set(visit.map(booking => notes[booking.id]?.trim()).filter((text): text is string => Boolean(text)))];
+    if (!texts.length) continue;
+    for (const booking of visit) result[booking.id] = texts.join("\n\n");
+  }
+  return result;
+}

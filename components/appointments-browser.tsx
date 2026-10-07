@@ -1,5 +1,5 @@
 "use client";
-import { appointmentVisits } from "@/lib/appointment-visits";
+import { appointmentVisits, shopifyNotesForVisits } from "@/lib/appointment-visits";
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
 import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
@@ -1331,6 +1331,10 @@ export function AppointmentsBrowser({
     Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])),
   );
   const [shopifyNotesByBooking, setShopifyNotesByBooking] = useState<Record<string, string>>({});
+  const visitShopifyNotes = useMemo(
+    () => shopifyNotesForVisits(initialBookings, shopifyNotesByBooking),
+    [initialBookings, shopifyNotesByBooking],
+  );
   const boardLongPressTimerRef = useRef<number | null>(null);
   const boardScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const boardLongPressStartRef = useRef<{
@@ -3112,7 +3116,7 @@ export function AppointmentsBrowser({
         ...getDateSearchValues(booking.startDate),
         ...getDateSearchValues(booking.endDate),
         booking.notesText,
-        shopifyNotesByBooking[booking.id],
+        visitShopifyNotes[booking.id],
         liveOfficeNote,
         booking.sheetNote,
         ...bookingTeam.map((mate) => mate.name),
@@ -3127,7 +3131,7 @@ export function AppointmentsBrowser({
       );
     }
     return index;
-  }, [initialBookings, paradiseNotes, shopifyNotesByBooking, teamByBooking]);
+  }, [initialBookings, paradiseNotes, visitShopifyNotes, teamByBooking]);
 
   const filteredBookings = useMemo(() => {
     const statusScoped = normalizedSearch
@@ -6405,7 +6409,7 @@ export function AppointmentsBrowser({
                       booking,
                       officeNote,
                       status === "COMPLETATO",
-                      shopifyNotesByBooking[booking.id],
+                      visitShopifyNotes[booking.id],
                     );
                     return (
                       <article
@@ -6688,7 +6692,7 @@ export function AppointmentsBrowser({
                               booking,
                               paradiseNote,
                               status === "COMPLETATO",
-                              shopifyNotesByBooking[booking.id],
+                              visitShopifyNotes[booking.id],
                             )
                               .filter((note) => note.key !== "office");
                             return (
@@ -7039,7 +7043,7 @@ export function AppointmentsBrowser({
                             booking,
                             paradiseNotes[booking.id] || booking.paradiseNote,
                             status === "COMPLETATO",
-                            shopifyNotesByBooking[booking.id],
+                            visitShopifyNotes[booking.id],
                           )}
                           compact
                         />
@@ -7747,7 +7751,7 @@ export function AppointmentsBrowser({
                                 booking,
                                 paradiseNotes[booking.id] || booking.paradiseNote,
                                 getBookingStatus(booking) === "COMPLETATO",
-                                shopifyNotesByBooking[booking.id],
+                                visitShopifyNotes[booking.id],
                               )}
                               compact
                             />
@@ -7810,7 +7814,7 @@ export function AppointmentsBrowser({
                               booking,
                               paradiseNotes[booking.id] || booking.paradiseNote,
                               getBookingStatus(booking) === "COMPLETATO",
-                              shopifyNotesByBooking[booking.id],
+                              visitShopifyNotes[booking.id],
                             )}
                             compact
                           />
@@ -7850,7 +7854,7 @@ export function AppointmentsBrowser({
                   booking,
                   paradiseNotes[booking.id] || booking.paradiseNote,
                   status === "COMPLETATO",
-                  shopifyNotesByBooking[booking.id],
+                  visitShopifyNotes[booking.id],
                 );
 
                 return (
@@ -8014,7 +8018,7 @@ export function AppointmentsBrowser({
                   booking,
                   paradiseNotes[booking.id] || booking.paradiseNote,
                   status === "COMPLETATO",
-                  shopifyNotesByBooking[booking.id],
+                  visitShopifyNotes[booking.id],
                 );
                 return (
                   <div

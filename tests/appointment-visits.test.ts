@@ -11,3 +11,17 @@ test('consecutive services join without losing their original records',()=>{
  const second={...b,startDate:a.endDate}; const group=appointmentVisits([a,second])[0]; assert.equal(group.length,2);assert.equal(group[1],second);
 });
 test('names alone never merge two clients',()=>assert.equal(appointmentVisits([{...a,customerPhone:null,customerEmail:null},{...b,customerPhone:null,customerEmail:null}]).length,2));
+
+test('Shopify note on reapplication is also shown on color with no order', async () => {
+ const {shopifyNotesForVisits} = await import('../lib/appointment-visits');
+ const notes = {a:'Nota Shopify riapplicazione'};
+ assert.deepEqual(shopifyNotesForVisits([a,b],notes),{a:notes.a,b:notes.a});
+ assert.deepEqual(notes,{a:'Nota Shopify riapplicazione'});
+});
+test('visit notes retain distinct notes, deduplicate shared notes and isolate other visits', async () => {
+ const {shopifyNotesForVisits} = await import('../lib/appointment-visits');
+ const other={...b,id:'other',dateKey:'2026-10-08'};
+ assert.deepEqual(shopifyNotesForVisits([a,b,other],{a:'Prima',b:'Seconda',other:'Altra visita'}),{a:'Prima\n\nSeconda',b:'Prima\n\nSeconda',other:'Altra visita'});
+ assert.deepEqual(shopifyNotesForVisits([a,b],{a:'Uguale',b:'Uguale'}),{a:'Uguale',b:'Uguale'});
+ assert.deepEqual(shopifyNotesForVisits([a,b],{a:''}),{});
+});

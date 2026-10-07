@@ -53,3 +53,20 @@ test("remaining counter excludes resolved appointments and reaches zero once not
  const completed = buildAgendaReport(day, bookings, [...controls, ...["pending", "future"].map(id => ({ updated_at: `${day}T19:30:00Z`, answers: { booking_id: id, client_control_notes_text: "Note salvate" } }))], statuses, {}, emptyAgendaNotes());
  assert.equal(remainingAgendaAppointments(completed.appointments), 0);
 });
+
+test('completed appointment with an agenda note counts even without a client form', () => {
+ const result = buildAgendaReport(day, [booking('reapplication'), booking('color')], [
+  {updated_at:`${day}T17:51:00Z`,answers:{booking_id:'color',client_control_notes_text:'Colore'}},
+ ], {reapplication:{status:'COMPLETATO'},color:{status:'COMPLETATO'}}, {}, emptyAgendaNotes(), {reapplication:'150 gr 3 fasce by vero'});
+ assert.equal(result.totals.completed,2);
+ assert.equal(remainingAgendaAppointments(result.appointments),0);
+});
+
+test('office notes alone and completed status alone do not count as a saved service', () => {
+ const result = buildAgendaReport(day, [booking('planned'),booking('empty'),booking('canceled'),booking('no-show')], [],
+ {planned:{status:'PRENOTATO'},empty:{status:'COMPLETATO'},canceled:{status:'ANNULLATO'},'no-show':{status:'NON_PRESENTATO'}}, {}, emptyAgendaNotes(),
+ {planned:'Preparare materiale',empty:'  ',canceled:'Nota precedente','no-show':'Nota precedente'});
+ assert.equal(result.totals.completed,0);
+ assert.equal(result.totals.cancelled,1);
+ assert.equal(result.totals.noShow,1);
+});

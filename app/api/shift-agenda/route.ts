@@ -22,9 +22,17 @@ async function load(day: string) {
   const ids = [...new Set(bookings.map(b => String(b.id)))];
   const formIds = forms.filter(f => isClientControlFormName(f.name, f.category)).map(f => f.id);
   const controls = ids.length && formIds.length ? await prisma.serviceFormResponse.findMany({ where: { form_id: { in: formIds }, OR: ids.map(id => ({ answers: { path: ["booking_id"], equals: id } })) }, select: { answers: true, updated_at: true } }) : [];
+  const officeNotes = ids.length ? await prisma.setting.findMany({
+    where: { key: { in: ids.map(id => `appointment_office_note:${id}`) } },
+    select: { key: true, value: true },
+  }) : [];
+  const completedAppointmentNotes = Object.fromEntries(officeNotes.map(row => {
+    const text = (row.value as { text?: unknown } | null)?.text;
+    return [row.key.slice("appointment_office_note:".length), typeof text === "string" ? text : ""];
+  }));
   const value = saved?.value as { notes?: AgendaNotes; version?: string } | null;
   const notes = value?.notes || emptyAgendaNotes();
-  return { ...buildAgendaReport(day, bookings, controls, (statuses?.value || {}) as Record<string, { status?: string }>, (teams?.value || {}) as Record<string, { teammates?: Array<{ name?: string }> }>, notes), notes, version: value?.version || null, updatedAt: new Date().toISOString() };
+  return { ...buildAgendaReport(day, bookings, controls, (statuses?.value || {}) as Record<string, { status?: string }>, (teams?.value || {}) as Record<string, { teammates?: Array<{ name?: string }> }>, notes, completedAppointmentNotes), notes, version: value?.version || null, updatedAt: new Date().toISOString() };
 }
 export async function GET(request: NextRequest) {
   const session = await auth();
