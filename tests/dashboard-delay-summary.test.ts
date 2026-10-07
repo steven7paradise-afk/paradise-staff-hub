@@ -22,3 +22,16 @@ test("format occurrence count in singular and plural",()=>{
  assert.equal(formatDelayCount(1),"1 ritardo");
  assert.equal(formatDelayCount(3),"3 ritardi");
 });
+
+test("corrected punctual entry ignores the historical detected time without masking another delay",()=>{
+ const corrected=log("ENTRATA","09:57","Modificata manualmente da Admin - Ora rilevata 10:04:34; arrotondamento entrata Paradise a 10:00:00. - [CONTEGGIO_RITARDO_DA_TIMBRATURA_REALE]");
+ const nextDate=new Date("2026-10-02");
+ const uncorrected={date:nextDate,type:"ENTRATA",timestamp:new Date("2026-10-02T10:30:00+02:00"),note:"Timbratura tablet - Ora rilevata 10:12:06; arrotondamento entrata Paradise a 10:30:00."};
+ const result=dashboardDelaySummary([corrected,uncorrected],[shift,{...shift,date:nextDate}],"Buenos Aires",60);
+ assert.equal(result.entryCount,1);assert.equal(result.entryMinutes,9);
+});
+
+test("a corrected entry that is still late remains in the counter",()=>{
+ const result=dashboardDelaySummary([log("ENTRATA","10:08","Modificata manualmente da Admin - Ora rilevata 10:20:00")],[shift],"Buenos Aires",60);
+ assert.equal(result.entryCount,1);assert.equal(result.entryMinutes,5);
+});

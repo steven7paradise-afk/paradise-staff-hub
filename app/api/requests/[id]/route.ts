@@ -1,3 +1,4 @@
+import { isAdminCorrectedAttendance } from "@/lib/scheduled-attendance";
 import { NextRequest, NextResponse } from "next/server";
 import { RequestStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -16,6 +17,7 @@ type LateAccountingMode = "ACTUAL" | "PENALTY_30";
 type AutomaticAbsenceResolution = "LATE" | "SICKNESS" | "UNJUSTIFIED";
 
 function actualEntryTimestamp(log: { timestamp: Date; note: string | null }) {
+  if (isAdminCorrectedAttendance(log)) return log.timestamp;
   const match = String(log.note || "").match(/Ora rilevata\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/i);
   if (!match) return null;
   const actualSeconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);

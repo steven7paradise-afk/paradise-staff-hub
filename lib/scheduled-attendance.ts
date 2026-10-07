@@ -30,7 +30,14 @@ export function romeMinutesForInstant(value: Date) {
   return hour * 60 + minute;
 }
 
+export function isAdminCorrectedAttendance(log: { note?: string | null }) {
+  return /^(?:Modificata|Inserita) manualmente da Admin\b/i.test(String(log.note || "").trim());
+}
+
 export function attendanceActualMinutes(log: { timestamp: Date; note?: string | null }) {
+  // Keep the detected clock time as history, but an explicit admin correction
+  // is the authoritative time for punctuality (not a blanket delay exemption).
+  if (isAdminCorrectedAttendance(log)) return romeMinutesForInstant(log.timestamp);
   const detected = String(log.note || "").match(/Ora rilevata\s+(\d{1,2}):(\d{2})(?::\d{2})?/i);
   if (detected) return Number(detected[1]) * 60 + Number(detected[2]);
   return romeMinutesForInstant(log.timestamp);

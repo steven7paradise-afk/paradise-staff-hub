@@ -42,3 +42,8 @@ test("usa l'ora realmente rilevata invece dell'arrotondamento della timbratura",
 
   assert.equal(minutes, 10 * 60 + 7);
 });
+
+test("admin correction takes precedence over the original detected time", () => {
+  assert.equal(attendanceActualMinutes({timestamp:new Date("2026-10-07T06:57:00Z"),note:"Modificata manualmente da Admin - Ora rilevata 09:04:34; [CONTEGGIO_RITARDO_DA_TIMBRATURA_REALE]"}),8*60+57);
+  assert.equal(attendanceActualMinutes({timestamp:new Date("2026-10-07T07:10:00Z"),note:"Inserita manualmente da Admin - Ora rilevata 09:30:00"}),9*60+10);
+});
