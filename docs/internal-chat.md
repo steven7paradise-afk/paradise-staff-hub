@@ -1,6 +1,6 @@
 # Chat interna — prima implementazione
 
-Sviluppo isolato sul ramo `codex/internal-chat`. Non distribuito in produzione e non incluso nella build 1.3 (5) preparata per Apple.
+Sviluppo sul ramo `codex/internal-chat`, aggiornato alla versione corrente del gestionale. Il collegamento al personale reale è stato richiesto l’8 ottobre. La funzione non è inclusa nella build 1.3 (5) già preparata per Apple.
 
 ## Funzioni implementate
 
@@ -14,7 +14,7 @@ Sviluppo isolato sul ramo `codex/internal-chat`. Non distribuito in produzione e
 - Blocco di utenti sospesi, ex dipendenti, sessioni scadute/revocate e account che devono cambiare password.
 - Allegati privati PDF, JPEG, PNG e TXT fino a 5 MB; anteprima nativa Quick Look, limite di 100 MB/giorno per autore, controllo accessi su ogni download e cancellazione dei byte quando si elimina il messaggio.
 - Predisposizione push APNs: registrazione autenticata del dispositivo, messaggio generico senza contenuto privato, preferenza silenzia per conversazione, esclusione di mittente/account sospesi/sessioni revocate.
-- Interfaccia nativa italiana, tema e accento esistenti. Accesso da Avvisi → Chat del team.
+- Interfaccia nativa italiana, tema e accento esistenti. Accesso dal menu inferiore → Chat.
 - Aggiornamento mediante richieste ogni 3 secondi nella conversazione e 5 secondi nell’elenco, solo in primo piano. Non è ancora un trasporto realtime WebSocket.
 
 ## Da completare prima del rilascio della funzione completa
@@ -28,11 +28,11 @@ Audio/video, stanze vocali, condivisione schermo e riunioni appartengono alla fa
 1. Usare un database PostgreSQL di test, senza dati o credenziali di produzione.
 2. Installare le dipendenze del progetto e generare Prisma (`pnpm exec prisma generate`).
 3. Applicare le migrazioni (`pnpm exec prisma migrate deploy`). La nuova migrazione aggiunge solo chat_rooms, chat_members, chat_messages e chat_attachments e i loro vincoli; non modifica i record staff.
-4. Impostare `DATABASE_URL`, `AUTH_SECRET` e `INTERNAL_CHAT_ENABLED=true`. Senza il flag l’API risponde 503, con messaggio esplicito.
+4. Impostare `DATABASE_URL`, `AUTH_SECRET` e facoltativamente `INTERNAL_CHAT_ENABLED=false` per disattivare la funzione. La chat usa gli account reali autenticati per impostazione predefinita.
 5. Per la prova push, aggiungere `CHAT_PUSH_ENABLED=true`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY` nei segreti del server di test. Non copiare chiavi nel repository. Topic: `it.paradisebeauty.myparadise`; Debug usa sandbox, Release produzione. Il widget ha un topic separato. Nessun nuovo acquisto effettuato.
 6. Avviare Next e usare la copia dell’app in `../MyParadise-chat`, con il server di test configurato.
 
-Non applicare questa migrazione a Neon di produzione finché le funzioni mancanti e la prova su due dispositivi fisici non sono state completate. Le istruzioni non eseguono un deploy.
+Il collegamento richiesto usa esclusivamente le tabelle utenti esistenti; non eseguire i seed di prova in produzione. Il rollout comprende chat e rubrica; push resta disattivato senza CHAT_PUSH_ENABLED e configurazione APNs. Le funzioni elencate come mancanti non fanno parte del rollout.
 
 ## Verifiche
 
