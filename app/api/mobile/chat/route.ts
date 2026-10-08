@@ -1,0 +1,126 @@
+import { scheduleChatPush } from "@/lib/chat-push";
+import { NextRequest, NextResponse } from "next/server";
+import { chatActor } from "@/lib/chat-access";
+import { chatDB as db } from "@/lib/chat-db";
+import { boundedJSON } from "@/lib/chat-files";
+import { ChatError, text, roomInput, requireMember, requireOwnMessage } from "@/lib/chat-policy";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
+
+export const dynamic = "force-dynamic";
+const person = { id: true, name: true, photo_url: true } as const;
+const messageUser = { user: { select: person }, attachment: { select: { id: true, filename: true, mediaType: true, size: true } } } as const;
+function response(value: unknown, status = 200) {
+  return NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
+}
+async function membership(roomId: string, userId: string) {
+  return requireMember(await db.chatMember.findUnique({ where: { roomId_userId: { roomId, userId } }, include: { room: true } }));
+}
+function failure(error: unknown) {
+  if (error instanceof ChatError) return response({ error: error.message }, error.status);
+  console.error("Chat operation failed", error instanceof Error ? error.name : "unknown");
+  return response({ error: "Chat temporaneamente non disponibile. Riprova." }, 500);
+}
+export async function GET(request: NextRequest) {
+  try {
+    const user = await chatActor(request);
+    const roomId = request.nextUrl.searchParams.get("roomId");
+    if (request.nextUrl.searchParams.get("directory") === "1") {
+      const q = (request.nextUrl.searchParams.get("q") ?? "").slice(0, 80);
+      const users = await db.user.findMany({ where: { active: true, employee_status: { not: FORMER_EMPLOYEE_STATUS }, id: { not: user.id }, name: { contains: q, mode: "insensitive" } }, select: { ...person, location: { select: { name: true } } }, orderBy: { name: "asc" }, take: 100 });
+      return response({ users });
+    }
+    if (roomId) {
+      const member = await membership(roomId, user.id);
+      const before = request.nextUrl.searchParams.get("before");
+      const cursor = before ? await db.chatMessage.findFirst({ where: { id: before, roomId } }) : null;
+      if (before && !cursor) throw new ChatError("Messaggio non disponibile.", 404);
+      const messages = await db.chatMessage.findMany({ where: { roomId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) }, include: messageUser, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 });
+      const hasMore = messages.length > 50;
+      const items = messages.slice(0, 50).reverse();
+      return response({ messages: items, hasMore, archived: member.room.archived, manager: member.manager });
+    }
+    const memberships = await db.chatMember.findMany({ where: { userId: user.id }, include: { room: { include: { members: { include: { user: { select: person } } }, messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 } } } }, orderBy: { room: { updatedAt: "desc" } }, take: 200 });
+    const rooms = await Promise.all(memberships.map(async ({ room, lastReadAt, muted, manager }) => ({
+      id: room.id, title: room.kind === "direct" ? room.members.find(m => m.userId !== user.id)?.user.name ?? "Chat privata" : room.title,
+      kind: room.kind, archived: room.archived, muted, manager, updatedAt: room.updatedAt,
+      members: room.members.map(m => m.user), lastMessage: room.messages[0]?.body ?? null,
+      unread: await db.chatMessage.count({ where: { roomId: room.id, userId: { not: user.id }, createdAt: { gt: lastReadAt } } }),
+    })));
+    return response({ rooms });
+  } catch (error) { return failure(error); }
+}
+export async function POST(request: NextRequest) {
+  try {
+    const user = await chatActor(request);
+    const input = await boundedJSON(request, 20000);
+    if (input.action === "create") {
+      const data = roomInput(input, user);
+      const count = await db.user.count({ where: { id: { in: data.members }, active: true, employee_status: { not: FORMER_EMPLOYEE_STATUS } } });
+      if (count !== data.members.length) throw new ChatError("Uno dei partecipanti non è disponibile.");
+      const create = { title: data.title, kind: data.kind, directKey: data.directKey, members: { create: data.members.map(id => ({ userId: id, manager: id === user.id })) } };
+      const room = await db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))::text`;
+        const recent = await tx.chatRoom.count({ where: { createdAt: { gt: new Date(Date.now() - 60000) }, members: { some: { userId: user.id, manager: true } } } });
+        if (recent >= 10) throw new ChatError("Troppe conversazioni create. Attendi un minuto.", 429);
+        return data.directKey ? tx.chatRoom.upsert({ where: { directKey: data.directKey }, create, update: {} }) : tx.chatRoom.create({ data: create });
+      });
+      return response({ id: room.id });
+    }
+    const roomId = text(input.roomId, 128, "Conversazione");
+    const member = await membership(roomId, user.id);
+    if (input.action === "read") {
+      const messageId = text(input.messageId, 128, "Messaggio");
+      const seen = await db.chatMessage.findFirst({ where: { id: messageId, roomId } });
+      if (!seen) throw new ChatError("Messaggio non disponibile.", 404);
+      await db.chatMember.updateMany({ where: { roomId, userId: user.id, lastReadAt: { lt: seen.createdAt } }, data: { lastReadAt: seen.createdAt } });
+      return response({ success: true });
+    }
+    if (input.action === "mute") {
+      if (typeof input.muted !== "boolean") throw new ChatError("Preferenza non valida.");
+      await db.chatMember.update({ where: { roomId_userId: { roomId, userId: user.id } }, data: { muted: input.muted } });
+      return response({ success: true });
+    }
+    if (input.action === "archive" || input.action === "rename") {
+      if (!member.manager || member.room.kind === "direct") throw new ChatError("Operazione non consentita.", 403);
+      await db.chatRoom.update({ where: { id: roomId }, data: input.action === "archive" ? { archived: true } : { title: text(input.title, 80, "Nome") } });
+      return response({ success: true });
+    }
+    if (member.room.archived) throw new ChatError("La conversazione è archiviata.", 409);
+    if (input.action === "send") {
+      const body = text(input.body, 4000, "Messaggio");
+      const clientId = text(input.clientId, 128, "Identificativo");
+      let createdNow = false;
+    const message = await db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))::text`;
+        const duplicate = await tx.chatMessage.findUnique({ where: { userId_clientId: { userId: user.id, clientId } }, include: messageUser });
+        if (duplicate) {
+          if (duplicate.roomId !== roomId) throw new ChatError("Identificativo già utilizzato.", 409);
+          return duplicate;
+        }
+        const count = await tx.chatMessage.count({ where: { userId: user.id, createdAt: { gt: new Date(Date.now() - 60000) } } });
+        if (count >= 30) throw new ChatError("Troppi messaggi. Attendi un minuto.", 429);
+        // Check membership again inside the write transaction.
+        requireMember(await tx.chatMember.findUnique({ where: { roomId_userId: { roomId, userId: user.id } } }));
+        const created = await tx.chatMessage.create({ data: { roomId, userId: user.id, body, clientId }, include: messageUser });
+        await tx.chatRoom.update({ where: { id: roomId }, data: { updatedAt: created.createdAt } });
+        createdNow = true;
+      return created;
+      });
+    if (createdNow) scheduleChatPush(message.id);
+      return response({ message });
+    }
+    if (input.action === "edit" || input.action === "delete") {
+      const id = text(input.messageId, 128, "Messaggio");
+      const existing = await db.chatMessage.findFirst({ where: { id, roomId } });
+      if (!existing) throw new ChatError("Messaggio non disponibile.", 404);
+      requireOwnMessage(existing.userId, user.id);
+      if (existing.deletedAt) throw new ChatError("Messaggio già eliminato.", 409);
+      await db.$transaction(async tx => {
+        if (input.action === "delete") await tx.chatAttachment.deleteMany({ where: { messageId: id } });
+        await tx.chatMessage.update({ where: { id }, data: input.action === "delete" ? { body: "Messaggio eliminato", deletedAt: new Date() } : { body: text(input.body, 4000, "Messaggio"), editedAt: new Date() } });
+      });
+      return response({ success: true });
+    }
+    throw new ChatError("Operazione non valida.");
+  } catch (error) { return failure(error); }
+}

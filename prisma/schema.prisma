@@ -75,6 +75,9 @@ enum InventorySyncStatus {
 }
 
 model User {
+  chatMemberships ChatMember[]
+  chatMessages ChatMessage[]
+
   id                    String    @id @default(cuid())
   name                  String
   email                 String    @unique
@@ -1235,4 +1238,56 @@ model AppointmentArchiveSync {
   error        Boolean  @default(false)
 
   @@map("appointment_archive_sync")
+}
+
+model ChatRoom {
+  id String @id @default(cuid())
+  title String
+  kind String
+  directKey String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+  archived Boolean @default(false)
+  members ChatMember[]
+  messages ChatMessage[]
+  @@map("chat_rooms")
+}
+model ChatMember {
+  roomId String
+  userId String
+  manager Boolean @default(false)
+  lastReadAt DateTime @default(now())
+  muted Boolean @default(false)
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([roomId, userId])
+  @@index([userId])
+  @@map("chat_members")
+}
+model ChatMessage {
+  attachment ChatAttachment?
+  id String @id @default(cuid())
+  roomId String
+  userId String
+  clientId String
+  body String
+  createdAt DateTime @default(now())
+  editedAt DateTime?
+  deletedAt DateTime?
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, clientId])
+  @@index([roomId, createdAt, id])
+  @@map("chat_messages")
+}
+
+model ChatAttachment {
+  id String @id @default(cuid())
+  messageId String @unique
+  filename String
+  mediaType String
+  size Int
+  data Bytes
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@map("chat_attachments")
 }
