@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
+import { POST as registerVoIP } from "../app/api/mobile/chat/voip/route";
+import { voipKey, voipPayload } from "../lib/call-push";
 import { GET, POST } from "../app/api/mobile/chat/calls/route";
 import { chatDB as db } from "../lib/chat-db";
 import { createMobileSession } from "../lib/mobile-auth";
@@ -17,12 +19,24 @@ async function main() {
   const post = (i: number, data: object) => POST(req(tokens[i], data));
   try {
     assert.equal((await GET(req("invalid"))).status, 401);
+    const deviceToken = "a".repeat(64);
+    assert.equal((await registerVoIP(req("invalid", { token: deviceToken, environment: "sandbox" }))).status, 401);
+    process.env.CHAT_PUSH_ENABLED = "true";
+    process.env.APNS_KEY_ID = "local-test"; process.env.APNS_TEAM_ID = "local-test"; process.env.APNS_PRIVATE_KEY = "not-used";
+    assert.equal((await registerVoIP(req(tokens[1], { token: "bad", environment: "sandbox" }))).status, 400);
+    assert.equal((await registerVoIP(req(tokens[1], { token: deviceToken, environment: "sandbox" }))).status, 200);
+    const device = await db.setting.findUniqueOrThrow({ where: { key: voipKey(deviceToken) } });
+    assert.equal((device.value as { userId: string }).userId, users[1].id);
+    await db.setting.delete({ where: { key: voipKey(deviceToken) } });
+    assert.equal(voipPayload({ id: "test", callerId: "a", calleeId: "b", callerName: "Collega", status: "ringing", expiresAt: Date.now()+1000 }).callId, "test");
+    process.env.CHAT_PUSH_ENABLED = "false";
     process.env.CALLS_ENABLED = "false";
     assert.equal((await (await GET(req(tokens[0]))).json()).enabled, false);
     process.env.CALLS_ENABLED = "true";
     process.env.LIVEKIT_URL = "wss://calls.example.invalid";
     process.env.LIVEKIT_API_KEY = "test-key";
     process.env.LIVEKIT_API_SECRET = "test-secret-for-local-tests-only";
+    const secondDevice = (await createMobileSession(users[1].id)).token;
     const id = randomUUID(); const start = { action: "start", id, roomId: room.id };
     assert.equal((await post(2, start)).status, 404);
     assert.equal((await post(0, start)).status, 200);
@@ -32,6 +46,10 @@ async function main() {
     assert.equal((await post(2, { action: "join", id })).status, 404);
     assert.equal((await post(0, { action: "join", id })).status, 400);
     assert.equal((await post(1, { action: "accept", id })).status, 200);
+    assert.equal((await POST(req(secondDevice, { action: "accept", id }))).status, 409);
+    assert.equal((await POST(req(secondDevice, { action: "end", id }))).status, 409);
+    assert.equal((await POST(req(secondDevice, { action: "join", id }))).status, 409);
+    assert.equal((await (await GET(req(secondDevice))).json()).call, null);
     const joined = await (await post(0, { action: "join", id })).json();
     const payload = JSON.parse(Buffer.from(joined.token.split(".")[1], "base64url").toString());
     assert.equal(payload.sub, users[0].id); assert.equal(payload.video.room, id);
