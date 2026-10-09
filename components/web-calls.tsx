@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { Phone, PhoneOff, Mic, MicOff, LogOut, Search, Volume2 } from "lucide-react";
 import styles from "./web-calls.module.css";
+import { WebChat } from "./web-chat";
 import { WebQRLogin } from "./web-qr-login";
 
 type Person = { id: string; name: string; photo_url?: string | null; location?: { name: string } | null };
@@ -21,6 +22,7 @@ function Portrait({ person, large = false }: { person: Pick<Person, "name" | "ph
   return <span className={large ? styles.portraitLarge : styles.portrait}>{person.photo_url && !failed ? <img src={person.photo_url} alt="" onError={() => setFailed(true)} /> : person.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>;
 }
 export function WebCalls() {
+  const [section, setSection] = useState<"chat" | "calls">("chat");
   const [user, setUser] = useState<Person | null>(null);
   const [checking, setChecking] = useState(true);
   const [people, setPeople] = useState<Person[]>([]);
@@ -128,11 +130,11 @@ export function WebCalls() {
   const peer = call ? { name: incoming ? call.callerName : call.calleeName, photo_url: incoming ? call.callerPhoto : call.calleePhoto } : null;
   return <main className={styles.shell}>
     <header className={styles.header}><a href="/my-staff" className={styles.brand}><img src="/logo.png" alt="Paradise Beauty" /><span>MyParadise<small>Il tuo team, anche dal computer</small></span></a>{user && <div className={styles.account}><span>{user.name}</span><button aria-label="Esci" disabled={busy || !!call} onClick={() => void run(async () => { await api("logout", {}); releaseLock.current?.(); setReady(false); setUser(null); setPeople([]); })}><LogOut size={19} /></button></div>}</header>
-    {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebQRLogin onLogin={setUser} /> : <div className={styles.workspace}>
+    {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebQRLogin onLogin={setUser} /> : <><nav className={styles.tabs} aria-label="Sezioni"><button aria-pressed={section === "chat" && !call} onClick={() => setSection("chat")}>Chat</button><button aria-pressed={section === "calls" || !!call} onClick={() => setSection("calls")}>Chiamate</button></nav><div hidden={section !== "chat" || !!call}><WebChat active={section === "chat" && !call} userId={user.id} people={people} onExpired={() => { releaseLock.current?.(); setReady(false); setUser(null); }} /></div><div hidden={section !== "calls" && !call}><div className={styles.workspace}>
       <aside className={styles.directory}><h1>Il personale</h1><label className={styles.search}><Search size={19} /><input aria-label="Cerca un collega" placeholder="Cerca un collega" value={search} onChange={e => setSearch(e.target.value)} /></label><div className={styles.people}>{people.filter(p => p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(person => <button key={person.id} className={styles.person} disabled={!ready || !healthy || !enabled || busy || !!call} onClick={() => void run(() => start(person))}><Portrait person={person} /><span><strong>{person.name}</strong><small>{person.location?.name || "Paradise Beauty"}</small></span><Phone size={18} aria-label="Chiama" /></button>)}{!people.length && <p className={styles.hint}>Nessun collega disponibile.</p>}</div></aside>
       <section className={styles.stage} aria-label="Chiamate"><div className={styles.status}><span className={ready && healthy && enabled ? styles.online : styles.offline} />{ready ? healthy ? enabled ? "Pronto a ricevere" : "Servizio chiamate non attivo" : "Connessione al servizio…" : "Ricezione non attiva"}</div>
       {peer && call ? <div className={styles.call} aria-live="polite"><Portrait person={peer} large /><h2>{peer.name}</h2><p>{call.status === "ringing" ? incoming ? "Chiamata in arrivo" : "Chiamata in corso…" : connection}</p><div className={styles.controls}>{call.status === "ringing" && incoming && <button className={styles.answer} disabled={busy} onClick={() => void run(() => action("accept"))}><Phone /><span>Rispondi</span></button>}{call.status === "active" && <button disabled={busy || !room.current} onClick={() => void run(async () => { await room.current?.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted); })}>{muted ? <MicOff /> : <Mic />}<span>{muted ? "Attiva microfono" : "Silenzia"}</span></button>}<button className={styles.end} disabled={busy} onClick={() => void run(() => action(incoming && call.status === "ringing" ? "decline" : "end"))}><PhoneOff /><span>{incoming && call.status === "ringing" ? "Rifiuta" : "Termina"}</span></button></div>{audioBlocked && <button className={styles.primary} onClick={() => void run(async () => { await room.current?.startAudio(); setAudioBlocked(false); })}>Attiva audio della chiamata</button>}</div> : <div className={styles.empty}><div className={styles.phoneMark}><Phone size={42} /></div><h2>{ready ? "Siamo in ascolto." : "Le chiamate, qui."}</h2><p>{ready ? "Scegli un collega per chiamare oppure attendi una chiamata in arrivo." : "Attiva audio e microfono per chiamare e ricevere dal computer."}</p>{!ready && <button className={styles.primary} disabled={busy} onClick={() => void run(activate)}><Volume2 size={19} />Attiva le chiamate</button>}<small>Tieni aperta questa pagina. Se chiudi il browser, riceverai sull’app del telefono.</small></div>}
-      </section></div>}
+      </section></div></div></>}
     {error && <div className={styles.error} role="alert">{error}<button onClick={() => setError("")} aria-label="Chiudi avviso">×</button></div>}<div ref={audio} className={styles.audio} />
   </main>;
 }

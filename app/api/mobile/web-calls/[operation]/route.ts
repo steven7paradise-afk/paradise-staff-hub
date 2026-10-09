@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { POST as login } from "@/app/api/mobile/auth/login/route";
 import { GET as getCalls, POST as postCalls } from "@/app/api/mobile/chat/calls/route";
 import { GET as directory, POST as createRoom } from "@/app/api/mobile/chat/route";
+import { GET as getFiles } from "@/app/api/mobile/chat/files/route";
 import { revokeMobileSession } from "@/lib/mobile-auth";
 import { chatActor } from "@/lib/chat-access";
 import { webCallCookie, webCallOriginAllowed, webCallActionAllowed } from "@/lib/web-call-policy";
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest, context: Context) {
       return reply({ user: { id: user.id, name: user.name, photo_url: user.photo_url } });
     }
     if (operation === "calls") return getCalls(req);
+    if (operation === "chat") return directory(req);
+    if (operation === "files") {
+      req.nextUrl.searchParams.delete("reportId");
+      return getFiles(req);
+    }
     if (operation === "directory") {
       req.nextUrl.search = "?directory=1";
       return directory(req);
@@ -36,7 +42,7 @@ export async function POST(request: NextRequest, context: Context) {
   if (!webCallOriginAllowed(request.headers.get("origin"), request.nextUrl.origin, request.headers.get("host"))) return reply({ error: "Origine non consentita." }, 403);
   const { operation } = await context.params;
   const raw = await request.text();
-  if (raw.length > 4000) return reply({ error: "Richiesta troppo grande." }, 413);
+  if (raw.length > 20000) return reply({ error: "Richiesta troppo grande." }, 413);
   let input;
   try { input = JSON.parse(raw || "{}"); } catch { return reply({ error: "Richiesta non valida." }, 400); }
   if (!input || typeof input !== "object" || Array.isArray(input)) return reply({ error: "Richiesta non valida." }, 400);
@@ -61,6 +67,7 @@ export async function POST(request: NextRequest, context: Context) {
     return response;
   }
   if (!webCallActionAllowed(operation, input.action)) return reply({ error: "Operazione non consentita." }, 400);
+  if (operation === "chat") return createRoom(bridge(request, raw));
   if (operation === "directory") {
     if (input.kind !== "direct") return reply({ error: "Scegli un collega." }, 400);
     return createRoom(bridge(request, raw));

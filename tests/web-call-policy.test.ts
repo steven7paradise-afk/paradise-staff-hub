@@ -21,3 +21,9 @@ test("production proxy validates the exact public host with HTTPS", () => {
   }
   assert.equal(webCallOriginAllowed("https://evil.example", internal, "evil.example"), false);
 });
+
+test("web chat bridge allows messages and read receipts but rejects administrative mutations", () => {
+  for (const action of ["send", "read"]) assert.equal(webCallActionAllowed("chat", action), true);
+  for (const action of ["create", "delete", "edit", "archive", "rename", "mute"]) assert.equal(webCallActionAllowed("chat", action), false);
+  assert.equal(webCallActionAllowed("files", "send"), false);
+});
