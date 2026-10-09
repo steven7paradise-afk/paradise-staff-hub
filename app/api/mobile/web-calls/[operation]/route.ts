@@ -33,7 +33,7 @@ export async function GET(request: NextRequest, context: Context) {
   } catch { return reply({ error: "Accedi con il tuo account MyParadise." }, 401); }
 }
 export async function POST(request: NextRequest, context: Context) {
-  if (!webCallOriginAllowed(request.headers.get("origin"), request.nextUrl.origin)) return reply({ error: "Origine non consentita." }, 403);
+  if (!webCallOriginAllowed(request.headers.get("origin"), request.nextUrl.origin, request.headers.get("host"))) return reply({ error: "Origine non consentita." }, 403);
   const { operation } = await context.params;
   const raw = await request.text();
   if (raw.length > 4000) return reply({ error: "Richiesta troppo grande." }, 413);

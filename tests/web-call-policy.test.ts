@@ -13,3 +13,11 @@ test("web call bridge only exposes required actions", () => {
   for (const action of ["send", "delete", "archive", "rename"]) assert.equal(webCallActionAllowed("directory", action), false);
   assert.equal(webCallActionAllowed("admin", "create"), false);
 });
+test("production proxy validates the exact public host with HTTPS", () => {
+  const internal = "http://0.0.0.0:3000";
+  assert.equal(webCallOriginAllowed("https://my.staff-paradise.tech", internal, "my.staff-paradise.tech"), true);
+  for (const origin of [null, "https://www.staff-paradise.tech", "https://evil.example", "http://my.staff-paradise.tech", internal]) {
+    assert.equal(webCallOriginAllowed(origin, internal, "my.staff-paradise.tech"), false);
+  }
+  assert.equal(webCallOriginAllowed("https://evil.example", internal, "evil.example"), false);
+});
