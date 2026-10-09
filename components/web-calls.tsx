@@ -95,6 +95,12 @@ export function WebCalls() {
     ring(); const interval = setInterval(ring, 2200); return () => clearInterval(interval);
   }, [callId, callStatus, ready]);
   useEffect(() => () => { releaseLock.current?.(); void tone.current?.close(); }, []);
+  useEffect(() => {
+    if (!callId || !ready || (callStatus === "ringing" && call?.callerId !== user?.id)) return;
+    const leave = () => { navigator.sendBeacon("/api/mobile/web-calls/calls", new Blob([JSON.stringify({ action: "end", id: callId })], { type: "application/json" })); };
+    window.addEventListener("pagehide", leave);
+    return () => window.removeEventListener("pagehide", leave);
+  }, [callId, callStatus, call?.callerId, ready, user?.id]);
 
   async function run(operation: () => Promise<void>) { if (acting.current) return; acting.current = true; revision.current++; setBusy(true); setError(""); try { await operation(); } catch (e) { setError((e as Error).message); } finally { acting.current = false; revision.current++; setBusy(false); } }
   async function activate() {
