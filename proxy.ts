@@ -34,5 +34,5 @@ export const config = {
   // This endpoint returns only a static service status, never protected data.
   // The external assistant performs a browser CORS preflight without a session.
   // Let its route validate the Bearer token directly, without the Auth.js proxy.
-  matcher: ["/((?!api/health(?:/|$)|api/shopify/order-block(?:/|$)|api/admin-assistant(?:/|$)|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|favicon.png|logo.png|icon-192.png|icon-512.png|login-banner.jpg|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!api/health(?:/|$)|api/shopify/order-block(?:/|$)|api/admin-assistant(?:/|$)|api/integrations/planning(?:/|$)|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|favicon.png|logo.png|icon-192.png|icon-512.png|login-banner.jpg|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

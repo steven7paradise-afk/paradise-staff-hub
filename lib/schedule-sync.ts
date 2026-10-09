@@ -1,3 +1,4 @@
+import { queuePlanningUpdate, deliverPlanningAfterResponse } from "./planning-integration";
 import { LeaveType, type PrismaClient, type ScheduleCategory } from "@prisma/client";
 
 const leaveTypeCategory: Record<LeaveType, { code: string; name: string; color: string; text_color: string }> = {
@@ -42,6 +43,8 @@ export async function syncApprovedLeaveToSchedule(
   if (!leaveRequest) {
     throw new Error("Richiesta non trovata");
   }
+  await queuePlanningUpdate(prisma);
+  deliverPlanningAfterResponse();
 
   const unjustifiedAbsence = String(leaveRequest.reason || "").includes(UNJUSTIFIED_ABSENCE_MARKER);
   const unconfirmedSickness = leaveRequest.type === "MALATTIA" && !leaveRequest.medical_code;
@@ -148,6 +151,8 @@ export async function revertApprovedLeaveFromSchedule(
   });
 
   if (!leaveRequest) return;
+  await queuePlanningUpdate(prisma);
+  deliverPlanningAfterResponse();
 
   const days = daysBetweenInclusive(leaveRequest.start_date, leaveRequest.end_date);
 

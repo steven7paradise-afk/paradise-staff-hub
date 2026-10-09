@@ -1,3 +1,4 @@
+import { planningMutation } from "@/lib/planning-integration";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -56,11 +57,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Lavoratore o salone non valido." }, { status: 400 });
   }
 
-  const override = await prisma.scheduleWorkerOverride.upsert({
+  const override = await planningMutation(tx => tx.scheduleWorkerOverride.upsert({
     where: { location_id_user_id: { location_id: locationId, user_id: userId } },
     update: {},
     create: { location_id: locationId, user_id: userId },
-  });
+  }));
 
   return NextResponse.json({ id: override.id, locationId: override.location_id, userId: override.user_id });
 }
@@ -72,6 +73,6 @@ export async function DELETE(request: NextRequest) {
   const permission = await guard(locationId);
   if ("error" in permission) return NextResponse.json({ error: permission.error }, { status: permission.status });
 
-  await prisma.scheduleWorkerOverride.deleteMany({ where: { location_id: locationId, user_id: userId } });
+  await planningMutation(tx => tx.scheduleWorkerOverride.deleteMany({ where: { location_id: locationId, user_id: userId } }));
   return NextResponse.json({ removed: true });
 }

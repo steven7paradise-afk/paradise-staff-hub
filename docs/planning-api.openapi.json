@@ -1,0 +1,396 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Paradise Planning Integration",
+    "version": "1.0.0",
+    "description": "Server-to-server integration, disabled until configured and deployed. No browser session or frontend secret required. All planning dates, staff names and IDs, locations, categories, notes, and staff/location assignments are exported. No passwords, tokens, bank, tax, medical certificate or unrelated HR fields are exported. Planning categories and notes can contain absence information: enable only for the intended private receiving application."
+  },
+  "servers": [
+    {
+      "url": "https://www.staff-paradise.tech",
+      "description": "Available after deployment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "planningToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "PLANNING_API_TOKEN; minimum 32 characters; server-side only"
+      },
+      "deliveryToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "PLANNING_DELIVERY_TOKEN; separate server-side maintenance credential"
+      }
+    },
+    "schemas": {
+      "PlanningSnapshot": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "event",
+          "revision",
+          "generatedAt",
+          "timezone",
+          "mode",
+          "data"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "planning.updated"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "Persistent increasing revision. Receivers must atomically ignore revisions less than or equal to the last applied revision."
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "enum": [
+              "Europe/Rome"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "replace"
+            ],
+            "description": "Complete snapshot of all stored planning dates. Missing entries represent deletions. Replace the mirrored dataset atomically."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "workers",
+              "locations",
+              "categories",
+              "entries",
+              "workerLocations"
+            ],
+            "properties": {
+              "workers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "sede_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mansione": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "locations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "opening_time": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "closing_time": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "code": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "location_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "color": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "text_color": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "start_time": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "end_time": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "editable_time": {
+                      "type": "boolean"
+                    },
+                    "paid_hours": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "user_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "location_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "category_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "date": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Calendar date, not a timestamp. Times are local Europe/Rome. Null entry times inherit category defaults."
+                    },
+                    "start_time": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "end_time": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "workerLocations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "user_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "location_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/integrations/planning": {
+      "get": {
+        "summary": "Read full planning snapshot for initial import or recovery",
+        "security": [
+          {
+            "planningToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consistent full snapshot, Cache-Control private no-store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token (also when not configured)"
+          },
+          "503": {
+            "description": "Temporary database error; keep the last imported snapshot"
+          }
+        }
+      }
+    },
+    "/api/integrations/planning/retry": {
+      "post": {
+        "summary": "Retry delivery of the latest pending revision",
+        "security": [
+          {
+            "deliveryToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "delivered, idle or not_configured"
+          },
+          "401": {
+            "description": "Invalid maintenance token"
+          },
+          "503": {
+            "description": "Still pending; call again later"
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "planningUpdated": {
+      "post": {
+        "summary": "POST to configured PLANNING_WEBHOOK_URL after saved planning changes",
+        "description": "Verify X-Planning-Signature = sha256=<HMAC-SHA256(secret, timestamp + \".\" + rawBody)> using PLANNING_WEBHOOK_SECRET. Reject timestamps older than 5 minutes. Headers: X-Planning-Timestamp (Unix seconds), X-Planning-Event-Id (planning-<revision>). Acknowledge with 2xx only after durable processing. Atomically ignore duplicate or older revisions. HTTPS only; redirects are rejected. No inbound API bearer token is sent to the receiver.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningSnapshot"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Snapshot durably accepted, or duplicate already applied"
+          }
+        }
+      }
+    }
+  },
+  "x-setup": {
+    "environment": [
+      "PLANNING_API_TOKEN",
+      "PLANNING_WEBHOOK_URL",
+      "PLANNING_WEBHOOK_SECRET",
+      "PLANNING_DELIVERY_TOKEN"
+    ],
+    "secrets": "Use independently generated random secrets of at least 32 characters. Never place them in browser JavaScript or NEXT_PUBLIC variables. No secrets or destination have been configured by this change.",
+    "delivery": "Three bounded attempts per delivery. Unsent state is stored transactionally in the database. Intermediate updates may be coalesced into a newer complete snapshot. Later planning changes trigger another delivery. Configure a server scheduler to POST the retry endpoint every minute for recovery when no new edits occur; no scheduler is installed by this change.",
+    "triggers": "Planning entries (single, bulk, deletion), category edits, planning staff/location assignments, approved or reverted leave affecting planning. User-profile/location-master edits are included in the next snapshot but do not independently trigger a webhook.",
+    "initialImport": "Fetch GET with Authorization: Bearer <PLANNING_API_TOKEN>, persist data and revision, then accept webhook updates. Configure URL/secret and invoke retry to deliver an existing pending revision.",
+    "database": "Uses the existing settings table for a single revision/pending marker; no schema migration. Receiver stores only its mirror and last applied revision.",
+    "testing": "Authentication, signature, retry and offline tests use a fake receiver; live receiver verification remains necessary after the other app is ready."
+  }
+}

@@ -1,3 +1,4 @@
+import { planningMutation } from "@/lib/planning-integration";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deleteScheduleEventFromGoogleCalendar, syncScheduleEntryToGoogleCalendar } from "@/lib/google-calendar";
@@ -167,28 +168,30 @@ export async function PUT(request: NextRequest) {
           })
         : [];
 
-      const operations = data.map((item) => {
-        const userId = String(item.userId ?? "");
-        const categoryId = item.categoryId ? String(item.categoryId) : null;
-        const locationId = item.locationId ? String(item.locationId) : null;
-        const startTime = normalizeTime(item.startTime);
-        const endTime = normalizeTime(item.endTime);
-        const date = new Date(String(item.date ?? ""));
+      const results = await planningMutation(async tx => {
+        const operations = data.map((item) => {
+          const userId = String(item.userId ?? "");
+          const categoryId = item.categoryId ? String(item.categoryId) : null;
+          const locationId = item.locationId ? String(item.locationId) : null;
+          const startTime = normalizeTime(item.startTime);
+          const endTime = normalizeTime(item.endTime);
+          const date = new Date(String(item.date ?? ""));
 
-        if (!categoryId) {
-          return prisma.scheduleEntry.deleteMany({
-            where: { user_id: userId, date, location_id: locationId },
+          if (!categoryId) {
+            return tx.scheduleEntry.deleteMany({
+              where: { user_id: userId, date, location_id: locationId },
+            });
+          }
+
+          return tx.scheduleEntry.upsert({
+            where: { user_id_date: { user_id: userId, date } },
+            update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
+            create: { user_id: userId, category_id: categoryId, location_id: locationId, date, start_time: startTime, end_time: endTime },
           });
-        }
-
-        return prisma.scheduleEntry.upsert({
-          where: { user_id_date: { user_id: userId, date } },
-          update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
-          create: { user_id: userId, category_id: categoryId, location_id: locationId, date, start_time: startTime, end_time: endTime },
         });
-      });
 
-      const results = await prisma.$transaction(operations);
+        return Promise.all(operations);
+      });
       const upsertedEntryIds = results
         .map((result) => (result && typeof result === "object" && "id" in result ? String(result.id) : null))
         .filter((id): id is string => Boolean(id));
@@ -248,7 +251,7 @@ export async function PUT(request: NextRequest) {
     if (existing?.user?.google_calendar_id && existing.user.google_calendar_sync) {
       targetCalendarId = existing.user.google_calendar_id;
     }
-    await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date: utcDate, location_id: locationId } });
+    await planningMutation(tx => tx.scheduleEntry.deleteMany({ where: { user_id: userId, date: utcDate, location_id: locationId } }));
     
     await syncUserSickness(userId, session.user.id);
 
@@ -264,11 +267,11 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Questa categoria appartiene a un altro salone." }, { status: 400 });
   }
 
-  const entry = await prisma.scheduleEntry.upsert({
+  const entry = await planningMutation(tx => tx.scheduleEntry.upsert({
     where: { user_id_date: { user_id: userId, date: utcDate } },
     update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
     create: { user_id: userId, category_id: categoryId, location_id: locationId, date: utcDate, start_time: startTime, end_time: endTime },
-  });
+  }));
 
   await syncUserSickness(userId, session.user.id);
 

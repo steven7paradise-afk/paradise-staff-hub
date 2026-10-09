@@ -1,3 +1,4 @@
+import { planningMutation } from "@/lib/planning-integration";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -49,9 +50,9 @@ export async function POST(request: NextRequest) {
       location_id: locationId,
   };
 
-  const category = existing
-    ? await prisma.scheduleCategory.update({ where: { id: existing.id }, data: payload })
-    : await prisma.scheduleCategory.create({ data: { ...payload, code } });
+  const category = await planningMutation(tx => existing
+    ? tx.scheduleCategory.update({ where: { id: existing.id }, data: payload })
+    : tx.scheduleCategory.create({ data: { ...payload, code } }));
 
   return NextResponse.json({
     id: category.id,
@@ -106,7 +107,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Esiste gia una categoria con questo codice nel salone." }, { status: 400 });
   }
 
-  const updated = await prisma.scheduleCategory.update({
+  const updated = await planningMutation(tx => tx.scheduleCategory.update({
     where: { id },
     data: {
       name,
@@ -119,7 +120,7 @@ export async function PUT(request: NextRequest) {
       location_id: locationId,
       active: true,
     },
-  });
+  }));
 
   return NextResponse.json({
     id: updated.id,
