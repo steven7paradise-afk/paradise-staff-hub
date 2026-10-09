@@ -8,7 +8,7 @@ import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 
 export const dynamic = "force-dynamic";
 const person = { id: true, name: true, photo_url: true } as const;
-const messageUser = { user: { select: person }, attachment: { select: { id: true, filename: true, mediaType: true, size: true } } } as const;
+const messageUser = { replyTo: { select: { id: true, body: true, deletedAt: true, user: { select: person } } }, user: { select: person }, attachment: { select: { id: true, filename: true, mediaType: true, size: true } } } as const;
 function response(value: unknown, status = 200) {
   return NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
 }
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       const before = request.nextUrl.searchParams.get("before");
       const cursor = before ? await db.chatMessage.findFirst({ where: { id: before, roomId } }) : null;
       if (before && !cursor) throw new ChatError("Messaggio non disponibile.", 404);
-      const messages = await db.chatMessage.findMany({ where: { roomId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) }, include: messageUser, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 });
+      const messages = await db.chatMessage.findMany({ where: { roomId, ...(request.nextUrl.searchParams.get("media") === "1" ? { deletedAt: null, attachment: { isNot: null } } : {}), ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) }, include: messageUser, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 });
       const hasMore = messages.length > 50;
       const items = messages.slice(0, 50).reverse();
       const readers = await db.chatMember.findMany({ where: { roomId, userId: { not: user.id } }, select: { lastReadAt: true } });
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
     if (input.action === "send") {
       const body = text(input.body, 4000, "Messaggio");
       const clientId = text(input.clientId, 128, "Identificativo");
+      const replyToId = input.replyToId == null ? null : text(input.replyToId, 128, "Messaggio citato");
       let createdNow = false;
     const message = await db.$transaction(async tx => {
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))::text`;
@@ -102,7 +103,10 @@ export async function POST(request: NextRequest) {
         if (count >= 30) throw new ChatError("Troppi messaggi. Attendi un minuto.", 429);
         // Check membership again inside the write transaction.
         requireMember(await tx.chatMember.findUnique({ where: { roomId_userId: { roomId, userId: user.id } } }));
-        const created = await tx.chatMessage.create({ data: { roomId, userId: user.id, body, clientId }, include: messageUser });
+        if (replyToId && !await tx.chatMessage.findFirst({ where: { id: replyToId, roomId, deletedAt: null } })) {
+          throw new ChatError("Il messaggio citato non è più disponibile.", 404);
+        }
+        const created = await tx.chatMessage.create({ data: { roomId, userId: user.id, body, clientId, replyToId }, include: messageUser });
         await tx.chatRoom.update({ where: { id: roomId }, data: { updatedAt: created.createdAt } });
         createdNow = true;
       return created;

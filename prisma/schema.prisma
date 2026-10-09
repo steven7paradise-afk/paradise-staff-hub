@@ -1265,6 +1265,10 @@ model ChatMember {
   @@map("chat_members")
 }
 model ChatMessage {
+  replyToId String?
+  replyTo ChatMessage? @relation("ChatReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies ChatMessage[] @relation("ChatReplies")
+  @@index([replyToId])
   attachment ChatAttachment?
   id String @id @default(cuid())
   roomId String

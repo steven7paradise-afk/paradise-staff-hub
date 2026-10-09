@@ -33,6 +33,20 @@ async function main() {
   const sent = await post(tokenA, message); assert.equal(sent.status, 200);
   const messageId = (await sent.json()).message.id;
   assert.equal((await (await post(tokenA, message)).json()).message.id, messageId);
+  const reply = await post(tokenB, { action: "send", roomId, body: "Risposta", clientId: "reply-test", replyToId: messageId });
+  assert.equal(reply.status, 200);
+  const replyData = (await reply.json()).message;
+  assert.equal(replyData.replyTo.id, messageId);
+  assert.equal(replyData.replyTo.body, message.body);
+  assert.equal(replyData.replyTo.user.id, a.id);
+  const otherRoom = (await (await post(tokenA, { action: "create", kind: "direct", members: [admin.id] })).json()).id;
+  const wrongReply = await post(tokenA, { action: "send", roomId: otherRoom, body: "No", clientId: "cross-room-reply", replyToId: messageId });
+  assert.equal(wrongReply.status, 404);
+  assert.equal((await post(tokenB, { action: "send", roomId, body: "Risposta", clientId: "reply-test", replyToId: messageId })).status, 200);
+  assert.equal(await db.chatMessage.count({ where: { userId: b.id, clientId: "reply-test" } }), 1);
+  await db.chatMessage.delete({ where: { id: replyData.id } });
+  await db.chatRoom.delete({ where: { id: otherRoom } });
+
   const inbox = await (await get(tokenB)).json(); assert.equal(inbox.rooms[0].unread, 1);
   assert.equal((await post(tokenAdmin, { ...message, clientId: "intruder" })).status, 404);
   assert.equal((await post(tokenB, { action: "edit", roomId, messageId, body: "Alterato" })).status, 403);
@@ -66,9 +80,14 @@ async function main() {
   assert.equal(await (await download(tokenB, attached.id)).text(), "Documento di prova riservato");
   const metadata = (await (await get(tokenB, `?roomId=${roomId}`)).json()).messages.find((m: { id: string }) => m.id === uploadedId).attachment;
   assert.equal(metadata.filename, "prova.txt"); assert.equal(metadata.data, undefined);
+  const media = await (await get(tokenB, `?roomId=${roomId}&media=1`)).json();
+  assert.equal(media.messages.length, 1); assert.equal(media.messages[0].attachment.id, attached.id);
+  assert.equal((await get(tokenAdmin, `?roomId=${roomId}&media=1`)).status, 404);
   assert.equal((await filePOST(fileRequest(tokenA, { ...upload, clientId: "too-big", data: Buffer.alloc(5 * 1024 * 1024 + 1, 65).toString("base64") }))).status, 413);
   assert.equal((await post(tokenA, { action: "delete", roomId, messageId: uploadedId })).status, 200);
   assert.equal((await download(tokenB, attached.id)).status, 404);
+  assert.equal((await (await get(tokenB, `?roomId=${roomId}&media=1`)).json()).messages.length, 0);
+  assert.equal((await post(tokenA, { ...message, clientId: "deleted-reply", replyToId: uploadedId })).status, 404);
   await db.user.update({ where: { id: b.id }, data: { active: false } });
   assert.equal((await get(tokenB, `?roomId=${roomId}`)).status, 401);
   await db.user.update({ where: { id: b.id }, data: { active: true, employee_status: "Ex dipendente" } });
