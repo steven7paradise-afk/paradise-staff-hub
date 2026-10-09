@@ -1,3 +1,4 @@
+import { safetyModerators, blockedPeers, requireRoomContact, screenChatText } from "@/lib/chat-safety";
 import { scheduleChatPush } from "@/lib/chat-push";
 import { NextRequest, NextResponse } from "next/server";
 import { chatActor } from "@/lib/chat-access";
@@ -16,7 +17,10 @@ export async function POST(request: NextRequest) {
     const clientId = text(input.clientId, 128, "Identificativo");
     const member = requireMember(await db.chatMember.findUnique({ where: { roomId_userId: { roomId, userId: user.id } }, include: { room: true } }));
     if (member.room.archived) throw new ChatError("La conversazione è archiviata.", 409);
+    await requireRoomContact(roomId, user.id);
     const file = validateChatFile(input.filename, input.data);
+    screenChatText(file.filename);
+    if (file.mediaType === "text/plain") screenChatText(file.data.toString("utf8"));
     let createdNow = false;
     const message = await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))::text`;
@@ -41,9 +45,19 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const user = await chatActor(request);
+    const blocked = await blockedPeers(user.id);
     const id = request.nextUrl.searchParams.get("id") ?? "";
+    const reportId = request.nextUrl.searchParams.get("reportId");
+    let reportedMessageId: string | undefined;
+    if (reportId) {
+      if (!safetyModerators.has(user.role)) throw new ChatError("Operazione non consentita.", 403);
+      const report = await db.setting.findUnique({ where: { key: `chat-report:${reportId}` } });
+      const value = report?.value as { status?: string; messageId?: string } | undefined;
+      if (value?.status !== "open" || !value.messageId) throw new ChatError("Segnalazione non disponibile.", 404);
+      reportedMessageId = value.messageId;
+    }
     // Filter membership in the database before loading the bytes.
-    const file = await db.chatAttachment.findFirst({ where: { id, message: { deletedAt: null, room: { members: { some: { userId: user.id } } } } } });
+    const file = await db.chatAttachment.findFirst({ where: { id, message: reportedMessageId ? { id: reportedMessageId, deletedAt: null } : { userId: { notIn: blocked }, deletedAt: null, room: { members: { some: { userId: user.id } } } } } });
     if (!file) throw new ChatError("Allegato non disponibile.", 404);
     return new Response(new Uint8Array(file.data), { headers: { "Content-Type": file.mediaType, "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`, "Content-Length": String(file.size), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   } catch (error) { return fail(error); }

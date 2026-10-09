@@ -1,3 +1,4 @@
+import { blockedPeers } from "./chat-safety";
 import { connect } from "node:http2";
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { after } from "next/server";
@@ -36,10 +37,12 @@ export async function sendChatPush(messageId: string) {
       await db.setting.deleteMany({ where: { key: device.key, value: { equals: device.value! } } }); continue;
     }
     if (value.userId === message.userId) continue;
+    const blocked = await blockedPeers(value.userId);
+    if (blocked.includes(message.userId) || await db.setting.findUnique({ where: { key: `chat-suspended:${value.userId}` } })) continue;
     const member = await db.chatMember.findUnique({ where: { roomId_userId: { roomId: message.roomId, userId: value.userId } } });
     if (!member || member.muted || member.lastReadAt >= message.createdAt) continue;
     const memberships = await db.chatMember.findMany({ where: { userId: value.userId, muted: false, room: { archived: false } }, select: { roomId: true, lastReadAt: true } });
-    const badge = await db.chatMessage.count({ where: { userId: { not: value.userId }, deletedAt: null, OR: memberships.map(m => ({ roomId: m.roomId, createdAt: { gt: m.lastReadAt } })) } });
+    const badge = await db.chatMessage.count({ where: { userId: { not: value.userId, notIn: blocked }, deletedAt: null, OR: memberships.map(m => ({ roomId: m.roomId, createdAt: { gt: m.lastReadAt } })) } });
     const status = await new Promise<number>(resolve => {
       const client = connect(value.environment === "sandbox" ? "https://api.sandbox.push.apple.com" : "https://api.push.apple.com");
       let finished = false;

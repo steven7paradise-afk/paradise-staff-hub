@@ -1,3 +1,4 @@
+import { blockedPeers } from "./chat-safety";
 import { connect } from "node:http2";
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { chatDB as db } from "./chat-db";
@@ -22,6 +23,7 @@ export async function sendIncomingCall(call: IncomingCall) {
     if (!session || session.user_id !== value.userId || session.revoked_at || session.expires_at <= new Date() || !session.user.active || session.user.must_change_password || session.user.employee_status === FORMER_EMPLOYEE_STATUS) {
       await db.setting.deleteMany({ where: { key: device.key, value: { equals: device.value! } } }); return;
     }
+    if ((await blockedPeers(value.userId)).includes(call.callerId) || await db.setting.findUnique({ where: { key: `chat-suspended:${value.userId}` } })) return;
     const member = await db.chatMember.findFirst({ where: { userId: value.userId, room: { members: { some: { userId: call.callerId } }, kind: "direct", archived: false } } });
     if (!member) return;
     const latest = await db.setting.findUnique({ where: { key: `audio-call:${call.id}` } });

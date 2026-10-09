@@ -1,3 +1,4 @@
+import { requireContactAllowed } from "@/lib/chat-safety";
 import { NextRequest, NextResponse, after } from "next/server";
 import { chatActor } from "@/lib/chat-access";
 import { chatDB as db } from "@/lib/chat-db";
@@ -52,6 +53,8 @@ export async function POST(request: NextRequest) {
       const member = requireMember(await db.chatMember.findUnique({ where: { roomId_userId: { roomId, userId: user.id } }, include: { room: { include: { members: { include: { user: true } } } } } }));
       const other = member.room.members.find(m => m.userId !== user.id)?.user;
       if (member.room.kind !== "direct" || member.room.archived || member.room.members.length !== 2 || !other?.active || other.must_change_password || other.employee_status === FORMER_EMPLOYEE_STATUS) throw new ChatError("Le chiamate sono disponibili nelle chat private con colleghi attivi.");
+      await requireContactAllowed(user.id, other.id);
+      if (await db.setting.findUnique({ where: { key: `chat-suspended:${other.id}` } })) throw new ChatError("Collega non disponibile.", 403);
       let created = false;
       const call = await db.$transaction(async tx => {
         // Serialize starts so simultaneous calls cannot reserve the same colleague.
