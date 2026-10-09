@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, CheckCheck, MessageCircle, Plus, Search, Send, Users } from "lucide-react";
+import { staffPhotoSource } from "@/lib/web-staff-photo";
 import s from "./web-chat.module.css";
 type Person = { id: string; name: string; photo_url?: string | null };
 type Room = { id: string; title: string; kind: string; members: Person[]; lastMessage: string | null; unread: number; archived: boolean; updatedAt: string };
@@ -12,7 +13,8 @@ async function request(path: string, body?: object) {
   return data;
 }
 function Avatar({ people }: { people: Person[] }) {
-  return <span className={s.avatar}>{people.slice(0, 3).map(p => <span key={p.id}>{p.photo_url ? <img src={p.photo_url} alt="" onError={e => { e.currentTarget.style.display = "none"; }} /> : p.name.slice(0, 1)}</span>)}{!people.length && <Users size={22} />}</span>;
+  const [failed, setFailed] = useState<string[]>([]);
+  return <span className={s.avatar}>{people.slice(0, 3).map(p => { const src = staffPhotoSource(p); return <span key={p.id}>{src && !failed.includes(src) ? <img src={src} alt={p.name} onError={() => setFailed(old => [...old, src])} /> : p.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>; })}{!people.length && <Users size={22} />}</span>;
 }
 const time = (value: string) => new Date(value).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 export function WebChat({ userId, people, active, onExpired }: { userId: string; people: Person[]; active: boolean; onExpired: () => void }) {

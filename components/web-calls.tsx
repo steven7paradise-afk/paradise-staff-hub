@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { Phone, PhoneOff, Mic, MicOff, LogOut, Search, Volume2 } from "lucide-react";
 import styles from "./web-calls.module.css";
+import { staffPhotoSource } from "@/lib/web-staff-photo";
 import { WebChat } from "./web-chat";
 import { WebQRLogin } from "./web-qr-login";
 
@@ -16,10 +17,10 @@ async function api(path: string, body?: object) {
   if (!response.ok) throw new ApiError(data.error || "Connessione non disponibile. Riprova.", response.status);
   return data;
 }
-function Portrait({ person, large = false }: { person: Pick<Person, "name" | "photo_url">; large?: boolean }) {
+function Portrait({ person, large = false }: { person: Pick<Person, "name" | "photo_url"> & { id?: string }; large?: boolean }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [person.photo_url]);
-  return <span className={large ? styles.portraitLarge : styles.portrait}>{person.photo_url && !failed ? <img src={person.photo_url} alt="" onError={() => setFailed(true)} /> : person.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>;
+  return <span className={large ? styles.portraitLarge : styles.portrait}>{person.photo_url && !failed ? <img src={staffPhotoSource(person)} alt="" onError={() => setFailed(true)} /> : person.name.split(" ").slice(0, 2).map(n => n[0]).join("")}</span>;
 }
 export function WebCalls() {
   const [section, setSection] = useState<"chat" | "calls">("chat");
@@ -127,7 +128,7 @@ export function WebCalls() {
     const data = await api("calls", { action: "start", roomId: conversation.id, id: crypto.randomUUID() }); setCall(data.call);
   }
   const incoming = call?.calleeId === user?.id;
-  const peer = call ? { name: incoming ? call.callerName : call.calleeName, photo_url: incoming ? call.callerPhoto : call.calleePhoto } : null;
+  const peer = call ? { id: incoming ? call.callerId : call.calleeId, name: incoming ? call.callerName : call.calleeName, photo_url: incoming ? call.callerPhoto : call.calleePhoto } : null;
   return <main className={styles.shell}>
     <header className={styles.header}><a href="/my-staff" className={styles.brand}><img src="/logo.png" alt="Paradise Beauty" /><span>MyParadise<small>Il tuo team, anche dal computer</small></span></a>{user && <div className={styles.account}><span>{user.name}</span><button aria-label="Esci" disabled={busy || !!call} onClick={() => void run(async () => { await api("logout", {}); releaseLock.current?.(); setReady(false); setUser(null); setPeople([]); })}><LogOut size={19} /></button></div>}</header>
     {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebQRLogin onLogin={setUser} /> : <><nav className={styles.tabs} aria-label="Sezioni"><button aria-pressed={section === "chat" && !call} onClick={() => setSection("chat")}>Chat</button><button aria-pressed={section === "calls" || !!call} onClick={() => setSection("calls")}>Chiamate</button></nav><div hidden={section !== "chat" || !!call}><WebChat active={section === "chat" && !call} userId={user.id} people={people} onExpired={() => { releaseLock.current?.(); setReady(false); setUser(null); }} /></div><div hidden={section !== "calls" && !call}><div className={styles.workspace}>

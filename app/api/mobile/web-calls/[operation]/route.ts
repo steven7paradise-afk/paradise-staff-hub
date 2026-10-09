@@ -6,6 +6,9 @@ import { GET as getFiles } from "@/app/api/mobile/chat/files/route";
 import { revokeMobileSession } from "@/lib/mobile-auth";
 import { chatActor } from "@/lib/chat-access";
 import { webCallCookie, webCallOriginAllowed, webCallActionAllowed } from "@/lib/web-call-policy";
+import { prisma } from "@/lib/prisma";
+import { downloadGoogleDriveFile } from "@/lib/google-drive";
+import { staffDrivePhotoId } from "@/lib/web-staff-photo";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ operation: string }> };
 const reply = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -24,6 +27,24 @@ export async function GET(request: NextRequest, context: Context) {
     if (operation === "session") {
       const user = await chatActor(req);
       return reply({ user: { id: user.id, name: user.name, photo_url: user.photo_url } });
+    }
+    if (operation === "photo") {
+      const actor = await chatActor(req);
+      const id = request.nextUrl.searchParams.get("userId") || "";
+      const person = await prisma.user.findFirst({ where: { id, active: true }, select: { photo_url: true } });
+      const fileId = staffDrivePhotoId(person?.photo_url);
+      if (!actor || !fileId) return reply({ error: "Foto non disponibile." }, 404);
+      const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
+      try {
+        const file = await downloadGoogleDriveFile(fileId);
+        if (["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimeType)) return new NextResponse(new Uint8Array(file.buffer), { headers: { ...headers, "Content-Type": file.mimeType } });
+      } catch { /* Already-public Drive photos can also be served as thumbnails. */ }
+      try {
+        const photo = await fetch(`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w400`, { signal: AbortSignal.timeout(10000), cache: "no-store" });
+        const mime = photo.headers.get("content-type")?.split(";")[0] || "";
+        if (photo.ok && ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) return new NextResponse(await photo.arrayBuffer(), { headers: { ...headers, "Content-Type": mime } });
+      } catch { /* Keep unavailable files private and render initials in the client. */ }
+      return reply({ error: "Foto non disponibile." }, 404);
     }
     if (operation === "calls") return getCalls(req);
     if (operation === "chat") return directory(req);
