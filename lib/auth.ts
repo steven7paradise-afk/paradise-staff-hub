@@ -15,6 +15,7 @@ function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/api/webhooks/cowlendar" && method === "POST") return true;
   if (pathname === "/api/webhooks/shopify/payments" && method === "POST") return true;
   if (pathname === "/api/appointments/events" && method === "GET") return true;
+  if (pathname === "/my-staff/link") return true;
   if (pathname === "/my-staff" || pathname === "/my-staff/") return true;
   if (pathname === "/login" || pathname === "/login/") return true;
   if (pathname.startsWith("/api/auth/")) return true;
