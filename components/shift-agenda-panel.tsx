@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { remainingAgendaAppointments, agendaGroup, WAIT_REASONS, type AgendaNotes, type AgendaReport } from "@/lib/shift-agenda";
+import { remainingAgendaAppointments, agendaGroup, AGENDA_OUTCOMES, WAIT_REASONS, type AgendaNotes, type AgendaReport } from "@/lib/shift-agenda";
 export type AgendaSummary = { complete: boolean; planned: number; completed: number; unresolved: number };
 export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (summary: AgendaSummary | null) => void }) {
   const [group, setGroup] = useState<ReturnType<typeof agendaGroup>>("review");
@@ -26,6 +26,11 @@ export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (
     } catch (e) { setError(e instanceof Error ? e.message : "Dati non disponibili"); onSummary(null); }
   }, [day, onSummary]);
   useEffect(() => { void refresh(); const timer = window.setInterval(() => void refresh(), 60000); return () => window.clearInterval(timer); }, [refresh]);
+  useEffect(() => {
+    const onFocus = () => { void refresh(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
   function edit(next: AgendaNotes) { dirtyRef.current = true; setDirty(true); setNotes(next); setMessage(""); }
   async function save() {
     if (!report) return;
@@ -56,6 +61,21 @@ export function ShiftAgendaPanel({ day, onSummary }: { day: string; onSummary: (
           <p className="text-sm font-semibold text-[#392936]">{a.time} · {a.name}</p><p className="mt-1 text-sm text-neutral-600">{a.service} · {a.staff}</p>
           {agendaGroup(a, report.updatedAt) === "upcoming" && <p className="mt-1 text-xs text-neutral-500">Appuntamento non ancora iniziato</p>}
           {a.confirmed && <p className="mt-3 text-sm font-semibold text-emerald-800">Note del servizio inserite</p>}
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <a href={`/appointments?booking=${encodeURIComponent(a.id)}&salone=buenos-aires`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-xl bg-[#963b62] px-4 py-2 text-sm font-bold text-white">Apri scheda cliente<span className="sr-only"> di {a.name} (nuova scheda)</span></a>
+            {!a.confirmed && !a.automaticOutcome && <label className="grid gap-1 text-sm font-semibold text-[#392936]">Esito di {a.name}
+              <select disabled={busy} className={field} value={notes.outcomes[a.id] || ""} onChange={e => {
+                const outcomes = { ...notes.outcomes };
+                if (e.target.value) outcomes[a.id] = e.target.value;
+                else delete outcomes[a.id];
+                edit({ ...notes, outcomes });
+              }}>
+                <option value="">Da verificare</option>
+                {AGENDA_OUTCOMES.map(outcome => <option key={outcome} value={outcome}>{outcome === "No-show" ? "Non presentata" : outcome}</option>)}
+              </select>
+            </label>}
+          </div>
+          {!a.confirmed && !a.automaticOutcome && <p className="mt-2 text-xs text-neutral-600">Servizio eseguito? Salva le note nella scheda cliente: al ritorno questa agenda si aggiorna. Per un altro esito, selezionalo qui e premi “Salva agenda”.</p>}
           {['No-show', 'Spostato', 'Annullato'].includes(a.outcome) && <p className="mt-3 inline-block rounded-full bg-[#f0edef] px-3 py-1 text-xs font-semibold">{a.outcome} · {a.automaticOutcome ? 'dal calendario' : 'dal verbale'}</p>}
         </article>)}
         {unresolved.length > 3 && <button type="button" aria-expanded={showAllAppointments} onClick={() => setShowAllAppointments(value => !value)} className="min-h-11 rounded-xl border border-[#d4a4b8] bg-[#faf3f7] px-4 py-2 text-sm font-semibold text-[#963b62]">{showAllAppointments ? "Mostra solo 3" : `Vedi altri (${unresolved.length - 3})`}</button>}

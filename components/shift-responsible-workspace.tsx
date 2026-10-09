@@ -1,6 +1,5 @@
 "use client";
 
-import { ShiftDeadlineCountdown } from "@/components/shift-deadline-countdown";
 import type { ShiftResponsiblePreview } from "@/lib/shift-responsible-preview";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { Check, Clock3, LockKeyhole, RefreshCw, ShieldCheck, UserRoundCheck } from "lucide-react";
@@ -145,7 +144,6 @@ export function ShiftResponsibleWorkspace({ day, currentUserId, currentUserName,
           <p className="text-sm text-neutral-600">Responsabile di turno: <strong className="text-[#392936]">{people.find(person => person.id === effectiveResponsibleId)?.name || "In attesa della timbratura"}</strong></p>
           <span className="rounded-md bg-[#f0edef] px-2 py-1 text-[10px] font-semibold tracking-wide text-neutral-600">DA TURNISTICA</span>
         </div>
-        <ShiftDeadlineCountdown day={day} />
       </header>
       <section className="hidden md:grid grid-cols-2 gap-2 border-b border-black/[0.08] px-1 pb-3 sm:gap-3 sm:px-2 lg:grid-cols-4" aria-label="Responsabili di oggi e dei prossimi giorni">
         {people.map((person, index) => {
