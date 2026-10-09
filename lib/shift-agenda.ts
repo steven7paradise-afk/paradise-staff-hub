@@ -7,7 +7,7 @@ export type AgendaNotes = {
   outcomes: Record<string, string>;
   waits: Array<{ bookingId: string; minutes: number; reason: string; note: string }>;
 };
-export type AgendaAppointment = { id: string; name: string; time: string; start: string; end?: string | null; service: string; staff: string; confirmed: boolean; outcome: string; automaticOutcome: boolean };
+export type AgendaAppointment = { id: string; name: string; time: string; start: string; end?: string | null; service: string; staff: string; confirmed: boolean; completedInCalendar?: boolean; outcome: string; automaticOutcome: boolean };
 export type AgendaReport = { appointments: AgendaAppointment[]; totals: { planned: number; completed: number; noShow: number; cancelled: number; moved: number; flash: number }; notes: AgendaNotes; version: string | null; updatedAt: string };
 export const emptyAgendaNotes = (): AgendaNotes => ({ outcomes: {}, waits: [] });
 export function romeAgendaDate(value: string | Date) {
@@ -31,8 +31,9 @@ export function buildAgendaReport(day: string, bookings: CowlendarBooking[], con
     const status = String(statuses[String(b.id)]?.status || b.attendance || b.confirmation_status || "").toUpperCase();
     const automatic = b.is_canceled || b.isCanceled || ["ANNULLATO", "CANCELLED", "CANCELED"].includes(status) ? "Annullato" : ["NON_PRESENTATO", "NO_SHOW", "NO-SHOW"].includes(status) ? "No-show" : ["RIPROGRAMMATO", "SPOSTATO", "RESCHEDULED"].includes(status) ? "Spostato" : "";
     const completedNote = status === "COMPLETATO" && Boolean(completedAppointmentNotes[String(b.id)]?.trim());
-    const confirmed = !automatic && (hasSavedServiceNotes(a) || completedNote);
-    return { id: String(b.id), name: b.customer?.name || [b.form_data?.firstname, b.form_data?.lastname].filter(Boolean).join(" ") || "Cliente", time: new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(b.start_date)), start: b.start_date, end: b.end_date, service: b.service?.title || "Servizio", staff: (teams[String(b.id)]?.teammates?.map(t => t.name).filter(Boolean) || b.teammates?.map(t => `${t.firstname || ""} ${t.lastname || ""}`.split("|")[0].trim()) || []).join(", ") || "Non assegnato", confirmed, outcome: confirmed ? "" : automatic || notes.outcomes[String(b.id)] || "", automaticOutcome: Boolean(automatic) };
+    const completedInCalendar = !automatic && status === "COMPLETATO";
+    const confirmed = !automatic && (completedInCalendar || hasSavedServiceNotes(a) || completedNote);
+    return { id: String(b.id), name: b.customer?.name || [b.form_data?.firstname, b.form_data?.lastname].filter(Boolean).join(" ") || "Cliente", time: new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(b.start_date)), start: b.start_date, end: b.end_date, service: b.service?.title || "Servizio", staff: (teams[String(b.id)]?.teammates?.map(t => t.name).filter(Boolean) || b.teammates?.map(t => `${t.firstname || ""} ${t.lastname || ""}`.split("|")[0].trim()) || []).join(", ") || "Non assegnato", confirmed, completedInCalendar, outcome: confirmed ? "" : automatic || notes.outcomes[String(b.id)] || "", automaticOutcome: Boolean(automatic) };
   }).sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
   return { appointments, totals: { planned: appointments.length, completed: appointments.filter(a => a.confirmed).length, noShow: appointments.filter(a => a.outcome === "No-show").length, cancelled: appointments.filter(a => a.outcome === "Annullato").length, moved: appointments.filter(a => a.outcome === "Spostato").length, flash: [...distinct.values()].filter(b => isPostoLampo(b.service?.title) && b.created_at && romeAgendaDate(b.created_at) === day).length } };
 }

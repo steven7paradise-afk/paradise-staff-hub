@@ -62,11 +62,21 @@ test('completed appointment with an agenda note counts even without a client for
  assert.equal(remainingAgendaAppointments(result.appointments),0);
 });
 
-test('office notes alone and completed status alone do not count as a saved service', () => {
+test('completed status resolves the appointment while office notes alone do not', () => {
  const result = buildAgendaReport(day, [booking('planned'),booking('empty'),booking('canceled'),booking('no-show')], [],
  {planned:{status:'PRENOTATO'},empty:{status:'COMPLETATO'},canceled:{status:'ANNULLATO'},'no-show':{status:'NON_PRESENTATO'}}, {}, emptyAgendaNotes(),
  {planned:'Preparare materiale',empty:'  ',canceled:'Nota precedente','no-show':'Nota precedente'});
- assert.equal(result.totals.completed,0);
+ assert.equal(result.totals.completed,1);
+ assert.equal(result.appointments.find(a => a.id === "empty")?.completedInCalendar, true);
+ assert.equal(remainingAgendaAppointments(result.appointments),1);
  assert.equal(result.totals.cancelled,1);
  assert.equal(result.totals.noShow,1);
+});
+
+
+test('completed appointments are matched by booking id, not a shared customer name', () => {
+ const report = buildAgendaReport(day, [booking('giorgia-13', {customer:{name:'Giorgia'}}), booking('giorgia-17', {customer:{name:'Giorgia'}})], [], {'giorgia-13':{status:'COMPLETATO'}}, {}, emptyAgendaNotes());
+ assert.equal(report.appointments.find(a => a.id === 'giorgia-13')?.confirmed, true);
+ assert.equal(report.appointments.find(a => a.id === 'giorgia-17')?.confirmed, false);
+ assert.equal(remainingAgendaAppointments(report.appointments), 1);
 });
