@@ -1,3 +1,4 @@
+import { GET as presenceGET, POST as presencePOST } from "../app/api/mobile/chat/presence/route";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
@@ -19,6 +20,22 @@ async function main() {
   const post = (i: number, data: object) => POST(req(tokens[i], data));
   try {
     assert.equal((await GET(req("invalid"))).status, 401);
+    const presenceRequest = (i: number) => new NextRequest(`https://localhost/api/mobile/chat/presence?roomId=${room.id}`, { headers: { authorization: `Bearer ${tokens[i]}` } });
+    assert.equal((await presencePOST(req("invalid", { active: true }))).status, 401);
+    assert.equal((await presenceGET(presenceRequest(2))).status, 404);
+    assert.equal((await presencePOST(req(tokens[2], { active: true, roomId: room.id }))).status, 404);
+    assert.equal((await presencePOST(req(tokens[1], { active: true }))).status, 200);
+    await presencePOST(req(tokens[1], { active: true, roomId: room.id }));
+    let presence = await (await presenceGET(presenceRequest(0))).json();
+    assert.deepEqual(presence.onlineUserIds, [users[1].id]);
+    assert.deepEqual(presence.typingUserIds, [users[1].id]);
+    await presencePOST(req(tokens[1], { active: false }));
+    presence = await (await presenceGET(presenceRequest(0))).json();
+    assert.deepEqual(presence.onlineUserIds, []); assert.deepEqual(presence.typingUserIds, []);
+    const sessions = await db.mobileSession.findMany({where:{user_id: users[1].id}});
+    await db.setting.update({where:{key:`chat-presence:${sessions[0].id}`},data:{value:{expiresAt:Date.now()-1}}});
+    assert.deepEqual((await (await presenceGET(presenceRequest(0))).json()).onlineUserIds, []);
+    await db.setting.deleteMany({where:{key:{in:sessions.flatMap(x=>[`chat-presence:${x.id}`,`chat-typing:${room.id}:${x.id}`])}}});
     const deviceToken = "a".repeat(64);
     assert.equal((await registerVoIP(req("invalid", { token: deviceToken, environment: "sandbox" }))).status, 401);
     process.env.CHAT_PUSH_ENABLED = "true";
