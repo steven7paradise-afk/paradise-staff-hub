@@ -29,6 +29,10 @@ async function main() {
     let presence = await (await presenceGET(presenceRequest(0))).json();
     assert.deepEqual(presence.onlineUserIds, [users[1].id]);
     assert.deepEqual(presence.typingUserIds, [users[1].id]);
+    const inboxPresence = (i: number) => new NextRequest("https://localhost/api/mobile/chat/presence", { headers: { authorization: `Bearer ${tokens[i]}` } });
+    assert.deepEqual((await (await presenceGET(inboxPresence(0))).json()).onlineUserIds, [users[1].id]);
+    assert.deepEqual((await (await presenceGET(inboxPresence(2))).json()).onlineUserIds, []);
+
     await presencePOST(req(tokens[1], { active: false }));
     presence = await (await presenceGET(presenceRequest(0))).json();
     assert.deepEqual(presence.onlineUserIds, []); assert.deepEqual(presence.typingUserIds, []);

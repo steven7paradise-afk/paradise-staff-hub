@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
   try {
     const user = await chatActor(request);
     const roomId = request.nextUrl.searchParams.get("roomId");
-    if (!roomId || roomId.length > 128) throw new ChatError("Conversazione non valida.");
-    requireMember(await db.chatMember.findFirst({ where: { userId: user.id, roomId, room: { archived: false } } }));
-    const members = await db.chatMember.findMany({ where: { roomId }, select: { userId: true } });
+    if (roomId && roomId.length > 128) throw new ChatError("Conversazione non valida.");
+    if (roomId) requireMember(await db.chatMember.findFirst({ where: { userId: user.id, roomId, room: { archived: false } } }));
+    const members = await db.chatMember.findMany({ where: roomId ? { roomId } : { room: { archived: false, members: { some: { userId: user.id } } } }, select: { userId: true } });
     const sessions = await db.mobileSession.findMany({ where: { user_id: { in: members.map(m => m.userId) }, revoked_at: null, expires_at: { gt: new Date() }, user: { active: true, must_change_password: false } }, select: { id: true, user_id: true } });
     const records = await db.setting.findMany({ where: { key: { in: sessions.map(s => `chat-presence:${s.id}`) } } });
     const live = new Set(records.filter(r => Number((r.value as { expiresAt?: number })?.expiresAt) > Date.now()).map(r => r.key));
