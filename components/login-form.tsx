@@ -146,7 +146,7 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
         setError(accessStatus.unavailable
           ? "Impossibile verificare l’accesso in questo momento. Riprova tra poco."
           : accessStatus.expired
-          ? "Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato."
+          ? "L’accesso è stato disattivato. Per richiedere i tuoi documenti scrivi a amministrazione@paradisebeauty.it."
           : loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
         return;
       }
@@ -168,7 +168,7 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
           ? "rounded-2xl border border-rose-300/40 bg-rose-500/20 px-4 py-3 text-left text-sm font-bold text-white"
           : "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800"}
         >
-          Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato.
+          L’accesso è stato disattivato. Per richiedere i tuoi documenti scrivi a amministrazione@paradisebeauty.it.
         </div>
       ) : null}
       <div className="space-y-3">

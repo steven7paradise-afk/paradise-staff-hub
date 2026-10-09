@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { isPinAlreadyAssigned, pinLookup, pinPrefixLookup } from "@/lib/pin";
 import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
-import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS, resolveEmployeeActive } from "@/lib/former-employee";
+import { asRecord, FORMER_EMPLOYEE_STATUS, resolveEmployeeActive } from "@/lib/former-employee";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
@@ -100,7 +100,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (becomingFormerEmployee) {
       const since = new Date();
       nextWorkforceData.exEmployeeSince = since.toISOString();
-      nextWorkforceData.exDocumentAccessUntil = addCalendarMonths(since, 3).toISOString();
+      nextWorkforceData.exDocumentAccessUntil = since.toISOString();
     } else if (leavingFormerEmployee) {
       delete nextWorkforceData.exEmployeeSince;
       delete nextWorkforceData.exDocumentAccessUntil;
@@ -123,7 +123,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       active: resolveEmployeeActive(data.active, requestedEmployeeStatus, current.active),
       employee_status: data.employeeStatus !== undefined ? requestedEmployeeStatus : undefined,
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
-      access_list: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? ["/documents"] : (data.accessList !== undefined ? data.accessList : undefined),
+      access_list: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? [] : (data.accessList !== undefined ? data.accessList : undefined),
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
       workforce_data: nextWorkforceData as Prisma.InputJsonValue,
       google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
@@ -149,6 +149,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           }
         }
       });
+
+      if (!baseUpdate.active) {
+        // Revoke within the same transaction as deactivation. Never delete documents.
+        await tx.mobileSession.updateMany({
+          where: { user_id: id, revoked_at: null },
+          data: { revoked_at: new Date() },
+        });
+      }
 
       if (nextSedeId && nextSedeId !== current.sede_id) {
         const futureEntries = await tx.scheduleEntry.findMany({

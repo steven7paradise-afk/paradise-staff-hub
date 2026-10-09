@@ -1,8 +1,8 @@
 export const FORMER_EMPLOYEE_STATUS = "Ex dipendente";
 
 export function resolveEmployeeActive(requestedActive: unknown, requestedStatus: string, currentActive: boolean) {
+  if (requestedStatus === FORMER_EMPLOYEE_STATUS) return false;
   if (typeof requestedActive === "boolean") return requestedActive;
-  if (requestedStatus === FORMER_EMPLOYEE_STATUS) return true;
   return currentActive;
 }
 
@@ -33,8 +33,10 @@ export function formerEmployeeAccessDates(workforceData: unknown, fallback?: Dat
   return { since, until };
 }
 
-export function hasFormerEmployeeDocumentAccess(workforceData: unknown, fallback?: Date | null, now = new Date()) {
-  return now.getTime() <= formerEmployeeAccessDates(workforceData, fallback).until.getTime();
+export function hasFormerEmployeeDocumentAccess(_workforceData: unknown, _fallback?: Date | null, _now = new Date()) {
+  // Legacy grace-period metadata does not grant access after offboarding.
+  // Documents remain in the archive and can be requested from administration.
+  return false;
 }
 
 export function isFormerEmployeeAllowedPath(pathname: string) {

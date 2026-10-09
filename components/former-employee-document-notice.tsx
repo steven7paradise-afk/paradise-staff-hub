@@ -24,7 +24,7 @@ export function FormerEmployeeDocumentNotice({ accessUntil }: { accessUntil: str
         </div>
         <h2 className="mt-5 text-xl font-black text-neutral-900">Scarica i tuoi documenti</h2>
         <p className="mt-2 text-sm font-medium leading-6 text-neutral-600">
-          Il tuo rapporto di lavoro è terminato. Puoi accedere esclusivamente ai tuoi documenti personali per tre mesi.
+          Il tuo rapporto di lavoro è terminato. Per richiedere i tuoi documenti scrivi a amministrazione@paradisebeauty.it.
         </p>
         <div className="mt-5 rounded-2xl border border-[#F3B5D4] bg-[#FFF0F7] p-4">
           <p className="text-[10px] font-black uppercase tracking-wider text-[#B83D7F]">Ultimo giorno disponibile</p>

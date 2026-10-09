@@ -140,7 +140,7 @@ export const authConfig = {
           select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true, employee_status: true, workforce_data: true, last_edited_at: true },
         }).catch(() => null);
 
-        if (!dbUser?.active) return null;
+        if (!dbUser?.active || dbUser.employee_status === FORMER_EMPLOYEE_STATUS) return null;
         token.name = dbUser.name;
         token.email = dbUser.email;
         token.role = dbUser.role as Role;
