@@ -38,7 +38,9 @@ async function main() {
   assert.equal((await post(tokenB, { action: "edit", roomId, messageId, body: "Alterato" })).status, 403);
   assert.equal((await post(tokenA, { action: "edit", roomId, messageId, body: "Corretto" })).status, 200);
   assert.equal((await (await get(tokenB, `?roomId=${roomId}`)).json()).messages[0].body, "Corretto");
+  assert.equal((await (await get(tokenA, `?roomId=${roomId}`)).json()).messages[0].readByAll, false);
   assert.equal((await post(tokenB, { action: "read", roomId, messageId })).status, 200);
+  assert.equal((await (await get(tokenA, `?roomId=${roomId}`)).json()).messages[0].readByAll, true);
   assert.equal((await (await get(tokenB)).json()).rooms[0].unread, 0);
   assert.equal((await post(tokenA, { action: "create", kind: "channel", title: "Riservato", members: [b.id] })).status, 403);
   const group = await post(tokenAdmin, { action: "create", kind: "channel", title: "Riservato", members: [b.id] });

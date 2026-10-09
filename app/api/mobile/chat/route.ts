@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       const messages = await db.chatMessage.findMany({ where: { roomId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) }, include: messageUser, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 });
       const hasMore = messages.length > 50;
       const items = messages.slice(0, 50).reverse();
-      return response({ messages: items, hasMore, archived: member.room.archived, manager: member.manager });
+      const readers = await db.chatMember.findMany({ where: { roomId, userId: { not: user.id } }, select: { lastReadAt: true } });
+      return response({ messages: items.map(message => ({ ...message, readByAll: message.userId === user.id && readers.length > 0 && readers.every(reader => reader.lastReadAt >= message.createdAt) })), hasMore, archived: member.room.archived, manager: member.manager });
     }
     const memberships = await db.chatMember.findMany({ where: { userId: user.id }, include: { room: { include: { members: { include: { user: { select: person } } }, messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 } } } }, orderBy: { room: { updatedAt: "desc" } }, take: 200 });
     const rooms = await Promise.all(memberships.map(async ({ room, lastReadAt, muted, manager }) => ({
