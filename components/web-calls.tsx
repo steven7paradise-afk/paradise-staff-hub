@@ -48,7 +48,7 @@ export function WebCalls() {
   useEffect(() => { let cancelled = false; api("session").then(d => { if (!cancelled) setUser(d.user); }).catch(() => {}).finally(() => { if (!cancelled) setChecking(false); }); return () => { cancelled = true; }; }, []);
   useEffect(() => { if (!user) return; let cancelled = false; api("directory").then(d => { if (!cancelled) setPeople(d.users); }).catch(e => { if (!cancelled) setError(e.message); }); return () => { cancelled = true; }; }, [user]);
   useEffect(() => {
-    if (!user || !ready) return;
+    if (!user) return;
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       const observed = revision.current;
@@ -57,7 +57,7 @@ export function WebCalls() {
       finally { if (!cancelled) timer = setTimeout(poll, 2000); }
     };
     void poll(); return () => { cancelled = true; clearTimeout(timer); };
-  }, [user, ready]);
+  }, [user]);
 
   const callId = call?.id;
   const callStatus = call?.status;
@@ -108,6 +108,7 @@ export function WebCalls() {
 
   async function run(operation: () => Promise<void>) { if (acting.current) return; acting.current = true; revision.current++; setBusy(true); setError(""); try { await operation(); } catch (e) { setError((e as Error).message); } finally { acting.current = false; revision.current++; setBusy(false); } }
   async function activate() {
+    if (ready) { await tone.current?.resume(); return; }
     if (!navigator.locks) throw new Error("Usa una versione aggiornata di Safari, Chrome o Edge.");
     const ctx = tone.current ?? new AudioContext(); tone.current = ctx; await ctx.resume();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); stream.getTracks().forEach(track => track.stop());
@@ -120,10 +121,11 @@ export function WebCalls() {
   }
   async function action(action: string) {
     if (!call) return;
-    if (action === "accept") await tone.current?.resume();
+    if (action === "accept") await activate();
     const data = await api("calls", { action, id: call.id }); setCall(data.call);
   }
   async function start(person: Person) {
+    await activate();
     const conversation = await api("directory", { action: "create", kind: "direct", members: [person.id] });
     const data = await api("calls", { action: "start", roomId: conversation.id, id: crypto.randomUUID() }); setCall(data.call);
   }
@@ -131,9 +133,9 @@ export function WebCalls() {
   const peer = call ? { id: incoming ? call.callerId : call.calleeId, name: incoming ? call.callerName : call.calleeName, photo_url: incoming ? call.callerPhoto : call.calleePhoto } : null;
   return <main className={styles.shell}>
     <header className={styles.header}><a href="/my-staff" className={styles.brand}><img src="/logo.png" alt="Paradise Beauty" /><span>MyParadise<small>Il tuo team, anche dal computer</small></span></a>{user && <div className={styles.account}><span>{user.name}</span><button aria-label="Esci" disabled={busy || !!call} onClick={() => void run(async () => { await api("logout", {}); releaseLock.current?.(); setReady(false); setUser(null); setPeople([]); })}><LogOut size={19} /></button></div>}</header>
-    {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebQRLogin onLogin={setUser} /> : <><nav className={styles.tabs} aria-label="Sezioni"><button aria-pressed={section === "chat" && !call} onClick={() => setSection("chat")}>Chat</button><button aria-pressed={section === "calls" || !!call} onClick={() => setSection("calls")}>Chiamate</button></nav><div hidden={section !== "chat" || !!call}><WebChat active={section === "chat" && !call} userId={user.id} people={people} onExpired={() => { releaseLock.current?.(); setReady(false); setUser(null); }} /></div><div hidden={section !== "calls" && !call}><div className={styles.workspace}>
+    {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebQRLogin onLogin={setUser} /> : <><nav className={styles.tabs} aria-label="Sezioni"><button aria-pressed={section === "chat" && !call} onClick={() => setSection("chat")}>Chat</button><button aria-pressed={section === "calls" || !!call} onClick={() => setSection("calls")}>Chiamate</button><button className={styles.receiveButton} disabled={busy} onClick={() => void run(activate)}><Volume2 size={16} />{ready ? healthy ? "Suoneria attiva" : "Riconnessione…" : "Attiva suoneria sul PC"}</button></nav><div hidden={section !== "chat" || !!call}><WebChat onCall={person => void run(() => start(person))} callBusy={busy || !!call} active={section === "chat" && !call} userId={user.id} people={people} onExpired={() => { releaseLock.current?.(); setReady(false); setUser(null); }} /></div><div hidden={section !== "calls" && !call}><div className={styles.workspace}>
       <aside className={styles.directory}><h1>Il personale</h1><label className={styles.search}><Search size={19} /><input aria-label="Cerca un collega" placeholder="Cerca un collega" value={search} onChange={e => setSearch(e.target.value)} /></label><div className={styles.people}>{people.filter(p => p.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(person => <button key={person.id} className={styles.person} disabled={!ready || !healthy || !enabled || busy || !!call} onClick={() => void run(() => start(person))}><Portrait person={person} /><span><strong>{person.name}</strong><small>{person.location?.name || "Paradise Beauty"}</small></span><Phone size={18} aria-label="Chiama" /></button>)}{!people.length && <p className={styles.hint}>Nessun collega disponibile.</p>}</div></aside>
-      <section className={styles.stage} aria-label="Chiamate"><div className={styles.status}><span className={ready && healthy && enabled ? styles.online : styles.offline} />{ready ? healthy ? enabled ? "Pronto a ricevere" : "Servizio chiamate non attivo" : "Connessione al servizio…" : "Ricezione non attiva"}</div>
+      <section className={styles.stage} aria-label="Chiamate"><div className={styles.status}><span className={ready && healthy && enabled ? styles.online : styles.offline} />{ready ? healthy ? enabled ? "Pronto a ricevere" : "Servizio chiamate non attivo" : "Connessione al servizio…" : "Chiamate visibili · suoneria da attivare"}</div>
       {peer && call ? <div className={styles.call} aria-live="polite"><Portrait person={peer} large /><h2>{peer.name}</h2><p>{call.status === "ringing" ? incoming ? "Chiamata in arrivo" : "Chiamata in corso…" : connection}</p><div className={styles.controls}>{call.status === "ringing" && incoming && <button className={styles.answer} disabled={busy} onClick={() => void run(() => action("accept"))}><Phone /><span>Rispondi</span></button>}{call.status === "active" && <button disabled={busy || !room.current} onClick={() => void run(async () => { await room.current?.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted); })}>{muted ? <MicOff /> : <Mic />}<span>{muted ? "Attiva microfono" : "Silenzia"}</span></button>}<button className={styles.end} disabled={busy} onClick={() => void run(() => action(incoming && call.status === "ringing" ? "decline" : "end"))}><PhoneOff /><span>{incoming && call.status === "ringing" ? "Rifiuta" : "Termina"}</span></button></div>{audioBlocked && <button className={styles.primary} onClick={() => void run(async () => { await room.current?.startAudio(); setAudioBlocked(false); })}>Attiva audio della chiamata</button>}</div> : <div className={styles.empty}><div className={styles.phoneMark}><Phone size={42} /></div><h2>{ready ? "Siamo in ascolto." : "Le chiamate, qui."}</h2><p>{ready ? "Scegli un collega per chiamare oppure attendi una chiamata in arrivo." : "Attiva audio e microfono per chiamare e ricevere dal computer."}</p>{!ready && <button className={styles.primary} disabled={busy} onClick={() => void run(activate)}><Volume2 size={19} />Attiva le chiamate</button>}<small>Tieni aperta questa pagina. Se chiudi il browser, riceverai sull’app del telefono.</small></div>}
       </section></div></div></>}
     {error && <div className={styles.error} role="alert">{error}<button onClick={() => setError("")} aria-label="Chiudi avviso">×</button></div>}<div ref={audio} className={styles.audio} />
