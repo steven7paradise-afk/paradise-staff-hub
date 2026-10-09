@@ -163,7 +163,7 @@ export const authConfig = {
     },
     async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
-      if (request.nextUrl.hostname === "my.staff-paradise.tech" && pathname === "/") return true;
+      if (request.headers.get("host") === "my.staff-paradise.tech" && pathname === "/") return true;
       if (isPublicOperationalRequest(pathname, request.method)) return true;
 
       // An administrator may open the remote-control console from the cashier

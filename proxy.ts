@@ -22,9 +22,8 @@ export const proxy = auth((request) => {
     }
   }
 
-  if (request.nextUrl.hostname === "my.staff-paradise.tech" && pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/my-staff";
+  if (request.headers.get("host") === "my.staff-paradise.tech" && pathname === "/") {
+    const url = new URL("https://my.staff-paradise.tech/my-staff");
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
