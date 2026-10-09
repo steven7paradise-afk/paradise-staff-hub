@@ -15,6 +15,7 @@ function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/api/webhooks/cowlendar" && method === "POST") return true;
   if (pathname === "/api/webhooks/shopify/payments" && method === "POST") return true;
   if (pathname === "/api/appointments/events" && method === "GET") return true;
+  if (pathname === "/my-staff" || pathname === "/my-staff/") return true;
   if (pathname === "/login" || pathname === "/login/") return true;
   if (pathname.startsWith("/api/auth/")) return true;
   if (pathname.startsWith("/api/mobile/")) return true;
@@ -162,6 +163,7 @@ export const authConfig = {
     },
     async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
+      if (request.nextUrl.hostname === "my.staff-paradise.tech" && pathname === "/") return true;
       if (isPublicOperationalRequest(pathname, request.method)) return true;
 
       // An administrator may open the remote-control console from the cashier
