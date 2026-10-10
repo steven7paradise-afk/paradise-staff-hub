@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-export default function manifest(): MetadataRoute.Manifest {
+function manifest(): MetadataRoute.Manifest {
   return {
     name: "Paradise Staff Hub",
     short_name: "Paradise Hub",
@@ -26,4 +26,10 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
   };
+}
+
+export function GET() {
+  return Response.json(manifest(), {
+    headers: { "Content-Type": "application/manifest+json" },
+  });
 }

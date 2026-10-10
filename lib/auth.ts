@@ -11,6 +11,7 @@ import { isPcCassaAllowedPath } from "@/lib/pc-cassa-access";
 import { consumePasskeyGrant } from "@/lib/passkey";
 
 function isPublicOperationalRequest(pathname: string, method: string) {
+  if (pathname === "/my-staff.webmanifest" && method === "GET") return true;
   // These routes enforce their own HMAC / PC-token authentication, without login redirects.
   if (pathname === "/api/webhooks/cowlendar" && method === "POST") return true;
   if (pathname === "/api/webhooks/shopify/payments" && method === "POST") return true;
