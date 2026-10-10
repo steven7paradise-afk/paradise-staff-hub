@@ -12,7 +12,10 @@ export function validateChatFile(name: unknown, encoded: unknown) {
   else if (/\.png$/i.test(filename) && data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) mediaType = "image/png";
   else if (/\.jpe?g$/i.test(filename) && data[0] === 255 && data[1] === 216 && data[2] === 255) mediaType = "image/jpeg";
   else if (/\.txt$/i.test(filename) && !data.includes(0) && Buffer.from(data.toString("utf8")).equals(data)) mediaType = "text/plain";
-  else throw new ChatError("Sono supportati PDF, JPEG, PNG e file di testo validi.");
+  else if (/\.m4a$/i.test(filename) && data.length >= 12 && data.subarray(4, 8).toString() === "ftyp") mediaType = "audio/mp4";
+  else if (/\.webm$/i.test(filename) && data.subarray(0, 4).equals(Buffer.from([0x1a,0x45,0xdf,0xa3])) && data.subarray(0, 4096).includes(Buffer.from("webm"))) mediaType = "audio/webm";
+  else if (/\.ogg$/i.test(filename) && data.subarray(0, 4).toString() === "OggS" && data.subarray(0, 4096).includes(Buffer.from("OpusHead"))) mediaType = "audio/ogg";
+  else throw new ChatError("Sono supportati PDF, JPEG, PNG, testo e audio M4A, WebM o Ogg validi.");
   return { filename, mediaType, data, size: data.length };
 }
 export async function boundedJSON(request: Request, maxBytes: number): Promise<Record<string, unknown>> {

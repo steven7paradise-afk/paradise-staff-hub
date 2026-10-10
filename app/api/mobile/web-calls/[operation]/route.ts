@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { POST as login } from "@/app/api/mobile/auth/login/route";
 import { GET as getCalls, POST as postCalls } from "@/app/api/mobile/chat/calls/route";
 import { GET as directory, POST as createRoom } from "@/app/api/mobile/chat/route";
-import { GET as getFiles } from "@/app/api/mobile/chat/files/route";
+import { GET as getFiles, POST as uploadFile } from "@/app/api/mobile/chat/files/route";
 import { revokeMobileSession } from "@/lib/mobile-auth";
 import { chatActor } from "@/lib/chat-access";
 import { webCallCookie, webCallOriginAllowed, webCallActionAllowed } from "@/lib/web-call-policy";
@@ -12,13 +12,13 @@ import { staffDrivePhotoId } from "@/lib/web-staff-photo";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ operation: string }> };
 const reply = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
-function bridge(request: NextRequest, body?: string) {
+function bridge(request: NextRequest, body?: string | ReadableStream<Uint8Array>) {
   const headers = new Headers({ "content-type": "application/json" });
   const token = request.cookies.get(webCallCookie)?.value;
   if (token) headers.set("authorization", `Bearer ${token}`);
   const ip = request.headers.get("x-forwarded-for");
   if (ip) headers.set("x-forwarded-for", ip);
-  return new NextRequest(request.url, { method: body === undefined ? "GET" : "POST", headers, body });
+  return new NextRequest(request.url, { method: body === undefined ? "GET" : "POST", headers, body, ...(typeof body === "object" ? { duplex: "half" } : {}) });
 }
 export async function GET(request: NextRequest, context: Context) {
   try {
@@ -62,6 +62,7 @@ export async function GET(request: NextRequest, context: Context) {
 export async function POST(request: NextRequest, context: Context) {
   if (!webCallOriginAllowed(request.headers.get("origin"), request.nextUrl.origin, request.headers.get("host"))) return reply({ error: "Origine non consentita." }, 403);
   const { operation } = await context.params;
+  if (operation === "files") return uploadFile(bridge(request, request.body ?? undefined));
   const raw = await request.text();
   if (raw.length > 20000) return reply({ error: "Richiesta troppo grande." }, 413);
   let input;
