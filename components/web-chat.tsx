@@ -3,13 +3,15 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Check, CheckCheck, MessageCircle, Plus, Search, Send, Users, Phone, X, Bell, BellOff, Palette } from "lucide-react";
 import { staffPhotoSource } from "@/lib/web-staff-photo";
 import { webRequest, connectionMessage } from "@/lib/web-api-response";
+import { WebMessageActions } from "./web-message-actions";
+import type { MessageReaction } from "@/lib/chat-reactions";
 import { WebChatComposer } from "./web-chat-composer";
 import landscape from "@/assets/chat/paradise-landscape.png";
 import portrait from "@/assets/chat/paradise-portrait.png";
 import s from "./web-chat.module.css";
 type Person = { id: string; name: string; photo_url?: string | null };
 type Room = { id: string; title: string; kind: string; members: Person[]; lastMessage: string | null; unread: number; archived: boolean; muted?: boolean; updatedAt: string };
-type Message = { id: string; body: string; userId: string; user: Person; createdAt: string; deletedAt?: string | null; readByAll?: boolean; attachment?: { id: string; filename: string; mediaType: string } | null; replyTo?: { body: string; deletedAt?: string | null; user: Person } | null };
+type Message = { reactions?: MessageReaction[]; id: string; body: string; userId: string; user: Person; createdAt: string; deletedAt?: string | null; readByAll?: boolean; attachment?: { id: string; filename: string; mediaType: string } | null; replyTo?: { body: string; deletedAt?: string | null; user: Person } | null };
 async function request(path: string, body?: object) {
   return webRequest(`/api/mobile/web-calls/${path}`, body);
 }
@@ -21,11 +23,14 @@ const time = (value: string) => new Date(value).toLocaleTimeString("it-IT", { ho
 export function WebChat({ userId, people, active, onExpired, onCall, callBusy }: { userId: string; people: Person[]; active: boolean; onExpired: () => void; onCall: (person: Person) => void; callBusy: boolean }) {
   const [rooms, setRooms] = useState<Room[]>([]), [selected, setSelected] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]), [draft, setDraft] = useState("");
+  const [reply, setReply] = useState<Message | null>(null), [forward, setForward] = useState<Message | null>(null);
+  const [forwardTarget, setForwardTarget] = useState(""), [forwardSearch, setForwardSearch] = useState(""), [notice, setNotice] = useState("");
+  const forwardPending = useRef<{ messageId: string; roomId: string; clientId: string } | null>(null);
   const [details, setDetails] = useState(false), [colorsOpen, setColorsOpen] = useState(false);
   const [chatColor, setChatColor] = useState(""), [messageSearch, setMessageSearch] = useState<string | null>(null);
   const detailsClose = useRef<HTMLButtonElement>(null), contactButton = useRef<HTMLButtonElement>(null);
   const colorKey = `myparadise-chat-color:${userId}:${selected}`;
-  useEffect(() => { try { setChatColor(localStorage.getItem(colorKey) || ""); } catch { setChatColor(""); } setDetails(false); setColorsOpen(false); setMessageSearch(null); }, [colorKey]);
+  useEffect(() => { try { setChatColor(localStorage.getItem(colorKey) || ""); } catch { setChatColor(""); } setDetails(false); setColorsOpen(false); setMessageSearch(null); setReply(null); setForward(null); setNotice(""); }, [colorKey]);
   useEffect(() => { if (!details) return; detailsClose.current?.focus(); const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { setDetails(false); contactButton.current?.focus(); } }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [details]);
   function changeColor(color: string) { setChatColor(color); try { if (color) localStorage.setItem(colorKey, color); else localStorage.removeItem(colorKey); } catch { /* Still apply for this session. */ } }
   const [filter, setFilter] = useState<"all" | "unread" | "groups">("all");
@@ -35,7 +40,7 @@ export function WebChat({ userId, people, active, onExpired, onCall, callBusy }:
   const list = useRef<HTMLDivElement>(null), nearBottom = useRef(true), seen = useRef("");
   const current = useRef(selected); current.current = selected;
   const expire = useRef(onExpired); expire.current = onExpired;
-  const pending = useRef<{ roomId: string; body: string; clientId: string } | null>(null);
+  const pending = useRef<{ roomId: string; body: string; replyToId?: string; clientId: string } | null>(null);
   const room = rooms.find(r => r.id === selected);
   function failure(e: unknown) { const err = e as Error & { status?: number }; setError(err.message); if (err.status === 401) expire.current(); }
   useEffect(() => {
@@ -72,8 +77,8 @@ export function WebChat({ userId, people, active, onExpired, onCall, callBusy }:
   async function send() {
     const body = draft.trim(); if (!selected || !body || busy) return;
     const roomId = selected; setBusy(true); setError("");
-    if (pending.current?.roomId !== roomId || pending.current.body !== body) pending.current = { roomId, body, clientId: crypto.randomUUID() };
-    try { const data = await request("chat", { action: "send", ...pending.current }); if (current.current === roomId) { nearBottom.current = true; setMessages(old => [...old.filter(m => m.id !== data.message.id), data.message]); setDraft(""); } pending.current = null; }
+    if (pending.current?.roomId !== roomId || pending.current.body !== body || pending.current.replyToId !== reply?.id) pending.current = { roomId, body, replyToId: reply?.id, clientId: crypto.randomUUID() };
+    try { const data = await request("chat", { action: "send", ...pending.current }); if (current.current === roomId) { nearBottom.current = true; setMessages(old => [...old.filter(m => m.id !== data.message.id), data.message]); setDraft(""); setReply(null); } pending.current = null; }
     catch (e) { failure(e); } finally { setBusy(false); }
   }
   async function upload(file: File, clientId: string) {
@@ -81,11 +86,26 @@ export function WebChat({ userId, people, active, onExpired, onCall, callBusy }:
     const roomId = selected; setBusy(true); setError("");
     try {
       const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = () => reject(new Error("Impossibile leggere l’allegato.")); reader.readAsDataURL(file); });
-      await request("files", { roomId, clientId, filename: file.name, data });
+      await request("files", { roomId, clientId, filename: file.name, data, replyToId: reply?.id });
+      setReply(null);
       nearBottom.current = true;
       // Polling refreshes the messages without risking a duplicate upload if refreshing fails.
       return true;
     } catch (e) { failure(e); return false; } finally { setBusy(false); }
+  }
+  async function react(message: Message, emoji: string | null) {
+    if (!selected || busy) return;
+    const roomId = selected; setBusy(true); setError("");
+    try { const data = await request("chat", { action: "react", roomId, messageId: message.id, emoji }); if (current.current === roomId) setMessages(old => old.map(m => m.id === message.id ? {...m, reactions: data.reactions} : m)); }
+    catch(e) { failure(e); } finally { setBusy(false); }
+  }
+  function beginForward(message: Message) { setForward(message); setForwardTarget(""); setForwardSearch(""); forwardPending.current = null; }
+  async function sendForward() {
+    if (!selected || !forward || !forwardTarget || busy) return;
+    setBusy(true); setError("");
+    if (forwardPending.current?.messageId !== forward.id || forwardPending.current.roomId !== forwardTarget) forwardPending.current = { messageId: forward.id, roomId: forwardTarget, clientId: crypto.randomUUID() };
+    try { const data = await request("chat", { action: "forward", sourceRoomId: selected, ...forwardPending.current }); if (current.current === forwardTarget) setMessages(old => [...old.filter(m => m.id !== data.message.id), data.message]); setNotice(`Messaggio inoltrato a ${rooms.find(r => r.id === forwardTarget)?.title || "destinazione"}.`); setForward(null); forwardPending.current = null; }
+    catch(e) { failure(e); } finally { setBusy(false); }
   }
   async function older() {
     if (!selected || !messages.length || busy) return;
@@ -106,13 +126,13 @@ export function WebChat({ userId, people, active, onExpired, onCall, callBusy }:
       {messageSearch !== null && <div className={s.messageSearch}><Search size={18}/><input autoFocus aria-label="Cerca nei messaggi caricati" placeholder="Cerca nei messaggi caricati…" value={messageSearch} onChange={e => setMessageSearch(e.target.value)} /><button aria-label="Chiudi ricerca" onClick={() => setMessageSearch(null)}><X size={18}/></button></div>}
       <div className={s.messageArea}><div className={s.wallpaper} aria-hidden="true"/><div ref={list} className={s.messages} onScroll={() => { const el = list.current; if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
         {more && <button className={s.older} disabled={busy} onClick={() => void older()}>Messaggi precedenti</button>}{!loaded && !messages.length && <p className={s.hint}>Apertura conversazione…</p>}{loaded && !messages.length && <p className={s.hint}>Scrivi il primo messaggio.</p>}
-        {shownMessages.map((m, index) => <div key={m.id}>{(index === 0 || new Date(shownMessages[index - 1].createdAt).toDateString() !== new Date(m.createdAt).toDateString()) && <div className={s.date}>{new Date(m.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}</div>}<article className={`${s.bubble} ${m.userId === userId ? s.mine : ""}`}>{room.kind !== "direct" && m.userId !== userId && <strong className={s.sender}>{m.user.name}</strong>}{m.replyTo && <blockquote>{m.replyTo.user.name}<br />{m.replyTo.deletedAt ? "Messaggio eliminato" : m.replyTo.body}</blockquote>}{m.deletedAt ? <i>Messaggio eliminato</i> : m.attachment ? m.attachment.mediaType.startsWith("audio/") ? <audio className={s.audioMessage} controls preload="none" aria-label="Messaggio vocale" src={`/api/mobile/web-calls/files?id=${encodeURIComponent(m.attachment.id)}`} /> : <a href={`/api/mobile/web-calls/files?id=${encodeURIComponent(m.attachment.id)}`} target="_blank" rel="noreferrer">{m.attachment.mediaType.startsWith("image/") && <img loading="lazy" className={s.attachment} src={`/api/mobile/web-calls/files?id=${encodeURIComponent(m.attachment.id)}`} alt={m.attachment.filename} />}{m.attachment.filename}</a> : <p>{m.body}</p>}<footer><time dateTime={m.createdAt}>{time(m.createdAt)}</time>{m.userId === userId && (m.readByAll ? <CheckCheck size={15} aria-label="Letto" className={s.read} /> : <Check size={15} aria-label="Inviato" />)}</footer></article></div>)}
-      </div></div><WebChatComposer key={room.id} draft={draft} setDraft={setDraft} disabled={busy || room.archived} onSend={() => void send()} onFile={upload} onError={setError} />{details && <div className={s.contactPanel} role="region" aria-label="Informazioni contatto">
+        {shownMessages.map((m, index) => <div key={m.id}>{(index === 0 || new Date(shownMessages[index - 1].createdAt).toDateString() !== new Date(m.createdAt).toDateString()) && <div className={s.date}>{new Date(m.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}</div>}<article className={`${s.bubble} ${m.userId === userId ? s.mine : ""}`}>{room.kind !== "direct" && m.userId !== userId && <strong className={s.sender}>{m.user.name}</strong>}{m.replyTo && <blockquote>{m.replyTo.user.name}<br />{m.replyTo.deletedAt ? "Messaggio eliminato" : m.replyTo.body}</blockquote>}{m.deletedAt ? <i>Messaggio eliminato</i> : m.attachment ? m.attachment.mediaType.startsWith("audio/") ? <audio className={s.audioMessage} controls preload="none" aria-label="Messaggio vocale" src={`/api/mobile/web-calls/files?id=${encodeURIComponent(m.attachment.id)}`} /> : <a href={`/api/mobile/web-calls/files?id=${encodeURIComponent(m.attachment.id)}`} target="_blank" rel="noreferrer">{m.attachment.mediaType.startsWith("image/") && <img loading="lazy" className={s.attachment} src={`/api/mobile/web-calls/files?id=${encodeURIComponent(m.attachment.id)}`} alt={m.attachment.filename} />}{m.attachment.filename}</a> : <p>{m.body}</p>}<footer><time dateTime={m.createdAt}>{time(m.createdAt)}</time>{m.userId === userId && (m.readByAll ? <CheckCheck size={15} aria-label="Letto" className={s.read} /> : <Check size={15} aria-label="Inviato" />)}</footer>{!m.deletedAt && <WebMessageActions disabled={busy || room.archived} reactions={m.reactions} onReact={emoji => void react(m, emoji)} onReply={() => { setReply(m); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Messaggio"]')?.focus()); }} onForward={() => beginForward(m)}/>}</article></div>)}
+      </div></div>{reply && <div className={s.replyPreview}><div><strong>Rispondi a {reply.user.name}</strong><span>{reply.attachment?.mediaType.startsWith("audio/") ? "Messaggio vocale" : reply.body}</span></div><button aria-label="Annulla risposta" disabled={busy} onClick={() => setReply(null)}><X size={18}/></button></div>}{notice && <div className={s.sentNotice} role="status">{notice}<button aria-label="Chiudi conferma" onClick={() => setNotice("")}><X size={16}/></button></div>}<WebChatComposer key={room.id} draft={draft} setDraft={setDraft} disabled={busy || room.archived} onSend={() => void send()} onFile={upload} onError={setError} />{details && <div className={s.contactPanel} role="region" aria-label="Informazioni contatto">
         <header><button ref={detailsClose} aria-label="Chiudi informazioni" onClick={() => { setDetails(false); contactButton.current?.focus(); }}><ArrowLeft size={22}/></button><span>{room.kind === "direct" ? "Info contatto" : "Info gruppo"}</span></header>
         <div className={s.contactHero}><Avatar people={room.members.filter(p => p.id !== userId)}/><h2>{room.title}</h2><p>{room.kind === "direct" ? "Collega · MyParadise" : `${room.members.length} partecipanti`}</p></div>
         <div className={s.contactActions}>{room.kind === "direct" && peer && !room.archived && <button disabled={callBusy} onClick={() => onCall(peer)}><Phone size={22}/><span>Audio</span></button>}<button disabled={busy} onClick={() => void toggleMute()}>{room.muted ? <BellOff size={22}/> : <Bell size={22}/>}<span>{room.muted ? "Riattiva" : "Silenzia"}</span></button><button onClick={() => { setDetails(false); setMessageSearch(""); }}><Search size={22}/><span>Cerca</span></button></div>
         <div className={s.contactCard}><button className={s.detailRow} aria-expanded={colorsOpen} onClick={() => setColorsOpen(!colorsOpen)}><Palette size={20}/><span>Colore chat</span><i style={{background:chatColor || "var(--ownBubble)"}}/></button>{colorsOpen && <div className={s.colorOptions}><p>Colore dei tuoi messaggi su questo browser.</p>{[["", "Paradise"], ["#583249", "Rosa"], ["#334e68", "Blu"], ["#335548", "Verde"], ["#514167", "Viola"], ["#61513a", "Sabbia"]].map(([color,name]) => <button key={name} aria-label={name} aria-pressed={chatColor === color} onClick={() => changeColor(color)}><i style={{background:color || "#bd3269"}}/>{name}</button>)}</div>}<button className={s.detailRow} disabled={busy} onClick={() => void toggleMute()}><Bell size={20}/><span>Notifiche messaggi</span><small>{room.muted ? "Disattivate" : "Attive"}</small></button></div>
         <h3>{room.kind === "direct" ? `Gruppi in comune (${commonGroups.length})` : "Partecipanti"}</h3><div className={s.contactCard}>{room.kind === "direct" ? commonGroups.length ? commonGroups.map(group => <button className={s.detailRow} key={group.id} onClick={() => open(group.id)}><Avatar people={group.members.filter(p => p.id !== userId)}/><span>{group.title}</span></button>) : <p className={s.hint}>Nessun gruppo in comune tra le tue conversazioni.</p> : room.members.map(person => <div key={person.id} className={s.detailRow}><Avatar people={[person]}/><span>{person.name}</span></div>)}</div>
-      </div>}</> : <div className={s.empty}><div className={s.emptyLogo}><img src="/logo.png" alt="Paradise Beauty" /><MessageCircle size={30} /></div><h2>Il tuo team, sempre vicino.</h2><p>Messaggi e chiamate di lavoro, in un unico posto. Scegli una conversazione per iniziare.</p><button onClick={() => { setCreating(true); setSearch(""); }}><Plus size={18} />Nuova conversazione</button><small>Collegato al tuo account MyParadise</small></div>}{error && <div role="alert" className={s.error}>{error}<button onClick={() => setError("")} aria-label="Chiudi avviso">×</button></div>}</section>
+      </div>}</> : <div className={s.empty}><div className={s.emptyLogo}><img src="/logo.png" alt="Paradise Beauty" /><MessageCircle size={30} /></div><h2>Il tuo team, sempre vicino.</h2><p>Messaggi e chiamate di lavoro, in un unico posto. Scegli una conversazione per iniziare.</p><button onClick={() => { setCreating(true); setSearch(""); }}><Plus size={18} />Nuova conversazione</button><small>Collegato al tuo account MyParadise</small></div>}{forward && <div className={s.forwardPanel} role="dialog" aria-modal="true" aria-label="Inoltra messaggio" onKeyDown={e => { if (e.key === "Escape" && !busy) setForward(null); }}><header><h2>Inoltra messaggio</h2><button disabled={busy} aria-label="Annulla inoltro" onClick={() => setForward(null)}><X size={22}/></button></header><blockquote>{forward.attachment?.mediaType.startsWith("audio/") ? "Messaggio vocale" : forward.body}</blockquote><label className={s.search}><Search size={18}/><input autoFocus aria-label="Cerca destinazione" placeholder="Cerca una chat…" value={forwardSearch} onChange={e => setForwardSearch(e.target.value)}/></label><div className={s.forwardRooms}>{rooms.filter(r => !r.archived && r.title.toLowerCase().includes(forwardSearch.toLowerCase())).map(r => <button key={r.id} disabled={busy} aria-pressed={forwardTarget === r.id} onClick={() => setForwardTarget(r.id)}><Avatar people={r.members.filter(p => p.id !== userId)}/><span>{r.title}</span>{forwardTarget === r.id && <Check size={20}/>}</button>)}</div><button className={s.confirmForward} disabled={busy || !forwardTarget} onClick={() => void sendForward()}>{busy ? "Invio…" : "Inoltra alla chat selezionata"}</button></div>}{error && <div role="alert" className={s.error}>{error}<button onClick={() => setError("")} aria-label="Chiudi avviso">×</button></div>}</section>
   </div>;
 }

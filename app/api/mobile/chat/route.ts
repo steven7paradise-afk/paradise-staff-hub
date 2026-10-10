@@ -1,3 +1,4 @@
+import { chatReactions, summarizeReactions } from "@/lib/chat-reactions";
 import { blockedPeers, requireRoomContact, requireContactAllowed, screenChatText } from "@/lib/chat-safety";
 import { scheduleChatPush } from "@/lib/chat-push";
 import { NextRequest, NextResponse } from "next/server";
@@ -39,8 +40,9 @@ export async function GET(request: NextRequest) {
       const messages = await db.chatMessage.findMany({ where: { roomId, userId: { notIn: blocked }, ...(request.nextUrl.searchParams.get("media") === "1" ? { deletedAt: null, attachment: { isNot: null } } : {}), ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) }, include: messageUser, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51 });
       const hasMore = messages.length > 50;
       const items = messages.slice(0, 50).reverse();
+      const reactions = items.length ? await db.setting.findMany({ where: { OR: items.filter(m => !m.deletedAt).map(m => ({ key: { startsWith: `chat-reaction:${m.id}:` } })) }, select: { value: true } }) : [];
       const readers = await db.chatMember.findMany({ where: { roomId, userId: { not: user.id } }, select: { lastReadAt: true } });
-      return response({ blockedUserIds: blocked, messages: items.map(message => ({ ...message, replyTo: message.replyTo && blocked.includes(message.replyTo.user.id) ? null : message.replyTo, readByAll: message.userId === user.id && readers.length > 0 && readers.every(reader => reader.lastReadAt >= message.createdAt) })), hasMore, archived: member.room.archived, manager: member.manager });
+      return response({ blockedUserIds: blocked, messages: items.map(message => ({ ...message, reactions: message.deletedAt ? [] : summarizeReactions(reactions, message.id, user.id, blocked), replyTo: message.replyTo && blocked.includes(message.replyTo.user.id) ? null : message.replyTo, readByAll: message.userId === user.id && readers.length > 0 && readers.every(reader => reader.lastReadAt >= message.createdAt) })), hasMore, archived: member.room.archived, manager: member.manager });
     }
     const memberships = await db.chatMember.findMany({ where: { userId: user.id }, include: { room: { include: { members: { include: { user: { select: person } } }, messages: { where: { userId: { notIn: blocked } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 } } } }, orderBy: { room: { updatedAt: "desc" } }, take: 200 });
     const rooms = await Promise.all(memberships.map(async ({ room, lastReadAt, muted, manager }) => ({
@@ -90,6 +92,55 @@ export async function POST(request: NextRequest) {
       if (input.action === "rename") screenChatText(text(input.title, 80, "Nome"));
       await db.chatRoom.update({ where: { id: roomId }, data: input.action === "archive" ? { archived: true } : { title: text(input.title, 80, "Nome") } });
       return response({ success: true });
+    }
+    if (input.action === "react") {
+      if (member.room.archived) throw new ChatError("La conversazione è archiviata.", 409);
+      await requireRoomContact(roomId, user.id);
+      const messageId = text(input.messageId, 128, "Messaggio");
+      const emoji = input.emoji;
+      if (emoji !== null && !chatReactions.includes(emoji as typeof chatReactions[number])) throw new ChatError("Reazione non valida.");
+      const blocked = await blockedPeers(user.id);
+      const target = await db.chatMessage.findFirst({ where: { id: messageId, roomId, deletedAt: null, userId: { notIn: blocked } } });
+      if (!target) throw new ChatError("Messaggio non disponibile.", 404);
+      const key = `chat-reaction:${messageId}:${user.id}`;
+      if (emoji === null) await db.setting.deleteMany({ where: { key } });
+      else { const value = { messageId, userId: user.id, emoji: String(emoji) }; await db.setting.upsert({ where: { key }, create: { key, value }, update: { value } }); }
+      const rows = await db.setting.findMany({ where: { key: { startsWith: `chat-reaction:${messageId}:` } }, select: { value: true } });
+      return response({ reactions: summarizeReactions(rows, messageId, user.id, blocked) });
+    }
+    if (input.action === "forward") {
+      if (member.room.archived) throw new ChatError("La conversazione di destinazione è archiviata.", 409);
+      await requireRoomContact(roomId, user.id);
+      const messageId = text(input.messageId, 128, "Messaggio");
+      const sourceRoomId = text(input.sourceRoomId, 128, "Conversazione originale");
+      const clientId = text(input.clientId, 128, "Identificativo");
+      await membership(sourceRoomId, user.id);
+      await requireRoomContact(sourceRoomId, user.id);
+      const blocked = await blockedPeers(user.id);
+      let createdNow = false;
+      const message = await db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))::text`;
+        const destination = requireMember(await tx.chatMember.findUnique({ where: { roomId_userId: { roomId, userId: user.id } }, include: { room: true } }));
+        if (destination.room.archived) throw new ChatError("La conversazione è archiviata.", 409);
+        requireMember(await tx.chatMember.findUnique({ where: { roomId_userId: { roomId: sourceRoomId, userId: user.id } } }));
+        const existing = await tx.chatMessage.findUnique({ where: { userId_clientId: { userId: user.id, clientId } }, include: messageUser });
+        if (existing) { if (existing.roomId !== roomId) throw new ChatError("Identificativo già utilizzato.", 409); return existing; }
+        const source = await tx.chatMessage.findFirst({ where: { id: messageId, roomId: sourceRoomId, deletedAt: null, userId: { notIn: blocked } }, include: { attachment: true } });
+        if (!source) throw new ChatError("Messaggio originale non disponibile.", 404);
+        const recent = await tx.chatMessage.count({ where: { userId: user.id, createdAt: { gt: new Date(Date.now() - 60000) } } });
+        if (recent >= 30) throw new ChatError("Troppi messaggi. Attendi un minuto.", 429);
+        screenChatText(source.body);
+        const file = source.attachment;
+        if (file) {
+          const quota = await tx.chatAttachment.aggregate({ where: { message: { userId: user.id, createdAt: { gt: new Date(Date.now() - 86400000) } } }, _sum: { size: true } });
+          if ((quota._sum.size ?? 0) + file.size > 100 * 1024 * 1024) throw new ChatError("Limite allegati giornaliero raggiunto (100 MB).", 429);
+        }
+        const created = await tx.chatMessage.create({ data: { roomId, userId: user.id, clientId, body: source.body, ...(file ? { attachment: { create: { filename: file.filename, mediaType: file.mediaType, size: file.size, data: file.data } } } : {}) }, include: messageUser });
+        await tx.chatRoom.update({ where: { id: roomId }, data: { updatedAt: created.createdAt } });
+        createdNow = true; return created;
+      });
+      if (createdNow) scheduleChatPush(message.id);
+      return response({ message });
     }
     if (input.action === "send" || input.action === "edit") await requireRoomContact(roomId, user.id);
     if (member.room.archived) throw new ChatError("La conversazione è archiviata.", 409);

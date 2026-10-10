@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const file = validateChatFile(input.filename, input.data);
     screenChatText(file.filename);
     if (file.mediaType === "text/plain") screenChatText(file.data.toString("utf8"));
+    const replyToId = input.replyToId == null ? null : text(input.replyToId, 128, "Messaggio citato");
     let createdNow = false;
     const message = await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))::text`;
@@ -33,7 +34,8 @@ export async function POST(request: NextRequest) {
       if (recent >= 30) throw new ChatError("Troppi messaggi. Attendi un minuto.", 429);
       const quota = await tx.chatAttachment.aggregate({ where: { message: { userId: user.id, createdAt: { gt: new Date(Date.now() - 86400000) } } }, _sum: { size: true } });
       if ((quota._sum.size ?? 0) + file.size > 100 * 1024 * 1024) throw new ChatError("Limite allegati giornaliero raggiunto (100 MB).", 429);
-      const created = await tx.chatMessage.create({ data: { roomId, userId: user.id, clientId, body: file.filename, attachment: { create: file } } });
+      if (replyToId && !await tx.chatMessage.findFirst({ where: { id: replyToId, roomId, deletedAt: null } })) throw new ChatError("Messaggio citato non disponibile.", 404);
+      const created = await tx.chatMessage.create({ data: { roomId, userId: user.id, clientId, replyToId, body: file.filename, attachment: { create: file } } });
       await tx.chatRoom.update({ where: { id: roomId }, data: { updatedAt: created.createdAt } });
       createdNow = true;
       return created;

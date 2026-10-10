@@ -7,5 +7,5 @@ export function webCallOriginAllowed(origin: string | null, requestOrigin: strin
   return origin === expected;
 }
 export function webCallActionAllowed(operation: string, action: unknown) {
-  return operation === "chat" ? ["send", "read", "mute"].includes(String(action)) : operation === "calls" ? ["start", "accept", "join", "decline", "end"].includes(String(action)) : operation === "directory" && action === "create";
+  return operation === "chat" ? ["send", "read", "mute", "react", "forward"].includes(String(action)) : operation === "calls" ? ["start", "accept", "join", "decline", "end"].includes(String(action)) : operation === "directory" && action === "create";
 }
