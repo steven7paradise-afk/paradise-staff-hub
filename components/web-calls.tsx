@@ -6,16 +6,13 @@ import { Phone, PhoneOff, Mic, MicOff, LogOut, Search, Volume2, MessageCircle, S
 import styles from "./web-calls.module.css";
 import { staffPhotoSource } from "@/lib/web-staff-photo";
 import { WebChat } from "./web-chat";
+import { webRequest, WebApiError as ApiError, connectionMessage } from "@/lib/web-api-response";
 import { WebQRLogin } from "./web-qr-login";
 
 type Person = { id: string; name: string; photo_url?: string | null; location?: { name: string } | null };
-class ApiError extends Error { constructor(message: string, public status: number) { super(message); } }
 type Call = { id: string; callerId: string; calleeId: string; callerName: string; calleeName: string; callerPhoto?: string | null; calleePhoto?: string | null; status: string; expiresAt: number };
 async function api(path: string, body?: object) {
-  const response = await fetch(`/api/mobile/web-calls/${path}`, { method: body ? "POST" : "GET", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, cache: "no-store", signal: AbortSignal.timeout(15000) });
-  const data = await response.json();
-  if (!response.ok) throw new ApiError(data.error || "Connessione non disponibile. Riprova.", response.status);
-  return data;
+  return webRequest(`/api/mobile/web-calls/${path}`, body);
 }
 function Portrait({ person, large = false }: { person: Pick<Person, "name" | "photo_url"> & { id?: string }; large?: boolean }) {
   const [failed, setFailed] = useState(false);
@@ -48,14 +45,21 @@ export function WebCalls() {
   const releaseLock = useRef<(() => void) | null>(null);
 
 
-  useEffect(() => { let cancelled = false; api("session").then(d => { if (!cancelled) setUser(d.user); }).catch(() => {}).finally(() => { if (!cancelled) setChecking(false); }); return () => { cancelled = true; }; }, []);
+  useEffect(() => {
+    let cancelled = false; let timer: ReturnType<typeof setTimeout>;
+    async function session() {
+      try { const data = await api("session"); if (!cancelled) { setUser(data.user); setChecking(false); setError(old => old === connectionMessage ? "" : old); } }
+      catch (e) { if (cancelled) return; if (e instanceof ApiError && e.temporary) { setError(e.message); timer = setTimeout(session, 3000); } else setChecking(false); }
+    }
+    void session(); return () => { cancelled = true; clearTimeout(timer); };
+  }, []);
   useEffect(() => { if (!user) return; let cancelled = false; api("directory").then(d => { if (!cancelled) setPeople(d.users); }).catch(e => { if (!cancelled) setError(e.message); }); return () => { cancelled = true; }; }, [user]);
   useEffect(() => {
     if (!user) return;
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       const observed = revision.current;
-      try { if (acting.current) return; const data = await api("calls"); if (cancelled || acting.current || observed !== revision.current) return; setEnabled(data.enabled); setHealthy(true); setCall(data.call); }
+      try { if (acting.current) return; const data = await api("calls"); if (cancelled || acting.current || observed !== revision.current) return; setEnabled(data.enabled); setHealthy(true); setCall(data.call); setError(old => old === connectionMessage ? "" : old); }
       catch (e) { if (!cancelled) { setHealthy(false); setError((e as Error).message); if (e instanceof ApiError && e.status === 401) { releaseLock.current?.(); setReady(false); setCall(null); setPeople([]); setUser(null); } } }
       finally { if (!cancelled) timer = setTimeout(poll, 2000); }
     };

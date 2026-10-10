@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Check, CheckCheck, MessageCircle, Plus, Search, Send, Users, Phone, X, Bell, BellOff, Palette } from "lucide-react";
 import { staffPhotoSource } from "@/lib/web-staff-photo";
+import { webRequest, connectionMessage } from "@/lib/web-api-response";
 import { WebChatComposer } from "./web-chat-composer";
 import landscape from "@/assets/chat/paradise-landscape.png";
 import portrait from "@/assets/chat/paradise-portrait.png";
@@ -10,10 +11,7 @@ type Person = { id: string; name: string; photo_url?: string | null };
 type Room = { id: string; title: string; kind: string; members: Person[]; lastMessage: string | null; unread: number; archived: boolean; muted?: boolean; updatedAt: string };
 type Message = { id: string; body: string; userId: string; user: Person; createdAt: string; deletedAt?: string | null; readByAll?: boolean; attachment?: { id: string; filename: string; mediaType: string } | null; replyTo?: { body: string; deletedAt?: string | null; user: Person } | null };
 async function request(path: string, body?: object) {
-  const res = await fetch(`/api/mobile/web-calls/${path}`, { method: body ? "POST" : "GET", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, cache: "no-store", signal: AbortSignal.timeout(15000) });
-  const data = await res.json();
-  if (!res.ok) throw Object.assign(new Error(data.error || "Chat non disponibile. Riprova."), { status: res.status });
-  return data;
+  return webRequest(`/api/mobile/web-calls/${path}`, body);
 }
 function Avatar({ people }: { people: Person[] }) {
   const [failed, setFailed] = useState<string[]>([]);
@@ -43,7 +41,7 @@ export function WebChat({ userId, people, active, onExpired, onCall, callBusy }:
   useEffect(() => {
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
-      try { const data = await request("chat"); if (!cancelled) { setRooms(data.rooms); setLoading(false); } }
+      try { const data = await request("chat"); if (!cancelled) { setRooms(data.rooms); setLoading(false); setError(old => old === connectionMessage ? "" : old); } }
       catch (e) { if (!cancelled) { failure(e); setLoading(false); } }
       finally { if (!cancelled) timer = setTimeout(refresh, 4000); }
     }
@@ -57,6 +55,7 @@ export function WebChat({ userId, people, active, onExpired, onCall, callBusy }:
         const data = await request(`chat?roomId=${encodeURIComponent(selected!)}`);
         if (cancelled) return;
         setMessages(old => { const ids = new Set(data.messages.map((m: Message) => m.id)); return [...old.filter(m => !ids.has(m.id) && m.createdAt < (data.messages[0]?.createdAt ?? "")), ...data.messages]; });
+        setError(old => old === connectionMessage ? "" : old);
         setLoaded(true); if (first) { setMore(data.hasMore); first = false; }
         const last = data.messages.at(-1);
         if (last && document.visibilityState === "visible" && nearBottom.current && seen.current !== last.id) {

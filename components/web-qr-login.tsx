@@ -1,13 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { webRequest, WebApiError, connectionMessage } from "@/lib/web-api-response";
 import QRCode from "qrcode";
 import styles from "./web-calls.module.css";
 
 async function link(action: string, id?: string) {
-  const res = await fetch("/api/mobile/web-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, id }), cache: "no-store", signal: AbortSignal.timeout(15000) });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Collegamento non disponibile.");
-  return data;
+  return webRequest("/api/mobile/web-link", { action, id });
 }
 export function WebQRLogin({ onLogin }: { onLogin: (user: { id: string; name: string; photo_url?: string | null }) => void }) {
   const [code, setCode] = useState<{ id: string; image: string; verification: string; expires: number } | null>(null);
@@ -31,8 +29,8 @@ export function WebQRLogin({ onLogin }: { onLogin: (user: { id: string; name: st
     const tick = setInterval(() => setSeconds(Math.max(0, Math.ceil((code.expires - Date.now()) / 1000))), 1000);
     const poll = async () => {
       if (Date.now() >= code.expires) return;
-      try { const data = await link("poll", code.id); if (stopped) return; if (data.user) { callback.current(data.user); return; } }
-      catch (e) { if (!stopped) { setError((e as Error).message); setCode(null); } return; }
+      try { const data = await link("poll", code.id); if (stopped) return; setError(old => old === connectionMessage ? "" : old); if (data.user) { callback.current(data.user); return; } }
+      catch (e) { if (!stopped) { setError((e as Error).message); if (e instanceof WebApiError && e.temporary) { timer = setTimeout(poll, 3000); return; } setCode(null); } return; }
       if (!stopped) timer = setTimeout(poll, 2000);
     };
     timer = setTimeout(poll, 2000);
