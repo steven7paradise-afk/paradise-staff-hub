@@ -11,8 +11,7 @@ export function GET() {
   "background_color": "#fff7fa",
   "theme_color": "#f7e9ef",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/my-staff/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }, { headers: { "Content-Type": "application/manifest+json" } });
 }

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     title: "MyParadise",
     statusBarStyle: "default",
   },
-  icons: { apple: "/icon-192.png" },
+  icons: { icon: "/my-staff/icon.png", shortcut: "/my-staff/icon.png", apple: "/my-staff/apple-icon.png" },
 };
 
 export default function MyStaffLayout({ children }: { children: React.ReactNode }) {
