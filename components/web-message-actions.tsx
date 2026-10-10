@@ -7,8 +7,20 @@ export function WebMessageActions({ disabled, reactions = [], onReact, onReply, 
   const [open, setOpen] = useState(false);
   const host = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    const bubble = host.current?.closest("article");
+    if (!bubble) return;
+    const click = (event: MouseEvent) => {
+      if (disabled || event.button !== 0 || window.getSelection()?.toString()) return;
+      const target = event.target as Element;
+      if (target.closest("button,a,audio,input,textarea,select") || host.current?.contains(target)) return;
+      setOpen(value => !value);
+    };
+    bubble.addEventListener("click", click);
+    return () => bubble.removeEventListener("click", click);
+  }, [disabled]);
+  useEffect(() => {
     if (!open) return;
-    const close = (e: PointerEvent) => { if (!host.current?.contains(e.target as Node)) setOpen(false); };
+    const close = (e: PointerEvent) => { if (!host.current?.closest("article")?.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); trigger.current?.focus(); } };
     document.addEventListener("pointerdown", close); document.addEventListener("keydown", key);
     return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", key); };
