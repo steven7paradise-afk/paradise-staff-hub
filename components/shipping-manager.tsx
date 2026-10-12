@@ -125,6 +125,18 @@ function photoPreviewUrl(url: string) {
   return driveId ? `/api/drive-image?id=${encodeURIComponent(driveId)}` : url;
 }
 
+function ShipmentPhotoThumbnails({ order }: { order: ShipmentOrder }) {
+  if (!order.photoUrl && !order.proofPhotoUrl) return null;
+  return <div className="mt-2 flex flex-wrap gap-2" aria-label={`Foto caricate per ${order.orderName}`}>
+    {[{ url: order.photoUrl, label: "Pacco" }, { url: order.proofPhotoUrl, label: "Comprovante" }].map(({ url, label }) => url && (
+      <a key={label} href={photoPreviewUrl(url)} target="_blank" rel="noopener noreferrer" className="w-24 rounded-lg border border-slate-200 bg-white p-1.5 text-center text-xs font-semibold text-[#B83D7F] hover:border-[#B83D7F]" aria-label={`Apri foto ${label.toLowerCase()} ${order.orderName}`}>
+        <img src={photoPreviewUrl(url)} alt={`Foto ${label.toLowerCase()} ${order.orderName}`} loading="lazy" className="mb-1 h-16 w-full rounded object-contain" />
+        {label}
+      </a>
+    ))}
+  </div>;
+}
+
 export function ShippingManager({
   initialOrders,
   initialOrderId,
@@ -761,6 +773,7 @@ export function ShippingManager({
                   <p className="truncate text-sm font-semibold text-[#181719]" title={order.customerName}>{order.customerName}</p>
                   <p className="truncate text-xs text-slate-500" title={order.lineItems[0]?.title}>{order.lineItems[0]?.title || "Articoli da recuperare"}</p>
                   <p className="mt-0.5 text-[11px] text-slate-400">{order.lineItems.reduce((sum, item) => sum + item.quantity, 0)} pezzi · {order.shippingAddress.city || "Destinazione da verificare"}</p>
+                  <ShipmentPhotoThumbnails order={order} />
                 </div>
                 <button type="button" onClick={() => openPackingModal(order)} aria-label={`Apri ordine ${order.orderName} di ${order.customerName}`} className="grid size-11 shrink-0 place-items-center rounded-lg border border-slate-200 text-[#181719] hover:bg-[#F5F3F4]"><ChevronRight className="size-5" aria-hidden="true" /></button>
               </div>)}
@@ -793,6 +806,7 @@ export function ShippingManager({
                           </div>
                         </div>
                         <p className="truncate text-xs text-slate-600" title={order.lineItems[0]?.title}>{order.lineItems[0]?.title || "Articoli da recuperare"}</p>
+                        <ShipmentPhotoThumbnails order={order} />
                         <div className="flex items-center justify-between border-t border-slate-100 pt-2">
                           <span className="text-xs tabular-nums text-slate-500">{order.lineItems.reduce((sum, item) => sum + item.quantity, 0)} pezzi</span>
                           <button type="button" onClick={() => openPackingModal(order)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#181719] hover:bg-slate-100">{col.id === "SHIPPED" ? "Apri ordine" : "Prepara"}<ChevronRight className="size-4" aria-hidden="true" /></button>
@@ -838,6 +852,7 @@ export function ShippingManager({
                       <h4 className="mt-0.5 truncate text-sm font-semibold text-slate-900" title={order.customerName}>{order.customerName}</h4>
                       <p className="mt-1 text-xs text-slate-500 xl:hidden">{order.shippingAddress.city || "Destinazione da verificare"} · {dateLabel(order.createdAt)}</p>
                       <p className="mt-1 truncate text-xs text-slate-700 xl:hidden">{order.lineItems[0]?.title || "Articoli da recuperare"}</p>
+                      <ShipmentPhotoThumbnails order={order} />
                     </div>
                   </div>
                   <div className="hidden min-w-0 xl:block">
