@@ -122,7 +122,7 @@ const yearsList = Array.from({ length: 3 }, (_, i) => currentYearNum - 1 + i);
 
 function photoPreviewUrl(url: string) {
   const driveId = url.match(/drive\.google\.com\/file\/d\/([^/]+)/)?.[1];
-  return driveId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w600` : url;
+  return driveId ? `/api/drive-image?id=${encodeURIComponent(driveId)}` : url;
 }
 
 export function ShippingManager({
@@ -351,10 +351,22 @@ export function ShippingManager({
     verifyBarcode(barcodeInput);
   }
 
+  async function persistShipmentPhoto(order: ShipmentOrder, field: "photoUrl" | "proofPhotoUrl", url: string) {
+    const response = await fetch("/api/shipping/shipments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // Save only the attachment: do not change status, tracking or fulfillment.
+      body: JSON.stringify({ shopifyOrderId: order.shopifyOrderId, orderName: order.orderName, [field]: url }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Foto caricata ma non salvata nella spedizione. Premi Salva bozza per riprovare.");
+    setOrders(current => current.map(item => item.shopifyOrderId === order.shopifyOrderId ? { ...item, [field]: url } : item));
+  }
+
   // Upload Package Photo to Google Drive
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !selectedOrder) return;
 
     setUploadingPhoto(true);
     setSavingStatus("Caricamento foto pacco su Google Drive in corso...");
@@ -369,24 +381,26 @@ export function ShippingManager({
       });
 
       const data = await res.json();
-      setUploadingPhoto(false);
 
       if (res.ok && data.url) {
         setPhotoUrl(data.url);
-        setSavingStatus("✓ Foto pacco caricata con successo!");
+        await persistShipmentPhoto(selectedOrder, "photoUrl", data.url);
+        setSavingStatus("✓ Foto pacco salvata nella spedizione.");
       } else {
         setSavingStatus(data.error || "Errore caricamento foto.");
       }
     } catch (err) {
       console.error("Photo upload error:", err);
+      setSavingStatus(err instanceof Error ? err.message : "Errore durante il caricamento.");
+    } finally {
       setUploadingPhoto(false);
-      setSavingStatus("Errore durante il caricamento.");
+      e.target.value = "";
     }
   }
 
   async function handleProofPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !selectedOrder) return;
     setUploadingProofPhoto(true);
     setSavingStatus("Caricamento del comprovante in corso...");
     const formData = new FormData();
@@ -396,6 +410,7 @@ export function ShippingManager({
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.error || "Caricamento non riuscito.");
       setProofPhotoUrl(data.url);
+      await persistShipmentPhoto(selectedOrder, "proofPhotoUrl", data.url);
       let labelTracking = "";
       if ("BarcodeDetector" in window && "createImageBitmap" in window) {
         try {
@@ -411,9 +426,9 @@ export function ShippingManager({
       }
       if (labelTracking) {
         setTrackingNumber(labelTracking);
-        setSavingStatus(`Comprovante caricato e tracking letto: ${labelTracking}. Premi Salva bozza.`);
+        setSavingStatus(`Comprovante salvato e tracking letto: ${labelTracking}. Premi Salva bozza.`);
       } else {
-        setSavingStatus("Comprovante caricato. Scansiona o scrivi il tracking e premi Salva bozza.");
+        setSavingStatus("Comprovante salvato. Scansiona o scrivi il tracking e premi Salva bozza.");
       }
     } catch (error) {
       setSavingStatus(error instanceof Error ? error.message : "Errore durante il caricamento del comprovante.");
@@ -425,7 +440,7 @@ export function ShippingManager({
 
   // Save Shipment Updates
   async function saveShipment(newStatus?: "UNFULFILLED" | "PACKING" | "READY" | "SHIPPED") {
-    if (!selectedOrder) return;
+    if (!selectedOrder || uploadingPhoto || uploadingProofPhoto) return;
     const targetStatus = newStatus || selectedOrder.status;
     if (newStatus && (targetStatus === "READY" || targetStatus === "SHIPPED") &&
       (!selectedOrder.lineItems.length || selectedOrder.lineItems.some((item) => verifiedQuantity(item, scannedBarcodes) < item.quantity))) {
@@ -892,7 +907,7 @@ export function ShippingManager({
                   <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handlePhotoUpload} disabled={uploadingPhoto} aria-label="Carica foto del pacco pronto" />
                 </label>
                 </div>
-                {photoUrl && <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-sm font-semibold text-[#B83D7F] underline">Vedi foto pacco ↗</a>}
+
               </div>
             </div>
 
@@ -1093,14 +1108,17 @@ export function ShippingManager({
               />
             </label>
 
-            {proofPhotoUrl && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="mb-3 text-sm font-semibold text-slate-900">Comprovante di spedizione</p>
-                <a href={proofPhotoUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
-                  <img src={photoPreviewUrl(proofPhotoUrl)} alt="Foto del comprovante di spedizione" className="max-h-64 max-w-full rounded-lg border border-slate-200 object-contain" />
-                </a>
-              </div>
-            )}
+            {(photoUrl || proofPhotoUrl) && <section aria-label="Foto della spedizione" className="grid gap-4 sm:grid-cols-2">
+              {[{ url: photoUrl, title: "Foto del pacco" }, { url: proofPhotoUrl, title: "Comprovante di spedizione" }].map(({ url, title }) => url && (
+                <div key={title} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-900">{title}</h3>
+                  <a href={photoPreviewUrl(url)} target="_blank" rel="noopener noreferrer" className="block text-sm font-semibold text-[#B83D7F]">
+                    <img src={photoPreviewUrl(url)} alt={title} className="mb-3 h-48 w-full rounded-lg border border-slate-200 object-contain" />
+                    <span className="underline">Apri foto a dimensione intera ↗</span>
+                  </a>
+                </div>
+              ))}
+            </section>}
 
             {savingStatus ? (
               <p className="rounded-2xl bg-[#FFF0F6] border border-[#F9D5E7] p-3 text-xs font-black text-[#B83D7F]">
