@@ -130,6 +130,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
   const [creating, setCreating] = useState(false);
   const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
@@ -280,6 +281,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     setEditing(employee);
     setPin("");
     setPassword("");
+    setPasswordConfirmation("");
     setMessage("");
 
     const mansioniPresets = ["hairstyle", "videomaker", "sito web", "magazzino", "grafico", "parrucchiera", "estetista", "receptionist"];
@@ -292,6 +294,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     setEditing({ ...draft, id: "" });
     setPin("");
     setPassword("");
+    setPasswordConfirmation("");
     setMessage("");
     setCustomMansioneEdit(false);
   }
@@ -312,6 +315,10 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
 
   async function saveEmployee() {
     if (!editing) return;
+    if (password && (password.length < 8 || password !== passwordConfirmation)) {
+      setErrorMsg(password.length < 8 ? "La password deve avere almeno 8 caratteri." : "Le password non coincidono.");
+      return;
+    }
     if (pin && !/^\d{4,6}$/.test(pin)) {
       setMessage("Il PIN deve avere da 4 a 6 numeri.");
       return;
@@ -370,6 +377,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       setCreating(false);
       setPin("");
       setPassword("");
+      setPasswordConfirmation("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Errore durante il salvataggio.");
     } finally {
@@ -897,30 +905,19 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                     />
                   </label>
 
-                  <div className="pt-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block mb-1">Cambia password</span>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setErrorMsg("");
-                        try {
-                          const res = await fetch(`/api/profile/password`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: editing.email })
-                          });
-                          if (!res.ok) throw new Error("Errore invio email reset password.");
-                          setMessage("Email per il reset della password inviata con successo!");
-                          setTimeout(() => setMessage(""), 3500);
-                        } catch (err: any) {
-                          setErrorMsg(err.message);
-                        }
-                      }}
-                      className="w-full flex items-center justify-center gap-2 rounded-2xl border border-[#B85B68]/20 bg-[#B85B68]/5 px-4 py-3 text-xs font-bold text-[#B85B68] hover:bg-[#B85B68]/10 active:scale-98 transition duration-200"
-                    >
-                      <Mail className="size-4" /> Invia link di reimpostazione
-                    </button>
-                  </div>
+                  {!creating && <div className="space-y-3 border-t border-[#B85B68]/15 pt-4">
+                    <h4 className="text-sm font-semibold">Reimposta password</h4>
+                    <p className="text-xs text-neutral-500">Lascia vuoto per mantenere la password attuale. La nuova password viene applicata premendo Salva. Il lavoratore dovrà cambiarla al prossimo accesso nell’app.</p>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium">Password temporanea</span>
+                      <Field value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Almeno 8 caratteri" />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium">Conferma password temporanea</span>
+                      <Field value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} type="password" autoComplete="new-password" />
+                    </label>
+                    <p className="text-xs text-neutral-500">Le sessioni dell’app saranno disconnesse. Nessuna email verrà inviata.</p>
+                  </div>}
                 </div>
               </div>
             </div>

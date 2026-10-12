@@ -136,7 +136,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         pin_lookup: pinLookup(pin),
         pin_prefix_lookup: pinPrefixLookup(pin),
       } : {}),
-      ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {}),
+      ...(password ? { password_hash: await bcrypt.hash(password, 12), must_change_password: true } : {}),
     };
 
     const user = await prisma.$transaction(async (tx) => {
@@ -150,8 +150,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         }
       });
 
-      if (!baseUpdate.active) {
-        // Revoke within the same transaction as deactivation. Never delete documents.
+      if (!baseUpdate.active || password) {
+        // Revoke atomically after deactivation or a password reset. Keep documents.
         await tx.mobileSession.updateMany({
           where: { user_id: id, revoked_at: null },
           data: { revoked_at: new Date() },
