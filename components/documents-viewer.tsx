@@ -17,14 +17,12 @@ import {
   Trash2,
   Search,
   X,
-  CheckCircle2,
-  ChevronRight,
   ArrowLeft,
-  AlertCircle,
 } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { contractActiveInPayrollMonth, workedInPayrollMonth } from "@/lib/payroll-status";
+import { PayrollRoster } from "./payroll-roster";
+import type { PayrollWorker } from "@/lib/payroll-roster";
 
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
@@ -365,7 +363,7 @@ export function DocumentsViewer({
 }: {
   documents: DocumentRecord[];
   employeeView: boolean;
-  workers?: { id: string; name: string; role?: string; mansione?: string | null; photo_url?: string | null; email?: string | null; contractStart?: string | null; contractEnd?: string | null; workedMonths?: string[] }[];
+  workers?: PayrollWorker[];
   initialWorkerId?: string;
   initialType?: string;
 }) {
@@ -396,20 +394,6 @@ export function DocumentsViewer({
 
   const [statusMonth, setStatusMonth] = useState(defaultMonth);
   const [statusYear, setStatusYear] = useState(defaultYear);
-  const [workerSearchQuery, setWorkerSearchQuery] = useState("");
-
-  const workersList = useMemo(() => {
-    const list: { id: string; name: string }[] = [];
-    const ids = new Set<string>();
-    documents.forEach((doc) => {
-      if (doc.user && !ids.has(doc.user.id)) {
-        ids.add(doc.user.id);
-        list.push({ id: doc.user.id, name: doc.user.name });
-      }
-    });
-    return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [documents]);
-
   const yearsList = useMemo(() => {
     const years = new Set<number>();
     documents.forEach((doc) => {
@@ -417,54 +401,6 @@ export function DocumentsViewer({
     });
     return Array.from(years).sort((a, b) => b - a);
   }, [documents]);
-
-  const workersWithStatus = useMemo(() => {
-    if (employeeView) return [];
-    
-    // Map workerId -> has BUSTA_PAGA for selected month and year
-    const statusMap = new Map<string, { hasDoc: boolean; docId?: string; dateUploaded?: string }>();
-    
-    documents.forEach((doc) => {
-      if (doc.type === "BUSTA_PAGA" && doc.month === statusMonth && doc.year === statusYear) {
-        statusMap.set(doc.user.id, {
-          hasDoc: true,
-          docId: doc.id,
-          dateUploaded: doc.created_at,
-        });
-      }
-    });
-    
-    return workers.filter((worker) => (
-      workedInPayrollMonth(worker.workedMonths, statusMonth, statusYear)
-      && contractActiveInPayrollMonth(worker.contractStart, worker.contractEnd, statusMonth, statusYear)
-    )).map((w) => {
-      const statusInfo = statusMap.get(w.id);
-      return {
-        ...w,
-        hasDoc: statusInfo?.hasDoc ?? false,
-        docId: statusInfo?.docId,
-        dateUploaded: statusInfo?.dateUploaded,
-      };
-    });
-  }, [workers, documents, statusMonth, statusYear, employeeView]);
-
-  const filteredWorkers = useMemo(() => {
-    if (!workerSearchQuery.trim()) return workersWithStatus;
-    const query = workerSearchQuery.toLowerCase();
-    return workersWithStatus.filter((w) => w.name.toLowerCase().includes(query));
-  }, [workersWithStatus, workerSearchQuery]);
-
-  const stats = useMemo(() => {
-    const total = workersWithStatus.length;
-    const completed = workersWithStatus.filter((w) => w.hasDoc).length;
-    const missing = total - completed;
-    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-    
-    const missingWorkers = workersWithStatus.filter((w) => !w.hasDoc);
-    const completedWorkers = workersWithStatus.filter((w) => w.hasDoc);
-    
-    return { total, completed, missing, percentage, missingWorkers, completedWorkers };
-  }, [workersWithStatus]);
 
   const activeWorker = useMemo(() => {
     if (!selectedWorkerId) return null;
@@ -583,7 +519,20 @@ export function DocumentsViewer({
     );
   }
 
-  const showPersonnelTable = !employeeView && workers.length > 0 && selectedWorkerId === "";
+  if (!employeeView && !selectedWorkerId) {
+    return <PayrollRoster workers={workers} documents={documents} month={statusMonth} year={statusYear}
+      onPeriodChange={(month, year) => { setStatusMonth(month); setStatusYear(year); }}
+      onOpenWorker={(workerId, documentId) => {
+        handleSelectWorker(workerId);
+        setSearchQuery(""); setSelectedType("ALL"); setSelectedYear("ALL");
+        if (documentId) {
+          setSelectedId(documentId); setExpandedId(documentId);
+          if (window.matchMedia("(max-width: 1023px)").matches) {
+            setMobilePreview(documents.find(document => document.id === documentId) ?? null);
+          }
+        }
+      }} />;
+  }
 
   return (
     <div className="operations-liquid-page documents-liquid min-h-[calc(100dvh-12rem)] rounded-[32px] border border-white/70 p-4 shadow-[0_18px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl sm:p-5">
@@ -606,87 +555,7 @@ export function DocumentsViewer({
       
       {/* MOBILE VERSION (lg:hidden) */}
       <div className="space-y-4 lg:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl documents-page">
-        {showPersonnelTable ? (
-          /* MOBILE: Personnel Status Table */
-          <div className="space-y-4">
-            <div className="bg-white/5 p-4 rounded-[24px] border border-white/5 space-y-3">
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.24em] text-[#B85B68]">Stato Consegne</p>
-              <h2 className="text-lg font-extrabold text-white">Consegna Cedolini</h2>
-              
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Cerca collaboratore..."
-                  value={workerSearchQuery}
-                  onChange={(e) => setWorkerSearchQuery(e.target.value)}
-                  className="w-full h-11 pl-9 pr-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
-                />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/30" />
-                {workerSearchQuery && (
-                  <button onClick={() => setWorkerSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30">
-                    <X className="size-3" />
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={statusMonth}
-                  onChange={(e) => setStatusMonth(Number(e.target.value))}
-                  className="h-11 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
-                >
-                  {monthNames.map((name, idx) => (
-                    <option key={idx} value={idx + 1}>{name}</option>
-                  ))}
-                </select>
-                <select
-                  value={statusYear}
-                  onChange={(e) => setStatusYear(Number(e.target.value))}
-                  className="h-11 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
-                >
-                  {[2024, 2025, 2026, 2027, 2028].map((year) => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {filteredWorkers.map((worker) => (
-                <button
-                  key={worker.id}
-                  type="button"
-                  onClick={() => handleSelectWorker(worker.id)}
-                  className="w-full rounded-2xl border border-white/5 bg-white/5 p-3.5 text-left flex items-center justify-between transition-all active:scale-[0.98] hover:bg-white/10"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1 pr-3">
-                    <StaffAvatar name={worker.name} photoUrl={worker.photo_url} className="size-11 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-extrabold text-white truncate">{worker.name}</h3>
-                      <p className="text-xs text-white/50 mt-0.5 font-semibold truncate">
-                        {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    {worker.hasDoc ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/20">
-                        <span className="size-1.5 rounded-full bg-emerald-400" />
-                        Caricato
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-1 text-[10px] font-extrabold text-rose-400 border border-rose-500/20">
-                        <span className="size-1.5 rounded-full bg-rose-400 animate-pulse" />
-                        Mancante
-                      </span>
-                    )}
-                    <ChevronRight className="size-4 text-white/30" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
+        {(
           /* MOBILE: User Document List */
           <>
             <div className="bg-white/5 p-4 rounded-[24px] border border-white/5 space-y-3.5">
@@ -897,100 +766,7 @@ export function DocumentsViewer({
       {/* DESKTOP VERSION (hidden lg:grid) */}
       <div className="hidden grid-cols-12 gap-5 lg:grid">
         <Card className="col-span-5 max-h-[calc(100dvh-8rem)] overflow-hidden p-0 hover:translate-y-0 flex flex-col">
-          {showPersonnelTable ? (
-            /* DESKTOP: Left Side - Personnel list with delivery status indicators */
-            <>
-              <div className="border-b border-black/5 bg-white/80 p-5 shrink-0">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-black/35">Stato Consegne</p>
-                <h2 className="mt-1 text-xl font-extrabold text-paradise-noir">Consegna Cedolini</h2>
-              </div>
-
-              <div className="border-b border-black/5 bg-slate-50/50 p-4 space-y-3 shrink-0">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Cerca collaboratore..."
-                    value={workerSearchQuery}
-                    onChange={(e) => setWorkerSearchQuery(e.target.value)}
-                    className="h-11 w-full rounded-xl border border-black/10 bg-white pl-9 pr-4 text-xs font-semibold outline-none transition focus:border-[#B85B68] focus:ring-2 focus:ring-[#B85B68]/20"
-                  />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
-                  {workerSearchQuery && (
-                    <button onClick={() => setWorkerSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-black/30 hover:text-black/60">
-                      <X className="size-3" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={statusMonth}
-                    onChange={(e) => setStatusMonth(Number(e.target.value))}
-                    className="h-11 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
-                  >
-                    {monthNames.map((name, index) => (
-                      <option key={index} value={index + 1}>{name}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={statusYear}
-                    onChange={(e) => setStatusYear(Number(e.target.value))}
-                    className="h-11 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
-                  >
-                    {[2024, 2025, 2026, 2027, 2028].map((year) => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                </div>
-                <p className="text-[10px] font-semibold text-black/40 italic">
-                  * Finestra di consegna: dal 1 al 15 del mese successivo.
-                </p>
-              </div>
-
-              <div className="flex-1 overflow-y-auto space-y-2.5 p-4 min-h-0">
-                {filteredWorkers.length === 0 ? (
-                  <div className="border border-black/5 bg-white/70 py-12 text-center text-sm text-black/45 rounded-3xl">
-                    Nessun collaboratore trovato.
-                  </div>
-                ) : (
-                  filteredWorkers.map((worker) => (
-                    <button
-                      key={worker.id}
-                      type="button"
-                      onClick={() => handleSelectWorker(worker.id)}
-                      className="w-full rounded-2xl border border-black/5 bg-white p-3.5 text-left flex items-center justify-between transition hover:border-[#B85B68]/30 hover:bg-slate-50/50 shadow-2xs"
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-4">
-                        <StaffAvatar name={worker.name} photoUrl={worker.photo_url} className="size-11 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-sm font-extrabold text-paradise-noir truncate">{worker.name}</h3>
-                          <p className="text-xs text-black/45 mt-0.5 font-semibold truncate">
-                            {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 shrink-0">
-                        {worker.hasDoc ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-extrabold text-emerald-700">
-                            <span className="size-2 rounded-full bg-emerald-500" />
-                            Caricato
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-extrabold text-rose-700">
-                            <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-                            Mancante
-                          </span>
-                        )}
-                        <ChevronRight className="size-4 text-black/20" />
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
-          ) : (
+          {(
             /* DESKTOP: Left Side - Selected worker's document archive */
             <>
               <div className="border-b border-black/5 bg-white/80 p-5 shrink-0 space-y-3">
@@ -1111,131 +887,7 @@ export function DocumentsViewer({
 
         {/* DESKTOP: Right Side Panel */}
         <div className="col-span-7 min-w-0">
-          {showPersonnelTable ? (
-            /* DESKTOP: Right Side - Statistics dashboard */
-            <Card className="sticky top-24 h-[calc(100dvh-8rem)] overflow-hidden rounded-[32px] p-0 hover:translate-y-0 flex flex-col bg-white">
-              <div className="border-b border-black/5 bg-gradient-to-r from-slate-50/50 to-white p-6 shrink-0">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[#B85B68]">Riepilogo Consegne</p>
-                <h2 className="mt-2 text-2xl font-extrabold text-paradise-noir">
-                  {monthNames[statusMonth - 1]} {statusYear}
-                </h2>
-                <p className="mt-1 text-sm font-semibold text-black/40">
-                  Stato di caricamento dei cedolini (Busta Paga) per i collaboratori.
-                </p>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
-                {/* Stats grid */}
-                <div className="grid grid-cols-3 gap-4 shrink-0">
-                  <div className="rounded-2xl border border-black/5 bg-slate-50/50 p-4 text-center flex flex-col justify-between">
-                    <p className="text-[10px] font-extrabold text-black/35 uppercase tracking-wider">Completamento</p>
-                    <p className="mt-2 text-3xl font-extrabold text-[#B85B68]">{stats.percentage}%</p>
-                    <div className="mt-3 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                        style={{ width: `${stats.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-4 text-center flex flex-col justify-between">
-                    <p className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider">Caricati</p>
-                    <p className="mt-2 text-3xl font-extrabold text-emerald-700">{stats.completed}</p>
-                    <p className="mt-1 text-[10px] text-emerald-600/70 font-semibold">su {stats.total} totali</p>
-                  </div>
-
-                  <div className="rounded-2xl border border-rose-100 bg-rose-50/30 p-4 text-center flex flex-col justify-between">
-                    <p className="text-[10px] font-extrabold text-rose-800 uppercase tracking-wider">Mancanti</p>
-                    <p className="mt-2 text-3xl font-extrabold text-rose-700">{stats.missing}</p>
-                    <p className="mt-1 text-[10px] text-rose-600/70 font-semibold">da caricare</p>
-                  </div>
-                </div>
-
-                {/* Columns Grid */}
-                <div className="grid grid-cols-2 gap-5 h-[calc(100%-120px)] min-h-[300px]">
-                  {/* Missing Panel */}
-                  <div className="border border-black/5 rounded-2xl p-4 flex flex-col bg-slate-50/20 min-h-0">
-                    <h3 className="text-xs font-extrabold text-rose-800 uppercase tracking-wider mb-3 flex items-center gap-1.5 shrink-0">
-                      <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-                      Da consegnare ({stats.missing})
-                    </h3>
-                    <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1">
-                      {stats.missingWorkers.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                          <CheckCircle2 className="size-10 text-emerald-500 mb-2" />
-                          <p className="text-xs font-extrabold text-emerald-700">Tutto caricato!</p>
-                          <p className="text-[10px] text-black/40 mt-1 max-w-[160px]">
-                            Tutti i collaboratori hanno ricevuto il cedolino per questo periodo.
-                          </p>
-                        </div>
-                      ) : (
-                        stats.missingWorkers.map((w) => (
-                          <div
-                            key={w.id}
-                            className="flex items-center justify-between p-3 rounded-xl bg-white border border-black/5 shadow-sm hover:border-[#B85B68]/30 transition"
-                          >
-                            <div className="min-w-0 pr-2">
-                              <p className="text-xs font-extrabold text-paradise-noir truncate">{w.name}</p>
-                              <p className="text-[10px] text-black/45 font-semibold truncate">
-                                {w.mansione || "Collaboratore"}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleSelectWorker(w.id)}
-                              className="px-3 py-1 text-[10px] font-bold bg-[#B85B68] text-white rounded-lg hover:brightness-105 active:scale-95 transition shrink-0"
-                            >
-                              Gestisci
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Completed Panel */}
-                  <div className="border border-black/5 rounded-2xl p-4 flex flex-col bg-slate-50/20 min-h-0">
-                    <h3 className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider mb-3 flex items-center gap-1.5 shrink-0">
-                      <span className="size-2 rounded-full bg-emerald-500" />
-                      Consegnati ({stats.completed})
-                    </h3>
-                    <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1">
-                      {stats.completedWorkers.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center p-4 text-black/35">
-                          <p className="text-xs font-bold">Nessun caricamento</p>
-                          <p className="text-[10px] text-black/45 mt-1 max-w-[160px]">
-                            Non ci sono buste paga caricate per questo mese di riferimento.
-                          </p>
-                        </div>
-                      ) : (
-                        stats.completedWorkers.map((w) => (
-                          <div
-                            key={w.id}
-                            className="flex items-center justify-between p-3 rounded-xl bg-white border border-black/5 shadow-sm hover:border-emerald-300 transition"
-                          >
-                            <div className="min-w-0 pr-2">
-                              <p className="text-xs font-extrabold text-paradise-noir truncate">{w.name}</p>
-                              <p className="text-[9px] text-emerald-600 font-extrabold truncate">
-                                Caricato il: {w.dateUploaded ? formatDate(w.dateUploaded) : ""}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => {
-                                handleSelectWorker(w.id);
-                                if (w.docId) setSelectedId(w.docId);
-                              }}
-                              className="px-3 py-1 text-[10px] font-bold border border-black/5 bg-slate-50 hover:bg-slate-100 rounded-lg active:scale-95 transition shrink-0"
-                            >
-                              Vedi PDF
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ) : selectedDocument ? (
+          {selectedDocument ? (
             /* DESKTOP: Right Side - Original Document Preview */
             <DesktopPreview
               document={selectedDocument}

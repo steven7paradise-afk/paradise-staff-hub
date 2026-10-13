@@ -20,7 +20,7 @@ type BulkFileItem = {
   error?: string;
 };
 
-export function DocumentUpload({ workers }: { workers: Worker[] }) {
+export function DocumentUpload({ workers, previewOnly = false }: { workers: Worker[]; previewOnly?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState("");
@@ -41,6 +41,7 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
   // Single document upload form submit
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (previewOnly) return setStatus("Anteprima locale: nessun file viene inviato.");
     setLoading(true);
     setStatus("");
     const response = await fetch("/api/documents", { method: "POST", body: new FormData(event.currentTarget) });
@@ -140,6 +141,7 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
 
   // Perform bulk upload
   const startBulkUpload = async () => {
+    if (previewOnly) return setStatus("Anteprima locale: nessun file viene inviato.");
     setLoading(true);
     setStatus("");
     
@@ -228,21 +230,22 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
   return (
     <>
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <Button onClick={() => setOpen(true)}><Upload className="size-4" /> Carica documento</Button>
-        <Button onClick={migrateExistingToDrive} disabled={migrating || loading} variant="soft">
+        <Button onClick={() => { setUploadMode("single"); setOpen(true); }}><Upload className="size-4" /> Carica documento</Button>
+        <Button variant="soft" onClick={() => { setUploadMode("bulk"); setOpen(true); }}><Upload className="size-4" /> Caricamento multiplo</Button>
+        {!previewOnly && <Button onClick={migrateExistingToDrive} disabled={migrating || loading} variant="soft">
           {migrating ? "Migrazione..." : "Migra vecchi documenti su Drive"}
-        </Button>
+        </Button>}
         {status ? <p className="rounded-full bg-paradise-nude px-4 py-2 text-sm">{status}</p> : null}
       </div>
       {open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 overflow-y-auto">
+        <div role="dialog" aria-modal="true" aria-label="Caricamento documenti" className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 overflow-y-auto">
           <Card className={cn("w-full transition-all duration-300 my-8 bg-white dark:bg-neutral-900 border border-white/50", uploadMode === "bulk" ? "max-w-5xl" : "max-w-lg")}>
             <div className="mb-5 flex items-center justify-between p-1">
               <div>
                 <h2 className="text-xl font-bold text-neutral-800 dark:text-white">Caricamento Documenti</h2>
                 <p className="text-xs text-neutral-400 font-semibold mt-0.5">Gestisci e pubblica i cedolini o contratti del personale.</p>
               </div>
-              <button onClick={() => setOpen(false)} className="grid size-10 place-items-center rounded-xl border border-black/10 hover:bg-neutral-100 dark:border-white/10 dark:hover:bg-neutral-800"><X className="size-4" /></button>
+              <button aria-label="Chiudi caricamento" disabled={loading} onClick={() => setOpen(false)} className="grid size-10 place-items-center rounded-xl border border-black/10 hover:bg-neutral-100 dark:border-white/10 dark:hover:bg-neutral-800"><X className="size-4" /></button>
             </div>
 
             {/* Mode Selector Tab */}
