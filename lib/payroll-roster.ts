@@ -1,4 +1,3 @@
-import { contractActiveInPayrollMonth, workedInPayrollMonth } from "./payroll-status";
 
 export type PayrollWorker = {
   id: string; name: string; active?: boolean; role?: string; mansione?: string | null;
@@ -20,8 +19,7 @@ export function buildPayrollRoster(workers: PayrollWorker[], documents: PayrollD
     const files = documents.filter(doc => doc.user.id === worker.id);
     const payslips = files.filter(doc => doc.type === "BUSTA_PAGA" && doc.month === month && doc.year === year)
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const expected = workedInPayrollMonth(worker.workedMonths, month, year)
-      && contractActiveInPayrollMonth(worker.contractStart, worker.contractEnd, month, year);
-    return { ...worker, filesCount: files.length, payslips, status: payslips.length ? "uploaded" : expected ? "missing" : "review" };
+    return { ...worker, filesCount: files.length, payslips,
+      status: payslips.length ? "uploaded" : worker.active !== false ? "missing" : "inactive" };
   }).sort((a, b) => a.name.localeCompare(b.name, "it"));
 }

@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPayrollRoster } from '../lib/payroll-roster';
 test('keeps workers without attendance or contract and inactive workers visible', () => {
- const result = buildPayrollRoster([{id:'a',name:'Anna',workedMonths:[]},{id:'b',name:'Bea',active:false}],[],10,2026);
+ const result = buildPayrollRoster([{id:'a',name:'Anna',active:true,workedMonths:[]},{id:'b',name:'Bea',active:false}],[],10,2026);
  assert.deepEqual(result.map(w=>w.id),['a','b']);
- assert.ok(result.every(w=>w.status==='review'));
+ assert.equal(result[0].status,'missing');
+ assert.equal(result[1].status,'inactive');
 });
 test('uses document period, keeps archived owners and selects latest duplicate', () => {
  const doc = {type:'BUSTA_PAGA',month:9,year:2026,created_at:'2026-10-13T10:00:00Z',user:{id:'a',name:'Anna'}};
