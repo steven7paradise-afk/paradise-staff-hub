@@ -13,7 +13,7 @@ export function getPrivateKey() {
   });
 }
 
-async function getOrCreateDateFolder(drive: any, parentFolderId: string, dateStr: string): Promise<string> {
+async function getOrCreateDateFolder(drive: any, parentFolderId: string, dateStr: string, publicRead = true): Promise<string> {
   // Search for folder with name = dateStr under parentFolderId
   const response = await drive.files.list({
     q: `name = '${dateStr}' and '${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
@@ -43,8 +43,8 @@ async function getOrCreateDateFolder(drive: any, parentFolderId: string, dateStr
 
   const folderId = folder.data.id!;
 
-  // Make the date folder readable by anyone with the link
-  try {
+  // Keep shipping folders restricted; other callers retain their existing behavior.
+  if (publicRead) try {
     await drive.permissions.create({
       fileId: folderId,
       requestBody: {
@@ -63,7 +63,8 @@ async function getOrCreateDateFolder(drive: any, parentFolderId: string, dateStr
 export async function uploadFileToGoogleDrive(
   buffer: Buffer,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  options: { publicRead?: boolean } = {}
 ) {
   const rootFolderId = firstDriveFolderId(
     [
@@ -96,7 +97,9 @@ export async function uploadFileToGoogleDrive(
   const dateStr = `${day}-${month}-${year}`;
 
   // 2. Get or create daily subfolder
-  const dateFolderId = await getOrCreateDateFolder(drive, rootFolderId, dateStr);
+  const dateFolderId = await getOrCreateDateFolder(
+    drive, rootFolderId, options.publicRead === false ? `Spedizioni-${dateStr}` : dateStr, options.publicRead !== false
+  );
 
   // 3. Convert buffer to readable stream for uploading
   const bufferStream = new Readable();
@@ -123,8 +126,8 @@ export async function uploadFileToGoogleDrive(
 
   const fileId = response.data.id!;
 
-  // 5. Make the file readable by anyone with the link (so we can display it on the admin dashboard)
-  try {
+  // Shipping attachments are served through the authenticated image endpoint.
+  if (options.publicRead !== false) try {
     await drive.permissions.create({
       fileId: fileId,
       requestBody: {

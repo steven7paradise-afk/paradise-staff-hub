@@ -387,7 +387,7 @@ export function ShippingManager({
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/notifications/upload", {
+      const res = await fetch("/api/shipping/upload", {
         method: "POST",
         body: formData,
       });
@@ -418,7 +418,7 @@ export function ShippingManager({
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const response = await fetch("/api/notifications/upload", { method: "POST", body: formData });
+      const response = await fetch("/api/shipping/upload", { method: "POST", body: formData });
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.error || "Caricamento non riuscito.");
       setProofPhotoUrl(data.url);
