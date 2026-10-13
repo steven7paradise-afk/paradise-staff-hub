@@ -1768,7 +1768,7 @@ export function AppointmentsBrowser({
       review: false,
       bookingId: null,
     });
-  const [maskClientPrivacy, setMaskClientPrivacy] = useState(true);
+  const [maskClientPrivacy, setMaskClientPrivacy] = useState(false);
   const finalPaymentOptional = allowsMissingFinalPaymentOrder([
     ...(clientControlForm.workerServices?.flatMap(section => section.services) ?? selectedServiceDetails),
     clientControlForm.serviceTitle,
