@@ -923,6 +923,17 @@ export function ShippingManager({
                 </label>
                 </div>
 
+                {(photoUrl || proofPhotoUrl) && <section aria-label="Foto della spedizione" className="grid grid-cols-2 gap-3 pt-2 text-left">
+                  {[{ url: proofPhotoUrl, title: "Comprovante" }, { url: photoUrl, title: "Foto pacco" }].map(({ url, title }) => url && (
+                    <div key={title} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <h3 className="mb-3 text-sm font-semibold text-slate-900">{title}</h3>
+                      <a href={photoPreviewUrl(url)} target="_blank" rel="noopener noreferrer" className="block text-sm font-semibold text-[#B83D7F]">
+                        <img src={photoPreviewUrl(url)} alt={title} className="mb-3 h-32 sm:h-40 w-full rounded-lg border border-slate-200 object-contain" />
+                        <span className="underline">Ingrandisci foto ↗</span>
+                      </a>
+                    </div>
+                  ))}
+                </section>}
               </div>
             </div>
 
@@ -1122,18 +1133,6 @@ export function ShippingManager({
                 placeholder="Es: Inserito omaggio pettine, imballo speciale con pluriball..."
               />
             </label>
-
-            {(photoUrl || proofPhotoUrl) && <section aria-label="Foto della spedizione" className="grid gap-4 sm:grid-cols-2">
-              {[{ url: photoUrl, title: "Foto del pacco" }, { url: proofPhotoUrl, title: "Comprovante di spedizione" }].map(({ url, title }) => url && (
-                <div key={title} className="rounded-xl border border-slate-200 bg-white p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-slate-900">{title}</h3>
-                  <a href={photoPreviewUrl(url)} target="_blank" rel="noopener noreferrer" className="block text-sm font-semibold text-[#B83D7F]">
-                    <img src={photoPreviewUrl(url)} alt={title} className="mb-3 h-48 w-full rounded-lg border border-slate-200 object-contain" />
-                    <span className="underline">Apri foto a dimensione intera ↗</span>
-                  </a>
-                </div>
-              ))}
-            </section>}
 
             {savingStatus ? (
               <p className="rounded-2xl bg-[#FFF0F6] border border-[#F9D5E7] p-3 text-xs font-black text-[#B83D7F]">
