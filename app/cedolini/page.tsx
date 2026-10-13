@@ -34,6 +34,7 @@ export default async function CedoliniPage({
       select: {
         id: true,
         active: true,
+        location: { select: { id: true, name: true } },
         name: true,
         role: true,
         mansione: true,

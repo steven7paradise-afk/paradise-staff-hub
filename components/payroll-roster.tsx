@@ -26,9 +26,12 @@ export function PayrollRoster({ workers, documents, month, year, onPeriodChange,
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [salon, setSalon] = useState("");
   const [activity, setActivity] = useState("active");
   const roster = useMemo(() => buildPayrollRoster(workers, documents, month, year), [workers, documents, month, year]);
-  const selectedRoster = roster.filter(worker => activity === "all" || (activity === "active" ? worker.active !== false : worker.active === false));
+  const salons = Array.from(new Map(roster.filter(worker => worker.location).map(worker => [worker.location!.id, worker.location!])).values()).sort((a, b) => a.name.localeCompare(b.name, "it"));
+  const selectedRoster = roster.filter(worker => (activity === "all" || (activity === "active" ? worker.active !== false : worker.active === false))
+    && (!salon || (salon === "unassigned" ? !worker.location : worker.location?.id === salon)));
   const delivery = new Date(year, month, 1);
   const missingCount = selectedRoster.filter(worker => worker.status === "missing").length;
   const visible = selectedRoster.filter(worker => worker.name.toLocaleLowerCase("it").includes(search.trim().toLocaleLowerCase("it"))
@@ -56,6 +59,7 @@ export function PayrollRoster({ workers, documents, month, year, onPeriodChange,
     </div>
     <div className={styles.tools}>
       <label className={styles.search}><Search size={18}/><input type="search" aria-label="Cerca collaboratore" placeholder="Cerca un collaboratore…" value={search} onChange={event => setSearch(event.target.value)}/></label>
+      <select aria-label="Filtra per salone" value={salon} onChange={event => setSalon(event.target.value)}><option value="">Tutti i saloni</option>{salons.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}<option value="unassigned">Senza salone assegnato</option></select>
       <select aria-label="Stato del collaboratore" value={activity} onChange={event => setActivity(event.target.value)}><option value="all">Attivi e non attivi</option><option value="active">Solo attivi</option><option value="inactive">Solo non attivi</option></select>
       <p role="status">{visible.length} di {selectedRoster.length} lavoratori</p>
     </div>
@@ -63,14 +67,14 @@ export function PayrollRoster({ workers, documents, month, year, onPeriodChange,
       <caption className={styles.caption}>Cedolini di {months[month - 1].toLowerCase()} {year}</caption>
       <thead><tr><th>Collaboratore</th><th>Cedolino · {months[month - 1]} {year}</th><th>Caricato il</th><th>Archivio</th><th><span className={styles.srOnly}>Azioni</span></th></tr></thead>
       <tbody>{visible.map(worker => <tr key={worker.id}>
-        <td><div className={styles.person}><WorkerPhoto worker={worker}/><div><strong>{worker.name}</strong><small>{worker.mansione || "Collaboratore"}{worker.active === false ? " · Non attivo" : ""}</small></div></div></td>
+        <td><div className={styles.person}><WorkerPhoto worker={worker}/><div><strong>{worker.name}</strong><small>{worker.mansione || "Collaboratore"} · {worker.location?.name || "Senza salone"}{worker.active === false ? " · Non attivo" : ""}</small></div></div></td>
         <td><span className={styles[worker.status]}>{labels[worker.status as keyof typeof labels]}</span>{worker.payslips.length > 1 && <small className={styles.duplicate}>{worker.payslips.length} documenti: verifica duplicati</small>}</td>
         <td data-label="Caricato il">{worker.payslips[0] ? new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(worker.payslips[0].created_at)) : "—"}</td>
         <td data-label="Archivio">{worker.filesCount} {worker.filesCount === 1 ? "documento" : "documenti"}</td>
         <td className={styles.actions}>{worker.payslips[0] && <button type="button" className={styles.primary} onClick={() => onOpenWorker(worker.id, worker.payslips[0].id)} aria-label={`Apri cedolino di ${worker.name}`}><FileText size={16}/>Cedolino</button>}<button type="button" onClick={() => onOpenWorker(worker.id)} aria-label={`Apri archivio di ${worker.name}`}>Archivio<ArrowRight size={16}/></button></td>
       </tr>)}</tbody>
     </table></div>
-    {!visible.length && <div className={styles.empty}><Search size={26}/><h3>Nessun collaboratore trovato</h3><p>Prova un altro nome oppure rimuovi i filtri.</p><button type="button" onClick={() => {setSearch(""); setStatus("all"); setActivity("active");}}><X size={16}/>Azzera filtri</button></div>}
+    {!visible.length && <div className={styles.empty}><Search size={26}/><h3>Nessun collaboratore trovato</h3><p>Prova un altro nome oppure rimuovi i filtri.</p><button type="button" onClick={() => {setSearch(""); setStatus("all"); setActivity("active"); setSalon("");}}><X size={16}/>Azzera filtri</button></div>}
     <footer className={styles.footer}>Il mese selezionato è quello <strong>del cedolino</strong>, non la data di caricamento. I lavoratori non attivi sono consultabili dal filtro sopra.</footer>
   </section>;
 }
