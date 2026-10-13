@@ -30,9 +30,10 @@ export default async function CedoliniPage({
       orderBy: { created_at: "desc" },
     }),
     prisma.user.findMany({
-      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      where: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       select: {
         id: true,
+        active: true,
         name: true,
         role: true,
         mansione: true,
@@ -87,7 +88,7 @@ export default async function CedoliniPage({
     >
       <div className="administrative-night-page">
       <div className="mb-6">
-        <DocumentUpload workers={workerItems} />
+        <DocumentUpload workers={workerItems.filter(worker => worker.active)} />
       </div>
       
       <DocumentsViewer
