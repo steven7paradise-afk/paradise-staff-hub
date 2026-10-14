@@ -627,7 +627,7 @@ export function StaffFormsViewer({
         : "";
       setVatLookupStatus({
         success: true,
-        message: `✓ DATI VERIFICATI CON ${data.source}\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}${data.warning ? `\n⚠ ${data.warning}\nErrore aggiunto alle note della richiesta.` : ""}`
+        message: `✓ DATI RECUPERATI DA ${data.source}\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}${data.warning ? `\n⚠ ${data.warning}\nAvviso aggiunto alle note della richiesta.` : ""}`
       });
     } catch (err: any) {
       setVatLookupStatus({

@@ -16,7 +16,7 @@ type SibillCounterpartSearch = {
 export type VerifiedVatCompany = ItalianVatCompany & {
   vat: string;
   taxNumber: string;
-  source: "VIES + SIBILL" | "VIES";
+  source: "VIES + SIBILL" | "VIES" | "SIBILL";
   warning?: string;
 };
 
@@ -96,7 +96,27 @@ export function reconcileVatCompanyData(
 }
 
 export async function lookupVerifiedItalianVatCompany(value: unknown) {
-  const vies = await lookupItalianVatCompany(value);
+  let vies: Awaited<ReturnType<typeof lookupItalianVatCompany>>;
+  try {
+    vies = await lookupItalianVatCompany(value);
+  } catch (error) {
+    if (!(error instanceof ItalianVatLookupError) || error.status === 400) throw error;
+    const vat = String(value ?? "").replace(/\D/g, "");
+    try {
+      const data = await fetchSibillCompany(vat);
+      if (clean(data.vat_number).replace(/\D/g, "") !== vat) throw new ItalianVatLookupError("I dati Sibill non corrispondono alla Partita IVA richiesta.", 409);
+      const name = clean(data.company_name);
+      const street = clean(data.address);
+      const postalCode = clean(data.postal_code);
+      const city = clean(data.city);
+      const province = clean(data.province_code).toUpperCase();
+      if (!name || !street || !/^\d{5}$/.test(postalCode) || !city || !/^[A-Z]{2}$/.test(province)) throw new ItalianVatLookupError("Dati aziendali incompleti: completa manualmente ragione sociale e indirizzo.", 422);
+      return { name, street, postalCode, city, province, address: `${street}, ${postalCode} ${city} (${province})`, vat, taxNumber: clean(data.tax_number), source: "SIBILL" as const, warning: "Dati recuperati da Sibill. Verifica VIES non completata: controlla i dati prima di fatturare." };
+    } catch (fallbackError) {
+      if (fallbackError instanceof ItalianVatLookupError && fallbackError.status === 409) throw fallbackError;
+      throw new ItalianVatLookupError("Non è stato possibile recuperare i dati aziendali automaticamente. Questo esito non determina la validità della Partita IVA. Puoi compilare manualmente ragione sociale e indirizzo.", 422);
+    }
+  }
   try {
     return await lookupSibillCompany(vies);
   } catch (error) {
@@ -107,6 +127,10 @@ export async function lookupVerifiedItalianVatCompany(value: unknown) {
 }
 
 async function lookupSibillCompany(vies: ItalianVatCompany & { vat: string }) {
+  return reconcileVatCompanyData(vies, await fetchSibillCompany(vies.vat));
+}
+
+async function fetchSibillCompany(vat: string): Promise<SibillCounterpartSearch> {
   const token = process.env.SIBILL_API_TOKEN?.trim();
   const baseUrl = (process.env.SIBILL_API_BASE_URL?.trim() || DEFAULT_SIBILL_BASE_URL).replace(/\/$/, "");
   if (!token) {
@@ -115,7 +139,7 @@ async function lookupSibillCompany(vies: ItalianVatCompany & { vat: string }) {
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/api/v1/counterparts/search?vat_number=${encodeURIComponent(vies.vat)}`, {
+    response = await fetch(`${baseUrl}/api/v1/counterparts/search?vat_number=${encodeURIComponent(vat)}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
@@ -142,5 +166,5 @@ async function lookupSibillCompany(vies: ItalianVatCompany & { vat: string }) {
     );
   }
 
-  return reconcileVatCompanyData(vies, data?.data || {});
+  return data?.data || {};
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ItalianVatLookupError } from "../lib/italian-vat-lookup";
-import { reconcileVatCompanyData } from "../lib/sibill-vat-lookup";
+import { reconcileVatCompanyData, lookupVerifiedItalianVatCompany } from "../lib/sibill-vat-lookup";
 
 const vies = {
   name: "CILLO NUNZIA",
@@ -52,4 +52,27 @@ test("uses Sibill billing location and records differences with VIES", () => {
   assert.equal(company.city, "ROMA");
   assert.equal(company.province, "RM");
   assert.ok(company.warning?.includes("Indirizzo diverso"));
+});
+
+
+test("searches Sibill when VIES does not list the VAT", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.SIBILL_API_TOKEN;
+  process.env.SIBILL_API_TOKEN = "test-token";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(JSON.stringify(calls === 1 ? { isValid: false } : { data: { vat_number: "12989161000", company_name: "Test", address: "Via Roma 1", postal_code: "20100", city: "Milano", province_code: "MI" } }), { status: 200 });
+  };
+  try {
+    const result = await lookupVerifiedItalianVatCompany("12989161000");
+    assert.equal(calls, 2);
+    assert.equal(result.source, "SIBILL");
+    assert.equal(result.name, "Test");
+    assert.match(result.warning || "", /VIES non completata/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) delete process.env.SIBILL_API_TOKEN;
+    else process.env.SIBILL_API_TOKEN = originalToken;
+  }
 });
