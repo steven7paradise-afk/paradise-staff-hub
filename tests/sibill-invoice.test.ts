@@ -162,3 +162,23 @@ test("selects the active EUR card account when Sibill hides the masked number fr
 
   assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), "account-active-eur");
 });
+
+
+test("exports euro symbols in descriptions as EUR without changing amounts or saved notes", () => {
+  const answers = {
+    invoice_client_type: "Privato (Codice Fiscale)",
+    invoice_client_name: "Maria Rossi",
+    invoice_fiscal_code: "RSSMRA80A01F205X",
+    invoice_address: "Via Roma 10, 20100 Milano (MI)",
+    invoice_notes: "Riapplicazione - acconto 20€; saldo 102 €. Qualità",
+    invoice_amount: "122",
+  };
+  const payload = buildSibillInvoiceDraft(answers, company);
+  const body = payload.fattura_elettronica_body[0];
+  assert.equal(body.dati_beni_servizi.dettaglio_linee[0].descrizione,
+    "Riapplicazione - acconto 20EUR; saldo 102 EUR. Qualità");
+  assert.equal(body.dati_generali.dati_generali_documento.importo_totale_documento, "122.00");
+  assert.equal(body.dati_beni_servizi.dati_riepilogo[0].imponibile_importo, "100.00");
+  assert.equal(body.dati_beni_servizi.dati_riepilogo[0].imposta, "22.00");
+  assert.equal(answers.invoice_notes, "Riapplicazione - acconto 20€; saldo 102 €. Qualità");
+});

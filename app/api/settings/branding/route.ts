@@ -15,6 +15,10 @@ export async function PUT(request: NextRequest) {
   }
 
   const payload = await request.json();
+  const logoColor = payload.logo_color || null;
+  if (logoColor !== null && (typeof logoColor !== "string" || !/^#[0-9a-f]{6}$/i.test(logoColor))) {
+    return NextResponse.json({ error: "Colore logo non valido" }, { status: 400 });
+  }
   const current = await prisma.brandingSetting.findFirst();
   const data = {
     primary_color: String(payload.primary_color ?? "#FFA8DD"),
@@ -49,9 +53,15 @@ export async function PUT(request: NextRequest) {
     logo_url: payload.logo_url ? String(payload.logo_url) : null,
   };
 
-  const branding = current
-    ? await prisma.brandingSetting.update({ where: { id: current.id }, data })
-    : await prisma.brandingSetting.create({ data });
+  const branding = await prisma.$transaction(async (tx) => {
+    const saved = current
+      ? await tx.brandingSetting.update({ where: { id: current.id }, data })
+      : await tx.brandingSetting.create({ data });
+    if ("logo_color" in payload) {
+      await tx.setting.upsert({ where: { key: "branding_logo_color" }, create: { key: "branding_logo_color", value: logoColor ?? "" }, update: { value: logoColor ?? "" } });
+    }
+    return { ...saved, logo_color: logoColor };
+  });
 
   revalidateTag("branding", "max");
   return NextResponse.json(branding);

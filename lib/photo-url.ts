@@ -1,3 +1,5 @@
+import { staffDrivePhotoId } from "./web-staff-photo";
+
 export function resolveDrivePhotoUrl(photoUrl: string | null | undefined) {
   if (!photoUrl) return "";
 
@@ -11,4 +13,10 @@ export function resolveDrivePhotoUrl(photoUrl: string | null | undefined) {
   }
 
   return photoUrl;
+}
+
+// Keep private Drive photos behind the existing authenticated Staff Hub route.
+export function resolveAuthenticatedPhotoUrl(photoUrl: string | null | undefined) {
+  const fileId = staffDrivePhotoId(photoUrl);
+  return fileId ? `/api/drive-image?id=${encodeURIComponent(fileId)}` : photoUrl || "";
 }

@@ -1,14 +1,13 @@
 import bcrypt from "bcryptjs";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { pinLookup } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
 import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
-import { pinLookup } from "@/lib/pin";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { FORMER_EMPLOYEE_STATUS, hasFormerEmployeeDocumentAccess, isFormerEmployeeAllowedPath } from "@/lib/former-employee";
 import { isPcCassaAllowedPath } from "@/lib/pc-cassa-access";
-import { consumePasskeyGrant } from "@/lib/passkey";
 
 function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/my-staff.webmanifest" && method === "GET") return true;
@@ -67,43 +66,21 @@ export const authConfig = {
   providers: [
     Credentials({
       credentials: {
+        pin: { label: "PIN", type: "password" },
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
-        pin: { label: "PIN", type: "password" },
-        passkeyToken: { label: "Passkey token", type: "password" },
       },
       async authorize(credentials) {
-        const passkeyToken = String(credentials?.passkeyToken ?? "");
-        if (passkeyToken) {
-          const user = await consumePasskeyGrant(passkeyToken, "LOGIN");
-          if (!user) return null;
-          if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            sedeId: user.sede_id,
-            mansione: user.mansione,
-          };
-        }
-
+        const submitted = credentials as Record<string, unknown>;
+        if (submitted.passkeyToken) return null;
         const pin = String(credentials?.pin ?? "").trim();
         if (pin) {
           if (!/^\d{4,6}$/.test(pin)) return null;
-          const lookup = pinLookup(pin);
-          const user = await prisma.user.findUnique({
-            where: { pin_lookup: lookup },
-          });
-          if (!user?.active) return null;
+          const user = await prisma.user.findUnique({ where: { pin_lookup: pinLookup(pin) } });
+          if (!user?.active || !user.pin_hash) return null;
           if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            sedeId: user.sede_id,
-          };
+          if (!await bcrypt.compare(pin, user.pin_hash)) return null;
+          return { id: user.id, name: user.name, email: user.email, role: user.role, sedeId: user.sede_id, mansione: user.mansione };
         }
 
         const email = String(credentials?.email ?? "").trim().toLowerCase();

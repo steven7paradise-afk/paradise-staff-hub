@@ -5,7 +5,6 @@ import {
   BadgeCheck,
   Check,
   Crown,
-  ImagePlus,
   Moon,
   Palette,
   RotateCcw,
@@ -15,10 +14,11 @@ import {
 } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 import type { BrandingTheme } from "@/lib/branding";
+import { SidebarLogo } from "@/components/sidebar-logo";
 import { cn } from "@/lib/utils";
 
 type StringThemeKey = {
-  [Key in keyof BrandingTheme]: BrandingTheme[Key] extends string ? Key : never;
+  [Key in keyof BrandingTheme]-?: BrandingTheme[Key] extends string ? Key : never;
 }[keyof BrandingTheme];
 type ColorKey = Exclude<StringThemeKey, "sidebar_font_family">;
 type Mode = "light" | "dark";
@@ -153,31 +153,6 @@ function readableColor(value: string) {
   return /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : value;
 }
 
-export function BrandingForm({ initial }: { initial: BrandingTheme }) {
-  const [form, setForm] = useState<BrandingTheme>({ ...defaults, ...initial });
-  const [mode, setMode] = useState<Mode>("light");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-
-  const colors = useMemo(() => modeValues(form, mode), [form, mode]);
-  const fields = mode === "dark" ? darkFields : lightFields;
-
-  const previewStyle = useMemo(
-    () =>
-      ({
-        "--preview-bg": colors.background,
-        "--preview-sidebar": colors.sidebar,
-        "--preview-card": colors.card,
-        "--preview-text": colors.text,
-        "--preview-button": colors.button,
-        "--preview-sidebar-text": colors.sidebarText,
-        "--preview-sidebar-icon": colors.sidebarIcon,
-        "--preview-primary": form.primary_color,
-        "--preview-soft": form.secondary_color,
-        "--preview-gold": form.gradient_color,
-      }) as CSSProperties,
-    [colors, form.gradient_color, form.primary_color, form.secondary_color],
-  );
-
   function applyLiveTheme(nextForm: BrandingTheme, nextMode: Mode) {
     const nextColors = modeValues(nextForm, nextMode);
     const root = document.querySelector<HTMLElement>(".paradise-theme-root") ?? document.documentElement;
@@ -233,16 +208,41 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     window.dispatchEvent(new CustomEvent("branding-change", { detail: nextForm }));
   }
 
+
+export function BrandingForm({ initial }: { initial: BrandingTheme }) {
+  const [form, setForm] = useState<BrandingTheme>({ ...defaults, ...initial });
+  const [mode, setMode] = useState<Mode>("light");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const colors = useMemo(() => modeValues(form, mode), [form, mode]);
+  const fields = mode === "dark" ? darkFields : lightFields;
+
+  const previewStyle = useMemo(
+    () =>
+      ({
+        "--preview-bg": colors.background,
+        "--preview-sidebar": colors.sidebar,
+        "--preview-card": colors.card,
+        "--preview-text": colors.text,
+        "--preview-button": colors.button,
+        "--preview-sidebar-text": colors.sidebarText,
+        "--preview-sidebar-icon": colors.sidebarIcon,
+        "--preview-primary": form.primary_color,
+        "--preview-soft": form.secondary_color,
+        "--preview-gold": form.gradient_color,
+      }) as CSSProperties,
+    [colors, form.gradient_color, form.primary_color, form.secondary_color],
+  );
+
+
   useEffect(() => {
     applyLiveTheme(form, mode);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [form, mode]);
 
   function update(key: ColorKey, value: string) {
     setStatus("idle");
     setForm((current) => {
       const next = { ...current, [key]: value };
-      applyLiveTheme(next, mode);
       return next;
     });
   }
@@ -251,7 +251,6 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     setStatus("idle");
     setForm((current) => {
       const next = { ...current, logo_url: value.trim() || null };
-      window.dispatchEvent(new CustomEvent("branding-change", { detail: next }));
       return next;
     });
   }
@@ -260,7 +259,6 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     setStatus("idle");
     setForm((current) => {
       const next = { ...current, sidebar_font_family: font };
-      applyLiveTheme(next, mode);
       return next;
     });
   }
@@ -268,14 +266,12 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
     document.documentElement.classList.toggle("dark", nextMode === "dark");
-    applyLiveTheme(form, nextMode);
   }
 
   function applyPreset(values: Partial<BrandingTheme>) {
     setStatus("idle");
     setForm((current) => {
       const next = { ...current, ...values };
-      applyLiveTheme(next, mode);
       return next;
     });
   }
@@ -292,7 +288,6 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
       const saved = (await response.json()) as BrandingTheme;
       const next = { ...defaults, ...saved };
       setForm(next);
-      applyLiveTheme(next, mode);
       setStatus("saved");
       return;
     }
@@ -354,7 +349,6 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
                 variant="soft"
                 onClick={() => {
                   setForm(defaults);
-                  applyLiveTheme(defaults, mode);
                   setStatus("idle");
                 }}
               >
@@ -469,14 +463,28 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
         <div className="rounded-[24px] border border-dashed border-black/15 bg-white p-5">
           <label className="block">
             <span className="text-sm font-black">Logo ufficiale</span>
-            <span className="mt-1 block text-xs text-black/45 dark:text-white/45">Usato nella sidebar, header mobile, login e favicon se configurato.</span>
+            <span className="mt-1 block text-xs text-black/45 dark:text-white/45">Modifica l’indirizzo del logo. Il colore personalizzato si applica alla sidebar.</span>
             <span className="mt-4 flex items-center gap-3">
               <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-black text-sm font-black text-white shadow-sm">
-                {form.logo_url ? <img src={form.logo_url} alt="Logo Paradise" className="size-full object-cover" /> : <ImagePlus className="size-5" />}
+                <SidebarLogo url={form.logo_url} color={form.logo_color} />
               </span>
               <Field value={form.logo_url ?? ""} onChange={(event) => updateLogo(event.target.value)} placeholder="https://..." />
             </span>
           </label>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-3 text-sm font-semibold">
+              Colore logo nella sidebar
+              <input type="color" aria-label="Colore logo nella sidebar" value={form.logo_color || "#1f1f1f"} onChange={(event) => {
+                const next = { ...form, logo_color: event.target.value };
+                setForm(next); setStatus("idle");
+              }} className="h-10 w-14 cursor-pointer rounded border" />
+            </label>
+            <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => {
+              const next = { ...form, logo_color: null };
+              setForm(next); setStatus("idle");
+            }}>Usa colori originali</button>
+          </div>
+          <p className="mt-2 text-xs text-black/60">Per colorare il logo usa un’immagine con sfondo trasparente. Salva le modifiche per mantenerle.</p>
         </div>
       </section>
 

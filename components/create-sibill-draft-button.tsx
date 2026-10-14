@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, ExternalLink, FilePlus2, Loader2, Trash2 } from "lucide-react";
 
 const SIBILL_WEB_APP_URL = "https://app.sibill.com/cashflow";
@@ -16,10 +17,37 @@ type DraftState = {
 export function CreateSibillDraftButton({
   responseId,
   initialDraft,
+  initialNotes = "",
 }: {
   responseId: string;
   initialDraft: DraftState;
+  initialNotes?: string;
 }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState(initialNotes);
+  const [savedNotes, setSavedNotes] = useState(initialNotes);
+  const [saving, setSaving] = useState(false);
+  const saveNotes = async () => {
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/invoices/${responseId}/sibill-draft`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Descrizione non salvata.");
+      setNotes(data.notes);
+      setSavedNotes(data.notes);
+      setEditing(false);
+      setMessageTone("success");
+      setMessage("Descrizione salvata. Puoi creare la bozza Sibill.");
+      router.refresh();
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Descrizione non salvata.");
+    } finally { setSaving(false); }
+  };
   const [draft, setDraft] = useState(initialDraft);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -113,12 +141,23 @@ export function CreateSibillDraftButton({
       <button
         type="button"
         onClick={createDraft}
-        disabled={loading}
+        disabled={loading || editing || saving}
         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[#0e7490] px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-[#155e75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
       >
         {loading ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />}
         {loading ? "Creo la bozza…" : "Crea bozza Sibill"}
       </button>
+      <button type="button" disabled={loading || saving} onClick={() => { setNotes(savedNotes); setEditing(!editing); }} className="min-h-10 rounded-xl border border-cyan-700/30 px-3 py-2 text-xs font-bold text-cyan-800">
+        {editing ? "Annulla modifica" : "Modifica descrizione"}
+      </button>
+      {editing && <div className="w-full min-w-64 space-y-2 rounded-xl border border-black/10 bg-white p-3 text-left text-black">
+        <label className="block text-xs font-bold">Descrizione della fattura
+          <textarea aria-label="Descrizione della fattura" value={notes} disabled={saving} maxLength={1000} rows={5} onChange={event => setNotes(event.target.value)} className="mt-2 block w-full rounded-lg border border-black/20 p-2 text-sm font-normal" />
+        </label>
+        <p className="text-xs text-black/60">Scrivi EUR al posto del simbolo €. La modifica viene salvata nella richiesta.</p>
+        {notes.includes("€") && <button type="button" disabled={saving} onClick={() => setNotes(notes.replace(/€/g, "EUR"))} className="min-h-10 text-xs font-bold text-cyan-800 underline">Sostituisci € con EUR</button>}
+        <button type="button" disabled={saving} onClick={saveNotes} className="block min-h-10 rounded-lg bg-cyan-800 px-4 py-2 text-sm font-bold text-white">{saving ? "Salvataggio…" : "Salva descrizione"}</button>
+      </div>}
       {message && <span className={`max-w-52 text-center text-[10px] font-semibold leading-4 ${messageTone === "success" ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>{message}</span>}
     </div>
   );

@@ -89,9 +89,11 @@ export function ProfileSettings({
       });
       const result = await verifyResponse.json();
       if (!verifyResponse.ok) throw new Error(result.error || "Face ID non verificato.");
+      // This is a display preference only; login still requires WebAuthn verification.
+      try { localStorage.setItem("paradise-profile-passkey-registered", "1"); } catch { /* Storage may be disabled. */ }
       setPasskeyPin("");
       setPasskeyOwnerName(result.employeeName || optionsData.employeeName || "");
-      setPasskeyStatus(`${result.message || "Accesso biometrico registrato."} Ora puoi usarlo dalla pagina Login su questo dispositivo.`);
+      setPasskeyStatus(`${result.message || "Accesso biometrico registrato."} Puoi accedere al sito con email e password oppure con il PIN personale.`);
     } catch (error) {
       setPasskeyStatus(error instanceof Error ? error.message : "Registrazione Face ID annullata.");
     } finally {

@@ -4,14 +4,14 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, FileText, Search, X } from "lucide-react";
 import { buildPayrollRoster, type PayrollWorker } from "@/lib/payroll-roster";
 import type { DocumentRecord } from "./documents-viewer";
-import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { resolveAuthenticatedPhotoUrl } from "@/lib/photo-url";
 import styles from "./payroll-roster.module.css";
 
 const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 const labels = { uploaded: "Caricato", missing: "Da caricare", inactive: "Nessun cedolino" };
 
 function WorkerPhoto({ worker }: { worker: PayrollWorker }) {
-  const url = resolveDrivePhotoUrl(worker.photo_url);
+  const url = resolveAuthenticatedPhotoUrl(worker.photo_url);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   return <span className={styles.avatar} aria-hidden="true">
     {url && failedUrl !== url ? <img src={url} alt="" loading="lazy" decoding="async" onError={() => setFailedUrl(url)} />

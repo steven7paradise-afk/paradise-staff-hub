@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, signOut } from "next-auth/react";
-import { browserSupportsWebAuthn, platformAuthenticatorIsAvailable, startAuthentication } from "@simplewebauthn/browser";
-import { AlertCircle, Loader2, KeyRound, Mail, ScanFace } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 
 const DEFAULT_LOGIN_DESTINATION = "/dashboard";
@@ -35,65 +34,15 @@ function normalizeLoginDestination(value?: string | null, fallback = DEFAULT_LOG
 type LoginFormVariant = "default" | "mobile-overlay";
 
 export function LoginForm({ variant = "default", documentAccessExpired = false }: { variant?: LoginFormVariant; documentAccessExpired?: boolean }) {
-  const [loginMode, setLoginMode] = useState<"email" | "pin">("pin");
-  const [expandedMode, setExpandedMode] = useState<"email" | "pin" | null>(
-    variant === "mobile-overlay" ? null : "pin",
-  );
+  const [loginMode, setLoginMode] = useState<"email" | "pin">("email");
+  const [pin, setPin] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const submittingRef = useRef(false);
   const router = useRouter();
   const isMobileOverlay = variant === "mobile-overlay";
-
-  useEffect(() => {
-    if (!browserSupportsWebAuthn()) return;
-    void platformAuthenticatorIsAvailable().then(setPasskeyAvailable).catch(() => setPasskeyAvailable(false));
-  }, []);
-
-  async function loginWithPasskey() {
-    if (submittingRef.current || passkeyLoading) return;
-    if (!passkeyAvailable) {
-      setError("Face ID o impronta non sono disponibili in questo browser. Apri Paradise dal tuo telefono oppure usa il PIN.");
-      return;
-    }
-    submittingRef.current = true;
-    setPasskeyLoading(true);
-    setError("");
-    try {
-      const callbackUrl = normalizeLoginDestination(new URLSearchParams(window.location.search).get("callbackUrl"));
-      await signOut({ redirect: false });
-      const optionsResponse = await fetch("/api/passkeys/auth/options", {
-        method: "POST",
-        headers: { "x-passkey-context": "app-login" },
-      });
-      const options = await optionsResponse.json();
-      if (!optionsResponse.ok) throw new Error(options.error || "Accesso biometrico non disponibile.");
-
-      const authentication = await startAuthentication(options);
-      const verifyResponse = await fetch("/api/passkeys/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-passkey-context": "app-login" },
-        body: JSON.stringify({ response: authentication }),
-      });
-      const verified = await verifyResponse.json();
-      if (!verifyResponse.ok || !verified.loginToken) throw new Error(verified.error || "Credenziale non riconosciuta.");
-
-      const result = await signIn("credentials", { passkeyToken: verified.loginToken, redirect: false, callbackUrl });
-      if (result?.error) throw new Error("Accesso non completato.");
-      window.location.replace(normalizeLoginDestination(result?.url, callbackUrl));
-    } catch (error) {
-      submittingRef.current = false;
-      setPasskeyLoading(false);
-      setError(error instanceof Error && error.name !== "NotAllowedError"
-        ? error.message
-        : "Accesso annullato. Se è il primo utilizzo, entra con PIN e attivalo dal Profilo.");
-    }
-  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,21 +59,9 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
 
       await signOut({ redirect: false });
 
-      let result;
-      if (loginMode === "pin") {
-        result = await signIn("credentials", {
-          pin,
-          redirect: false,
-          callbackUrl,
-        });
-      } else {
-        result = await signIn("credentials", {
-          email,
-          password,
-          redirect: false,
-          callbackUrl,
-        });
-      }
+      const result = await signIn("credentials", {
+        ...(loginMode === "pin" ? { pin } : { email, password }), redirect: false, callbackUrl,
+      });
 
       if (result?.error) {
         if (result.error !== "CredentialsSignin") {
@@ -171,128 +108,30 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
           L’accesso è stato disattivato. Per richiedere i tuoi documenti scrivi a amministrazione@paradisebeauty.it.
         </div>
       ) : null}
-      <div className="space-y-3">
-          <button
-            type="button"
-            onClick={loginWithPasskey}
-            disabled={loading || passkeyLoading}
-            className={isMobileOverlay
-              ? "flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-white/25 bg-white px-4 text-sm font-black text-black shadow-[0_14px_34px_rgba(0,0,0,0.24)] transition active:scale-[0.98] disabled:opacity-60"
-              : "flex min-h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-[#171717] px-4 text-sm font-black text-white shadow-sm transition hover:bg-black active:scale-[0.98] disabled:opacity-60"}
-          >
-            {passkeyLoading ? <Loader2 className="size-5 animate-spin" /> : <ScanFace className="size-5" />}
-            {passkeyLoading ? "Verifica in corso..." : "Accedi con Face ID / impronta"}
+      <div className="grid grid-cols-2 gap-2" aria-label="Metodo di accesso">
+        {(["email", "pin"] as const).map((method) => (
+          <button key={method} type="button" aria-pressed={loginMode === method} disabled={loading}
+            onClick={() => { setLoginMode(method); setError(""); }}
+            className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${loginMode === method ? "border-pink-300 bg-pink-100 text-black" : isMobileOverlay ? "border-white/30 text-white" : "border-black/15 text-black dark:text-white"}`}>
+            {method === "email" ? "Email e password" : "PIN personale"}
           </button>
-          <div className={`flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.18em] ${isMobileOverlay ? "text-white/55" : "text-black/35 dark:text-white/35"}`}>
-            <span className={`h-px flex-1 ${isMobileOverlay ? "bg-white/20" : "bg-black/10 dark:bg-white/10"}`} />
-            oppure
-            <span className={`h-px flex-1 ${isMobileOverlay ? "bg-white/20" : "bg-black/10 dark:bg-white/10"}`} />
-          </div>
+        ))}
       </div>
-      {isMobileOverlay ? null : (
-        <div className="space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-black/40 dark:text-white/40">
-            Metodo di accesso
-          </p>
-          <p className="text-sm leading-relaxed text-black/55 dark:text-white/55">
-            Scegli accesso rapido con PIN oppure login classico con email e password.
-          </p>
-        </div>
-      )}
-
-      <div
-        className={
-          isMobileOverlay
-            ? "grid grid-cols-2 gap-3"
-            : "grid grid-cols-2 gap-2 rounded-[22px] border border-black/5 bg-[#FFF4F8] p-1.5 dark:border-white/5 dark:bg-white/5"
-        }
-      >
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => {
-            setLoginMode("pin");
-            setExpandedMode("pin");
-            setError("");
-          }}
-          className={`flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold transition ${
-            isMobileOverlay
-              ? expandedMode === "pin"
-                ? "rounded-2xl border border-white/30 bg-white text-black shadow-[0_14px_34px_rgba(0,0,0,0.24)]"
-                : "rounded-2xl border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/18"
-              : loginMode === "pin"
-                ? "rounded-[18px] bg-white text-black shadow-[0_10px_30px_rgba(17,17,17,0.08)] dark:bg-neutral-800 dark:text-white"
-                : "rounded-[18px] text-black/55 hover:bg-white/70 hover:text-black dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
-          } disabled:pointer-events-none disabled:opacity-50`}
-        >
-          <KeyRound className="size-4" />
-          PIN
-        </button>
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => {
-            setLoginMode("email");
-            setExpandedMode("email");
-            setError("");
-          }}
-          className={`flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold transition ${
-            isMobileOverlay
-              ? expandedMode === "email"
-                ? "rounded-2xl border border-white/30 bg-white text-black shadow-[0_14px_34px_rgba(0,0,0,0.24)]"
-                : "rounded-2xl border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/18"
-              : loginMode === "email"
-                ? "rounded-[18px] bg-white text-black shadow-[0_10px_30px_rgba(17,17,17,0.08)] dark:bg-neutral-800 dark:text-white"
-                : "rounded-[18px] text-black/55 hover:bg-white/70 hover:text-black dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
-          } disabled:pointer-events-none disabled:opacity-50`}
-        >
-          <Mail className="size-4" />
-          Email
-        </button>
-      </div>
-
-      {isMobileOverlay && !expandedMode ? null : (
-        <form className="space-y-4" onSubmit={submit}>
+      <form className="space-y-4" onSubmit={submit}>
         {loginMode === "pin" ? (
           <div className="space-y-2">
-            <label
-              htmlFor="login-pin"
-              className={`block text-[11px] font-bold uppercase tracking-[0.22em] ${
-                isMobileOverlay ? "text-white/70" : "text-black/45 dark:text-white/45"
-              }`}
-            >
-              PIN personale
-            </label>
-            <Field
-              id="login-pin"
-              name="pin"
-              type="password"
-              placeholder="Inserisci il tuo PIN a 6 cifre"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              autoComplete="current-password"
-              value={pin}
+            <label htmlFor="login-pin" className="block text-sm font-semibold">PIN personale</label>
+            <Field id="login-pin" name="pin" type="password" inputMode="numeric" pattern="[0-9]{4,6}" minLength={4} maxLength={6}
+              autoComplete="current-password" placeholder="Inserisci il tuo PIN" required disabled={loading} value={pin}
               onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              disabled={loading}
-              required
-              className={
-                isMobileOverlay
-                  ? "border-white/20 bg-white/10 text-white placeholder:text-white/45"
-                  : undefined
-              }
-            />
-            <p className={`text-xs leading-relaxed ${isMobileOverlay ? "text-white/65" : "text-black/45 dark:text-white/45"}`}>
-              Usa lo stesso PIN che utilizzi sul tablet per timbrare.
-            </p>
+              className={isMobileOverlay ? "border-white/30 bg-white/10 text-base text-white" : "border-black/20 bg-white text-base text-black"} />
           </div>
-        ) : (
-          <>
+        ) : (<>
             <div className="space-y-2">
               <label
                 htmlFor="login-email"
-                className={`block text-[11px] font-bold uppercase tracking-[0.22em] ${
-                  isMobileOverlay ? "text-white/70" : "text-black/45 dark:text-white/45"
+                className={`block text-sm font-semibold ${
+                  isMobileOverlay ? "text-white/90" : "text-black/75 dark:text-white/85"
                 }`}
               >
                 Email
@@ -301,7 +140,7 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
                 id="login-email"
                 name="email"
                 type="email"
-                placeholder="email@paradisebeauty.it"
+                placeholder="nome@esempio.it"
                 autoComplete="email"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -312,8 +151,8 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
                 required
                 className={
                   isMobileOverlay
-                    ? "border-white/20 bg-white/10 text-white placeholder:text-white/45"
-                    : undefined
+                    ? "border-white/30 bg-white/10 text-base text-white placeholder:text-white/60"
+                    : "border-black/20 bg-white text-base text-black placeholder:text-black/45"
                 }
               />
             </div>
@@ -321,8 +160,8 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
             <div className="space-y-2">
               <label
                 htmlFor="login-password"
-                className={`block text-[11px] font-bold uppercase tracking-[0.22em] ${
-                  isMobileOverlay ? "text-white/70" : "text-black/45 dark:text-white/45"
+                className={`block text-sm font-semibold ${
+                  isMobileOverlay ? "text-white/90" : "text-black/75 dark:text-white/85"
                 }`}
               >
                 Password
@@ -339,8 +178,8 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
                 required
                 className={
                   isMobileOverlay
-                    ? "border-white/20 bg-white/10 text-white placeholder:text-white/45"
-                    : undefined
+                    ? "border-white/30 bg-white/10 text-base text-white placeholder:text-white/60"
+                    : "border-black/20 bg-white text-base text-black placeholder:text-black/45"
                 }
               />
             </div>
@@ -348,8 +187,7 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
             <p className={`text-xs leading-relaxed ${isMobileOverlay ? "text-white/65" : "text-black/45 dark:text-white/45"}`}>
               Inserisci la tua email completa e la password personale.
             </p>
-          </>
-        )}
+          </>)}
 
         {error ? (
           <div className="rounded-2xl border border-red-200 bg-red-50/70 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400 animate-pulse-danger flex items-center gap-2">
@@ -378,7 +216,6 @@ export function LoginForm({ variant = "default", documentAccessExpired = false }
           )}
         </Button>
         </form>
-      )}
     </div>
   );
 }

@@ -3545,3 +3545,38 @@ html.dark .app-content-surface .notification-register :is(
   background: #d5efdf !important;
   color: #216c40 !important;
 }
+
+
+/* Staff Hub 9: restrained Paradise accent and readable desktop navigation. */
+@media (min-width: 1280px) {
+  .app-liquid-sidebar {
+    background: var(--user-sidebar-color, var(--light-sidebar, #fffcfd)) !important;
+  }
+  .dark .app-liquid-sidebar {
+    background: var(--user-sidebar-color, var(--dark-sidebar, #171719)) !important;
+  }
+  .dark .app-liquid-sidebar-nav {
+    --sidebar-text: var(--dark-sidebar-text, #f8f3f6);
+    --sidebar-icon: var(--dark-sidebar-icon, #f8f3f6);
+    color: var(--sidebar-text);
+  }
+  .app-liquid-sidebar .sidebar-brand { padding-bottom: 20px; }
+  .app-liquid-sidebar .sidebar-brand .sidebar-label p:first-child { letter-spacing: .02em; text-transform: none; font-size: 13px; }
+  .app-liquid-sidebar .sidebar-section-toggle { margin-top: 8px; min-height: 36px; }
+  .app-liquid-sidebar .sidebar-section-toggle p { opacity: 1 !important; }
+  .app-liquid-sidebar .sidebar-nav-link { font-weight: 550; min-height: 44px; }
+  .app-liquid-sidebar .sidebar-nav-link.active { border-color: var(--sidebar-active-icon) !important; box-shadow: inset 3px 0 var(--sidebar-active-icon) !important; }
+  .app-liquid-sidebar .sidebar-area-button[aria-pressed="true"] { background: var(--sidebar-active-bg); color: var(--sidebar-active-text); }
+  .app-liquid-sidebar .sidebar-profile { padding: 14px 4px 8px; row-gap: 10px; }
+  .app-liquid-sidebar .sidebar-profile-identity .sidebar-label { flex: 1; }
+  .app-liquid-sidebar .sidebar-role { text-transform: none; letter-spacing: .02em; font-size: 11px; }
+  .app-liquid-sidebar .sidebar-logout { color: var(--sidebar-text); background: transparent; border: 1px solid color-mix(in srgb, var(--sidebar-text) 18%, transparent); min-height: 40px; text-transform: none; letter-spacing: 0; }
+  .app-liquid-sidebar :is(button,a,input):focus-visible { outline: 2px solid #ad356a; outline-offset: 3px; }
+  .sidebar-collapsed .app-liquid-sidebar .sidebar-profile { padding: 10px 0 0; }
+}
+
+@media (min-width: 1280px) {
+  .app-liquid-sidebar { border-radius: 0 !important; border-width: 0 1px 0 0 !important; box-shadow: none !important; }
+  .app-liquid-sidebar > aside { border-radius: 0 !important; padding-top: 44px; }
+  .app-liquid-sidebar .sidebar-brand { padding-top: 0; }
+}

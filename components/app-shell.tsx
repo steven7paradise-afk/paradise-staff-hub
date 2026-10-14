@@ -61,7 +61,6 @@ const nav = [
   { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/fine-giornata", label: "Fine giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
@@ -78,7 +77,6 @@ const nav = [
   { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
   { href: "/cedolini", label: "Cedolini", iconName: "FileCheck2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
   { href: "/malattie", label: "Malattie", iconName: "Heart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
-  { href: "/team", label: "Team", iconName: "Users", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
 
   // Section: Impostazioni
   { href: "/profile", label: "Profilo", iconName: "UserRound", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Impostazioni" },
@@ -419,11 +417,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     // pagine e lasciare quindi visibile una sidebar completamente vuota.
     sidebarItems = [
       { href: "/appointments/buenos-aires", label: "Appuntamenti", iconName: "CalendarDays", section: "", badge: undefined },
-      { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", section: "", badge: undefined },
       { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "", badge: undefined },
       { href: "/shopify-orders", label: "Ordini Shopify", iconName: "ShoppingCart", section: "", badge: undefined },
     ];
-    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/client-control/giornata", "/service-forms", "/shopify-orders"] }];
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms", "/shopify-orders"] }];
   }
   const aside = (
       <aside className={cn(
@@ -457,6 +454,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         <div className="flex-1 min-h-0 flex flex-col hidden xl:flex">
           <DesktopSidebarNav
             logoUrl={branding.logo_url}
+            logoColor={branding.logo_color}
             userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
             userPhoto={displayUser?.photo_url ?? null}
             roleLabel={isPcCassa ? "PC Cassa" : currentUser?.mansione?.trim() || (currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole])}

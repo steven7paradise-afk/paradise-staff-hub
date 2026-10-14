@@ -31,6 +31,7 @@ export type BrandingTheme = {
   sidebar_active_icon_color: string;
   sidebar_font_family: string;
   logo_url: string | null;
+  logo_color?: string | null;
 };
 
 const fallbackBranding: BrandingTheme = {
@@ -74,7 +75,8 @@ export const getBrandingTheme = unstable_cache(
     if (!process.env.DATABASE_URL) return fallbackBranding;
     try {
       const branding = await prisma.brandingSetting.findFirst();
-      return branding ?? fallbackBranding;
+      const logo = await prisma.setting.findUnique({ where: { key: "branding_logo_color" } });
+      return { ...(branding ?? fallbackBranding), logo_color: typeof logo?.value === "string" ? logo.value : null };
     } catch {
       return fallbackBranding;
     }

@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { PayrollRoster } from "./payroll-roster";
 import type { PayrollWorker } from "@/lib/payroll-roster";
 
-import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { resolveAuthenticatedPhotoUrl } from "@/lib/photo-url";
 
 export type DocumentRecord = {
   id: string;
@@ -45,13 +45,14 @@ export type DocumentRecord = {
 };
 
 function StaffAvatar({ name, photoUrl, className = "size-9" }: { name: string; photoUrl?: string | null; className?: string }) {
-  const resolved = photoUrl ? resolveDrivePhotoUrl(photoUrl) : "";
+  const resolved = photoUrl ? resolveAuthenticatedPhotoUrl(photoUrl) : "";
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const initials = (name || "N N").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
   return (
     <div className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#FAF0F4] text-xs font-black text-[#A74758] border border-black/10 shadow-2xs select-none", className)}>
-      {resolved ? (
-        <img src={resolved} alt={name} className="size-full object-cover" />
+      {resolved && failedUrl !== resolved ? (
+        <img src={resolved} alt={name} className="size-full object-cover" onError={() => setFailedUrl(resolved)} />
       ) : (
         <span>{initials}</span>
       )}

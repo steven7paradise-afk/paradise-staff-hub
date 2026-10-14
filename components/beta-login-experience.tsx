@@ -52,7 +52,7 @@ export function BetaLoginExperience({
             />
           </div>
           <span className="rounded-full border border-white/25 bg-black/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.24em] backdrop-blur-md sm:text-xs">
-            Staff Hub · Beta
+            Staff Hub
           </span>
         </header>
 
@@ -109,16 +109,13 @@ export function BetaLoginExperience({
           <div className="mb-6">
             <div className="mb-5 flex items-center justify-between gap-4">
               <img src={logoSrc} alt="Paradise" className="h-11 w-auto max-w-[170px] object-contain" />
-              <span className="rounded-full bg-[#ffe9f0] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.22em] text-[#b5416f]">
-                Beta
-              </span>
             </div>
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.28em] text-[#bc4772]">
               Login staff
             </p>
             <h2 className="text-3xl font-black tracking-[-0.035em] sm:text-4xl">Bentornata</h2>
             <p className="mt-2 text-sm leading-relaxed text-black/55">
-              Accedi con Face ID, impronta, PIN personale oppure email e password.
+              Accedi con email e password oppure con il tuo PIN personale.
             </p>
           </div>
 

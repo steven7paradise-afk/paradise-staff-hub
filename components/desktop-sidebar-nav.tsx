@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BriefcaseBusiness, ChevronDown, Search, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
+import { SidebarLogo } from "./sidebar-logo";
 import { DynamicIcon } from "./dynamic-icon";
 
 type MenuItem = {
@@ -26,6 +27,7 @@ type SidebarFolder = {
 
 type DesktopSidebarNavProps = {
   logoUrl: string | null;
+  logoColor?: string | null;
   userName: string;
   userPhoto: string | null;
   roleLabel: string;
@@ -37,6 +39,7 @@ type DesktopSidebarNavProps = {
 
 export function DesktopSidebarNav({
   logoUrl,
+  logoColor,
   userName,
   userPhoto,
   roleLabel,
@@ -69,7 +72,7 @@ export function DesktopSidebarNav({
   const getRenderSections = () => {
     if (sidebarConfig !== null) {
       const sectionsToRender = sidebarConfig
-        .filter((sec) => !hasAreaSwitch || (sec.area ?? "LAVORO") === activeArea)
+        .filter((sec) => Boolean(normalizedSearch) || !hasAreaSwitch || (sec.area ?? "LAVORO") === activeArea)
         .map((sec) => {
         const matchedItems = filteredItems
           .filter((item) => sec.routes.includes(item.href))
@@ -125,7 +128,7 @@ export function DesktopSidebarNav({
     <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
       <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-black/[0.07] px-1 pb-5 pt-2">
         <div className="sidebar-brand-logo flex h-12 w-24 shrink-0 items-center justify-start overflow-hidden">
-          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-12 w-full object-contain object-left dark:invert select-none pointer-events-none" />
+          <SidebarLogo url={logoUrl} color={logoColor} />
         </div>
         <div className="sidebar-brand-icon hidden size-11 shrink-0 place-items-center overflow-hidden rounded-2xl">
           <img src="/favicon.png" alt="" className="size-11 object-cover select-none pointer-events-none" aria-hidden="true" />
@@ -142,7 +145,8 @@ export function DesktopSidebarNav({
         </span>
         <input
           id="desktop-sidebar-search"
-          type="text"
+          type="search"
+          aria-label="Cerca in tutte le pagine"
           placeholder="Cerca una pagina"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -172,7 +176,7 @@ export function DesktopSidebarNav({
                 onClick={() => setActiveArea(area)}
                 aria-pressed={selected}
                 className={cn(
-                  "flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-[9px] font-black uppercase tracking-[0.12em] transition",
+                  "sidebar-area-button flex min-h-10 items-center justify-center gap-2 rounded-lg px-2 text-xs font-semibold transition",
                   selected ? "bg-white text-zinc-900 shadow-sm" : "text-black/45 hover:text-black dark:text-white/50 dark:hover:text-white",
                 )}
               >
@@ -228,11 +232,11 @@ export function DesktopSidebarNav({
                 <button
                   type="button"
                   onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                  className="sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-black/[0.035]"
+                  className="sidebar-section-toggle sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-black/[0.035]"
                   aria-expanded={openSectionId === section.id}
                 >
-                  <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
-                    {section.title}
+                  <p className="truncate text-xs font-semibold text-[color:var(--sidebar-text)] opacity-40">
+                    {section.title.toLowerCase() === "impostazione" ? "Impostazioni" : section.title}
                   </p>
                   <ChevronDown className={cn("size-3.5 shrink-0 text-[color:var(--sidebar-text)] opacity-35 transition-transform", openSectionId === section.id && "rotate-180")} />
                 </button>
@@ -250,6 +254,7 @@ export function DesktopSidebarNav({
                         key={item.href}
                         href={item.href}
                         title={displayLabel}
+                        aria-current={isActive ? "page" : undefined}
                         className={cn(
                           "sidebar-nav-link group relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
                           isActive
@@ -288,8 +293,8 @@ export function DesktopSidebarNav({
         </div>
       </nav>
 
-      <div className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-2 border-t border-black/[0.07] px-2 pt-4 text-[color:var(--sidebar-text)]">
-        <Link href="/profile" title={`${userName} - ${roleLabel}`} className="flex min-w-0 flex-1 items-center gap-3 transition hover:opacity-80">
+      <div className="sidebar-profile mx-1 mt-2 flex shrink-0 flex-wrap items-center gap-2 border-t border-black/[0.07] px-2 pt-4 text-[color:var(--sidebar-text)]">
+        <Link href="/profile" title={`${userName} - ${roleLabel}`} className="sidebar-profile-identity flex w-full min-w-0 items-center gap-3 transition hover:opacity-80">
           <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-black/10 bg-black/[0.035]">
             {userPhoto ? (
               <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />

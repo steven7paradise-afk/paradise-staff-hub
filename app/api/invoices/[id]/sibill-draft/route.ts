@@ -174,3 +174,30 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Impossibile eliminare la bozza su Sibill. Riprova tra poco." }, { status: 500 });
   }
 }
+
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const user = await invoiceEditor();
+  if (!user) return NextResponse.json({ error: "Non hai il permesso di modificare le fatture." }, { status: 403 });
+  const body = await request.json().catch(() => null);
+  if (typeof body?.notes !== "string" || body.notes.length > 1000) {
+    return NextResponse.json({ error: "Inserisci una descrizione di massimo 1000 caratteri." }, { status: 400 });
+  }
+  const { id } = await params;
+  const record = await prisma.serviceFormResponse.findFirst({
+    where: { id, form: { name: { contains: "fattura", mode: "insensitive" } } },
+    select: { answers: true },
+  });
+  if (!record) return NextResponse.json({ error: "Fattura non trovata." }, { status: 404 });
+  const answers = (record.answers as Record<string, Prisma.InputJsonValue>) || {};
+  if (answers[SIBILL_ANSWER_KEYS.documentId]) {
+    return NextResponse.json({ error: "La bozza è già su Sibill: modifica la descrizione direttamente in Sibill." }, { status: 409 });
+  }
+  const notes = body.notes.trim();
+  const result = await prisma.serviceFormResponse.updateMany({
+    where: { id, answers: { equals: record.answers ?? Prisma.DbNull } },
+    data: { answers: { ...answers, invoice_notes: notes } },
+  });
+  if (!result.count) return NextResponse.json({ error: "La fattura è stata aggiornata. Ricarica la pagina prima di riprovare." }, { status: 409 });
+  return NextResponse.json({ ok: true, notes });
+}

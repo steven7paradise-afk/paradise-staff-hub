@@ -295,6 +295,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                       </td>
                       <td className="px-5 py-4 text-center">
                         <CreateSibillDraftButton
+                      initialNotes={String(answer(res, "invoice_notes") || "")}
                           responseId={res.id}
                           initialDraft={answer(res, SIBILL_ANSWER_KEYS.documentId) ? {
                             id: String(answer(res, SIBILL_ANSWER_KEYS.documentId)),
@@ -398,6 +399,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
 
                   <div className="mt-4 flex flex-wrap items-start justify-end gap-2">
                     <CreateSibillDraftButton
+                      initialNotes={String(answer(res, "invoice_notes") || "")}
                       responseId={res.id}
                       initialDraft={answer(res, SIBILL_ANSWER_KEYS.documentId) ? {
                         id: String(answer(res, SIBILL_ANSWER_KEYS.documentId)),

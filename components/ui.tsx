@@ -47,10 +47,10 @@ export function Badge({ children, tone = "pink" }: { children: React.ReactNode; 
   return <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold tracking-wide transition-all duration-200 hover:scale-[1.02]", tones[tone])}>{children}</span>;
 }
 
-export function Field(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Field({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 px-4 text-sm outline-none transition placeholder:text-black/35 focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:placeholder:text-white/35"
+      className={cn("min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 px-4 text-sm outline-none transition placeholder:text-black/35 focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:placeholder:text-white/35", className)}
       {...props}
     />
   );

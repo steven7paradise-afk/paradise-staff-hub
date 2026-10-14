@@ -124,7 +124,9 @@ function paymentCode(value: unknown) {
 }
 
 function invoiceDescription(answers: Record<string, unknown>) {
-  const notes = clean(answers.invoice_notes).replace(/\s+/g, " ");
+  // Sibill rejects the euro symbol in invoice descriptions. Preserve its meaning
+  // in the exported text without changing the saved notes or monetary fields.
+  const notes = clean(answers.invoice_notes).replace(/€/g, "EUR").replace(/\s+/g, " ");
   return (notes || "Servizi e prodotti Paradise Beauty").slice(0, 1000);
 }
 
