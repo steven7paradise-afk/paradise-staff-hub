@@ -534,7 +534,7 @@ export function StaffDirectory({
     }
   }, [showCreateModal]);
 
-  const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
+  const isAuthorizedToEdit = userRole === "ZERO" || userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
   const archivedCount = staff.filter(isArchivedEmployee).length;
   const isUpcomingContractExpiry = (employee: Employee) => {

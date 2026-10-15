@@ -13,7 +13,7 @@ export default async function EmployeesPage() {
 
   const [employees, locations] = await Promise.all([
     prisma.user.findMany({
-      where: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      where: session.user.role === "ZERO" ? {} : { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       include: { 
         location: true,
         last_edited_by: {

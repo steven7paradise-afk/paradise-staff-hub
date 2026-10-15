@@ -41,6 +41,8 @@ export default async function StaffPage({
   searchParams?: Promise<{ employee?: string }>;
 }) {
   const params = searchParams ? await searchParams : {};
+  const session = await auth();
+  const visibleRoles = session?.user?.role === "ZERO" ? {} : { role: { notIn: ["ZERO", "SUPER_ADMIN"] as ("ZERO" | "SUPER_ADMIN")[] } };
   const currentYear = new Date().getFullYear();
   const sicknessStart = new Date(currentYear, 0, 1);
   const sicknessEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999);
@@ -52,12 +54,9 @@ export default async function StaffPage({
     return Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   };
 
-  const [session, staff, locations, managers, todaySchedules, todayAttendanceLogs, approvedLeavesToday, monthlySchedules, monthlyAttendanceLogs, monthlyLeaves] = await Promise.all([
-    auth(),
+  const [staff, locations, managers, todaySchedules, todayAttendanceLogs, approvedLeavesToday, monthlySchedules, monthlyAttendanceLogs, monthlyLeaves] = await Promise.all([
     prisma.user.findMany({
-      where: {
-        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
-      },
+      where: visibleRoles,
       include: {
         location: true,
         manager: true,
@@ -123,7 +122,7 @@ export default async function StaffPage({
     prisma.scheduleEntry.findMany({
       where: {
         date: { gte: month.start, lt: tomorrow },
-        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        user: { active: true, ...visibleRoles },
       },
       include: {
         category: true,
@@ -134,7 +133,7 @@ export default async function StaffPage({
     prisma.attendanceLog.findMany({
       where: {
         date: { gte: month.start, lt: tomorrow },
-        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        user: { active: true, ...visibleRoles },
       },
       orderBy: { timestamp: "asc" },
     }),
@@ -143,7 +142,7 @@ export default async function StaffPage({
         type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] },
         start_date: { lt: month.end },
         end_date: { gte: month.start },
-        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        user: { active: true, ...visibleRoles },
       },
       select: { id: true, user_id: true, type: true, start_date: true, end_date: true, start_time: true, end_time: true, status: true, reason: true, medical_code: true, user: { select: { name: true } } },
     }),
