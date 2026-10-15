@@ -7,7 +7,7 @@ import styles from "./web-calls.module.css";
 import { staffPhotoSource } from "@/lib/web-staff-photo";
 import { WebChat } from "./web-chat";
 import { webRequest, WebApiError as ApiError, connectionMessage } from "@/lib/web-api-response";
-import { WebQRLogin } from "./web-qr-login";
+import { WebLogin } from "./web-login";
 
 type Person = { id: string; name: string; photo_url?: string | null; location?: { name: string } | null };
 type Call = { id: string; callerId: string; calleeId: string; callerName: string; calleeName: string; callerPhoto?: string | null; calleePhoto?: string | null; status: string; expiresAt: number };
@@ -140,7 +140,7 @@ export function WebCalls() {
   const peer = call ? { id: incoming ? call.callerId : call.calleeId, name: incoming ? call.callerName : call.calleeName, photo_url: incoming ? call.callerPhoto : call.calleePhoto } : null;
   return <main className={`${styles.shell} ${user ? styles.appMode : ""} ${user && dark ? styles.dark : ""}`}>
     <header className={styles.header}><a href="/my-staff" className={styles.brand}><img src="/logo.png" alt="Paradise Beauty" /><span>MyParadise<small>Il tuo team, anche dal computer</small></span></a>{user && <div className={styles.account}><span>{user.name}</span><button aria-label="Esci" disabled={busy || !!call} onClick={() => void run(async () => { await api("logout", {}); releaseLock.current?.(); setReady(false); setUser(null); setPeople([]); })}><LogOut size={19} /></button></div>}</header>
-    {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebQRLogin onLogin={setUser} /> : <><nav className={styles.rail} aria-label="Sezioni">
+    {checking ? <p className={styles.loading}>Verifica accesso…</p> : !user ? <WebLogin onLogin={setUser} /> : <><nav className={styles.rail} aria-label="Sezioni">
       <a className={styles.railBrand} href="/my-staff" aria-label="MyParadise"><img src="/my-staff/icon.png" alt="" /></a>
       <button title="Chat" aria-label="Chat" aria-pressed={section === "chat" && !call} onClick={() => setSection("chat")}><MessageCircle size={23} /></button>
       <button title="Chiamate" aria-label="Chiamate" aria-pressed={section === "calls" || !!call} onClick={() => setSection("calls")}><Phone size={22} /></button>
