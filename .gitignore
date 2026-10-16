@@ -10,3 +10,5 @@ prisma/import_staff_officiale.sql
 APP STAFF/
 scratch/
 
+# Local review workspace: customer data never committed
+tools/google-reviews-local/.local-data/
