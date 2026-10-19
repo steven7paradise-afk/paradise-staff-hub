@@ -22,6 +22,9 @@ test('authorization browser flow preserves query, validates callbacks, and gives
   process.env.MCP_ENABLED='true';
   let api=await route(null,null); let q=query(); let r=await api.GET(req(q));
   assert.equal(r.status,307); const login=new URL(r.headers.get('location')!); assert.equal(login.pathname,'/login'); assert.equal(login.searchParams.get('callbackUrl'),'/oauth/authorize?'+q);
+  const proxied = new NextRequest('http://0.0.0.0:3000/oauth/authorize?'+q,{headers:{'x-forwarded-host':'www.staff-paradise.tech','x-forwarded-proto':'https'}});
+  r=await api.GET(proxied); assert.equal(new URL(r.headers.get('location')!).pathname,'/login');
+  assert.equal(new URL(r.headers.get('location')!).searchParams.get('callbackUrl'),'/oauth/authorize?'+q);
   api=await route({user:{id:'admin'}},{id:'admin',active:true,role:'SUPER_ADMIN'});
   for (const callback of ['https://claude.ai/api/mcp/auth_callback','https://claude.com/api/mcp/auth_callback']) {q=query();q.set('redirect_uri',callback);r=await api.GET(req(q));assert.equal(r.status,200);assert.match(await r.text(),/Claude vuole leggere.*sola lettura/);assert.ok(r.headers.get('set-cookie'));}
   api=await route({user:{id:'worker'}},{id:'worker',active:true,role:'STAFF'});r=await api.GET(req(query()));assert.equal(r.status,403);assert.match(r.headers.get('content-type')!,/text\/html/);const html=await r.text();assert.match(html,/account attualmente collegato non è amministratore/);assert.match(html,/error_description/);

@@ -23,7 +23,9 @@ function browserError(reason: string, description: string, status = 400, target?
 export async function GET(request: NextRequest) {
   if (!enabled()) return browserError("connector_disabled", "Il connettore è temporaneamente disabilitato.", 503);
   // Consent cookie and form POST must use the same configured origin.
-  if (new URL(request.url).origin !== issuer()) return NextResponse.redirect(`${issuer()}/oauth/authorize${request.nextUrl.search}`);
+  const publicHost = (request.headers.get("x-forwarded-host") || request.headers.get("host") || new URL(request.url).host).split(",")[0].trim();
+  // TLS terminates at Coolify: request.url may contain the internal HTTP origin.
+  if (publicHost !== new URL(issuer()).host) return NextResponse.redirect(`${issuer()}/oauth/authorize${request.nextUrl.search}`);
   const q = request.nextUrl.searchParams;
   if ([...new Set(q.keys())].some(k => q.getAll(k).length !== 1)) return browserError("invalid_request", "La richiesta di autorizzazione non è valida.");
   const client = await prisma.mcpClient.findUnique({ where: { id: q.get("client_id") || "" } });
