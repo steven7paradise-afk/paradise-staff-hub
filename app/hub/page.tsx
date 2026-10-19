@@ -29,7 +29,7 @@ export default async function HubPage() {
       hideAdminAssistant
     >
       <iframe
-        src="https://exciting-renewal-production-8936.up.railway.app/hub"
+        src="https://magazzino.187.127.71.250.sslip.io/hub/login"
         title="Magazzino Paradise"
         loading="eager"
         allow="clipboard-read; clipboard-write"
