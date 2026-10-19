@@ -23,13 +23,13 @@ export function issuer() {
 export function resource() { return `${issuer()}/mcp`; }
 export function enabled() { return process.env.MCP_ENABLED === "true"; }
 export function validRedirect(value: string) {
-  try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.hash; } catch { return false; }
+  try { const url = new URL(value); return (url.protocol === "https:" || (url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname))) && !url.username && !url.password && !url.hash; } catch { return false; }
 }
 export function allowedOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || [issuer(), "https://claude.ai", "https://claude.com"].includes(origin);
 }
-export function audit(event: string, data: { user_id?: string; client_id?: string; tool?: string; status?: number; duration_ms?: number } = {}) {
+export function audit(event: string, data: { user_id?: string; client_id?: string; tool?: string; status?: number; duration_ms?: number; reason?: string; role?: string } = {}) {
   // No tokens, query strings, tool arguments, names or returned records in logs.
   console.info(JSON.stringify({ service: "staff-mcp", event, at: new Date().toISOString(), ...data }));
 }

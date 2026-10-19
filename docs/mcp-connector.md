@@ -76,3 +76,13 @@ Manutenzione: eliminare periodicamente i rate bucket con `expires_at < NOW()`, i
 I test usano fixture e mock, nessun dato operativo reale viene modificato o inviato a Claude. Verificano PKCE, grant/code binding, rotazione/replay, scadenze/ruoli/audience/scope, limite distribuito, proiezione privacy, date Rome/DST e tutti i tool tramite il trasporto ufficiale SDK. Il collaudo OAuth browser → Claude reale e la migrazione sul server restano attività di attivazione, non sono attestati dai test unitari.
 
 Riferimenti: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization e https://github.com/modelcontextprotocol/typescript-sdk/tree/v1.x .
+
+## Correzione autorizzazione browser (19 ottobre 2026)
+
+- Sessione assente: ritorno al login conservando l'intera query di autorizzazione. Sessione riferita a un utente non più presente: richiede un nuovo login.
+- Account attivo senza ruolo amministratore: pagina HTML 403 con spiegazione, cambio account e ritorno al callback registrato con `error`, `error_description`, `state`. Non si promuovono automaticamente account.
+- Errori dei parametri dopo la verifica del callback: redirect OAuth. Client sconosciuto o callback non registrato: errore HTML locale, mai redirect verso una destinazione non verificata.
+- Consenso sul dominio canonico per evitare disallineamenti tra cookie e Origin del POST. Log con motivi distinti senza credenziali/query.
+- Entrambi i callback Claude sono validi; devono essere registrati dal client e corrispondere esattamente alla richiesta. Supportati anche callback HTTP su IP loopback (`127.0.0.1`, `::1`) per Inspector; altri callback HTTP restano vietati.
+- Prova reale Inspector CLI sulla versione locale: discovery, DCR, richiesta con PKCE, redirect al login con parametri preservati e pagina login 200. Il proprietario ha chiesto di non autorizzare: nessun consenso, token o lettura operativa reale collaudati.
+- Account Brayan verificato attivo SUPER_ADMIN. Il motivo storico preciso del JSON `access_denied` non è dimostrato dai log consultati: nel vecchio GET proveniva solo dal controllo utente/ruolo; POST aveva ulteriori rifiuti indistinti (Origin, sessione, ticket/CSRF).
