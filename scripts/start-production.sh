@@ -52,8 +52,10 @@ esac
 # inside the same container and Traefik can route traffic to it again.
 health_start_delay="${APP_HEALTH_START_DELAY_SECONDS:-15}"
 health_interval="${APP_HEALTH_INTERVAL_SECONDS:-10}"
-health_failures_before_restart="${APP_HEALTH_FAILURES_BEFORE_RESTART:-3}"
-health_url="http://127.0.0.1:${PORT:-3000}/api/health"
+health_failures_before_restart="${APP_HEALTH_FAILURES_BEFORE_RESTART:-6}"
+# Probe the application's own pool, not a separate connection that could work
+# while login/chat remain stuck. Six failures tolerate brief database wakeups.
+health_url="http://127.0.0.1:${PORT:-3000}/api/health?database=1"
 shutdown_requested=0
 server_pid=""
 watchdog_pid=""
