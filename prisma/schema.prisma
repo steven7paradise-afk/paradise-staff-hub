@@ -1295,3 +1295,59 @@ model ChatAttachment {
   message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   @@map("chat_attachments")
 }
+
+// MCP credentials are separate from operational data. Only hashes are stored.
+model McpClient {
+  id String @id
+  name String
+  redirect_uris String[]
+  auth_method String
+  secret_hash String?
+  created_at DateTime @default(now())
+  @@map("mcp_clients")
+}
+model McpAuthorization {
+  id String @id
+  client_id String
+  user_id String
+  redirect_uri String
+  challenge String
+  resource String
+  state String
+  csrf_hash String
+  code_hash String? @unique
+  expires_at DateTime
+  consumed_at DateTime?
+  @@index([expires_at])
+  @@map("mcp_authorizations")
+}
+model McpGrant {
+  id String @id
+  client_id String
+  user_id String
+  resource String
+  scope String
+  expires_at DateTime
+  revoked_at DateTime?
+  tokens McpToken[]
+  @@index([user_id])
+  @@map("mcp_grants")
+}
+model McpToken {
+  id String @id
+  grant_id String
+  access_hash String @unique
+  refresh_hash String @unique
+  access_expires_at DateTime
+  refresh_expires_at DateTime
+  rotated_at DateTime?
+  grant McpGrant @relation(fields: [grant_id], references: [id], onDelete: Cascade)
+  @@map("mcp_tokens")
+}
+model McpRateBucket {
+  key String @id
+  count Int
+  expires_at DateTime
+  @@index([expires_at])
+  @@map("mcp_rate_buckets")
+}

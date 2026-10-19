@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 
 const allSettings = [
+  { href: "/settings/mcp", title: "Connettore MCP", text: "Condivisione dei dati operativi con Claude e dashboard esterne, reparti e revoca accessi.", icon: ShieldCheck, superAdminOnly: false },
   { href: "/settings/dashboard", title: "Obiettivi & Promo", text: "Obiettivi mensili sulle schede, slider promozioni scadenziabili e prodotto del mese.", icon: Sparkles, superAdminOnly: true },
   { href: "/settings/sidebar", title: "Personalizza Sidebar", text: "Modifica il colore di sfondo della barra laterale e l'ordine dei pulsanti di navigazione.", icon: Palette, superAdminOnly: true },
   { href: "/settings/branding", title: "Branding", text: "Colori, logo, dark mode e look premium.", icon: Palette, superAdminOnly: true },
@@ -45,7 +46,7 @@ export default async function SettingsPage() {
   }
 
   // Filter settings based on user role
-  const settings = allSettings.filter((s) => !s.superAdminOnly || role === "ZERO");
+  const settings = allSettings.filter((s) => s.href === "/settings/mcp" ? ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role) : !s.superAdminOnly || role === "ZERO");
 
   return (
     <AppShell title="Impostazioni" subtitle="Configura il sistema, gestisci moduli per lo staff e personalizza il tuo portale.">
