@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma, McpClient } from "@prisma/client";
 import { digest, equalHash, opaque, mayAuthorize, MCP_SCOPE, resource, validVerifier, scopeForResource } from "./security";
+import { accessFor } from "./permissions";
 const ACCESS_MS = 15 * 60_000;
 const REFRESH_MS = 30 * 24 * 60 * 60_000;
 export async function currentAdmin(id: string) {
   const user = await prisma.user.findUnique({ where: { id }, select: { id: true, active: true, role: true } });
-  return mayAuthorize(user) ? user : null;
+  const access = await accessFor(id);
+  return user && access && access.role !== "collaboratore" ? user : null;
 }
 export async function authenticateClient(request: Request, form: URLSearchParams): Promise<McpClient | null> {
   let id = form.get("client_id") || ""; let secret = form.get("client_secret") || "";
@@ -32,7 +34,7 @@ export async function exchangeCode(client: McpClient, form: URLSearchParams) {
   const target = form.get("resource") || ""; const scope = scopeForResource(target);
   const code = form.get("code") || ""; if (!code || !scope) return null;
   const authorization = await prisma.mcpAuthorization.findUnique({ where: { code_hash: digest(code) } });
-  if (!authorization || authorization.client_id !== client.id || authorization.resource !== target || authorization.redirect_uri !== form.get("redirect_uri") || !validVerifier(form.get("code_verifier") || "", authorization.challenge) || !await currentAdmin(authorization.user_id)) return null;
+  if (!authorization || authorization.scope !== scope || authorization.client_id !== client.id || authorization.resource !== target || authorization.redirect_uri !== form.get("redirect_uri") || !validVerifier(form.get("code_verifier") || "", authorization.challenge) || !await currentAdmin(authorization.user_id)) return null;
   const now = new Date();
   return prisma.$transaction(async tx => {
     const used = await tx.mcpAuthorization.updateMany({ where: { id: authorization.id, consumed_at: null, expires_at: { gt: now } }, data: { consumed_at: now } });
@@ -45,7 +47,7 @@ export async function refreshTokens(client: McpClient, form: URLSearchParams) {
   const target = form.get("resource") || ""; const scope = scopeForResource(target);
   if (!scope || (form.has("scope") && form.get("scope") !== scope)) return null;
   const token = await prisma.mcpToken.findUnique({ where: { refresh_hash: digest(form.get("refresh_token") || "") }, include: { grant: true } });
-  if (!token || token.grant.client_id !== client.id || token.grant.resource !== target || !await currentAdmin(token.grant.user_id)) return null;
+  if (!token || token.grant.scope !== scope || token.grant.client_id !== client.id || token.grant.resource !== target || !await currentAdmin(token.grant.user_id)) return null;
   const now = new Date();
   return prisma.$transaction(async tx => {
     if (token.grant.revoked_at || token.grant.expires_at <= now || token.refresh_expires_at <= now) return null;

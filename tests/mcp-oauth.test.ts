@@ -9,7 +9,8 @@ function patch(t: any, target: any, key: string, fn: (...args: any[]) => any) { 
 const client: any = { id: "client", auth_method: "none", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"] };
 test("authorization code is single-use and bound to PKCE, redirect, resource and client", async t => {
   const verifier = opaque(), code = opaque(); let consumed = false, minted = 0;
-  const authorization = { id: "auth", user_id: "admin", client_id: client.id, resource: resource(), redirect_uri: client.redirect_uris[0], challenge: createHash("sha256").update(verifier).digest("base64url") };
+  const authorization = { id: "auth", user_id: "admin", client_id: client.id, scope: "staff:read", resource: resource(), redirect_uri: client.redirect_uris[0], challenge: createHash("sha256").update(verifier).digest("base64url") };
+  patch(t, prisma.setting, "findUnique", async () => null);
   patch(t, prisma.user, "findUnique", async () => ({ id: "admin", role: "ADMIN", active: true }));
   patch(t, prisma.mcpAuthorization, "findUnique", async ({ where }) => where.code_hash === digest(code) ? authorization : null);
   patch(t, prisma, "$transaction", async (run: any) => run({ mcpAuthorization: { updateMany: async ({ where }: any) => { assert.ok(where.expires_at.gt instanceof Date); if (consumed) return { count: 0 }; consumed = true; return { count: 1 }; } }, mcpGrant: { create: async ({ data }: any) => data }, mcpToken: { create: async ({ data }: any) => { minted++; assert.notEqual(data.access_hash, code); } } }));
@@ -22,7 +23,8 @@ test("authorization code is single-use and bound to PKCE, redirect, resource and
 });
 test("refresh tokens rotate and replay revokes the entire grant", async t => {
   let rotated = false, revoked = false;
-  const token: any = { id: "old", grant_id: "grant", refresh_expires_at: new Date(Date.now()+60_000), grant: { id: "grant", user_id: "admin", client_id: client.id, resource: resource(), expires_at: new Date(Date.now()+60_000), revoked_at: null } };
+  const token: any = { id: "old", grant_id: "grant", refresh_expires_at: new Date(Date.now()+60_000), grant: { id: "grant", user_id: "admin", client_id: client.id, scope: "staff:read", resource: resource(), expires_at: new Date(Date.now()+60_000), revoked_at: null } };
+  patch(t, prisma.setting, "findUnique", async () => null);
   patch(t, prisma.user, "findUnique", async () => ({ role: "ADMIN", active: true }));
   patch(t, prisma.mcpToken, "findUnique", async () => token);
   patch(t, prisma, "$transaction", async (run: any) => run({ mcpToken: { updateMany: async () => { if (rotated) return { count: 0 }; rotated = true; return { count: 1 }; }, create: async () => ({}) }, mcpGrant: { update: async () => { revoked = true; } } }));
@@ -34,6 +36,7 @@ test("bearer validation rejects expiration, scope/audience mismatch, revocation 
   const secret = opaque(); const token: any = { access_hash: digest(secret), access_expires_at: new Date(Date.now()+60_000), grant: { user_id: "admin", client_id: "client", expires_at: new Date(Date.now()+60_000), resource: resource(), scope: "staff:read", revoked_at: null } };
   let role = "ADMIN";
   patch(t, prisma.mcpToken, "findUnique", async () => token);
+  patch(t, prisma.setting, "findUnique", async () => null);
   patch(t, prisma.user, "findUnique", async () => ({ role, active: true }));
   const request = new Request(resource(), { headers: { Authorization: `Bearer ${secret}` } });
   assert.ok(await bearerIdentity(request));
@@ -58,4 +61,12 @@ test("distributed rate limiter rejects request 61 and resets in the next minute"
   for (let i=0;i<60;i++) assert.equal(await consumeRate("token:test", 60, 60_000), true);
   assert.equal(await consumeRate("token:test", 60, 60_000), false);
   assert.equal(await consumeRate("token:test", 60, 120_000), true);
+});
+test('old read-only admin grants and pending consents cannot acquire write scope',async t=>{
+ const {adminResource}=await import('../lib/mcp/security');
+ const code=opaque(),verifier=opaque();
+ patch(t,prisma.mcpAuthorization,'findUnique',async()=>({id:'old',scope:'staff:admin:read',client_id:client.id,user_id:'admin',resource:adminResource(),redirect_uri:client.redirect_uris[0],challenge:createHash('sha256').update(verifier).digest('base64url')}));
+ assert.equal(await exchangeCode(client,new URLSearchParams({code,code_verifier:verifier,redirect_uri:client.redirect_uris[0],resource:adminResource()})),null);
+ patch(t,prisma.mcpToken,'findUnique',async()=>({grant:{client_id:client.id,resource:adminResource(),scope:'staff:admin:read'}}));
+ assert.equal(await refreshTokens(client,new URLSearchParams({refresh_token:opaque(),resource:adminResource()})),null);
 });

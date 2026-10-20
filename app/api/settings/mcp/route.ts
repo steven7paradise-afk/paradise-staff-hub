@@ -1,11 +1,11 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { currentAdmin } from "@/lib/mcp/oauth";
+import { accessFor } from "@/lib/mcp/permissions";
 import { OfficeConfig, CONFIG_KEY } from "@/lib/mcp/schemas";
 import { boundedBody, issuer, audit } from "@/lib/mcp/security";
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id || !await currentAdmin(session.user.id)) return Response.json({ error: "Accesso riservato alla direzione" }, { status: 403 });
+  if (!session?.user?.id || (await accessFor(session.user.id))?.role !== "super_admin") return Response.json({ error: "Accesso riservato alla direzione" }, { status: 403 });
   if (request.headers.get("origin") !== issuer()) return Response.json({ error: "Origin non valida" }, { status: 403 });
   try {
     const body = JSON.parse(await boundedBody(request, 1_000_000));

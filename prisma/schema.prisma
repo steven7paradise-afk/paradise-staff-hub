@@ -1307,6 +1307,7 @@ model McpClient {
   @@map("mcp_clients")
 }
 model McpAuthorization {
+  scope String @default("staff:read")
   id String @id
   client_id String
   user_id String

@@ -15,10 +15,10 @@ test("disabled connector exposes no tools; no bearer gives MCP discovery challen
 });
 test("resource and authorization metadata agree on audience, scope, endpoints and PKCE", async () => {
   const p = await protectedMetadata().json(), a = await authorizationMetadata().json();
-  assert.equal(p.resource, resource()); assert.deepEqual(p.authorization_servers, [a.issuer]); assert.deepEqual(a.code_challenge_methods_supported, ["S256"]); assert.deepEqual(a.scopes_supported, ["staff:read", "staff:admin:read"]); assert.ok(a.registration_endpoint);
+  assert.equal(p.resource, resource()); assert.deepEqual(p.authorization_servers, [a.issuer]); assert.deepEqual(a.code_challenge_methods_supported, ["S256"]); assert.deepEqual(a.scopes_supported, ["staff:read", "staff:admin"]); assert.ok(a.registration_endpoint);
 });
 test("route returns 429 and Retry-After, and authenticated GET has no persistent SSE", async t => {
-  enable(t); const secret = opaque(); let count = 61;
+  enable(t); patch(t, prisma.setting, "findUnique", async () => null); const secret = opaque(); let count = 61;
   patch(t, prisma.mcpToken, "findUnique", async () => ({ access_hash: digest(secret), access_expires_at: new Date(Date.now()+60_000), grant: { user_id: "admin", client_id: "client", scope: "staff:read", resource: resource(), expires_at: new Date(Date.now()+60_000), revoked_at: null } }));
   patch(t, prisma.user, "findUnique", async () => ({ role: "ADMIN", active: true }));
   patch(t, prisma, "$queryRaw", async () => [{ count }]);

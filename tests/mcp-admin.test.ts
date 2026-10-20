@@ -15,7 +15,7 @@ test('admin tools enforce roles, explicit projections, schemas and private PDF l
  patch(t,prisma.leaveRequest,'findMany',async(a:any)=>{for(const k of ['reason','medical_code','admin_note'])assert.equal(a.select[k],undefined);return []});
  patch(t,prisma.document,'findMany',async(a:any)=>{for(const k of ['file_url','storage_path','notes'])assert.equal(a.select[k],undefined);return [{id:'doc',month:10,year:2026}]});
  patch(t,prisma.staffTask,'findMany',async()=>[]);
- const list=await rpc('tools/list');assert.equal(list.result.tools.length,5);for(const tool of list.result.tools){assert.equal(tool.annotations.readOnlyHint,true);assert.ok(tool.outputSchema);}
+ const list=await rpc('tools/list');assert.equal(list.result.tools.length,12);for(const tool of list.result.tools){assert.equal(tool.annotations.readOnlyHint,!["create_task","update_task","add_task_comment","send_message","mark_read"].includes(tool.name));assert.ok(tool.outputSchema);}
  for(const name of ['get_full_profile','get_attendance_history','list_absences','list_payslips','list_all_tasks']){
  const result=await rpc('tools/call',{name,arguments:{employee_id:'person',...(['get_attendance_history','list_absences'].includes(name)?{from:'2026-10-01',to:'2026-10-20'}:{})}});assert.equal(result.result.isError,undefined,JSON.stringify(result));assert.equal(JSON.stringify(result).includes('PRIVATE_SENTINEL'),false);assert.deepEqual(JSON.parse(result.result.content[0].text),result.result.structuredContent);
  if(name==='list_payslips'){assert.match(result.result.structuredContent.payslips[0].pdf_url,/\/api\/documents\/doc\/download$/);assert.equal(result.result.structuredContent.payslips[0].net,null);}
@@ -24,6 +24,7 @@ test('admin tools enforce roles, explicit projections, schemas and private PDF l
  role='DIPENDENTE';const denied=await rpc('tools/call',{name:'get_full_profile',arguments:{employee_id:'person'}});assert.equal(denied.result.isError,true);
 });
 test('operational OAuth grants cannot access admin resource, including after role elevation',async t=>{
+ patch(t,prisma.setting,'findUnique',async()=>null);
  patch(t,prisma.user,'findUnique',async()=>({id:'admin',active:true,role:'SUPER_ADMIN'}));
  const grant={user_id:'admin',client_id:'client',resource:resource(),scope:MCP_SCOPE,expires_at:new Date(Date.now()+60000),revoked_at:null};
  patch(t,prisma.mcpToken,'findUnique',async()=>({access_hash:'hash',access_expires_at:new Date(Date.now()+60000),grant}));
@@ -33,5 +34,5 @@ test('operational OAuth grants cannot access admin resource, including after rol
 });
 test('admin endpoint always requires OAuth even when secret URL is enabled',async t=>{
  const {POST}=await import('../app/mcp-admin/route');process.env.MCP_ENABLED='true';process.env.MCP_URL_TOKEN='s'.repeat(64);t.after(()=>delete process.env.MCP_URL_TOKEN);
- const r=await POST(new Request(adminResource(),{method:'POST',headers:{Authorization:'Bearer '+'s'.repeat(64)}}));assert.equal(r.status,401);assert.match(r.headers.get('www-authenticate')!,/oauth-protected-resource\/mcp-admin/);assert.match(r.headers.get('www-authenticate')!,/staff:admin:read/);
+ const r=await POST(new Request(adminResource(),{method:'POST',headers:{Authorization:'Bearer '+'s'.repeat(64)}}));assert.equal(r.status,401);assert.match(r.headers.get('www-authenticate')!,/oauth-protected-resource\/mcp-admin/);assert.match(r.headers.get('www-authenticate')!,/staff:admin/);
 });

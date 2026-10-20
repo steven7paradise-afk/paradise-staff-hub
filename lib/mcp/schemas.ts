@@ -1,8 +1,9 @@
 import { z } from "zod";
-export const DepartmentKey = z.enum(["ecom", "mkt", "admin", "ceo", "tit"]);
+export const DepartmentKey = z.enum(["ecom", "mkt", "admin", "ceo", "tit", "mag", "sarta"]);
 export const departments = [
   { key: "ecom", name: "E-commerce" }, { key: "mkt", name: "Marketing & Social" },
   { key: "admin", name: "Amministrazione" }, { key: "ceo", name: "Ufficio Brayan (direzione)" }, { key: "tit", name: "Ufficio titolare" },
+  { key: "mag", name: "Magazzino" }, { key: "sarta", name: "Sartoria" },
 ] as const;
 export const DateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v, "Data non valida");
 const Iso = z.string().datetime({ offset: true });
@@ -25,7 +26,7 @@ export const Projects = z.object({ ...Meta, projects: z.array(Project) });
 // Explicit mapping avoids guessing staff departments or disclosing arbitrary HR/task notes.
 export const OfficeConfig = z.object({
   employees: z.array(z.object({ employee_id: Id, department_key: DepartmentKey, public_role: z.string().max(100) })).max(500),
-  departments: z.array(z.object({ key: DepartmentKey, lead_employee_id: Id.nullable(), capacity: z.number().int().min(0).max(1000).nullable() })).max(5),
+  departments: z.array(z.object({ key: DepartmentKey, lead_employee_id: Id.nullable(), capacity: z.number().int().min(0).max(1000).nullable() })).max(7),
   task_texts: z.array(z.object({ task_id: Id, title: z.string().trim().min(1).max(150), description: z.string().max(300) })).max(2000),
 }).strict().superRefine((value, ctx) => {
   for (const ids of [value.employees.map(e => e.employee_id), value.departments.map(d => d.key), value.task_texts.map(t => t.task_id)])
