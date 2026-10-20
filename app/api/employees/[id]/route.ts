@@ -1,3 +1,4 @@
+import { DepartmentKey } from "@/lib/mcp/schemas";
 import { withProfessionalLevel } from "@/lib/professional-level";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
@@ -82,6 +83,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (requestedRole !== undefined && requestedRole !== current.role && session.user.role !== "ZERO") {
       return apiError("Solo Zero può modificare i ruoli di sistema.", 403);
     }
+    const department = DepartmentKey.safeParse(data.department_key === undefined ? current.department_key : data.department_key);
+    const job = data.mansione === undefined ? current.mansione?.trim() : String(data.mansione ?? "").trim();
+    if (!department.success || !job || job.length > 100 || (data.mcp_excluded !== undefined && typeof data.mcp_excluded !== "boolean")) return apiError("Reparto valido e mansione (massimo 100 caratteri) sono obbligatori.", 400);
     const role = requestedRole ?? current.role;
     const currentWorkforceData = asRecord(current.workforce_data);
     const requestedEmployeeStatus = data.employeeStatus !== undefined ? String(data.employeeStatus) : current.employee_status;
@@ -118,7 +122,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       contract_end: contractEnd,
       photo_url: data.photoUrl !== undefined ? (data.photoUrl ? String(data.photoUrl).trim() : null) : undefined,
       whatsapp_phone: data.whatsappPhone !== undefined ? (data.whatsappPhone ? String(data.whatsappPhone).trim() : null) : undefined,
-      mansione: data.mansione !== undefined ? (data.mansione ? String(data.mansione).trim() : null) : undefined,
+      mansione: job,
+      department_key: department.data,
+      mcp_excluded: data.mcp_excluded,
       iban: data.iban !== undefined ? (data.iban ? String(data.iban).trim().toUpperCase() : null) : undefined,
       active: resolveEmployeeActive(data.active, requestedEmployeeStatus, current.active),
       employee_status: data.employeeStatus !== undefined ? requestedEmployeeStatus : undefined,

@@ -1,3 +1,4 @@
+import { officeConfig } from "@/lib/mcp/data";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { accessFor } from "@/lib/mcp/permissions";
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
       await prisma.mcpGrant.updateMany({ where: { id: body.revoke_grant_id }, data: { revoked_at: new Date() } });
       audit("grant.revoked_by_admin", { user_id: session.user.id });
     } else {
-      const config = OfficeConfig.parse(body);
+      const config = OfficeConfig.parse({...body,employees:(await officeConfig()).employees});
       const ids = config.employees.map(e => e.employee_id);
       const count = await prisma.user.count({ where: { id: { in: ids }, active: true } });
       if (count !== ids.length) return Response.json({ error: "Seleziona solo collaboratori attivi" }, { status: 400 });

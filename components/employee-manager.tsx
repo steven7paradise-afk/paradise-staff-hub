@@ -1,4 +1,5 @@
 "use client";
+import { departments, DepartmentKey } from "@/lib/mcp/schemas";
 import "./contract-history.css";
 
 import { useState, useEffect } from "react";
@@ -29,6 +30,8 @@ type Employee = {
   photoUrl: string;
   whatsappPhone: string;
   mansione?: string | null;
+  department_key?: string | null;
+  mcp_excluded?: boolean;
   googleCalendarId: string;
   googleCalendarSync: boolean;
   iban?: string;
@@ -174,6 +177,8 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     photoUrl: "",
     whatsappPhone: "",
     mansione: "",
+    department_key: "",
+    mcp_excluded: false,
     googleCalendarId: "",
     googleCalendarSync: false,
     workforceData: {},
@@ -315,6 +320,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
 
   async function saveEmployee() {
     if (!editing) return;
+    if (!DepartmentKey.safeParse(editing.department_key).success || !editing.mansione?.trim() || editing.mansione.trim().length > 100) { setMessage("Seleziona un reparto e una mansione (massimo 100 caratteri)."); return; }
     if (password && (password.length < 8 || password !== passwordConfirmation)) {
       setErrorMsg(password.length < 8 ? "La password deve avere almeno 8 caratteri." : "Le password non coincidono.");
       return;
@@ -356,6 +362,8 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
         photoUrl: data.photo_url ?? "",
         whatsappPhone: data.whatsapp_phone ?? "",
         mansione: data.mansione ?? "",
+        department_key: data.department_key,
+        mcp_excluded: data.mcp_excluded,
         googleCalendarId: data.google_calendar_id ?? "",
         googleCalendarSync: data.google_calendar_sync ?? false,
         iban: data.iban ?? "",
@@ -757,9 +765,12 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                 </div>
 
                 <div className="space-y-3.5 mt-4">
+                  <label className="block space-y-1"><span className="text-sm font-semibold">Reparto *</span><Select required value={editing.department_key || ""} onChange={e=>updateDraft("department_key",e.target.value)}><option value="">Seleziona reparto...</option>{departments.map(d=><option key={d.key} value={d.key}>{d.name}</option>)}</Select></label>
+                  <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={editing.mcp_excluded === true} onChange={e=>updateDraft("mcp_excluded",e.target.checked)} />Escludi questo dipendente dai connettori MCP</label>
+                  <p className="text-xs text-neutral-500">I dipendenti attivi sono condivisi automaticamente. Gli ex dipendenti restano consultabili solo nello storico amministratore.</p>
                   <label className="block space-y-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Mansione / Ruolo</span>
-                    <Select
+                    <Select required
                       value={customMansioneEdit ? "custom" : (editing.mansione || "").toLowerCase()}
                       onChange={(e) => {
                         const val = e.target.value;

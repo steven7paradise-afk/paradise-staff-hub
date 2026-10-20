@@ -99,6 +99,8 @@ model User {
   cover_url             String?
   whatsapp_phone        String?
   mansione              String?
+  department_key        String?
+  mcp_excluded          Boolean   @default(false)
   google_calendar_sync  Boolean   @default(false)
   google_calendar_id    String?
   active                Boolean   @default(true)
@@ -166,6 +168,7 @@ model User {
   barcode_collections       BarcodeLabelCollection[]   @relation("BarcodeCollectionCreator")
 
   @@map("users")
+  @@index([active, mcp_excluded, department_key], map: "User_mcp_roster_idx")
 }
 
 model MobileSession {

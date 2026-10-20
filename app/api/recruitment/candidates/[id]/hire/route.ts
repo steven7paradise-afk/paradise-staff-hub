@@ -1,3 +1,4 @@
+import { DepartmentKey } from "@/lib/mcp/schemas";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       hr_notes,
     } = data;
 
+    const department = DepartmentKey.safeParse(data.department_key);
+    const job = typeof data.mansione === "string" ? data.mansione.trim() : "";
+    if (!department.success || !job || job.length > 100) return NextResponse.json({error:"Reparto valido e mansione (massimo 100 caratteri) sono obbligatori."},{status:400});
     if (!name || !email || !pin || !role) {
       return NextResponse.json({ error: "Nome, email, PIN e ruolo sono obbligatori." }, { status: 400 });
     }
@@ -74,7 +78,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         sede_id: sede_id || null,
         whatsapp_phone: whatsapp_phone || null,
         contract_start: contract_start ? new Date(contract_start) : null,
-        mansione: role,
+        mansione: job,
+        department_key: department.data,
         employee_status: employee_status || "In prova",
         access_list: access_list || [],
         hr_notes: hr_notes || null,

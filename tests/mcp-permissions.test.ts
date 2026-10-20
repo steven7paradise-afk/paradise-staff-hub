@@ -5,6 +5,7 @@ import {accessFor,authorizeTool,requireTask,allowedEmployees,Permission,permissi
 function patch(t:any,target:any,key:string,fn:any){const old=target[key];target[key]=fn;t.after(()=>target[key]=old);}
 test('live permissions deny by default, enforce categories and department boundaries including mixed tasks',async t=>{
  let role='RESPONSABILE',active=true,saved:any=null;
+ patch(t,prisma.user,'findMany',async()=>[{id:'inside'}]);
  patch(t,prisma.user,'findUnique',async()=>({role,active,id:'actor'}));
  patch(t,prisma.setting,'findUnique',async({where}:any)=>where.key===permissionKey('actor')?(saved?{value:saved}:null):{value:{employees:[{employee_id:'inside',department_key:'ecom',is_department_lead:false},{employee_id:'outside',department_key:'mkt',is_department_lead:false}],departments:[],task_texts:[]}});
  assert.equal((await accessFor('actor'))?.role,'responsabile');

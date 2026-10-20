@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
-import { CONFIG_KEY, OfficeConfig, emptyConfig, departments, type OfficeConfiguration } from "./schemas";
+import { CONFIG_KEY, OfficeConfig, emptyConfig, departments, DepartmentKey, type OfficeConfiguration } from "./schemas";
 import { addDays, dayStart, romeDate, romeIso, attendanceForDay, TIMEZONE, type ClockLog } from "./time";
-export const employeeSelect = { id: true, name: true } as const;
+export const employeeSelect = { id: true, name: true, department_key: true, mansione: true } as const;
+export const activeSharedWhere = {active:true, employee_status:{not:"Ex dipendente"}, mcp_excluded:false} as const;
 export const taskSelect = { id: true, status: true, priority: true, due_date: true, started_at: true, completed_at: true, created_at: true, created_by_id: true, assignees: { select: { id: true } } } as const;
 // Only task title/description may be shared; notes, contacts, payroll and leave tables are excluded.
 export async function officeConfig(): Promise<OfficeConfiguration> {
   const setting = await prisma.setting.findUnique({ where: { key: CONFIG_KEY }, select: { value: true } });
-  return setting ? OfficeConfig.parse(setting.value) : emptyConfig;
+  const saved = setting ? OfficeConfig.parse(setting.value) : emptyConfig;
+  const users = await prisma.user.findMany({where: activeSharedWhere, select: employeeSelect});
+  const employees = users.flatMap(u => { const key = DepartmentKey.safeParse(u.department_key); return key.success ? [{employee_id:u.id,department_key:key.data,public_role:u.mansione || ""}] : []; });
+  return {...saved, employees, departments:saved.departments.map(d => ({...d,lead_employee_id:employees.some(e=>e.employee_id===d.lead_employee_id && e.department_key===d.key)?d.lead_employee_id:null}))};
 }
 export function taskState(status: string): "da_fare" | "in_corso" | "completata" {
   return ["COMPLETED", "DONE"].includes(status) ? "completata" : ["ACTIVE", "COMPLETION_REQUESTED"].includes(status) ? "in_corso" : "da_fare";
@@ -14,8 +18,7 @@ export function taskState(status: string): "da_fare" | "in_corso" | "completata"
 export async function loadOffice(now = new Date(), date = romeDate(now)) {
   const config = await officeConfig();
   const shareTexts = process.env.MCP_SHARE_TASK_TEXTS !== "false";
-  const ids = config.employees.map(e => e.employee_id);
-  const people = await prisma.user.findMany({ where: { id: { in: ids }, active: true, employee_status: { not: "Ex dipendente" } }, select: employeeSelect, orderBy: { name: "asc" } });
+  const people = await prisma.user.findMany({ where: activeSharedWhere, select: employeeSelect, orderBy: { name: "asc" } });
   const visibleIds = people.map(e => e.id), visible = new Set(visibleIds);
   const firstDay = addDays(date, -6);
   const [logs, rawTasks] = await Promise.all([
@@ -31,7 +34,8 @@ export async function loadOffice(now = new Date(), date = romeDate(now)) {
   for (const log of logs) { const items = byPerson.get(log.user_id) || []; items.push(log); byPerson.set(log.user_id, items); }
   const attendance = people.map(p => ({ employee_id: p.id, ...attendanceForDay(byPerson.get(p.id) || [], date, now) }));
   const employees = people.map(p => {
-    const assignment = config.employees.find(e => e.employee_id === p.id)!;
+    const key = DepartmentKey.safeParse(p.department_key);
+    const assignment = { public_role:p.mansione, department_key:key.success?key.data:null };
     const own = tasks.filter(t => t.assignee_ids.includes(p.id));
     const current = rawTasks.filter(t => t.status === "ACTIVE" && t.started_at && t.assignees.some(a => a.id === p.id)).sort((a, b) => b.started_at!.getTime() - a.started_at!.getTime())[0];
     const presence = attendance.find(a => a.employee_id === p.id)!;
@@ -43,7 +47,7 @@ export async function loadOffice(now = new Date(), date = romeDate(now)) {
     return { ...d, lead_employee_id: setup?.lead_employee_id && visible.has(setup.lead_employee_id) ? setup.lead_employee_id : null, free_seats: setup?.capacity != null ? Math.max(0, setup.capacity - occupied) : null };
   });
   const meta = { generated_at: romeIso(now), timezone: TIMEZONE as "Europe/Rome", data_notes: [
-    "Sono inclusi solo i collaboratori configurati per il connettore MCP.",
+    "Tutti i collaboratori attivi sono inclusi automaticamente, salvo esclusione esplicita nella scheda dipendente.",
     "Progetti non disponibili: lo Staff Hub non contiene un archivio progetti strutturato.",
     "Assenze e riunioni non sono dedotte: senza timbratura lo stato è non_timbrato.",
     "Posti liberi null indica capienza non configurata; presenze e pause occupano un posto.",

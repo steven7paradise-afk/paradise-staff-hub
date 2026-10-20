@@ -363,6 +363,8 @@ export default async function StaffPage({
             photoUrl: user.photo_url ?? "",
             whatsappPhone: user.whatsapp_phone ?? "",
             mansione: user.mansione ?? "",
+            department_key: user.department_key,
+            mcp_excluded: user.mcp_excluded,
             professionalLevel: readProfessionalLevel(user.workforce_data),
             employeeStatus: user.employee_status,
             managerId: user.manager_id,

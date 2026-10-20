@@ -1,3 +1,4 @@
+import { DepartmentKey } from "@/lib/mcp/schemas";
 import { withProfessionalLevel } from "@/lib/professional-level";
 import type { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
     const whatsappPhone = data.whatsappPhone ? String(data.whatsappPhone).trim() : null;
     const mansione = data.mansione ? String(data.mansione).trim() : null;
 
+    const department = DepartmentKey.safeParse(data.department_key);
+    if (!department.success || !mansione || mansione.length > 100 || (data.mcp_excluded !== undefined && typeof data.mcp_excluded !== "boolean")) return apiError("Reparto valido e mansione (massimo 100 caratteri) sono obbligatori.", 400);
     if (!name || !email || password.length < 8 || !/^\d{4,6}$/.test(pin)) {
       return apiError("Nome, email, password valida e PIN da 4 a 6 numeri sono obbligatori.", 400);
     }
@@ -120,6 +123,8 @@ export async function POST(request: NextRequest) {
         photo_url: data.photoUrl ? String(data.photoUrl).trim() : null,
         whatsapp_phone: whatsappPhone,
         mansione,
+        department_key: department.data,
+        mcp_excluded: data.mcp_excluded === true,
         employee_status: data.employeeStatus ? String(data.employeeStatus) : "Attivo",
         google_calendar_id: data.googleCalendarId ? String(data.googleCalendarId).trim() : null,
         google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : false,

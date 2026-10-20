@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { Access } from '@/lib/mcp/permissions';
-const departments={ecom:'E-commerce',mkt:'Marketing e Social',admin:'Amministrazione',ceo:'Direzione',tit:'Titolare',mag:'Magazzino',sarta:'Sartoria'};
+const departments={ecom:'E-commerce',mkt:'Marketing e Social',admin:'Amministrazione',ceo:'Direzione',tit:'Titolare',mag:'Magazzino',sarta:'Sartoria',saloni:'Saloni'};
 const categories={presenze:'Presenze',task:'Task',assenze:'Assenze',buste_paga:'Buste paga',contratto:'Contratto'};
 export function McpPermissions({users}:{users:{id:string;name:string;permissions:Access}[]}){
  const [rows,setRows]=useState(users),[id,setId]=useState(users[0]?.id||''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');

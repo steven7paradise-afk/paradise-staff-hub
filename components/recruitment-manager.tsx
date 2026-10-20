@@ -1,4 +1,5 @@
 "use client";
+import { departments } from "@/lib/mcp/schemas";
 
 import { useState, useEffect } from "react";
 import { 
@@ -157,6 +158,8 @@ export function RecruitmentManager({
   const [onboardingForm, setOnboardingForm] = useState({
     pin: "",
     role: "DIPENDENTE",
+    department_key: "",
+    mansione: "",
     sede_id: locations[0]?.id ?? "",
     whatsapp_phone: "",
     contract_start: new Date().toISOString().slice(0, 10),
@@ -317,6 +320,8 @@ export function RecruitmentManager({
         name: `${activeCandidate.first_name} ${activeCandidate.last_name}`,
         email: activeCandidate.email,
         role: onboardingForm.role,
+        department_key: onboardingForm.department_key,
+        mansione: onboardingForm.mansione,
         sede_id: onboardingForm.sede_id || null,
         pin: onboardingForm.pin,
         whatsapp_phone: onboardingForm.whatsapp_phone || null,
@@ -471,6 +476,8 @@ export function RecruitmentManager({
                           setOnboardingForm({
                             pin: "",
                             role: "DIPENDENTE",
+                            department_key: "",
+                            mansione: candidate.profession || "",
                             sede_id: locations.find(l => l.name === candidate.preferred_location)?.id || locations[0]?.id || "",
                             whatsapp_phone: candidate.phone || "",
                             contract_start: new Date().toISOString().slice(0, 10),
@@ -1632,6 +1639,8 @@ export function RecruitmentManager({
                               </div>
                             ) : (
                               <form onSubmit={handleOnboardingSubmit} className="space-y-4">
+                                <label className="block">Reparto *<Select required value={onboardingForm.department_key} onChange={e=>setOnboardingForm({...onboardingForm,department_key:e.target.value})}><option value="">Seleziona reparto...</option>{departments.map(d=><option key={d.key} value={d.key}>{d.name}</option>)}</Select></label>
+                                <label className="block">Mansione *<Field required maxLength={100} value={onboardingForm.mansione} onChange={e=>setOnboardingForm({...onboardingForm,mansione:e.target.value})}/></label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <label className="space-y-1">
                                     <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Nome e Cognome</span>
