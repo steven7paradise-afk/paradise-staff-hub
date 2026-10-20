@@ -14,6 +14,7 @@ function cors(request: Request, response: Response) {
   return response;
 }
 async function handle(request: Request) {
+  if (process.env.MCP_URL_TOKEN) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
   if (!enabled()) return Response.json({ error: "MCP non abilitato" }, { status: 503 });
   if (!allowedOrigin(request)) return Response.json({ error: "Origin non consentita" }, { status: 403 });
   try {
@@ -35,6 +36,7 @@ export const POST = handle;
 export const GET = handle;
 export const DELETE = handle;
 export async function OPTIONS(request: Request) {
+  if (process.env.MCP_URL_TOKEN) return new Response(null, { status: 404 });
   if (!allowedOrigin(request)) return new Response(null, { status: 403 });
   const response = new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID" } });
   return cors(request, response);

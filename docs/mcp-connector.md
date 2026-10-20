@@ -86,3 +86,27 @@ Riferimenti: https://modelcontextprotocol.io/specification/2025-11-25/basic/auth
 - Entrambi i callback Claude sono validi; devono essere registrati dal client e corrispondere esattamente alla richiesta. Supportati anche callback HTTP su IP loopback (`127.0.0.1`, `::1`) per Inspector; altri callback HTTP restano vietati.
 - Prova reale Inspector CLI sulla versione locale: discovery, DCR, richiesta con PKCE, redirect al login con parametri preservati e pagina login 200. Il proprietario ha chiesto di non autorizzare: nessun consenso, token o lettura operativa reale collaudati.
 - Account Brayan verificato attivo SUPER_ADMIN. Il motivo storico preciso del JSON `access_denied` non è dimostrato dai log consultati: nel vecchio GET proveniva solo dal controllo utente/ruolo; POST aveva ulteriori rifiuti indistinti (Origin, sessione, ticket/CSRF).
+
+## Accesso tramite URL segreto
+
+Impostando `MCP_URL_TOKEN` a una stringa casuale crittografica di almeno 40 caratteri,
+si abilita `/mcp/<MCP_URL_TOKEN>`. Il token va configurato solo come variabile runtime
+(non NEXT_PUBLIC, non nel repository). Generazione consigliata: 48 byte casuali
+codificati base64url (64 caratteri). `MCP_ENABLED=true` resta necessario.
+
+Questo endpoint usa gli stessi sei tool e filtri di privacy, senza OAuth, cookie o
+controlli Origin/Referer. Token mancante/errato restituisce 404; nessuna challenge
+WWW-Authenticate. Il vecchio `/mcp` restituisce 404 quando è configurato il token.
+Limite condiviso: 60 richieste/minuto. Gli audit applicativi non includono l'URL.
+Disabilitare o oscurare il percorso `/mcp/*` negli eventuali access log del proxy:
+chi possiede il link può leggere i dati operativi configurati.
+
+In Claude usare l'URL completo come connettore senza autenticazione. Per revocare
+tutti gli accessi tramite il vecchio link, sostituire MCP_URL_TOKEN con un nuovo
+valore casuale e ridistribuire/riavviare l'app; poi aggiornare il connettore Claude.
+Le chiamate già in corso possono terminare. Per disabilitare tutti i connettori,
+impostare MCP_ENABLED=false (rimuovere solo il token riattiva il vecchio endpoint OAuth).
+
+Verifica con Inspector: `npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http --method tools/list`
+e `--method tools/call --tool-name get_office_summary`. Non inserire il valore
+segreto in script versionati o log condivisi.
