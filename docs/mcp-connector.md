@@ -110,3 +110,27 @@ impostare MCP_ENABLED=false (rimuovere solo il token riattiva il vecchio endpoin
 Verifica con Inspector: `npx @modelcontextprotocol/inspector --cli "$MCP_URL" --transport http --method tools/list`
 e `--method tools/call --tool-name get_office_summary`. Non inserire il valore
 segreto in script versionati o log condivisi.
+
+## Due livelli (20 ottobre 2026)
+
+- Operativo: URL segreto esistente, sei tool. Titoli e descrizioni originali sono
+  condivisi e `text_shared=true`; `MCP_SHARE_TASK_TEXTS=false` ripristina la modalità
+  con testi approvati. Nessun altro campo HR è aggiunto al livello operativo.
+- Amministratore: `/mcp-admin`, OAuth con audience separata e scope
+  `staff:admin:read`. Un grant `staff:read` non può essere usato su questa risorsa.
+  Consenso esplicito; controllo account attivo e ruolo ZERO/SUPER_ADMIN/ADMIN sia
+  sul trasporto sia a ogni esecuzione dei cinque tool amministrativi.
+- Discovery amministratore: `/.well-known/oauth-protected-resource/mcp-admin`.
+- Il login mantiene la sessione SameSite=Lax; GET authorize non controlla Origin
+  o Referer. Il POST del consenso mantiene CSRF e verifica Origin.
+- Profili: contratto tipo/livello dai campi workforce, data assunzione ricavata da
+  contract_start. Ore settimanali non strutturate, quindi null.
+- Cedolini: lordo/netto non strutturati, quindi null; stato caricato non significa
+  pagato. Link interno protetto dal login, mai URL storage/Drive o link firmati.
+- Assenze: esclusi motivi, note, diagnosi, certificati; giorni di calendario
+  inclusivi della richiesta. Presenze: eventi completi e riepiloghi Europe/Rome.
+- Task e cedolini: paginazione con next_cursor; audit per utente, tool, dipendente,
+  intervallo, timestamp ed esito, senza contenuto delle risposte o token.
+
+Su successiva richiesta dell’amministratore il token operativo NON viene ruotato.
+La sua rotazione resta raccomandata dopo esposizione, ma non è dichiarata eseguita.

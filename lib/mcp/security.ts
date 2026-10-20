@@ -1,5 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 export const MCP_SCOPE = "staff:read";
+export const ADMIN_SCOPE = "staff:admin:read";
+export function adminResource() { return `${issuer()}/mcp-admin`; }
+export function scopeForResource(value: string) { return value === resource() ? MCP_SCOPE : value === adminResource() ? ADMIN_SCOPE : null; }
 export const ADMIN_ROLES = ["ZERO", "SUPER_ADMIN", "ADMIN"];
 export function mayAuthorize(user: { active: boolean; role: string } | null | undefined) {
   return Boolean(user?.active && ADMIN_ROLES.includes(user.role));
@@ -29,7 +32,7 @@ export function allowedOrigin(request: Request) {
   const origin = request.headers.get("origin");
   return !origin || [issuer(), "https://claude.ai", "https://claude.com"].includes(origin);
 }
-export function audit(event: string, data: { user_id?: string; client_id?: string; tool?: string; status?: number; duration_ms?: number; reason?: string; role?: string } = {}) {
+export function audit(event: string, data: { user_id?: string; client_id?: string; tool?: string; status?: number; duration_ms?: number; reason?: string; role?: string; employee_id?: string; from?: string; to?: string } = {}) {
   // No tokens, query strings, tool arguments, names or returned records in logs.
   console.info(JSON.stringify({ service: "staff-mcp", event, at: new Date().toISOString(), ...data }));
 }

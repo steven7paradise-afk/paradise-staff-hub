@@ -27,6 +27,7 @@ test('authorization browser flow preserves query, validates callbacks, and gives
   assert.equal(new URL(r.headers.get('location')!).searchParams.get('callbackUrl'),'/oauth/authorize?'+q);
   api=await route({user:{id:'admin'}},{id:'admin',active:true,role:'SUPER_ADMIN'});
   for (const callback of ['https://claude.ai/api/mcp/auth_callback','https://claude.com/api/mcp/auth_callback']) {q=query();q.set('redirect_uri',callback);r=await api.GET(req(q));assert.equal(r.status,200);assert.match(await r.text(),/Claude vuole leggere.*sola lettura/);assert.ok(r.headers.get('set-cookie'));}
+  q=query();q.set('resource','https://www.staff-paradise.tech/mcp-admin');q.set('scope','staff:admin:read');r=await api.GET(req(q));assert.equal(r.status,200);assert.match(await r.text(),/Accesso amministratore/);
   api=await route({user:{id:'worker'}},{id:'worker',active:true,role:'STAFF'});r=await api.GET(req(query()));assert.equal(r.status,403);assert.match(r.headers.get('content-type')!,/text\/html/);const html=await r.text();assert.match(html,/account attualmente collegato non è amministratore/);assert.match(html,/error_description/);
   q=query();q.set('redirect_uri','https://evil.test/callback');r=await api.GET(req(q));assert.equal(r.status,400);assert.equal(r.headers.get('location'),null);
   q=query();q.set('client_id','unknown');r=await api.GET(req(q));assert.equal(r.status,400);assert.equal(r.headers.get('location'),null);
