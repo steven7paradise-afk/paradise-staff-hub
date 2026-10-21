@@ -1,3 +1,4 @@
+import { accessFor } from "@/lib/mcp/permissions";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
@@ -36,6 +37,7 @@ function getContrastYIQ(hexcolor: string) {
 }
 
 const nav = [
+  { href: "/reviews", label: "Recensioni", iconName: "Star", roles: ["ZERO", "SUPER_ADMIN"], section: "Planning & Saloni" },
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
   { href: "/hub", label: "Magazzino Paradise", iconName: "PanelsTopLeft", roles: routePermissions["/hub"], section: "Planning & Saloni" },
@@ -272,6 +274,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     .filter((item) => item.href !== "/tables" || userHasTablesAccess)
     .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
 
+  const canSeeReviews = Boolean(session?.user?.id && (await accessFor(session.user.id))?.role === "super_admin");
+  baseItems = baseItems.filter(item => item.href !== "/reviews");
+  if (canSeeReviews) baseItems.push({ href: "/reviews", label: "Recensioni", iconName: "Star", roles: [currentRole], section: "Planning & Saloni" });
   let sidebarConfig = resolveSidebarLayout(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
   if (sidebarConfig && currentRole === "SUPER_ADMIN") {
     const primaryIndex = sidebarConfig.findIndex(section => /principale/i.test(section.title) || section.routes.includes("/dashboard"));
@@ -309,6 +314,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
       ? { ...section, routes: [...section.routes, "/barcode-labels"] }
       : section);
+  }
+  if (canSeeReviews && sidebarConfig?.length && !sidebarConfig.some(section => section.routes.includes("/reviews"))) {
+    sidebarConfig = sidebarConfig.map((section, index) => index === 0 ? { ...section, routes: [...section.routes, "/reviews"] } : section);
   }
   const canSeeHub = effectivePermissionSet
     ? effectivePermissionSet.view.includes("/hub")
@@ -393,7 +401,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         return route ? allowedRoutes.has(route) : true;
       })
     : rawItems;
-  let sidebarItems = getStructuredMenuItems(dedupeMenuItems(items)).map((item: any) => ({
+  const reviewNavItems = items.filter(item => item.href !== "/reviews");
+  if (canSeeReviews) reviewNavItems.push({ href: "/reviews", label: "Recensioni", iconName: "Star", roles: [currentRole], section: "Planning & Saloni" });
+  let sidebarItems = getStructuredMenuItems(dedupeMenuItems(reviewNavItems)).map((item: any) => ({
     href: item.href,
     label: getSidebarLabel(item.href, item.label),
     iconName: getSidebarIcon(item.href, item.iconName),

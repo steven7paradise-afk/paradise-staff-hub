@@ -8,6 +8,8 @@ export async function register() {
       startSocialPostScheduler();
       const { startSocialAudienceScheduler } = await import("./lib/social-audience-scheduler");
       startSocialAudienceScheduler();
+      const { startGoogleBusinessScheduler } = await import("./lib/google-business/scheduler");
+      startGoogleBusinessScheduler();
     }
   }
   if (process.env.NEXT_RUNTIME === "edge") await import("./sentry.edge.config");

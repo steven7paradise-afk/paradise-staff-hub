@@ -16,6 +16,7 @@ export const roleLabels: Record<Role, string> = {
 };
 
 export const routePermissions: Record<string, Role[]> = {
+  "/reviews": ["ZERO", "SUPER_ADMIN"],
   "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/hub": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],

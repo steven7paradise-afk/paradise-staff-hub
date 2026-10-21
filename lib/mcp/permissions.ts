@@ -22,7 +22,7 @@ const categories:Record<string,Access['categories'][number]>={get_full_profile:'
 export async function authorizeTool(id:string,name:string,args:Record<string,unknown>){
  const p=await accessFor(id);if(!p||p.role==='collaboratore')forbidden('Il tuo ruolo non può usare il connettore amministratore.');
  if(p!.role!=='super_admin'){
-  if(name==='sync_check')forbidden('Il controllo di sincronizzazione è riservato ai super admin.');
+  if(['sync_check','list_reviews','get_reviews_summary'].includes(name))forbidden('Questo strumento è riservato ai super admin.');
   const category=categories[name];if(category&&!p!.categories.includes(category))forbidden(`Categoria non autorizzata: ${category}.`);
   if(['create_task','update_task','add_task_comment'].includes(name)&&!p!.create_tasks)forbidden('Scrittura delle task non autorizzata.');
   if(['list_conversations','list_messages','send_message','mark_read'].includes(name)&&!p!.chat)forbidden('Accesso alla chat non autorizzato.');

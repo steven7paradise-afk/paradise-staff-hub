@@ -75,6 +75,7 @@ enum InventorySyncStatus {
 }
 
 model User {
+  google_reviews GoogleBusinessReviewStaff[]
   chatMemberships ChatMember[]
   chatMessages ChatMessage[]
 
@@ -1354,4 +1355,54 @@ model McpRateBucket {
   expires_at DateTime
   @@index([expires_at])
   @@map("mcp_rate_buckets")
+}
+
+model GoogleBusinessConnection {
+  id                String   @id @default("primary")
+  tokens_encrypted  String
+  location_name     String?
+  location_title    String?
+  average_rating    Float?
+  total_reviews     Int?
+  synced_at         DateTime?
+  attempted_at      DateTime?
+  sync_error        String?
+  lock_until        DateTime?
+  lock_owner        String?
+  @@map("google_business_connections")
+}
+
+model GoogleBusinessOAuthState {
+  hash       String @id
+  user_id    String
+  verifier   String
+  expires_at DateTime
+  @@map("google_business_oauth_states")
+}
+
+model GoogleBusinessReview {
+  id            String @id
+  location_name String
+  rating        Int
+  comment       String?
+  reviewer_name String
+  created_at    DateTime
+  updated_at    DateTime
+  reply_text    String?
+  replied_at    DateTime?
+  match_type    String?
+  manual_match  Boolean @default(false)
+  staff         GoogleBusinessReviewStaff[]
+  @@index([location_name, created_at, id])
+  @@map("reviews")
+}
+
+model GoogleBusinessReviewStaff {
+  review_id String
+  staff_id String
+  review GoogleBusinessReview @relation(fields: [review_id], references: [id], onDelete: Cascade)
+  staff User @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  @@id([review_id, staff_id])
+  @@index([staff_id])
+  @@map("review_staff")
 }

@@ -17,7 +17,7 @@ test('admin tools enforce roles, explicit projections, schemas and private PDF l
  patch(t,prisma.scheduleEntry,'findMany',async()=>[]);
  patch(t,prisma.document,'findMany',async(a:any)=>{for(const k of ['file_url','storage_path','notes'])assert.equal(a.select[k],undefined);return [{id:'doc',month:10,year:2026}]});
  patch(t,prisma.staffTask,'findMany',async()=>[]);
- const list=await rpc('tools/list');assert.equal(list.result.tools.length,14);for(const tool of list.result.tools){assert.equal(tool.annotations.readOnlyHint,!["create_task","update_task","add_task_comment","send_message","mark_read"].includes(tool.name));assert.ok(tool.outputSchema);}
+ const list=await rpc('tools/list');assert.equal(list.result.tools.length,16);for(const tool of list.result.tools){assert.equal(tool.annotations.readOnlyHint,!["create_task","update_task","add_task_comment","send_message","mark_read"].includes(tool.name));assert.ok(tool.outputSchema);}
  for(const name of ['get_full_profile','get_attendance_history','list_absences','list_payslips','list_all_tasks']){
  const result=await rpc('tools/call',{name,arguments:{employee_id:'person',...(['get_attendance_history','list_absences'].includes(name)?{from:'2026-10-01',to:'2026-10-20'}:{})}});assert.equal(result.result.isError,undefined,JSON.stringify(result));assert.equal(JSON.stringify(result).includes('PRIVATE_SENTINEL'),false);assert.deepEqual(JSON.parse(result.result.content[0].text),result.result.structuredContent);
  if(name==='list_payslips'){assert.match(result.result.structuredContent.payslips[0].pdf_url,/\/api\/documents\/doc\/download$/);assert.equal(result.result.structuredContent.payslips[0].net,null);}
@@ -78,4 +78,21 @@ test('schedule tools return daily rests, shift times and enforce department/cate
  const noCategory=await rpc('tools/call',{name:'list_shifts',arguments:args});
  assert.equal(JSON.parse(noCategory.result.content[0].text).error,'forbidden');
  assert.equal(queries,2);
+});
+
+test('review tools deny non-super-admin access and expose only declared review fields',async t=>{
+ let role='RESPONSABILE';patch(t,prisma.user,'findUnique',async()=>({active:true,role}));
+ patch(t,prisma.setting,'findUnique',async()=>null);
+ patch(t,prisma.googleBusinessConnection,'findUnique',async()=>({location_name:'accounts/1/locations/2',synced_at:new Date(),average_rating:4.5,total_reviews:20}));
+ patch(t,prisma.googleBusinessReview,'findMany',async()=>[{id:'review',rating:5,comment:'Pubblico',reviewer_name:'Google User',created_at:new Date(),reply_text:null,staff:[],match_type:null,private:'PRIVATE_SENTINEL'}]);
+ patch(t,prisma.googleBusinessReview,'aggregate',async()=>({_count:0,_avg:{rating:null}}));
+ for(const name of ['list_reviews','get_reviews_summary']) {
+  const denied=await rpc('tools/call',{name,arguments:{}});assert.equal(JSON.parse(denied.result.content[0].text).error,'forbidden');
+ }
+ role='SUPER_ADMIN';
+ for(const name of ['list_reviews','get_reviews_summary']) {
+  const result=await rpc('tools/call',{name,arguments:{}});assert.equal(result.result.isError,undefined);
+  assert.equal(JSON.stringify(result).includes('PRIVATE_SENTINEL'),false);
+  assert.deepEqual(JSON.parse(result.result.content[0].text),result.result.structuredContent);
+ }
 });
