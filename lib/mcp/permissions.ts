@@ -18,7 +18,7 @@ export async function allowedEmployees(p:Access, history=false):Promise<string[]
  return users.map(u=>u.id);
 }
 export async function requireEmployee(p:Access,id:string,history=true){const ids=await allowedEmployees(p,history);if(!ids.includes(id))forbidden('Dipendente escluso dai connettori o fuori dai reparti autorizzati.');}
-const categories:Record<string,Access['categories'][number]>={get_full_profile:'contratto',get_attendance_history:'presenze',list_absences:'assenze',list_payslips:'buste_paga',list_all_tasks:'task',create_task:'task',update_task:'task',add_task_comment:'task'};
+const categories:Record<string,Access['categories'][number]>={get_full_profile:'contratto',get_attendance_history:'presenze',list_absences:'assenze',list_shifts:'presenze',list_payslips:'buste_paga',list_all_tasks:'task',create_task:'task',update_task:'task',add_task_comment:'task'};
 export async function authorizeTool(id:string,name:string,args:Record<string,unknown>){
  const p=await accessFor(id);if(!p||p.role==='collaboratore')forbidden('Il tuo ruolo non può usare il connettore amministratore.');
  if(p!.role!=='super_admin'){
