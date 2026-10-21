@@ -78,7 +78,10 @@ export async function POST(request: NextRequest) {
     const mansione = data.mansione ? String(data.mansione).trim() : null;
 
     const department = DepartmentKey.safeParse(data.department_key);
-    if (!department.success || !mansione || mansione.length > 100 || (data.mcp_excluded !== undefined && typeof data.mcp_excluded !== "boolean")) return apiError("Reparto valido e mansione (massimo 100 caratteri) sono obbligatori.", 400);
+    if (!department.success) return apiError("Seleziona il reparto del lavoratore.", 400);
+    if (!mansione) return apiError("Seleziona o scrivi la mansione del lavoratore.", 400);
+    if (mansione.length > 100) return apiError("La mansione supera 100 caratteri: usa una descrizione più breve.", 400);
+    if (data.mcp_excluded !== undefined && typeof data.mcp_excluded !== "boolean") return apiError("Scelta di condivisione MCP non valida.", 400);
     if (!name || !email || password.length < 8 || !/^\d{4,6}$/.test(pin)) {
       return apiError("Nome, email, password valida e PIN da 4 a 6 numeri sono obbligatori.", 400);
     }

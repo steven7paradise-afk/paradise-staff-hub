@@ -85,7 +85,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
     const department = DepartmentKey.safeParse(data.department_key === undefined ? current.department_key : data.department_key);
     const job = data.mansione === undefined ? current.mansione?.trim() : String(data.mansione ?? "").trim();
-    if (!department.success || !job || job.length > 100 || (data.mcp_excluded !== undefined && typeof data.mcp_excluded !== "boolean")) return apiError("Reparto valido e mansione (massimo 100 caratteri) sono obbligatori.", 400);
+    if (!department.success) return apiError("Seleziona il reparto del lavoratore.", 400);
+    if (!job) return apiError("Seleziona o scrivi la mansione del lavoratore.", 400);
+    if (job.length > 100) return apiError("La mansione supera 100 caratteri: usa una descrizione più breve.", 400);
+    if (data.mcp_excluded !== undefined && typeof data.mcp_excluded !== "boolean") return apiError("Scelta di condivisione MCP non valida.", 400);
     const role = requestedRole ?? current.role;
     const currentWorkforceData = asRecord(current.workforce_data);
     const requestedEmployeeStatus = data.employeeStatus !== undefined ? String(data.employeeStatus) : current.employee_status;

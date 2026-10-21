@@ -1,4 +1,5 @@
 "use client";
+import { departments } from "@/lib/mcp/schemas";
 import "./contract-history.css";
 import { PROFESSIONAL_LEVELS, readProfessionalLevel, type ProfessionalLevel } from "@/lib/professional-level";
 
@@ -34,6 +35,8 @@ type Employee = {
   photoUrl: string;
   whatsappPhone: string;
   mansione: string;
+  department_key?: string | null;
+  mcp_excluded?: boolean;
   professionalLevel?: ProfessionalLevel;
   employeeStatus: string;
   managerId: string | null;
@@ -808,6 +811,8 @@ export function StaffDirectory({
           photoUrl: editForm.photoUrl || undefined,
           whatsappPhone: editForm.whatsappPhone || undefined,
           mansione: editForm.mansione || undefined,
+          department_key: editForm.department_key,
+          mcp_excluded: editForm.mcp_excluded,
           professionalLevel: editForm.professionalLevel || "",
           active: editForm.active,
           employeeStatus: editForm.employeeStatus,
@@ -849,6 +854,8 @@ export function StaffDirectory({
         photoUrl: data.photo_url ?? "",
         whatsappPhone: data.whatsapp_phone ?? "",
         mansione: data.mansione ?? "",
+        department_key: data.department_key,
+        mcp_excluded: data.mcp_excluded,
         professionalLevel: readProfessionalLevel(data.workforce_data),
         employeeStatus: data.employee_status,
         managerId: data.manager_id,
@@ -947,6 +954,8 @@ export function StaffDirectory({
           photoUrl: newEmployeeForm.photoUrl || undefined,
           whatsappPhone: newEmployeeForm.whatsappPhone || undefined,
           mansione: newEmployeeForm.mansione || undefined,
+          department_key: newEmployeeForm.department_key,
+          mcp_excluded: newEmployeeForm.mcp_excluded,
           professionalLevel: newEmployeeForm.professionalLevel || "",
           active: newEmployeeForm.active !== false,
           employeeStatus: newEmployeeForm.employeeStatus || "Attivo",
@@ -983,6 +992,8 @@ export function StaffDirectory({
         photoUrl: data.photo_url ?? "",
         whatsappPhone: data.whatsapp_phone ?? "",
         mansione: data.mansione ?? "",
+        department_key: data.department_key,
+        mcp_excluded: data.mcp_excluded,
         professionalLevel: readProfessionalLevel(data.workforce_data),
         employeeStatus: data.employee_status || "Attivo",
         managerId: data.manager_id,
@@ -1248,6 +1259,8 @@ export function StaffDirectory({
           photoUrl: nextEmployee.photoUrl || undefined,
           whatsappPhone: nextEmployee.whatsappPhone || undefined,
           mansione: nextEmployee.mansione || undefined,
+          department_key: nextEmployee.department_key,
+          mcp_excluded: nextEmployee.mcp_excluded,
           active: nextEmployee.active,
           employeeStatus: nextEmployee.employeeStatus,
           managerId: nextEmployee.managerId || null,
@@ -1658,9 +1671,11 @@ export function StaffDirectory({
                     </div>
 
                     <div className="space-y-3.5 mt-4">
+                      <label className="block space-y-1"><span className="text-sm font-semibold">Reparto *</span><Select required aria-label="Reparto" value={editForm.department_key || ""} onChange={e=>setEditForm(prev=>prev?{...prev,department_key:e.target.value}:null)}><option value="">Seleziona un reparto</option>{departments.map(d=><option key={d.key} value={d.key}>{d.name}</option>)}</Select></label>
+                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={editForm.mcp_excluded === true} onChange={e=>setEditForm(prev=>prev?{...prev,mcp_excluded:e.target.checked}:null)} />Escludi dai connettori MCP</label>
                       <label className="block space-y-1">
                         <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Mansione / Ruolo</span>
-                        <Select
+                        <Select required
                           value={customMansioneEdit ? "custom" : (editForm.mansione || "").toLowerCase()}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -2323,6 +2338,8 @@ export function StaffDirectory({
                     photoUrl: "",
                     whatsappPhone: "",
                     mansione: "",
+                    department_key: "",
+                    mcp_excluded: false,
                     employeeStatus: "Attivo",
                     managerId: "",
                     hrNotes: "",
@@ -2765,9 +2782,11 @@ export function StaffDirectory({
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="block space-y-1"><span className="text-sm font-semibold">Reparto *</span><Select required aria-label="Reparto" value={newEmployeeForm.department_key || ""} onChange={e=>setNewEmployeeForm(prev=>prev?{...prev,department_key:e.target.value}:null)}><option value="">Seleziona un reparto</option>{departments.map(d=><option key={d.key} value={d.key}>{d.name}</option>)}</Select></label>
+                      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={newEmployeeForm.mcp_excluded === true} onChange={e=>setNewEmployeeForm(prev=>prev?{...prev,mcp_excluded:e.target.checked}:null)} />Escludi dai connettori MCP</label>
                       <label className="space-y-1.5 sm:col-span-2">
                         <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Mansione <b className="text-[#c23878]">*</b></span>
-                        <Select value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()} onChange={(e) => {
+                        <Select required value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()} onChange={(e) => {
                           const val = e.target.value;
                           if (val === "custom") {
                             setCustomMansioneCreate(true);
@@ -2781,7 +2800,7 @@ export function StaffDirectory({
                           {mansioniList.map((m) => <option key={m} value={m.toLowerCase()}>{m}</option>)}
                           <option value="custom">+ Aggiungi altra mansione</option>
                         </Select>
-                        {customMansioneCreate && <Field required value={newEmployeeForm.mansione || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)} placeholder="Scrivi la nuova mansione" className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200" />}
+                        {customMansioneCreate && <Field required maxLength={100} value={newEmployeeForm.mansione || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)} placeholder="Scrivi la nuova mansione" className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200" />}
                       </label>
                       <label className="space-y-1.5 sm:col-span-2">
                         <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Livello professionale</span>
