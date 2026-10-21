@@ -33,9 +33,16 @@ function comparable(value: unknown) {
     .trim();
 }
 
+function comparableCompanyName(value: unknown) {
+  // Dotted initials are one abbreviation: S.R.L. and S. R. L. both become SRL.
+  const name = clean(value).replace(/\b(?:[A-Za-z]\.\s*){2,}[A-Za-z]?\.?/g,
+    (abbreviation) => abbreviation.replace(/[.\s]/g, "") + " ");
+  return comparable(name);
+}
+
 function nameSimilarity(left: unknown, right: unknown) {
-  const leftTokens = new Set(comparable(left).split(" ").filter(Boolean));
-  const rightTokens = new Set(comparable(right).split(" ").filter(Boolean));
+  const leftTokens = new Set(comparableCompanyName(left).split(" ").filter(Boolean));
+  const rightTokens = new Set(comparableCompanyName(right).split(" ").filter(Boolean));
   if (!leftTokens.size || !rightTokens.size) return 0;
   const common = [...leftTokens].filter((token) => rightTokens.has(token)).length;
   return common / Math.min(leftTokens.size, rightTokens.size);

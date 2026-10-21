@@ -76,3 +76,19 @@ test("searches Sibill when VIES does not list the VAT", async () => {
     else process.env.SIBILL_API_TOKEN = originalToken;
   }
 });
+
+for (const name of ["ITAKA S.R.L.", "Itaka S. R. L.", "ITAKA S.R.L"]) {
+  test(`accepts equivalent company abbreviation: ${name}`, () => {
+    const company = reconcileVatCompanyData({ ...vies, name: "ITAKA SRL" }, {
+      company_name: name, vat_number: vies.vat,
+    });
+    assert.equal(company.name, name);
+    assert.equal(company.source, "VIES + SIBILL");
+  });
+}
+
+test("still blocks genuinely different company names with the same legal suffix", () => {
+  assert.throws(() => reconcileVatCompanyData({ ...vies, name: "ITAKA SRL" }, {
+    company_name: "ALTRA S.R.L.", vat_number: vies.vat,
+  }), (error) => error instanceof ItalianVatLookupError && error.status === 409);
+});
