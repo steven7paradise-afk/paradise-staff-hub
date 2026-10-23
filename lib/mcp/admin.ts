@@ -1,4 +1,5 @@
 import { registerReviewTools } from './reviews';
+import { registerInventoryTools } from './inventory';
 import { scheduledShifts } from './shifts';
 import { syncCheck, SyncIssue } from './sync';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -40,6 +41,7 @@ export function createAdminServer(identity:{user_id:string;client_id:string}) {
  tool('list_all_tasks','Attività assegnate, incluse completate, con titolo e descrizione integrali. from/to filtrano la data di creazione; paginare con next_cursor.',{employee_id:Id.optional(),status:TaskStatus.optional(),from:DateKey.optional(),to:DateKey.optional(),...page},{...meta,next_cursor:nullableText,tasks:z.array(z.object({id:Id,title:z.string(),description:z.string(),status:z.string(),priority:z.string(),created_at:z.string(),due_date:nullableText,completed_at:nullableText,assigned_by:Id,assignee_ids:z.array(Id)}))},async({employee_id,status,from,to,cursor,limit},access)=>{const allowed=await allowedEmployees(access,Boolean(employee_id));if(from&&to)period(from,to);const statuses=status==='completata'?['COMPLETED','DONE']:status==='in_corso'?['ACTIVE','COMPLETION_REQUESTED']:null;const rows=await prisma.staffTask.findMany({where:{assignees:{some:{...(employee_id?{id:employee_id}:{})},...(allowed?{every:{id:{in:allowed}}}:{})},...(status?{status:statuses?{in:statuses}:{notIn:['COMPLETED','DONE','ACTIVE','COMPLETION_REQUESTED']}}:{}),...((from||to)?{created_at:{...(from?{gte:dayStart(from)}:{}),...(to?{lt:dayStart(addDays(to,1))}:{})}}:{}),...(cursor?{id:{gt:cursor}}:{})},select:{id:true,title:true,description:true,status:true,priority:true,created_at:true,due_date:true,completed_at:true,created_by_id:true,assignees:{select:{id:true}}},orderBy:{id:'asc'},take:limit+1});return {...stamp(),next_cursor:rows.length>limit?rows[limit-1].id:null,tasks:rows.slice(0,limit).map(r=>({id:r.id,title:r.title,description:r.description,status:taskState(r.status),priority:r.priority,created_at:romeIso(r.created_at),due_date:r.due_date?romeDate(r.due_date):null,completed_at:r.completed_at?romeIso(r.completed_at):null,assigned_by:r.created_by_id,assignee_ids:r.assignees.map(a=>a.id)}))};});
  tool('sync_check','Controlla inclusione automatica, reparto e ruolo dei dipendenti attivi e le timbrature di oggi (Europe/Rome). Le esclusioni esplicite sono segnalate senza annullarle.',{},{...meta,issues:z.array(SyncIssue)},async()=>({...stamp(),issues:await syncCheck()}));
  registerReviewTools(tool);
+ registerInventoryTools(tool);
  registerActions(tool,identity.user_id);
  return server;
 }

@@ -134,3 +134,37 @@ segreto in script versionati o log condivisi.
 
 Su successiva richiesta dell’amministratore il token operativo NON viene ruotato.
 La sua rotazione resta raccomandata dopo esposizione, ma non è dichiarata eseguita.
+
+## Magazzino Admin (23 ottobre 2026)
+
+Due nuovi tool su `/mcp-admin`, riservati al ruolo MCP effettivo `super_admin`
+(riletto a ogni chiamata; account inattivi esclusi). Non sono disponibili sul
+connettore operativo. Nessun nuovo grant o permesso viene assegnato.
+
+- `list_inventory` → `{items:[{id,code,color,type,length_cm,grams,quantity,location,min_stock}]}`.
+  `id` identifica il prodotto, `code` lo SKU, `type` la categoria e `location` il
+  codice della sede. Una riga per articolo/sede con unità AVAILABLE o RESERVED;
+  lo stesso articolo può quindi comparire più volte. Articoli senza giacenza:
+  quantity 0 e location null. Include anche prodotti/sedi disattivati se hanno
+  stock; non tronca a 1.000 articoli. `min_stock` è la soglia globale del prodotto,
+  non una soglia distinta per sede. Le quantità sono unità etichettate, non grammi.
+- `list_inventory_movements({from,to,cursor?})` → `{movements:[{id,date,item_id,code,color,type,grams,quantity,reason,employee_id,note}],next_cursor}`.
+  Date YYYY-MM-DD inclusive Europe/Rome, ordine decrescente `(created_at,id)`,
+  100 movimenti per pagina. `next_cursor: null` termina l'elenco. Il cursore è
+  vincolato all'intervallo ed usa la posizione data/ID anche se la riga viene rimossa.
+  IN = carico +1; OUT = vendita -1; RETURN = reso +1; DAMAGED = rettifica -1;
+  TRANSFER = rettifica 0 (nessun cambio della giacenza totale).
+  ADJUSTMENT = rettifica con quantity null: lo storico non registra gli stati
+  precedenti/successivi, quindi il delta non può essere ricavato dallo stato attuale.
+  La fonte non distingue uso in salone da vendita. Nessuna inferenza dalle note.
+
+Colore, lunghezza e grammi non sono campi strutturati in questa fonte: null.
+Nessuna modifica allo schema o ai movimenti storici per inventare valori mancanti.
+Il campo `note` contiene solo spiegazioni tecniche costanti per trasferimenti,
+danni o rettifiche; altrimenti null. Le note libere originali, descrizioni prodotto,
+clienti, contatti, relazioni cliente e dettagli personali dell'operatore non vengono
+selezionati né esposti. `employee_id` è esclusivamente l'identificatore dell'autore.
+
+Questi lettori eseguono soltanto query SELECT/groupBy, senza chiamare
+`getInventoryOverview`/`ensureInventoryLocations`, che aggiornano le sedi.
+Gli audit MCP mantengono il comportamento esistente senza registrare il risultato.
