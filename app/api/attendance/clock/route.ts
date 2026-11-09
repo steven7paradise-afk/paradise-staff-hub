@@ -210,10 +210,19 @@ export async function POST(request: NextRequest) {
     }
   });
 
-  if (type === "ENTRATA") await publishLiveChange().catch(() => console.warn("Live attendance update unavailable"));
-  await prisma.device.update({
-    where: { id: device.id },
-    data: { last_used_at: actualTimestamp },
+  after(async () => {
+    const results = await Promise.allSettled([
+      prisma.device.update({
+        where: { id: device.id },
+        data: { last_used_at: actualTimestamp },
+      }),
+      ...(type === "ENTRATA" ? [publishLiveChange()] : []),
+    ]);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.error("Attendance saved; device/live update failed", { attendanceId: log.id });
+      }
+    }
   });
 
   let lateRequest: {
@@ -235,71 +244,89 @@ export async function POST(request: NextRequest) {
     lateRequest = lateResult?.lateRequests.find((request) => request.userId === user.id) || null;
   }
 
-  if (type === "ENTRATA" && usedEntranceGrace) {
-    const { start, end } = localWeekRange(actualTimestamp);
-    const weeklyGraceCount = await prisma.attendanceLog.count({
-      where: {
-        user_id: user.id,
-        type: "ENTRATA",
-        date: { gte: start, lt: end },
-        note: { contains: "tolleranza entrata usata" },
-      },
-    });
+  after(async () => {
+    try {
+      if (type === "ENTRATA" && usedEntranceGrace) {
+        const { start, end } = localWeekRange(actualTimestamp);
+        const weeklyGraceCount = await prisma.attendanceLog.count({
+          where: {
+            user_id: user.id,
+            type: "ENTRATA",
+            date: { gte: start, lt: end },
+            note: { contains: "tolleranza entrata usata" },
+          },
+        });
 
-    if (weeklyGraceCount > 5) {
-      const admins = await prisma.user.findMany({
-        where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
-        select: { id: true },
-      });
-      await createNotifications(
-        admins.map((admin) => ({
-          user_id: admin.id,
-          title: "Tolleranze entrata superate",
-          message: `${user.name} ha usato ${weeklyGraceCount} tolleranze di entrata questa settimana. Ora rilevata ${actualTime}, registrata ${time}.`,
-          type: "TIMBRATURA",
-          action_url: "/attendance",
-        })),
-      ).catch((err) => console.error("Failed to send entrance grace notifications:", err));
+        if (weeklyGraceCount > 5) {
+          const admins = await prisma.user.findMany({
+            where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
+            select: { id: true },
+          });
+          await createNotifications(
+            admins.map((admin) => ({
+              user_id: admin.id,
+              title: "Tolleranze entrata superate",
+              message: `${user.name} ha usato ${weeklyGraceCount} tolleranze di entrata questa settimana. Ora rilevata ${actualTime}, registrata ${time}.`,
+              type: "TIMBRATURA",
+              action_url: "/attendance",
+            })),
+          ).catch((err) => console.error("Failed to send entrance grace notifications:", err));
+        }
+      }
+    } catch {
+      console.error("Attendance saved; entrance grace notification failed", { attendanceId: log.id });
     }
-  }
+  });
 
-  // Check break limit on RIENTRO and notify admins/superadmins
-  if (type === "RIENTRO" && breakDelayMins > 0 && breakDurationMins !== null) {
-    const breakLimit = rule.breakDurationMinutes;
-    const admins = await prisma.user.findMany({
-      where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
-      select: { id: true },
-    });
-    await createNotifications(
-      admins.map((admin) => ({
-        user_id: admin.id,
-        title: "Rientro pausa in ritardo",
-        message: `${user.name} è rientrato con ${breakDelayMins} minuti di ritardo. Pausa: ${breakDurationMins} minuti, limite: ${breakLimit} minuti.`,
-        type: "TIMBRATURA",
-        action_url: `/staff?employee=${encodeURIComponent(user.id)}`,
-      }))
-    ).catch((err) => console.error("Failed to send break limit notifications:", err));
-  }
-
-  if (type !== "PAUSA") {
-    let finalNote = storedNote;
-    if (type === "RIENTRO" && breakDurationMins !== null) {
-      const breakInfo = `Pausa durata: ${breakDurationMins} min`;
-      finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;
+  after(async () => {
+    try {
+      // Check break limit on RIENTRO and notify admins/superadmins
+      if (type === "RIENTRO" && breakDelayMins > 0 && breakDurationMins !== null) {
+        const breakLimit = rule.breakDurationMinutes;
+        const admins = await prisma.user.findMany({
+          where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
+          select: { id: true },
+        });
+        await createNotifications(
+          admins.map((admin) => ({
+            user_id: admin.id,
+            title: "Rientro pausa in ritardo",
+            message: `${user.name} è rientrato con ${breakDelayMins} minuti di ritardo. Pausa: ${breakDurationMins} minuti, limite: ${breakLimit} minuti.`,
+            type: "TIMBRATURA",
+            action_url: `/staff?employee=${encodeURIComponent(user.id)}`,
+          }))
+        ).catch((err) => console.error("Failed to send break limit notifications:", err));
+      }
+    } catch {
+      console.error("Attendance saved; break notification failed", { attendanceId: log.id });
     }
-    appendAttendanceToGoogleSheet({
-      date: new Intl.DateTimeFormat("it-IT").format(timestamp),
-      time,
-      employeeName: user.name,
-      employeeEmail: user.email,
-      locationName: logLocationName,
-      type,
-      deviceName: device.device_name,
-      note: finalNote,
-    }).catch((err) => {
-      console.error("Failed to append to Google Sheet asynchronously:", err);
-    });
-  }
+  });
+
+  after(async () => {
+    try {
+      if (type !== "PAUSA") {
+        let finalNote = storedNote;
+        if (type === "RIENTRO" && breakDurationMins !== null) {
+          const breakInfo = `Pausa durata: ${breakDurationMins} min`;
+          finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;
+        }
+        await appendAttendanceToGoogleSheet({
+          date: new Intl.DateTimeFormat("it-IT").format(timestamp),
+          time,
+          employeeName: user.name,
+          employeeEmail: user.email,
+          locationName: logLocationName,
+          type,
+          deviceName: device.device_name,
+          note: finalNote,
+        }).catch((err) => {
+          console.error("Failed to append to Google Sheet asynchronously:", err);
+        });
+      }
+    } catch {
+      console.error("Attendance saved; Google Sheet export failed", { attendanceId: log.id });
+    }
+  });
 
   return NextResponse.json({
     id: log.id,

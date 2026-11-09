@@ -197,6 +197,8 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
     }
   }`;
 
+  // One budget for the entire paginated export, including response bodies.
+  const exportDeadline = AbortSignal.timeout(20_000);
   try {
     const transactionGroups = new Map<string, { order: { id: string; name: string }; transactions: any[] }>();
     // processed_at finds sales made during the day; updated_at also finds
@@ -204,6 +206,7 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
     for (const searchField of ["processed_at", "updated_at"]) {
       let cursor: string | null = null;
       for (let page = 0; page < 20; page += 1) {
+        exportDeadline.throwIfAborted();
         const response: Response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
           method: "POST",
           headers,
@@ -214,11 +217,12 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
               search: `${searchField}:>=${start.toISOString()} ${searchField}:<${end.toISOString()}`,
             },
           }),
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.any([exportDeadline, AbortSignal.timeout(15_000)]),
           next: { revalidate: 300 },
         });
         if (!response.ok) throw new Error(`Shopify GraphQL ${response.status}`);
         const data = await response.json();
+        exportDeadline.throwIfAborted();
         if (data?.errors?.some((error: { path?: string[] }) => error.path?.[0] === "orders")) {
           throw new Error(`Shopify GraphQL orders: ${data.errors[0]?.message || "unknown error"}`);
         }
@@ -230,6 +234,7 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
           });
         }
         if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+        if (page === 19) throw new Error("Shopify revenue export exceeded page limit");
         cursor = connection.pageInfo.endCursor;
       }
     }
