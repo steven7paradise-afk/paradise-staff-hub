@@ -6,6 +6,7 @@ import { Bell, Building2, CheckCheck, ExternalLink } from "lucide-react";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
 import { isAttendanceNotification, resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { cn } from "@/lib/utils";
+import { loadLatestNotifications } from "@/lib/latest-notifications-client";
 
 type NotificationItem = {
   id: string;
@@ -17,7 +18,7 @@ type NotificationItem = {
   type: string;
 };
 
-export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: number }) {
+export function NotificationsPopover({ userId, initialUnread = 0 }: { userId: string; initialUnread?: number }) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(initialUnread);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -29,16 +30,10 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
     if (fetching.current) return;
     fetching.current = true;
     try {
-      const res = await fetch("/api/notifications/latest", { cache: "no-store", signal: AbortSignal.timeout(10000) });
-      if (!res.ok) { setFetchError(true); return; }
-      if (res.ok) {
-        const data = await res.json();
-        setFetchError(false);
-        setUnreadCount(data.count ?? 0);
-        if (Array.isArray(data.items)) {
-          setItems(data.items);
-        }
-      }
+      const data = await loadLatestNotifications(userId);
+      setFetchError(false);
+      setUnreadCount(data.count ?? 0);
+      if (Array.isArray(data.items)) setItems(data.items);
     } catch {
       setFetchError(true);
     } finally {
@@ -50,7 +45,7 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 25000);
     return () => clearInterval(interval);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

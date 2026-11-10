@@ -209,7 +209,7 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
   );
 }
 
-export function ManagementDashboard({ data }: { data: ManagementDashboardData }) {
+export function ManagementDashboard({ data, userId }: { data: ManagementDashboardData; userId: string }) {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [personnelView, setPersonnelView] = useState<"PRESENT" | "ABSENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
@@ -319,7 +319,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
 
   return (
     <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-none bg-[#f5f5f5] p-3 pb-12 font-sans antialiased dark:bg-[#151518] sm:rounded-[34px] sm:p-6 lg:p-8">
-      <DashboardCommunicationBanner><section className="order-0 relative isolate min-h-44 overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.16)] sm:min-h-56">
+      <DashboardCommunicationBanner userId={userId}><section className="order-0 relative isolate min-h-44 overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.16)] sm:min-h-56">
         <img
           src="/beta-login-hero.png"
           alt=""

@@ -86,7 +86,7 @@ export function TopControls({
   unread: number;
   name: string;
   photoUrl: string | null;
-  userId?: string;
+  userId: string;
   profileHref?: string;
 }) {
   const pathname = usePathname();
@@ -177,7 +177,7 @@ export function TopControls({
           </div>
         </div>
       )}
-      <NotificationsPopover initialUnread={unread} />
+      <NotificationsPopover userId={userId} initialUnread={unread} />
       <ThemeToggleButton />
       <div className="group relative">
         <Link href={profileHref} onClick={(event) => choosePcProfile(event)} className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">

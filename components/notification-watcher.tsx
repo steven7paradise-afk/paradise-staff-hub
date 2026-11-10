@@ -2,15 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
-
-type LatestNotification = {
-  id: string;
-  title: string;
-  message: string;
-  actionUrl: string | null;
-  createdAt: string;
-  type: string;
-};
+import { loadLatestNotifications, type LatestNotification } from "@/lib/latest-notifications-client";
 
 function playNotificationSound() {
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -115,8 +107,7 @@ async function subscribeToPushNotifications() {
   await sendSubscriptionToServer(newSubscription);
 }
 
-export function NotificationWatcher({ initialUnread }: { initialUnread: number }) {
-  const lastCount = useRef(initialUnread);
+export function NotificationWatcher({ userId }: { userId: string }) {
   const lastId = useRef<string | null>(null);
   // Keep the server render and the browser's first render identical. Reading
   // Notification.permission during initialization causes a hydration mismatch
@@ -154,10 +145,8 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
     let cancelled = false;
 
     async function check() {
-      const response = await fetch("/api/notifications/latest", { cache: "no-store" }).catch(() => null);
-      if (!response?.ok || cancelled) return;
-      const data = (await response.json()) as { count: number; latest: LatestNotification | null; communication?: Pick<LatestNotification, "id" | "title" | "message"> | null };
-      if (cancelled) return;
+      const data = await loadLatestNotifications(userId).catch(() => null);
+      if (!data || cancelled) return;
       const latest = data.latest;
       const latestId = latest?.id ?? null;
       const lastShownId = typeof window !== "undefined" ? readLastShownNotificationId() : null;
@@ -173,7 +162,6 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
         try { playNotificationSound(); } catch { /* Audio can be blocked by the browser. */ }
         showSystemNotification(latest);
       }
-      lastCount.current = data.count;
     }
 
     void check();
@@ -185,7 +173,7 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, []);
+  }, [userId]);
 
   async function enableNotifications() {
     playNotificationSound();

@@ -10,7 +10,7 @@ import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
 import { DashboardRedesignClient } from "@/components/dashboard-redesign-client";
 import { ManagementDashboard, type ManagementDashboardData } from "@/components/management-dashboard";
-import { auth } from "@/lib/auth";
+import { getRenderSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
@@ -93,7 +93,7 @@ function romeDateTimeParts(date: Date) {
 }
 
 export default async function DashboardPage() {
-  const session = await auth();
+  const session = await getRenderSession();
   if (!session?.user?.id || !session.user.role) redirect("/login");
 
   const safe = async <T,>(promise: Promise<T>, fallback: T): Promise<T> => {
@@ -476,7 +476,7 @@ export default async function DashboardPage() {
 
     return (
       <AppShell title="Dashboard" subtitle="Direzione operativa" role={role as any} hideHeader transparentMain>
-        <ManagementDashboard data={managementData} />
+        <ManagementDashboard data={managementData} userId={session.user.id} />
       </AppShell>
     );
   }

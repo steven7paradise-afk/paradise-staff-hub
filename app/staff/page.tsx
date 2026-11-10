@@ -2,7 +2,7 @@ import { readProfessionalLevel } from "@/lib/professional-level";
 import { AppShell } from "@/components/app-shell";
 import { StaffDirectory } from "@/components/staff-directory";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { getRenderSession } from "@/lib/auth";
 import { normalizeAccessRoutes } from "@/lib/roles";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { attendanceActualMinutes, compareScheduledClock, currentRomeMinutes, isClosedSchedule, isRestSchedule, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
@@ -41,7 +41,7 @@ export default async function StaffPage({
   searchParams?: Promise<{ employee?: string }>;
 }) {
   const params = searchParams ? await searchParams : {};
-  const session = await auth();
+  const session = await getRenderSession();
   const visibleRoles = session?.user?.role === "ZERO" ? {} : { role: { notIn: ["ZERO", "SUPER_ADMIN"] as ("ZERO" | "SUPER_ADMIN")[] } };
   const currentYear = new Date().getFullYear();
   const sicknessStart = new Date(currentYear, 0, 1);

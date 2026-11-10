@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { cache } from "react";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { pinLookup } from "@/lib/pin";
@@ -220,3 +221,6 @@ export const authConfig = {
 } satisfies NextAuthConfig;
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+
+// Reuse the session within one server render. Each request still validates it.
+export const getRenderSession = cache(() => auth());

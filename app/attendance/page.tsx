@@ -2,23 +2,24 @@ import type { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { AttendanceManager } from "@/components/attendance-manager";
-import { auth } from "@/lib/auth";
+import { getRenderSession } from "@/lib/auth";
 import { closeForgottenShifts } from "@/lib/forgotten-shifts";
 import { prisma } from "@/lib/prisma";
-import { canAccessForUser, canEditForUser } from "@/lib/roles";
+import { canAccess, canEdit, getEffectivePermissionSet } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
 export default async function AttendancePage() {
-  const session = await auth();
+  const session = await getRenderSession();
   if (!session?.user?.id) redirect("/login");
   const currentUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, role: true, mansione: true, access_list: true, sede_id: true },
+    select: { id: true, role: true, mansione: true },
   });
   if (!currentUser) redirect("/login");
-  const hasFullAttendanceAccess = await canAccessForUser(prisma, "/attendance", currentUser);
-  const canEditAttendance = await canEditForUser(prisma, "/attendance", currentUser);
+  const permissions = await getEffectivePermissionSet(prisma, currentUser);
+  const hasFullAttendanceAccess = canAccess("/attendance", currentUser.role, currentUser.mansione ?? undefined, permissions);
+  const canEditAttendance = canEdit("/attendance", currentUser.role, currentUser.mansione ?? undefined, permissions);
   await closeForgottenShifts();
   const dateLimit = new Date();
   dateLimit.setMonth(dateLimit.getMonth() - 6);
@@ -55,11 +56,26 @@ export default async function AttendancePage() {
   const [logs, workers] = await Promise.all([
     prisma.attendanceLog.findMany({
       where,
-      include: { user: true, location: true, device: true },
+      select: {
+        id: true,
+        user_id: true,
+        type: true,
+        timestamp: true,
+        date: true,
+        time: true,
+        note: true,
+        user: { select: { name: true, photo_url: true } },
+        location: { select: { name: true } },
+        device: { select: { device_name: true } },
+      },
       orderBy: { timestamp: "desc" },
     }),
     hasFullAttendanceAccess
-      ? prisma.user.findMany({ where: { ...currentEmployeeWhere, sede_id: { not: null } }, include: { location: true }, orderBy: { name: "asc" } })
+      ? prisma.user.findMany({
+          where: { ...currentEmployeeWhere, sede_id: { not: null } },
+          select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
+          orderBy: { name: "asc" },
+        })
       : Promise.resolve([]),
   ]);
 

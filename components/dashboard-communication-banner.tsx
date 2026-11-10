@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { loadLatestNotifications } from "@/lib/latest-notifications-client";
 import { ArrowRight, ChevronLeft, ChevronRight, Megaphone, Pause, Play } from "lucide-react";
 type Item = { id: string; title: string; message: string; backgroundUrl?: string | null };
-export function DashboardCommunicationBanner({ children }: { children: ReactNode }) {
+export function DashboardCommunicationBanner({ children, userId }: { children: ReactNode; userId: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -38,15 +39,13 @@ export function DashboardCommunicationBanner({ children }: { children: ReactNode
     let cancelled = false;
     async function load() {
       try {
-        const response = await fetch("/api/notifications/latest", { cache: "no-store", signal: AbortSignal.timeout(10000) });
-        if (!response.ok) return;
-        const data = await response.json();
+        const data = await loadLatestNotifications(userId);
         if (!cancelled) setItems(Array.isArray(data.communications) ? data.communications : []);
       } catch { /* Preserve loaded banners during temporary outages. */ }
     }
     void load(); const timer = window.setInterval(load, 30000); window.addEventListener("focus", load);
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", load); };
-  }, []);
+  }, [userId]);
   return <div className="relative" role="region" aria-roledescription="carosello" aria-label="Benvenuto e comunicazioni"
     onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)}
     onFocusCapture={(event) => { if (!(event.target as HTMLElement).closest("[data-autoplay-control]")) setPaused(true); }}

@@ -1,6 +1,6 @@
 import { accessFor } from "@/lib/mcp/permissions";
 import type { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
+import { getRenderSession } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
@@ -109,7 +109,7 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
 }
 
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
-  const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
+  const [session, branding] = await Promise.all([getRenderSession(), getBrandingTheme()]);
   const isPcCassa = pcMode;
   if (!session?.user?.id && !isPcCassa) redirect("/login");
   const pcProfileChooserHref = pcProfileChooserHrefOverride || "/appointments/buenos-aires?choose=1";
@@ -523,7 +523,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<><ThemeRestorer />{isPcCassa && !remoteController ? <AppointmentIdleSessionGuard redirectTo={pcProfileChooserHref} /> : null}{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
+      main={<><ThemeRestorer />{isPcCassa && !remoteController ? <AppointmentIdleSessionGuard redirectTo={pcProfileChooserHref} /> : null}{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher userId={session?.user?.id ?? "PC_CASSA"} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),
