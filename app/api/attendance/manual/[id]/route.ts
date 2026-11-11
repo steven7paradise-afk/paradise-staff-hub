@@ -1,5 +1,5 @@
 import { AttendanceType } from "@prisma/client";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
 import { prisma } from "@/lib/prisma";
@@ -56,32 +56,39 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   ]);
 
   if (type !== "PAUSA") {
-    let finalNote = `[CORREZIONE ${id}] ${storedNote}`;
-    if (type === "RIENTRO") {
-      const previousPause = await prisma.attendanceLog.findFirst({
-        where: {
-          user_id: user.id,
-          type: "PAUSA",
-          timestamp: { lt: timestamp },
-        },
-        orderBy: { timestamp: "desc" },
-      });
-      if (previousPause) {
-        const breakDurationMs = timestamp.getTime() - previousPause.timestamp.getTime();
-        const breakDurationMins = Math.round(breakDurationMs / (1000 * 60));
-        const breakInfo = `Pausa durata: ${breakDurationMins} min`;
-        finalNote = `${finalNote} - ${breakInfo}`;
+    const locationName = user.location.name;
+    after(async () => {
+      try {
+          let finalNote = `[CORREZIONE ${id}] ${storedNote}`;
+          if (type === "RIENTRO") {
+            const previousPause = await prisma.attendanceLog.findFirst({
+              where: {
+                user_id: user.id,
+                type: "PAUSA",
+                timestamp: { lt: timestamp },
+              },
+              orderBy: { timestamp: "desc" },
+            });
+            if (previousPause) {
+              const breakDurationMs = timestamp.getTime() - previousPause.timestamp.getTime();
+              const breakDurationMins = Math.round(breakDurationMs / (1000 * 60));
+              const breakInfo = `Pausa durata: ${breakDurationMins} min`;
+              finalNote = `${finalNote} - ${breakInfo}`;
+            }
+          }
+          await appendAttendanceToGoogleSheet({
+            date: new Intl.DateTimeFormat("it-IT").format(timestamp),
+            time,
+            employeeName: user.name,
+            employeeEmail: user.email,
+            locationName: locationName,
+            type,
+            deviceName: device.device_name,
+            note: finalNote,
+          });
+      } catch {
+        console.warn("Manual attendance spreadsheet sync failed");
       }
-    }
-    await appendAttendanceToGoogleSheet({
-      date: new Intl.DateTimeFormat("it-IT").format(timestamp),
-      time,
-      employeeName: user.name,
-      employeeEmail: user.email,
-      locationName: user.location.name,
-      type,
-      deviceName: device.device_name,
-      note: finalNote,
     });
   }
   return NextResponse.json({ ...log, recalculated: true });
