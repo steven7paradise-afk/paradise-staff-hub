@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Pencil, Plus, Save, X, Clock, Coffee, UserCheck, FileEdit, Search, CalendarDays, LogOut, MapPin, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Card, Field, Select } from "@/components/ui";
 import { deriveAttendanceState } from "@/lib/attendance-state";
@@ -83,6 +83,7 @@ export function AttendanceManager({
   readOnly?: boolean;
 }) {
   const [day, setDay] = useState(initialDay);
+  const lastRegisterResponse = useRef<string | undefined>(undefined);
   const [revision, setRevision] = useState(0);
   const [liveError, setLiveError] = useState(false);
   const [open, setOpen] = useState(false);
@@ -125,14 +126,11 @@ export function AttendanceManager({
   });
 
   useEffect(() => {
-    if (saving || deleting) return;
+    if (open || saving || deleting) return;
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
     let running = false;
-    let previous = "";
 
     async function refresh() {
-      clearTimeout(timer);
       if (running || document.hidden || controller.signal.aborted) return;
       running = true;
       try {
@@ -143,16 +141,15 @@ export function AttendanceManager({
         if (!response.ok) throw new Error("Attendance refresh failed");
         const body = await response.text();
         if (controller.signal.aborted) return;
-        if (body !== previous) {
+        if (body !== lastRegisterResponse.current) {
           setDay(JSON.parse(body) as AttendanceDay);
-          previous = body;
+          lastRegisterResponse.current = body;
         }
         setLiveError(false);
       } catch {
         if (!controller.signal.aborted) setLiveError(true);
       } finally {
         running = false;
-        if (!controller.signal.aborted && !document.hidden) timer = setTimeout(refresh, 3000);
       }
     }
 
@@ -161,11 +158,10 @@ export function AttendanceManager({
     window.addEventListener("focus", refresh);
     return () => {
       controller.abort();
-      clearTimeout(timer);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("focus", refresh);
     };
-  }, [saving, deleting, revision, initialDay]);
+  }, [open, saving, deleting, revision]);
 
   const monthKey = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
   const historyKey = selectedWorkerId ? `${selectedWorkerId}:${monthKey}:${revision}` : "";
@@ -594,6 +590,9 @@ export function AttendanceManager({
               {message}
             </span>
           ) : null}
+          <Button variant="soft" type="button" onClick={() => setRevision((current) => current + 1)} className="min-h-11">
+            Aggiorna
+          </Button>
           {!readOnly && (
             <Button onClick={createLog} disabled={workers.length === 0} className="min-h-11 w-full sm:w-auto">
               <Plus className="size-4" /> Aggiungi timbratura
