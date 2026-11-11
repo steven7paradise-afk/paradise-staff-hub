@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Pencil, Plus, Save, X, Clock, Coffee, UserCheck, FileEdit, Search, CalendarDays, LogOut, MapPin, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Button, Card, Field, Select } from "@/components/ui";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -21,6 +20,9 @@ type AttendanceLog = {
   note: string;
   photoUrl?: string | null;
 };
+
+type AttendanceDay = { today: string; logs: AttendanceLog[] };
+const attendanceDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" });
 
 type AttendanceGroup = {
   id: string;
@@ -73,15 +75,16 @@ function visibleClockTime(log?: AttendanceLog) {
 
 export function AttendanceManager({ 
   workers, 
-  initialLogs,
+  initialDay,
   readOnly = false
 }: { 
   workers: Worker[]; 
-  initialLogs: AttendanceLog[];
+  initialDay: AttendanceDay;
   readOnly?: boolean;
 }) {
-  const router = useRouter();
-  const [logs, setLogs] = useState(initialLogs);
+  const [day, setDay] = useState(initialDay);
+  const [revision, setRevision] = useState(0);
+  const [liveError, setLiveError] = useState(false);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -121,13 +124,88 @@ export function AttendanceManager({
     note: "",
   });
 
+  useEffect(() => {
+    if (saving || deleting) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let running = false;
+    let previous = "";
+
+    async function refresh() {
+      clearTimeout(timer);
+      if (running || document.hidden || controller.signal.aborted) return;
+      running = true;
+      try {
+        const response = await fetch("/api/attendance/register", {
+          cache: "no-store",
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+        });
+        if (!response.ok) throw new Error("Attendance refresh failed");
+        const body = await response.text();
+        if (controller.signal.aborted) return;
+        if (body !== previous) {
+          setDay(JSON.parse(body) as AttendanceDay);
+          previous = body;
+        }
+        setLiveError(false);
+      } catch {
+        if (!controller.signal.aborted) setLiveError(true);
+      } finally {
+        running = false;
+        if (!controller.signal.aborted && !document.hidden) timer = setTimeout(refresh, 3000);
+      }
+    }
+
+    void refresh();
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [saving, deleting, revision, initialDay]);
+
+  const monthKey = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}`;
+  const historyKey = selectedWorkerId ? `${selectedWorkerId}:${monthKey}:${revision}` : "";
+  const [history, setHistory] = useState<{ key: string; logs: AttendanceLog[] | null }>();
+
+  useEffect(() => {
+    if (!selectedWorkerId) return;
+    const controller = new AbortController();
+    const query = new URLSearchParams({ worker: selectedWorkerId, month: monthKey });
+    async function loadMonth() {
+      try {
+        const response = await fetch(`/api/attendance/register?${query}`, {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
+        });
+        if (!response.ok) throw new Error("Attendance history failed");
+        const { logs } = await response.json() as { logs: AttendanceLog[] };
+        if (!controller.signal.aborted) setHistory({ key: historyKey, logs });
+      } catch {
+        if (!controller.signal.aborted) setHistory({ key: historyKey, logs: null });
+      }
+    }
+    void loadMonth();
+    return () => controller.abort();
+  }, [selectedWorkerId, monthKey, historyKey]);
+
+  const logs = useMemo(() => {
+    if (!historyKey || history?.key !== historyKey || !history.logs) return day.logs;
+    const yesterday = new Date(day.today);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const firstLiveDay = yesterday.toISOString().slice(0, 10);
+    return [...history.logs.filter((log) => (log.date?.slice(0, 10) ?? "") < firstLiveDay), ...day.logs];
+  }, [day, history, historyKey]);
+
   // Calculate statistics
   const stats = useMemo(() => {
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    const todayStr = day.today;
     
     // Filter logs that belong to today
-    const todayLogs = logs.filter(log => {
-      const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(log.timestamp));
+    const todayLogs = day.logs.filter(log => {
+      const datePart = attendanceDate.format(new Date(log.timestamp));
       return datePart === todayStr;
     });
 
@@ -149,7 +227,7 @@ export function AttendanceManager({
       state => state.status === "BREAK"
     ).length;
 
-    const manualCorrections = logs.filter(
+    const manualCorrections = todayLogs.filter(
       log => log.device.toLowerCase().includes("manuale") || log.device.toLowerCase().includes("correzione")
     ).length;
 
@@ -159,7 +237,7 @@ export function AttendanceManager({
       onBreakWorkers,
       manualCorrections
     };
-  }, [logs]);
+  }, [day]);
 
   // Compute break duration helper for groups
   const getBreakDurationForGroup = (group: { pausa?: AttendanceLog; rientro?: AttendanceLog }) => {
@@ -194,7 +272,7 @@ export function AttendanceManager({
       const savedShiftDate = log.date ? new Date(log.date) : null;
       const datePart = savedShiftDate && !Number.isNaN(savedShiftDate.getTime())
         ? savedShiftDate.toISOString().slice(0, 10)
-        : new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(log.timestamp));
+        : attendanceDate.format(new Date(log.timestamp));
       const groupKey = `${log.userId}-${datePart}`;
       const workerProfile = peopleById.get(log.userId);
 
@@ -232,7 +310,7 @@ export function AttendanceManager({
     });
   }, [logs, peopleById]);
 
-  const todayKey = useMemo(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date()), []);
+  const todayKey = day.today;
 
   const todayRosterGroups = useMemo(() => {
     const byWorker = new Map<string, AttendanceGroup>();
@@ -385,36 +463,25 @@ export function AttendanceManager({
   async function save() {
     setSaving(true);
     setMessage("");
-    const response = await fetch(editingId ? `/api/attendance/manual/${editingId}` : "/api/attendance/manual", {
-      method: editingId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...draft, timestamp: new Date(draft.timestamp).toISOString() }),
-    });
-    const data = await response.json();
-    setSaving(false);
-    if (!response.ok) {
-      setMessage(data.error ?? "Timbratura non salvata.");
-      return;
+    try {
+      const response = await fetch(editingId ? `/api/attendance/manual/${editingId}` : "/api/attendance/manual", {
+        method: editingId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...draft, timestamp: new Date(draft.timestamp).toISOString() }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setMessage(data.error ?? "Timbratura non salvata.");
+        return;
+      }
+      setMessage(editingId ? "Timbratura modificata correttamente." : "Timbratura aggiunta correttamente.");
+      setOpen(false);
+      setRevision((current) => current + 1);
+    } catch {
+      setMessage("Impossibile verificare il salvataggio. Controlla il registro prima di riprovare.");
+    } finally {
+      setSaving(false);
     }
-    setMessage(editingId ? "Timbratura modificata correttamente." : "Timbratura aggiunta correttamente.");
-    setOpen(false);
-    const worker = workers.find((item) => item.id === draft.userId);
-    const fallbackWorker = peopleById.get(draft.userId);
-    const updated: AttendanceLog = {
-      id: data.id,
-      userId: draft.userId,
-      employee: worker?.name ?? fallbackWorker?.name ?? "",
-      location: worker?.location ?? fallbackWorker?.location ?? "",
-      device: editingId ? "Correzione manuale Admin" : "Inserimento manuale Admin",
-      type: draft.type,
-      timestamp: data.timestamp,
-      date: data.date,
-      time: data.time,
-      note: data.note ?? "",
-      photoUrl: worker?.photoUrl ?? fallbackWorker?.photoUrl ?? null,
-    };
-    setLogs((current) => editingId ? current.map((log) => log.id === editingId ? updated : log) : [updated, ...current]);
-    router.refresh();
   }
 
   async function deleteCurrentLog() {
@@ -424,28 +491,33 @@ export function AttendanceManager({
 
     setDeleting(true);
     setMessage("");
-    const response = await fetch(`/api/attendance/manual/${editingId}`, {
-      method: "DELETE",
-    });
-    const data = await response.json().catch(() => ({}));
-    setDeleting(false);
+    try {
+      const response = await fetch(`/api/attendance/manual/${editingId}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-      setMessage(data.error ?? "Timbratura non eliminata.");
-      return;
+      if (!response.ok) {
+        setMessage(data.error ?? "Timbratura non eliminata.");
+        return;
+      }
+
+      setMessage("Timbratura eliminata correttamente.");
+      setOpen(false);
+      setEditingId(null);
+      setRevision((current) => current + 1);
+    } catch {
+      setMessage("Impossibile verificare l’eliminazione. Controlla il registro prima di riprovare.");
+    } finally {
+      setDeleting(false);
     }
-
-    setLogs((current) => current.filter((log) => log.id !== editingId));
-    setMessage("Timbratura eliminata correttamente.");
-    setOpen(false);
-    setEditingId(null);
-    router.refresh();
   }
 
   return (
     <>
       {/* Premium Stats Grid */}
       <div className="mb-6 grid grid-cols-4 gap-2 sm:gap-4 animate-in fade-in duration-500">
+      {liveError && <p role="status" className="text-sm">Aggiornamento presenze non disponibile. Mostro gli ultimi dati ricevuti.</p>}
         <Card className="flex min-h-[92px] flex-col items-center justify-center gap-1 bg-white/70 p-2 text-center backdrop-blur-md dark:bg-[#1B1A1F]/70 border-black/5 dark:border-white/5 shadow-sm transition-all duration-300 hover:translate-y-[-2px] hover:shadow-md sm:min-h-0 sm:flex-row sm:justify-start sm:gap-4 sm:p-5 sm:text-left">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-paradise-softPink/40 text-paradise-pink dark:bg-paradise-pink/15 sm:size-12">
             <Clock className="size-5 text-[#A74758] dark:text-[#F4A3C4] sm:size-6" />
@@ -481,7 +553,7 @@ export function AttendanceManager({
             <FileEdit className="size-5 text-blue-600 dark:text-blue-400 sm:size-6" />
           </div>
           <div className="min-w-0">
-            <p className="text-[9px] font-semibold uppercase leading-tight tracking-[0.08em] text-black/55 dark:text-white/55 sm:text-xs sm:tracking-wide">Variazioni Manuali</p>
+            <p className="text-[9px] font-semibold uppercase leading-tight tracking-[0.08em] text-black/55 dark:text-white/55 sm:text-xs sm:tracking-wide">Variazioni manuali oggi</p>
             <h3 className="mt-0.5 text-xl font-bold text-black dark:text-white sm:text-2xl">{stats.manualCorrections}</h3>
           </div>
         </Card>
@@ -561,7 +633,7 @@ export function AttendanceManager({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.24em] text-paradise-pink">Presenze salone</p>
-                <h2 className="text-2xl font-black">Persone attualmente in sede</h2>
+                <h2 className="text-2xl font-black">Stato delle presenze di oggi</h2>
               </div>
               <p className="rounded-full border border-black/10 bg-black/[0.02] px-4 py-2 text-xs font-bold text-black/55 dark:border-white/10 dark:bg-white/5 dark:text-white/65">
                 Clicca foto o nome per andamento mensile
@@ -780,7 +852,7 @@ export function AttendanceManager({
                         </div>
                       ) : null}
                     </div>
-                      {!readOnly ? (
+                      {!readOnly && isPresent ? (
                         <button
                           type="button"
                           onClick={() => createLogForGroup("USCITA", group.userId, group.dateStr)}
@@ -820,6 +892,13 @@ export function AttendanceManager({
             </div>
 
             <div className="max-h-[calc(94vh-110px)] overflow-auto p-3 sm:p-5">
+              {history?.key !== historyKey ? (
+                <p role="status" className="mb-3 text-sm">Caricamento storico…</p>
+              ) : history.logs === null ? (
+                <p role="status" className="mb-3 text-sm">
+                  Storico non disponibile. <button type="button" className="underline" onClick={() => setRevision((current) => current + 1)}>Riprova</button>
+                </p>
+              ) : null}
               <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                 {(["ENTRATA", "PAUSA", "RIENTRO", "USCITA"] as const).map((type) => (
                   <div key={type} className={`rounded-2xl border px-3 py-2 text-xs font-black sm:px-4 sm:py-3 sm:text-sm ${typeStyles[type]}`}>
