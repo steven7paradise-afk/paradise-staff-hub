@@ -797,8 +797,10 @@ export async function POST(request: NextRequest) {
     noteSync,
     warning: noteSync.failed.length
       ? `Scheda salvata, ma la nota non è stata completata sugli ordini ${noteSync.failed.map(order => `#${order}`).join(", ")}. Premi di nuovo Conferma controllo per riprovare.`
-      : !isDraft && useDayPayments && !targetOrders.length
-        ? "Scheda salvata. Nessun pagamento del giorno verificato: la nota non è stata inviata a Shopify."
+      : !isDraft && !targetOrders.length && (useDayPayments || customNote)
+        ? useDayPayments
+          ? "Scheda salvata. Nessun pagamento del giorno verificato: la nota non è stata inviata a Shopify."
+          : "Scheda salvata. Nessun numero d’ordine Shopify valido per inviare la nota."
         : undefined,
     createdAt: response.created_at.toISOString(),
   });

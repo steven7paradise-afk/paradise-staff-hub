@@ -937,6 +937,14 @@ export function TabletClock({
       if (!res.ok) {
         throw new Error(data.error || "Errore durante il salvataggio.");
       }
+      if (typeof data.warning === "string" && data.warning) {
+        setAppointmentMessage({
+          type: "error",
+          text: data.warning + " Controlla il numero d’ordine e premi di nuovo Salva.",
+        });
+        sound("error");
+        return;
+      }
       void rememberAppointmentNotePhrases(appointmentForm.customNoteText);
       
       setPhotoPrimaFronteFile(null);
@@ -980,7 +988,9 @@ export function TabletClock({
         });
       }
 
-      showFeedback("success", "Scheda controllo salvata ed eliminata dalla lista.");
+      showFeedback("success", data.noteSync?.succeeded?.length
+        ? "Scheda salvata e nota inviata a Shopify."
+        : "Scheda controllo salvata ed eliminata dalla lista.");
       router.refresh();
       setClientControlOpen(false);
       setSelectedBookingForDetails(null);
@@ -2019,7 +2029,7 @@ export function TabletClock({
       <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 min-[600px]:h-[calc(100svh-2rem)] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
-        <header className="relative z-[80] flex items-start justify-between gap-2 border-b border-black/[0.07] pb-3 sm:gap-3 sm:pb-4">
+        <header className={cn("relative flex items-start justify-between gap-2 border-b border-black/[0.07] pb-3 sm:gap-3 sm:pb-4", clientControlOpen ? "z-30" : "z-[80]")}>
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-lg border border-black/10 bg-[color:var(--tablet-card)]/70 sm:size-10 sm:rounded-xl">
               <MapPin className="size-4 text-[color:var(--tablet-accent)]" />
@@ -2585,17 +2595,17 @@ export function TabletClock({
           </div>
         </footer>
 
-        {/* Client Control Form Modal overlay */}
+        {/* Full-screen client control workspace */}
         {clientControlOpen && clientControlFormId && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5">
-            <div className="flex h-[92%] w-full max-w-[1500px] overflow-hidden rounded-[26px] border border-black/15 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.35)] relative">
-              <aside className="flex w-full min-w-0 flex-col bg-[#FAFAFA] p-5 sm:p-7">
+          <section aria-labelledby="tablet-client-control-title" className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#FAFAFA]">
+            <div className="flex min-h-0 flex-1">
+              <aside className="flex min-h-0 w-full min-w-0 flex-col p-3 sm:p-7">
                 
                 {/* Modal Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">Store manager</p>
-                    <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">Appuntamenti e controllo cliente</h2>
+                    <h2 id="tablet-client-control-title" className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">Appuntamenti e controllo cliente</h2>
                     <p className="mt-1 text-xs font-semibold text-black/45">
                       Compila appuntamenti dal tablet e controlla l'andamento per salone.
                     </p>
@@ -2655,14 +2665,15 @@ export function TabletClock({
                         setClientPhotoPreview(null);
                       }
                     }}
-                    className="grid size-11 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm active:scale-95 hover:bg-black/[0.02]"
+                    aria-label="Torna alla schermata del tablet"
+                    className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm active:scale-95 hover:bg-black/[0.02]"
                   >
                     <X className="size-5" />
                   </button>
                 </div>
 
                 {/* Modal Content body scrollable */}
-                <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 space-y-4">
+                <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 space-y-4">
                   {appointmentMode === "create" ? (
                     <div className="mb-4 rounded-[26px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
                       <div className="w-full">
@@ -3246,7 +3257,7 @@ export function TabletClock({
 
               </aside>
             </div>
-          </div>
+          </section>
         )}
 
         {/* Response detail modification edit modal overlay */}
