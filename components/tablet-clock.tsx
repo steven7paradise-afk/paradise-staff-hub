@@ -450,6 +450,7 @@ export function TabletClock({
     paid: "",
     staffIds: [] as string[],
     shopifyOrder: "",
+    secondShopifyOrder: "",
     instagramTag: "",
     customNoteText: "", // Shopify Custom Note
     notes: false,
@@ -921,6 +922,7 @@ export function TabletClock({
 
       const payload = {
         ...appointmentForm,
+        shopifyNoteOrder: appointmentForm.secondShopifyOrder.trim() || appointmentForm.shopifyOrder.trim(),
         clientPhoto: clientPhotoBase64,
         photoPrimaFronte: photoPrimaFronteBase64,
         photoPrimaDietro: photoPrimaDietroBase64,
@@ -1006,6 +1008,7 @@ export function TabletClock({
         paid: "",
         staffIds: [],
         shopifyOrder: "",
+        secondShopifyOrder: "",
         instagramTag: "",
         customNoteText: "", // Clear note text field
         notes: false,
@@ -1554,6 +1557,7 @@ export function TabletClock({
         depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
         paid: "",
         staffIds,
+        secondShopifyOrder: "",
         shopifyOrder: booking.isManual ? "" : (booking.bookingStr ? booking.bookingStr.replace(/^#/, "") : ""),
         instagramTag: "",
         customNoteText: "",
@@ -2762,6 +2766,17 @@ export function TabletClock({
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="0.00"
                               />
+                            </label>
+
+                            <label className="block">
+                              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Ordine Shopify del saldo</span>
+                              <SmoothInput
+                                value={appointmentForm.secondShopifyOrder}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, secondShopifyOrder: val }))}
+                                className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                                placeholder="Numero dell’ordine del pagamento finale"
+                              />
+                              <span className="mt-1 block text-xs text-black/60">Se indicato, la nota viene inviata a questo ordine.</span>
                             </label>
 
                             <label className="block">
