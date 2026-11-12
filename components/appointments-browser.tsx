@@ -333,7 +333,7 @@ type AppointmentRecord = {
   startDate: string;
   endDate?: string | null;
   dateKey: string;
-  inferredSalon: SalonFilter | "altro";
+  inferredSalon: SalonFilter | "repubblica" | "altro";
   teammates: BookingTeammate[];
   priceAmount?: number | null;
   priceCurrency?: string | null;
@@ -411,7 +411,10 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
 
 const pcLinkManagerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
-const clientControlSalons = [{ label: "Corso", value: "Salone Buenos Aires" }];
+const clientControlSalons = [
+  { label: "Corso", value: "Salone Buenos Aires" },
+  { label: "Repubblica", value: "Salone Repubblica" },
+];
 
 const clientControlNoteSuggestions = [
   "Cliente simpatica",
@@ -863,6 +866,7 @@ function getOrderSearchVariants(value?: string | null) {
 
 function getSalonLabel(value: AppointmentRecord["inferredSalon"]) {
   if (value === "duomo") return "Duomo";
+  if (value === "repubblica") return "Repubblica";
   if (value === "buenos-aires") return "Buenos Aires";
   if (value === "ufficio") return "Ufficio Paradise";
   return "Altro";
@@ -1607,6 +1611,7 @@ export function AppointmentsBrowser({
   }
 
   function salonNameForBooking(booking: AppointmentRecord) {
+    if (booking.inferredSalon === "repubblica") return "Salone Repubblica";
     return booking.inferredSalon === "buenos-aires"
       ? "Salone Buenos Aires"
       : "Salone Duomo";
@@ -3324,7 +3329,8 @@ export function AppointmentsBrowser({
     setConfirmationAttendance([]);
     setConfirmationAttendanceLoading(true);
     setConfirmationAttendanceError("");
-    const salonSlug = normalizeSalonName(clientControlForm.salon).includes("duomo") ? "duomo" : "buenos-aires";
+    const salonName = normalizeSalonName(clientControlForm.salon);
+    const salonSlug = salonName === "repubblica" ? "repubblica" : salonName.includes("duomo") ? "duomo" : "buenos-aires";
     fetch(`/api/appointments/pc/active-staff?salone=${salonSlug}&scope=salon`, { cache: "no-store", signal: controller.signal })
       .then(async response => {
         const data = await response.json();

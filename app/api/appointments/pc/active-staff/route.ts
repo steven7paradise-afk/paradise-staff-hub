@@ -25,7 +25,8 @@ function normalizeStaffAliases(value: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
+  const requestedSalon = request.nextUrl.searchParams.get("salone");
+  const salonSlug = requestedSalon === "repubblica" ? requestedSalon : normalizeAppointmentSalonSlug(requestedSalon);
   const includeAllSalonStaff = request.nextUrl.searchParams.get("scope") === "salon";
   const isPinEntry = request.nextUrl.searchParams.get("scope") === "pin-entry";
   const session = await auth();
@@ -57,6 +58,9 @@ export async function GET(request: NextRequest) {
         },
         select: { id: true },
       });
+      if (salonSlug === "repubblica" && !forcedLocation) {
+        return NextResponse.json({ error: "Salone Repubblica non trovato." }, { status: 404 });
+      }
       locationId = forcedLocation?.id || locationId;
     }
 

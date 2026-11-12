@@ -103,10 +103,11 @@ function dedupeDetails(items: Array<{ label: string; value: string }>) {
   });
 }
 
-function getSalonFromText(value?: string | null): "duomo" | "buenos-aires" | "ufficio" | "altro" {
+function getSalonFromText(value?: string | null): "duomo" | "buenos-aires" | "repubblica" | "ufficio" | "altro" {
   const source = normalizeName(value);
   if (!source) return "altro";
   if (source.includes("duomo")) return "duomo";
+  if (source.includes("repubblica")) return "repubblica";
   if (source.includes("buenos aires") || source.includes("corso buenos aires")) return "buenos-aires";
   if (source.includes("ufficio paradise") || source.includes("ufficio")) return "ufficio";
   return "altro";
@@ -501,10 +502,10 @@ export default async function AppointmentsPage({
           if (!matchedUser?.location?.name) return null;
           return getSalonFromText(matchedUser.location.name);
         })
-        .filter((s): s is "duomo" | "buenos-aires" | "ufficio" => s !== null && s !== "altro");
+        .filter((s): s is "duomo" | "buenos-aires" | "repubblica" | "ufficio" => s !== null && s !== "altro");
 
-      const inferredSalon: "duomo" | "buenos-aires" | "ufficio" | "altro" =
-        teammateSalons.find((s) => s === "buenos-aires" || s === "duomo") ||
+      const inferredSalon: "duomo" | "buenos-aires" | "repubblica" | "ufficio" | "altro" =
+        teammateSalons.find((s) => s === "buenos-aires" || s === "duomo" || s === "repubblica") ||
         [booking.service?.title, booking.booking_str, ...(booking.teammates ?? []).map((mate) => `${mate.firstname ?? ""} ${mate.lastname ?? ""}`)]
           .map(getSalonFromText)
           .find((value) => value !== "altro") ||
