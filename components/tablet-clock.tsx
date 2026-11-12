@@ -480,6 +480,7 @@ export function TabletClock({
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Response details editing
+  const [clientResponseSaveMessage, setClientResponseSaveMessage] = useState("");
   const [selectedClientResponse, setSelectedClientResponse] = useState<any | null>(null);
   const [clientResponseDraft, setClientResponseDraft] = useState<Record<string, any>>({});
   const [clientResponseLoading, setClientResponseLoading] = useState<string | null>(null);
@@ -700,6 +701,7 @@ export function TabletClock({
       if (!res.ok || !data) {
         throw new Error(data?.error || "Non riesco ad aprire questa scheda.");
       }
+      setClientResponseSaveMessage("");
       setSelectedClientResponse(data);
       setClientResponseDraft(data.answers || {});
     } catch (err: any) {
@@ -713,11 +715,12 @@ export function TabletClock({
   const saveResponseDetail = async () => {
     if (!selectedClientResponse) return;
     setClientResponseSaving(true);
+    setClientResponseSaveMessage("");
     try {
       const res = await fetch(`/api/service-forms/responses/${selectedClientResponse.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: clientResponseDraft }),
+        body: JSON.stringify({ answers: clientResponseDraft, syncClientNote: true }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) {
@@ -725,11 +728,11 @@ export function TabletClock({
       }
       setSelectedClientResponse(data);
       setClientResponseDraft(data.answers || {});
-      showFeedback("success", "Scheda cliente aggiornata correttamente.");
+      setClientResponseSaveMessage(data.noteWarning || (data.noteSynced ? "Scheda salvata e nota inviata a Shopify." : "Scheda cliente aggiornata."));
       sound("success");
       fetchAnalytics();
     } catch (err: any) {
-      showFeedback("error", err.message || "Errore durante il salvataggio.");
+      setClientResponseSaveMessage(err.message || "Errore durante il salvataggio.");
       sound("error");
     } finally {
       setClientResponseSaving(false);
@@ -3335,8 +3338,17 @@ export function TabletClock({
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block md:col-span-2">
+                    <span className="text-xs font-semibold">Nota Shopify</span>
+                    <textarea
+                      value={String(clientResponseDraft.client_control_notes_text ?? "")}
+                      onChange={(event) => setClientResponseDraft((prev) => ({ ...prev, client_control_notes_text: event.target.value }))}
+                      className="mt-1 min-h-24 w-full rounded-xl border border-black/10 bg-white p-3 text-sm"
+                    />
+                  </label>
+                  {clientResponseSaveMessage && <p role="status" className="text-sm font-semibold md:col-span-2">{clientResponseSaveMessage}</p>}
                   {selectedClientResponse.form.fields.map((field: any) => {
-                    if (field.id === CLIENT_CONTROL_FIELD_IDS.clientName || field.id === CLIENT_CONTROL_FIELD_IDS.serviceStaff) {
+                    if (field.id === CLIENT_CONTROL_FIELD_IDS.clientName || field.id === CLIENT_CONTROL_FIELD_IDS.serviceStaff || field.id === "client_control_notes_text") {
                       return null;
                     }
                     const val = clientResponseDraft[field.id];

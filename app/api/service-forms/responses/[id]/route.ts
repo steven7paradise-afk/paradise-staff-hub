@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { orderReference, ORDER_BLOCK_STATES } from "@/lib/shopify-order-block";
 import { prisma } from "@/lib/prisma";
-import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { CLIENT_CONTROL_FIELD_IDS, CLIENT_CONTROL_FORM_NAME } from "@/lib/client-control-form";
 import { getOperationalUser } from "@/lib/operational-session";
 import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 import { refundStates, validRefundStates } from "@/lib/refund-status";
@@ -100,6 +100,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       });
       if (!result.count) return NextResponse.json({ error: "La pratica è stata aggiornata da un'altra persona. Ricarica e riprova." }, { status: 409 });
       return NextResponse.json(await prisma.serviceFormResponse.findUnique({ where: { id } }));
+    }
+
+    const syncClientNote = body.syncClientNote === true;
+    const previousAnswers = (response.answers ?? {}) as Record<string, unknown>;
+    const clientNote = typeof answers?.client_control_notes_text === "string" ? answers.client_control_notes_text.trim() : "";
+    let noteOrder: string | null = null;
+    if (syncClientNote) {
+      if (response.form.name !== CLIENT_CONTROL_FORM_NAME ||
+        (!["ZERO", "SUPER_ADMIN", "ADMIN"].includes(user.role) && (!user.sedeId || user.sedeId !== response.user_location_id))) {
+        return NextResponse.json({ error: "Non autorizzato a inviare la nota di questa scheda." }, { status: 403 });
+      }
+      if (clientNote && previousAnswers.client_control_is_draft !== true) {
+        noteOrder = orderReference(previousAnswers.shopify_note_order)
+          ?? orderReference(previousAnswers.second_shopify_order)
+          ?? orderReference(previousAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder]);
+      }
     }
 
     const dataToUpdate: any = {};
@@ -272,7 +288,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json({ ...updatedResponse, confirmed_by: confirmedBy });
+    let noteSynced = false;
+    let noteWarning: string | undefined;
+    if (syncClientNote && clientNote && previousAnswers.client_control_is_draft !== true) {
+      if (noteOrder) {
+        const { appendShopifyOrderNote } = await import("@/lib/shopify");
+        noteSynced = await appendShopifyOrderNote(noteOrder, user.name || "Staff", clientNote);
+      }
+      if (!noteSynced) {
+        noteWarning = noteOrder
+          ? `Scheda salvata. Shopify non ha confermato la nota sull’ordine #${noteOrder}. Riprova con Salva modifiche.`
+          : "Scheda salvata. La nota richiede un ordine Shopify collegato.";
+      }
+    }
+    return NextResponse.json({ ...updatedResponse, confirmed_by: confirmedBy, noteSynced, noteWarning });
   } catch (error) {
     console.error("Failed to update form response:", error);
     return NextResponse.json({ error: "Errore durante l'aggiornamento della risposta" }, { status: 500 });
