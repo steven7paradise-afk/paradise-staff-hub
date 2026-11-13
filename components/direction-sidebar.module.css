@@ -297,22 +297,29 @@
     color: var(--direction-muted);
   }
 
-  .frame .remote {
+  .frame :is(.remote, :global(.sidebar-logout)) {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-radius: 9px;
     border-color: var(--direction-line);
-    color: var(--direction-muted);
-    font-size: 10px;
+    background: transparent;
+    color: var(--direction-muted) !important;
+    font-size: 12px;
+    line-height: 1.25;
+    font-weight: 750;
     letter-spacing: 0;
     text-transform: none;
   }
 
-  .frame :global(.sidebar-logout) {
-    color: var(--direction-muted) !important;
-    border-color: var(--direction-line);
-    border-radius: 9px;
-    min-height: 44px;
+  .frame :is(.remote, :global(.sidebar-logout)) svg {
+    width: 16px;
+    height: 16px;
   }
 
-  .frame :global(.sidebar-logout:hover) {
+  .frame :is(.remote, :global(.sidebar-logout)):hover {
     background: var(--direction-hover);
     color: var(--direction-ink) !important;
   }
