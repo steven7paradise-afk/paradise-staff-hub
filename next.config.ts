@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/appointments/register",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
+      {
         source: "/sw.js",
         headers: [
           { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },

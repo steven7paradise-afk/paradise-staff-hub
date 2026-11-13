@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
-import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { appointmentSalonForPC, appointmentStaffLocationsForPC, checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import {
@@ -25,8 +25,7 @@ function normalizeStaffAliases(value: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const requestedSalon = request.nextUrl.searchParams.get("salone");
-  const salonSlug = requestedSalon === "repubblica" ? requestedSalon : normalizeAppointmentSalonSlug(requestedSalon);
+  const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
   const scope = request.nextUrl.searchParams.get("scope");
   const isRepubblicaBoard = scope === "repubblica-board";
   const includeAllSalonStaff = scope === "salon";
@@ -34,14 +33,17 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
+  let pcLocationId: string | null = null;
+  let staffLocationIds: string[] | null = null;
 
-  if (!isAuthorized && !isRepubblicaBoard) {
+  if ((!isAuthorized || isPinEntry || includeAllSalonStaff) && !isRepubblicaBoard) {
     const cookieStore = await cookies();
     const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
     const pcAuth = await checkPCAuthorization(pcToken);
     if (pcAuth) {
       isAuthorized = true;
       locationId = pcAuth.locationId;
+      pcLocationId = pcAuth.locationId;
     }
   }
 
@@ -60,6 +62,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Sede Salone Repubblica non identificata." }, { status: 404 });
       }
       locationId = locations[0].id;
+      staffLocationIds = await appointmentStaffLocationsForPC(locationId, "repubblica");
+    } else if (pcLocationId) {
+      const pcSalon = await appointmentSalonForPC(pcLocationId);
+      if (!pcSalon || (salonSlug && pcSalon !== salonSlug)) {
+        return NextResponse.json({ error: "Apri la pagina del salone associato a questo computer." }, { status: 403 });
+      }
+      staffLocationIds = await appointmentStaffLocationsForPC(pcLocationId, pcSalon);
     } else if (salonSlug) {
       const forcedLocation = await prisma.location.findFirst({
         where: {
@@ -85,7 +94,7 @@ export async function GET(request: NextRequest) {
       prisma.user.findMany({
         where: {
           active: true,
-          ...(isRepubblicaBoard ? { sede_id: locationId } : {}),
+          ...(isRepubblicaBoard && staffLocationIds ? { sede_id: { in: staffLocationIds } } : {}),
           ...(isRepubblicaBoard || isPinEntry ? { employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}),
           ...(isPinEntry ? { role: { notIn: ["ADMIN", "SUPER_ADMIN", "ZERO"] } } : {}),
         },
@@ -116,7 +125,9 @@ export async function GET(request: NextRequest) {
           name: appointmentStaffDisplayName(worker.name, worker.id),
           photo_url: worker.photo_url,
           sede_id: worker.sede_id,
-          locationName: worker.location?.name ?? "",
+          locationName: worker.sede_id && worker.sede_id !== locationId && staffLocationIds?.includes(worker.sede_id)
+            ? "Salone Repubblica"
+            : worker.location?.name ?? "",
           status: alwaysActive ? "IN" : state.status,
           alwaysActive,
           clockedInAt: state.firstEntry
@@ -136,7 +147,7 @@ export async function GET(request: NextRequest) {
       .filter((worker) => {
         // The board roster is already restricted by sede_id in the query.
         if (isRepubblicaBoard || worker.alwaysActive) return true;
-        if (locationId && worker.sede_id !== locationId) return false;
+        if (locationId && (!worker.sede_id || !(staffLocationIds || [locationId]).includes(worker.sede_id))) return false;
         return includeAllSalonStaff || worker.status === "IN" || worker.status === "BREAK";
       });
 

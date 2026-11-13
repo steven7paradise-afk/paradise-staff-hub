@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { normalizeAppointmentSalonSlug, appointmentSalonUrl } from "@/lib/appointment-salon-url";
 import {
+  appointmentSalonForPC,
+  appointmentStaffLocationsForPC,
   appointmentsPcCookieName,
   appointmentsPcWorkerCookieMaxAgeSeconds,
   appointmentsPcWorkerCookieName,
@@ -33,13 +35,16 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const workerId = typeof body?.workerId === "string" ? body.workerId.trim() : "";
   const pinPrefix = typeof body?.pinPrefix === "string" ? body.pinPrefix : "";
-  const salone = normalizeAppointmentSalonSlug(body?.salone);
 
   if (!workerId) {
     return NextResponse.json({ error: "Profilo non valido." }, { status: 400 });
   }
   if (!/^\d{2}$/.test(pinPrefix)) {
     return NextResponse.json({ error: "Inserisci le prime 2 cifre del PIN." }, { status: 400 });
+  }
+  const salone = await appointmentSalonForPC(pcAuth.locationId);
+  if (!salone || (body?.salone && body.salone !== "tutti" && normalizeAppointmentSalonSlug(body.salone) !== salone)) {
+    return NextResponse.json({ error: "Apri la pagina del salone associato a questo computer." }, { status: 403 });
   }
 
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
@@ -72,7 +77,8 @@ export async function POST(request: NextRequest) {
   if (isAppointmentPinOnlyRole(worker.role)) return NextResponse.json({ error: "Per questo profilo usa il PIN completo di 4 cifre." }, { status: 403 });
 
   const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
-  if (!alwaysActive && worker.sede_id !== null && worker.sede_id !== pcAuth.locationId) {
+  if (!alwaysActive && worker.sede_id !== null && worker.sede_id !== pcAuth.locationId &&
+    !(await appointmentStaffLocationsForPC(pcAuth.locationId, salone)).includes(worker.sede_id)) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
 

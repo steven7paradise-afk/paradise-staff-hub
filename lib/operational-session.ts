@@ -7,6 +7,7 @@ import {
   appointmentsRemoteTargetCookieName,
   appointmentsRemoteWorkerCookieName,
   checkPCAuthorization,
+  isAppointmentStaffLocationForPC,
 } from "@/lib/appointments-pc-auth";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
@@ -54,10 +55,11 @@ export async function getOperationalUser(
         select: { id: true, name: true, email: true, role: true, sede_id: true },
         })
       : null;
-    const worker = workerCandidate && (
-      workerCandidate.sede_id === pcAuth.locationId ||
-      isAlwaysActiveAppointmentStaff(workerCandidate.name, workerCandidate.id)
-    ) ? workerCandidate : null;
+    const workerAtDeviceSalon = workerCandidate?.sede_id
+      ? await isAppointmentStaffLocationForPC(pcAuth.locationId, workerCandidate.sede_id)
+      : false;
+    const worker = workerCandidate && (workerAtDeviceSalon ||
+      isAlwaysActiveAppointmentStaff(workerCandidate.name, workerCandidate.id)) ? workerCandidate : null;
 
     if (worker) {
       return {
@@ -65,7 +67,7 @@ export async function getOperationalUser(
         name: appointmentStaffDisplayName(worker.name, worker.id),
         email: worker.email,
         role: worker.role,
-        sedeId: worker.sede_id,
+        sedeId: workerAtDeviceSalon ? pcAuth.locationId : worker.sede_id,
         isPC: true,
       };
     }

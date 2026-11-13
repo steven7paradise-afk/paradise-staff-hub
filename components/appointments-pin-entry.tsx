@@ -5,6 +5,7 @@ import { ArrowRight, Check, Loader2, Delete, RefreshCw, LockKeyhole, Sun, Moon }
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentPinKey } from "@/lib/appointment-pin-keyboard";
+import type { AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import styles from "./appointments-pin-entry.module.css";
 
 const THEME_KEY = "paradise-appointments-entry-theme";
@@ -12,7 +13,7 @@ const THEME_KEY = "paradise-appointments-entry-theme";
 export type PinEntryWorker = { id: string; name: string; photo_url?: string | null; locationName: string; status: string };
 
 export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
-  salon: "tutti" | "buenos-aires" | "duomo" | "ufficio";
+  salon: "tutti" | AppointmentSalonSlug;
   pcName?: string;
   onUnlock: (worker: PinEntryWorker, destination: string) => void;
 }) {

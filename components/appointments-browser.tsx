@@ -60,8 +60,8 @@ import {
   List,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
-import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
-import { initialAppointmentDateFilter } from "@/lib/appointment-date";
+import { appointmentSalonSlugFromName, appointmentSalonUrl, isCashierAppointmentSalon, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentDateKey, initialAppointmentDateFilter, isAppointmentDateKey } from "@/lib/appointment-date";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { AppointmentPaymentNotice, AppointmentPaymentHistory } from "@/components/appointment-payment-notice";
@@ -71,6 +71,8 @@ import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock"
 import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
+import { overlappingAppointmentsByWorker } from "@/lib/appointment-overlap";
+import { RepubblicaAgendaToolbar } from "./repubblica-agenda-toolbar";
 import { uniqueAppointmentPayment, appointmentDayPayments, canCorrectAppointmentClient } from "@/lib/appointment-payment-match";
 import {
   allowsMissingFinalPaymentOrder,
@@ -105,7 +107,7 @@ function maskEmail(email?: string): string {
 }
 
 type ViewMode = "day" | "week" | "month";
-type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
+type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "repubblica" | "ufficio";
 type AppointmentDateFilterMode = "all" | "today" | "tomorrow" | "custom";
 type AppointmentStatusValue =
   | "PRENOTATO"
@@ -334,7 +336,7 @@ type AppointmentRecord = {
   startDate: string;
   endDate?: string | null;
   dateKey: string;
-  inferredSalon: SalonFilter | "repubblica" | "altro";
+  inferredSalon: SalonFilter | "altro";
   teammates: BookingTeammate[];
   priceAmount?: number | null;
   priceCurrency?: string | null;
@@ -407,6 +409,7 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
   { value: "tutti", label: "Tutti" },
   { value: "duomo", label: "Duomo" },
   { value: "buenos-aires", label: "Buenos Aires" },
+  { value: "repubblica", label: "Repubblica" },
   { value: "ufficio", label: "Ufficio Paradise" },
 ];
 
@@ -475,6 +478,7 @@ const viewOptions: Array<{ value: ViewMode; label: string }> = [
 ];
 
 const appointmentsPageSize = 25;
+const agendaHours = Array.from({ length: 11 }, (_, index) => String(index + 9).padStart(2, "0"));
 const appointmentHourFormatter = new Intl.DateTimeFormat("it-IT", {
   timeZone: "Europe/Rome",
   hour: "2-digit",
@@ -491,6 +495,12 @@ const appointmentStatusOptions: Array<{
   { value: "IN_ATTESA", label: "Arrivata" },
   { value: "INIZIATO", label: "In lavorazione" },
   { value: "COMPLETATO", label: "Completato" },
+];
+
+const agendaStatusOptions = [
+  ...appointmentStatusOptions.filter(({ value }) => value !== "IN_ATTESA"),
+  { value: "ARRIVATA", label: "Arrivata" },
+  { value: "ANNULLATO", label: "Annullato" },
 ];
 
 const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
@@ -577,6 +587,7 @@ function getDateSearchValues(value?: string | null) {
 function formatTime(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
@@ -795,9 +806,11 @@ function AppointmentNotePreviews({
 function AppointmentInstantSearch({
   value,
   onSearchChange,
+  plain = false,
 }: {
   value: string;
   onSearchChange: (value: string) => void;
+  plain?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -825,6 +838,25 @@ function AppointmentInstantSearch({
     setDraft("");
     onSearchChange("");
   }
+
+  if (plain) return (
+    <div className="relative flex items-center gap-2 rounded-[10px] border border-[#DAD6D3] bg-white px-3 focus-within:ring-2 focus-within:ring-[#2B6556] dark:border-white/20 dark:bg-[#202125]">
+      <Search aria-hidden="true" className="size-4 shrink-0 text-[#6D6067] dark:text-white/65" />
+      <label htmlFor="appointments-client-search" className="sr-only">Cerca cliente</label>
+      <input
+        id="appointments-client-search"
+        type="search"
+        value={draft}
+        onChange={(event) => updateSearch(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Escape") clearSearch(); }}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="Nome, telefono, email o numero ordine…"
+        className="min-h-11 min-w-0 flex-1 appearance-none bg-transparent text-sm font-medium text-[#2B2429] outline-none dark:text-white [&::-webkit-search-cancel-button]:hidden"
+      />
+      {draft ? <button type="button" onClick={clearSearch} aria-label="Cancella ricerca" className="grid size-11 shrink-0 place-items-center rounded-lg text-[#6D6067] hover:bg-black/5 dark:text-white/65"><X className="size-4" /></button> : null}
+    </div>
+  );
 
   return (
     <div className="relative min-h-14 rounded-[18px] border border-white bg-white/95 shadow-[0_8px_24px_rgba(81,43,60,0.08)] transition focus-within:border-[#D86B9B] focus-within:ring-4 focus-within:ring-[#F7D9E7]">
@@ -1305,14 +1337,15 @@ export function AppointmentsBrowser({
       router.replace(params.size ? `${base}?${params.toString()}` : base, { scroll: false });
     }
     setIsRefreshing(false);
-  }, [searchParams, repubblicaBoard, router]);
+  }, [initialSalon, navigationBasePath, repubblicaBoard, router, searchParams]);
 
   useEffect(() => {
     const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
-    setSalon((salonFromUrl || initialSalon) as SalonFilter);
-  }, [initialSalon, searchParams]);
+    setSalon(isPC ? initialSalon : salonFromUrl || initialSalon);
+  }, [initialSalon, isPC, searchParams]);
 
   function updateSalonFilter(nextSalon: SalonFilter) {
+    if (isPC) return;
     setSalon(nextSalon);
     navigateToAppointmentRange(view, anchorDate, {
       salonOverride: nextSalon,
@@ -1325,7 +1358,10 @@ export function AppointmentsBrowser({
 
   const [view, setView] = useState<ViewMode>(initialView);
   const [layoutMode, setLayoutMode] = useState<"table" | "board">("board");
-  const boardSalonName = repubblicaBoard ? "Salone Repubblica" : "Salone Corso";
+  const pcRepubblica = isPC && initialSalon === "repubblica";
+  const hasSeparateCorsoLocation = locations.some((location) => appointmentSalonSlugFromName(location.name) === "buenos-aires");
+  const legacyCorsoOnRepubblica = (repubblicaBoard || pcRepubblica) && !hasSeparateCorsoLocation;
+  const boardSalonName = repubblicaBoard || pcRepubblica ? "Salone Repubblica" : "Salone Corso";
   const [boardRosterRevision, setBoardRosterRevision] = useState("initial");
   const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
   const [boardStaffLoading, setBoardStaffLoading] = useState(false);
@@ -1333,7 +1369,7 @@ export function AppointmentsBrowser({
   const [draggedBoardBookingId, setDraggedBoardBookingId] = useState<string | null>(null);
   const [boardDropTargetId, setBoardDropTargetId] = useState<string | null>(null);
   const [boardWorkerOrder, setBoardWorkerOrder] = useState<string[]>([]);
-  const [showEmptyBoardWorkers, setShowEmptyBoardWorkers] = useState(false);
+  const [showEmptyBoardWorkers, setShowEmptyBoardWorkers] = useState(repubblicaBoard);
   const [draggedBoardWorkerId, setDraggedBoardWorkerId] = useState<string | null>(null);
   const [boardWorkerDropTarget, setBoardWorkerDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
   const [boardStatusMenu, setBoardStatusMenu] = useState<{
@@ -1453,14 +1489,16 @@ export function AppointmentsBrowser({
 
   const rosterSnapshot = repubblicaBoard ? initialBookings : null;
   useEffect(() => {
-    if (layoutMode !== "board") return;
+    if (layoutMode !== "board" && !repubblicaBoard) return;
     const controller = new AbortController();
 
     async function loadBoardStaff() {
       setBoardStaffLoading(true);
       setBoardStaffError("");
       try {
-        const params = repubblicaBoard ? "scope=repubblica-board" : "salone=buenos-aires&scope=salon";
+        const params = repubblicaBoard
+          ? "scope=repubblica-board"
+          : `salone=${pcRepubblica ? "repubblica" : "buenos-aires"}&scope=salon`;
         const response = await fetch(`/api/appointments/pc/active-staff?${params}`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
@@ -1482,7 +1520,7 @@ export function AppointmentsBrowser({
       controller.abort();
       window.clearInterval(interval);
     };
-  }, [boardRosterRevision, layoutMode, repubblicaBoard, rosterSnapshot]);
+  }, [boardRosterRevision, layoutMode, pcRepubblica, repubblicaBoard, rosterSnapshot]);
 
   useEffect(() => {
     try {
@@ -1502,6 +1540,23 @@ export function AppointmentsBrowser({
       // The board remains usable when local storage is unavailable.
     }
   }, [boardWorkerOrder]);
+
+  function openAgendaPeriod(nextView: ViewMode, date: Date) {
+    const range = rangeForView(nextView, date);
+    setIsDatePickerOpen(false);
+    navigateToAppointmentRange(nextView, date, range);
+  }
+
+  function changeAgendaDate(direction: -1 | 1) {
+    const nextDate = new Date(anchorDate);
+    if (view === "month") {
+      nextDate.setDate(1);
+      nextDate.setMonth(nextDate.getMonth() + direction);
+    } else {
+      nextDate.setDate(nextDate.getDate() + direction * (view === "week" ? 7 : 1));
+    }
+    openAgendaPeriod(view, nextDate);
+  }
 
   function rangeForView(nextView: ViewMode, date: Date) {
     const start = new Date(date);
@@ -1552,12 +1607,13 @@ export function AppointmentsBrowser({
     if (worker) params.set("worker", worker);
     if (options?.forceRefresh) params.set("refresh", "true");
 
-    setIsRefreshing(true);
     if (navigationBasePath && targetSalon !== "tutti") {
       params.set("salone", targetSalon);
     }
     const base = navigationBasePath || appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon);
     const target = `${base}?${params.toString()}`;
+    if (repubblicaBoard && !options?.forceRefresh && target === `${window.location.pathname}${window.location.search}`) return;
+    setIsRefreshing(true);
     startTransition(() => {
       if (options?.replace) router.replace(target, { scroll: false });
       else router.push(target, { scroll: false });
@@ -1651,7 +1707,7 @@ export function AppointmentsBrowser({
   }
 
   function salonNameForBooking(booking: AppointmentRecord) {
-    if (booking.inferredSalon === "repubblica") return "Salone Repubblica";
+    if (booking.inferredSalon === "repubblica" || (legacyCorsoOnRepubblica && booking.inferredSalon === "buenos-aires")) return "Salone Repubblica";
     return booking.inferredSalon === "buenos-aires"
       ? "Salone Buenos Aires"
       : "Salone Duomo";
@@ -3113,35 +3169,51 @@ export function AppointmentsBrowser({
     });
   }
 
-  const bookingsByHour = useMemo(() => {
-    const byHour = new Map<string, AppointmentRecord[]>();
-    if (!repubblicaBoard) return byHour;
+  const bookingHours = useMemo(() => {
+    const hours = new Map<string, string>();
+    if (!repubblicaBoard) return hours;
 
     for (const booking of initialBookings) {
       const startsAt = new Date(booking.startDate);
-      if (Number.isNaN(startsAt.getTime())) continue;
-
-      const hour = appointmentHourFormatter.format(startsAt);
-      const bookings = byHour.get(hour);
-      if (bookings) bookings.push(booking);
-      else byHour.set(hour, [booking]);
+      if (Number.isFinite(startsAt.getTime())) hours.set(booking.id, appointmentHourFormatter.format(startsAt));
     }
-
-    return byHour;
+    return hours;
   }, [initialBookings, repubblicaBoard]);
-  const hourOptions = useMemo(() => {
-    const hours = new Set(bookingsByHour.keys());
-    if (filterHour) hours.add(filterHour);
-    return [...hours].sort();
-  }, [bookingsByHour, filterHour]);
-  const hourScopedBookings = filterHour ? bookingsByHour.get(filterHour) || [] : initialBookings;
 
-  const activeBookingsCount = hourScopedBookings.filter(
-    (booking) => !booking.isCanceled,
-  ).length;
-  const canceledBookingsCount = hourScopedBookings.filter(
-    (booking) => booking.isCanceled,
-  ).length;
+  const repubblicaWorkersByBooking = useMemo(() => {
+    const matches = new Map<string, string[]>();
+    if (!repubblicaBoard) return matches;
+
+    const workersById = new Map(boardActiveStaff.map((worker) => [worker.id, worker]));
+    const workersByExternalId = new Map(boardActiveStaff.flatMap((worker) =>
+      (worker.externalIds || []).map((id) => [id, worker] as const),
+    ));
+    for (const booking of initialBookings) {
+      const team = teamByBooking[booking.id] ?? booking.teammates;
+      const allowNameMatch = ["repubblica", "buenos-aires", "altro"].includes(booking.inferredSalon);
+      const ids = new Set<string>();
+      for (const teammate of team) {
+        const worker = workersById.get(teammate.id) || workersByExternalId.get(teammate.id);
+        if (worker) ids.add(worker.id);
+        else if (allowNameMatch) {
+          const names = boardActiveStaff.filter((candidate) => staffNamesReferToSamePerson(candidate.name, teammate.name));
+          if (names.length === 1) ids.add(names[0].id);
+        }
+      }
+      matches.set(booking.id, [...ids]);
+    }
+    return matches;
+  }, [boardActiveStaff, initialBookings, repubblicaBoard, teamByBooking]);
+
+  const overlapsByWorker = useMemo(() => overlappingAppointmentsByWorker(
+    repubblicaBoard ? initialBookings : [],
+    (booking) => repubblicaWorkersByBooking.get(booking.id) || [],
+  ), [initialBookings, repubblicaBoard, repubblicaWorkersByBooking]);
+  const hourScopedBookings = filterHour
+    ? initialBookings.filter((booking) => bookingHours.get(booking.id) === filterHour)
+    : initialBookings;
+  const activeBookingsCount = hourScopedBookings.filter((booking) => !booking.isCanceled).length;
+  const canceledBookingsCount = hourScopedBookings.length - activeBookingsCount;
   const dateFilterLabel = useMemo(() => {
     if (dateFilter.mode === "all") return `Archivio · ${new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(dateFromLocalKey(dateFilter.from) || anchorDate)}`;
     if (dateFilter.mode === "today") return "Oggi";
@@ -3201,19 +3273,20 @@ export function AppointmentsBrowser({
     return index;
   }, [initialBookings, paradiseNotes, visitShopifyNotes, teamByBooking]);
 
-  const filteredBookings = useMemo(() => {
-    const statusScoped = normalizedSearch
-      ? hourScopedBookings
+  const bookingsBeforeHour = useMemo(() => {
+    const bypassStatus = normalizedSearch && !repubblicaBoard;
+    const statusScoped = bypassStatus
+      ? initialBookings
       : showCanceled
-        ? hourScopedBookings.filter((booking) => booking.isCanceled)
+        ? initialBookings.filter((booking) => booking.isCanceled)
         : filterStatus === "all"
-          ? hourScopedBookings
-          : hourScopedBookings.filter((booking) => !booking.isCanceled);
+          ? initialBookings
+          : initialBookings.filter((booking) => !booking.isCanceled);
     const base =
-      salon === "tutti" || normalizedSearch
+      salon === "tutti" || (bypassStatus && !pcRepubblica)
         ? statusScoped
         : statusScoped.filter((booking) => {
-            if (booking.inferredSalon === salon) return true;
+            if (booking.inferredSalon === salon || (legacyCorsoOnRepubblica && salon === "repubblica" && booking.inferredSalon === "buenos-aires")) return true;
             // Also include if assigned teammate belongs to current salon
             const team = getBookingTeam(booking);
             return team.some((mate) => {
@@ -3243,6 +3316,7 @@ export function AppointmentsBrowser({
       filterStaff === "all"
         ? dateScoped
         : dateScoped.filter((booking) => {
+            if (repubblicaBoard) return repubblicaWorkersByBooking.get(booking.id)?.includes(filterStaff);
             const team = getBookingTeam(booking);
             return team.some(
               (mate) =>
@@ -3265,7 +3339,7 @@ export function AppointmentsBrowser({
           });
 
     const appointmentStatusScoped =
-      normalizedSearch || filterStatus === "all"
+      bypassStatus || filterStatus === "all"
         ? paymentScoped
         : paymentScoped.filter((booking) => {
             const status = getBookingStatus(booking);
@@ -3273,16 +3347,51 @@ export function AppointmentsBrowser({
             if (filterStatus === "ARRIVATA") {
               return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
             }
-            return status === filterStatus;
+            return status === filterStatus || (repubblicaBoard && filterStatus === "PRENOTATO" && status === "PAGATO");
           });
 
-    const searched = normalizedSearch
+    return normalizedSearch
       ? appointmentStatusScoped.filter((booking) =>
           (bookingSearchIndex.get(booking.id) || "").includes(normalizedSearch),
         )
       : appointmentStatusScoped;
+  }, [
+    bookingSearchIndex,
+    corsoTeamOptions,
+    dateFilter,
+    filterStaff,
+    filterPayment,
+    filterStatus,
+    initialBookings,
+    legacyCorsoOnRepubblica,
+    normalizedSearch,
+    pcRepubblica,
+    repubblicaBoard,
+    repubblicaWorkersByBooking,
+    salon,
+    showCanceled,
+    statusByBooking,
+    teamByBooking,
+  ]);
 
-    return [...searched].sort((a, b) => {
+  const agendaHourOptions = useMemo(() => {
+    if (!repubblicaBoard) return [];
+    const counts = new Map(agendaHours.map((hour) => [hour, 0]));
+    for (const hour of bookingHours.values()) if (!counts.has(hour)) counts.set(hour, 0);
+    if (filterHour && !counts.has(filterHour)) counts.set(filterHour, 0);
+    for (const booking of bookingsBeforeHour) {
+      const hour = bookingHours.get(booking.id);
+      if (hour) counts.set(hour, (counts.get(hour) ?? 0) + 1);
+    }
+    return [...counts].sort(([left], [right]) => left.localeCompare(right))
+      .map(([value, count]) => ({ value, count }));
+  }, [bookingHours, bookingsBeforeHour, filterHour, repubblicaBoard]);
+
+  const filteredBookings = useMemo(() => {
+    const matching = filterHour
+      ? bookingsBeforeHour.filter((booking) => bookingHours.get(booking.id) === filterHour)
+      : bookingsBeforeHour;
+    return [...matching].sort((a, b) => {
       const cancellationOrder = compareCanceledAppointmentsLast(a, b);
       if (cancellationOrder !== 0) return cancellationOrder;
       const aCompleted = getBookingStatus(a) === "COMPLETATO";
@@ -3290,23 +3399,11 @@ export function AppointmentsBrowser({
       if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
       return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
     });
-  }, [
-    dateFilter,
-    filterStaff,
-    filterPayment,
-    filterStatus,
-    hourScopedBookings,
-    bookingSearchIndex,
-    normalizedSearch,
-    salon,
-    showCanceled,
-    statusByBooking,
-    teamByBooking,
-  ]);
+  }, [bookingHours, bookingsBeforeHour, filterHour, statusByBooking]);
 
   useEffect(() => {
     setVisibleCount(appointmentsPageSize);
-  }, [dateFilter, filterHour, normalizedSearch, salon, showCanceled, view, anchorDate]);
+  }, [dateFilter, filterHour, filterPayment, filterStaff, filterStatus, normalizedSearch, salon, showCanceled, view, anchorDate]);
 
   const selectedBooking = useMemo(
     () =>
@@ -3883,17 +3980,17 @@ export function AppointmentsBrowser({
     const nextTeam = teammateIds.flatMap(id => assignableTeam.filter(option => option.id === id));
 
     if (
-      booking.inferredSalon !== "buenos-aires" &&
+      !isCashierAppointmentSalon(booking.inferredSalon === "altro" || booking.inferredSalon === "tutti" ? null : booking.inferredSalon) &&
       !nextTeam.every((teammate) => (officeStaffAccess.allowed && officeStaffAccess.workers.some(worker => worker.id === teammate.id)) || canWorkAcrossAppointmentLocations(teammate.role) || normalizeSearchValue(teammate.name) === "franci")
     ) {
       alert(
-        "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
+        "Il team si può modificare solo per gli appuntamenti del salone.",
       );
       return false;
     }
 
     if (!nextTeam.length) {
-      alert("Seleziona almeno una collaboratrice del salone Corso.");
+      alert(`Seleziona almeno una collaboratrice di ${boardSalonName}.`);
       return false;
     }
 
@@ -4053,7 +4150,7 @@ export function AppointmentsBrowser({
     if (teammateIds.length !== selectedEmployees.length) {
       showPushToast(
         "Profilo staff non collegato",
-        "Una collaboratrice non è collegata al personale del Salone Corso.",
+        `Una collaboratrice non è collegata al personale di ${boardSalonName}.`,
         "error",
       );
       return;
@@ -4431,24 +4528,27 @@ export function AppointmentsBrowser({
     const otherBookings: AppointmentRecord[] = [];
 
     for (const booking of filteredBookings) {
-      const belongsToCorso = booking.inferredSalon === "buenos-aires";
+      const belongsToCorso = booking.inferredSalon === "buenos-aires" || (pcRepubblica && booking.inferredSalon === "repubblica");
       const assignedWorkerIds = new Set<string>();
-      const matchByName = !repubblicaBoard || belongsToCorso ||
-        booking.inferredSalon === "repubblica" || booking.inferredSalon === "altro";
+
+      if (repubblicaBoard) {
+        const ids = repubblicaWorkersByBooking.get(booking.id) ?? [];
+        for (const id of ids) bookingsByWorker.get(id)?.push(booking);
+        if (!ids.length) otherBookings.push(booking);
+        continue;
+      }
 
       for (const teammate of getBookingTeam(booking)) {
         const worker =
           workersById.get(teammate.id) ||
           workersByExternalId.get(teammate.id) ||
-          (matchByName && workers.find((candidate) =>
-            staffNamesReferToSamePerson(candidate.name, teammate.name),
-          ));
+          workers.find((candidate) => staffNamesReferToSamePerson(candidate.name, teammate.name));
         if (!worker || assignedWorkerIds.has(worker.id)) continue;
         assignedWorkerIds.add(worker.id);
         bookingsByWorker.get(worker.id)?.push(booking);
       }
 
-      if (assignedWorkerIds.size === 0 && (repubblicaBoard || belongsToCorso)) otherBookings.push(booking);
+      if (assignedWorkerIds.size === 0 && belongsToCorso) otherBookings.push(booking);
     }
 
     const durationHours = (bookings: AppointmentRecord[]) => bookings.reduce((sum, booking) => {
@@ -4516,7 +4616,7 @@ export function AppointmentsBrowser({
         ];
 
     return columns;
-  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, filteredBookings, normalizedSearch, repubblicaBoard, teamByBooking]);
+  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, filteredBookings, normalizedSearch, pcRepubblica, repubblicaBoard, repubblicaWorkersByBooking, teamByBooking]);
   const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
     (column) =>
       column.id !== "unassigned" &&
@@ -4526,6 +4626,9 @@ export function AppointmentsBrowser({
       !staffNamesReferToSamePerson(column.name, effectivePcWorkerName),
   ).length;
   const visibleAppointmentBoardColumns = useMemo(() => {
+    if (repubblicaBoard && filterStaff !== "all") {
+      return appointmentBoardColumns.filter((column) => column.id === filterStaff);
+    }
     if (showEmptyBoardWorkers) return appointmentBoardColumns;
     const visibleColumns = appointmentBoardColumns.filter(
       (column) =>
@@ -4535,8 +4638,8 @@ export function AppointmentsBrowser({
         column.status === "BREAK" ||
         staffNamesReferToSamePerson(column.name, effectivePcWorkerName),
     );
-    return visibleColumns.length ? visibleColumns : appointmentBoardColumns;
-  }, [appointmentBoardColumns, effectivePcWorkerName, showEmptyBoardWorkers]);
+    return repubblicaBoard || visibleColumns.length ? visibleColumns : appointmentBoardColumns;
+  }, [appointmentBoardColumns, effectivePcWorkerName, filterStaff, repubblicaBoard, showEmptyBoardWorkers]);
   const boardBookingCount = new Set(
     visibleAppointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
   ).size;
@@ -4846,7 +4949,28 @@ export function AppointmentsBrowser({
     );
   };
 
+  const pcLinkLocations = locations.filter(({ name }) => isCashierAppointmentSalon(appointmentSalonSlugFromName(name)));
+  function openPcLinkDialog() {
+    const repubblica = pcLinkLocations.find(({ name }) => appointmentSalonSlugFromName(name) === "repubblica");
+    setGenSedeId(repubblica?.id || pcLinkLocations[0]?.id || "");
+    setGenPcName("");
+    setGeneratedLink("");
+    setGenError("");
+    setCopiedLink(false);
+    setPcGenModalOpen(true);
+  }
+
   const tableBookings = filteredBookings.slice(0, visibleCount);
+  const visibleVisitCount = repubblicaBoard
+    ? new Set([...visitsByBooking.values()].filter((visit) => showCanceled || !visit[0].isCanceled)).size
+    : 0;
+  const agendaDateLabel = dateFilter.from === dateFilter.to
+    ? dateFilter.from.split("-").reverse().join("/")
+    : `${dateFilter.from.split("-").reverse().join("/")} – ${dateFilter.to.split("-").reverse().join("/")}`;
+  const agendaDateHeading = dateFilter.from === dateFilter.to
+    ? new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" }).format(dateFromLocalKey(dateFilter.from) || anchorDate)
+    : agendaDateLabel;
+  const agendaWorkerOptions = boardActiveStaff.map(({ id, name }) => ({ value: id, label: name }));
   const confirmedBookingsCount = hourScopedBookings.filter(
     (booking) => !booking.isCanceled && getBookingStatus(booking) === "PRENOTATO",
   ).length;
@@ -5943,17 +6067,18 @@ export function AppointmentsBrowser({
                 )}
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
+                  <label htmlFor="pc-link-salon" className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
                     Sede Salone
                   </label>
                   <select
+                    id="pc-link-salon"
                     value={genSedeId}
                     onChange={(e) => setGenSedeId(e.target.value)}
                     required
                     className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
                   >
                     <option value="">Seleziona sede</option>
-                    {locations.map((loc) => (
+                    {pcLinkLocations.map((loc) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
                       </option>
@@ -5970,7 +6095,7 @@ export function AppointmentsBrowser({
                     required
                     value={genPcName}
                     onChange={(e) => setGenPcName(e.target.value)}
-                    placeholder="Es: Cassa Buenos Aires"
+                    placeholder="Es: Cassa Repubblica"
                     className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
                   />
                 </div>
@@ -5999,8 +6124,104 @@ export function AppointmentsBrowser({
           </div>
         </div>
       )}
-      <div className="appointments-workspace w-full">
-        <main className="relative min-h-[calc(100dvh-4rem)] min-w-0 space-y-3 overflow-hidden rounded-[22px] border border-[#E7D9E0] bg-[#F6EEF2] p-1.5 sm:space-y-5 sm:rounded-[30px] sm:p-3 lg:p-4">
+      <div className={`appointments-workspace w-full ${repubblicaBoard ? "repubblica-agenda" : ""}`}>
+        <main className={repubblicaBoard
+          ? "relative min-h-[calc(100dvh-4rem)] min-w-0 space-y-3 bg-transparent px-3 pt-3 sm:space-y-4 sm:px-5 sm:pt-4 lg:px-6"
+          : "relative min-h-[calc(100dvh-4rem)] min-w-0 space-y-3 overflow-hidden rounded-[22px] border border-[#E7D9E0] bg-[#F6EEF2] p-1.5 sm:space-y-5 sm:rounded-[30px] sm:p-3 lg:p-4"
+        }>
+          {repubblicaBoard ? (
+            <RepubblicaAgendaToolbar
+              title={pageTitle}
+              visitCount={visibleVisitCount}
+              dateLabel={agendaDateLabel}
+              dateFrom={dateFilter.from}
+              dateTo={dateFilter.to}
+              view={view}
+              layoutMode={layoutMode}
+              dateOpen={isDatePickerOpen}
+              onDateOpenChange={setIsDatePickerOpen}
+              onDateRangeChange={(from, to) => {
+                const date = isAppointmentDateKey(from) && dateFromLocalKey(from);
+                if (!date || !isAppointmentDateKey(to) || from > to) return;
+                setIsDatePickerOpen(false);
+                navigateToAppointmentRange(view, date, { from, to });
+              }}
+              onArchiveMonth={(month) => {
+                const day = `${month}-01`;
+                const date = isAppointmentDateKey(day) && dateFromLocalKey(day);
+                if (!date) return;
+                setIsDatePickerOpen(false);
+                navigateToAppointmentRange("month", date, { scopeAll: true });
+              }}
+              onPrevious={() => changeAgendaDate(-1)}
+              onNext={() => changeAgendaDate(1)}
+              onToday={() => openAgendaPeriod("day", dateFromLocalKey(appointmentDateKey()) ?? new Date())}
+              onViewChange={(nextView) => openAgendaPeriod(nextView, anchorDate)}
+              onLayoutChange={setLayoutMode}
+              isRefreshing={isRefreshing}
+              onRefresh={() => navigateToAppointmentRange(view, anchorDate, {
+                from: dateFilter.from,
+                to: dateFilter.to,
+                scopeAll: dateFilter.mode === "all",
+                forceRefresh: true,
+              })}
+              searchOpen={searchPanelOpen}
+              onSearchToggle={() => {
+                setSearchPanelOpen(!searchPanelOpen);
+                setIsDatePickerOpen(false);
+                if (searchPanelOpen) setSearchTerm("");
+                else requestAnimationFrame(() => document.getElementById("appointments-client-search")?.focus());
+              }}
+              searchField={searchPanelOpen ? <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} plain /> : null}
+              workerValue={filterStaff}
+              workerOptions={agendaWorkerOptions}
+              onWorkerChange={setFilterStaff}
+              statusValue={filterStatus}
+              statusOptions={agendaStatusOptions}
+              onStatusChange={(value) => {
+                setFilterStatus(value);
+                setShowCanceled(value === "ANNULLATO");
+              }}
+              canReset={Boolean(activeAdvancedFilterCount || filterHour || searchTerm || salon !== "tutti")}
+              onReset={() => {
+                setFilterStaff("all");
+                setFilterPayment("all");
+                setFilterStatus("all");
+                setShowCanceled(false);
+                setFilterHour("");
+                setSearchTerm("");
+                if (salon !== "tutti") updateSalonFilter("tutti");
+              }}
+              hideOffShift={!showEmptyBoardWorkers}
+              onHideOffShiftChange={(hide) => setShowEmptyBoardWorkers(!hide)}
+              offShiftHint="Nasconde le colonne senza appuntamenti del personale fuori turno."
+              hours={agendaHourOptions}
+              totalHoursCount={bookingsBeforeHour.length}
+              hourValue={filterHour}
+              onHourChange={setFilterHour}
+              onAdvancedOpenChange={setIsFilterModalOpen}
+              onGeneratePcLink={currentUser?.role && pcLinkManagerRoles.has(currentUser.role) ? openPcLinkDialog : undefined}
+              advancedFilters={
+                <>
+                  <label className="grid gap-1 text-xs font-semibold text-[#6D6067]">
+                    Salone
+                    <select value={salon} onChange={(event) => updateSalonFilter(event.target.value as SalonFilter)} className="min-h-11 rounded-[10px] border border-[#DAD6D3] bg-white px-3 text-sm font-semibold text-[#2B2429]">
+                      {salonOptions.filter((option) => !legacyCorsoOnRepubblica || option.value !== "buenos-aires").map((option) => <option key={option.value} value={option.value}>{option.value === "tutti" ? "Tutti i saloni" : option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-[#6D6067]">
+                    Pagamento
+                    <select value={filterPayment} onChange={(event) => setFilterPayment(event.target.value)} className="min-h-11 rounded-[10px] border border-[#DAD6D3] bg-white px-3 text-sm font-semibold text-[#2B2429]">
+                      <option value="all">Tutti i pagamenti</option>
+                      <option value="pagato">Pagato interamente</option>
+                      <option value="acconto">Acconto</option>
+                      <option value="prenotato">Da pagare</option>
+                    </select>
+                  </label>
+                </>
+              }
+            />
+          ) : (
           <section className={`relative overflow-visible rounded-[22px] border border-[#E7D9E0] bg-[#FBF7F9] p-3 shadow-[0_10px_30px_rgba(66,39,51,0.06)] sm:rounded-[28px] sm:p-4 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
             <div>
               <div>
@@ -6077,14 +6298,7 @@ export function AppointmentsBrowser({
                   {!isPC && currentUser?.role && pcLinkManagerRoles.has(currentUser.role) && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setGenSedeId(locations[0]?.id || "");
-                        setGenPcName("");
-                        setGeneratedLink("");
-                        setGenError("");
-                        setCopiedLink(false);
-                        setPcGenModalOpen(true);
-                      }}
+                      onClick={openPcLinkDialog}
                       className="inline-flex items-center gap-1.5 rounded-xl border border-[#E8D8CF] bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[#4E382C] transition shadow-2xs hover:bg-[#FFF7F3] hover:shadow-xs sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs"
                     >
                       <Sparkles size={13} className="text-[#A56A42]" />
@@ -6315,7 +6529,7 @@ export function AppointmentsBrowser({
                   </div>
                 ) : null}
               </div>
-              <select
+              {!isPC && <select
                 value={salon}
                 onChange={(event) =>
                   updateSalonFilter(event.target.value as SalonFilter)
@@ -6327,7 +6541,7 @@ export function AppointmentsBrowser({
                     {option.value === "tutti" ? "Tutti i saloni" : option.label}
                   </option>
                 ))}
-              </select>
+              </select>}
               <div className="relative">
                 <button
                   type="button"
@@ -6458,36 +6672,7 @@ export function AppointmentsBrowser({
             </div>
           </section>
 
-          {repubblicaBoard ? (
-            <section aria-labelledby="appointments-hour-filter" className="rounded-[22px] border border-[#E7D9E0] bg-white px-3 py-3 sm:px-5">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h2 id="appointments-hour-filter" className="flex items-center gap-2 text-sm font-bold text-[#261C22]">
-                  <Clock3 aria-hidden="true" className="size-4 text-[#9E3262]" />
-                  Orario di inizio
-                </h2>
-                <p aria-live="polite" className="text-xs font-semibold tabular-nums text-[#76656E]">
-                  {filteredBookings.length === 1 ? "1 appuntamento" : `${filteredBookings.length} appuntamenti`}
-                </p>
-              </div>
-              <div role="group" aria-labelledby="appointments-hour-filter" className="flex flex-wrap gap-2">
-                {[{ value: "", label: "Tutte le ore" }, ...hourOptions.map((hour) => ({ value: hour, label: `${hour}:00` }))].map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={filterHour === value}
-                    onClick={() => setFilterHour(value)}
-                    className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-3 text-sm font-bold tabular-nums outline-offset-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#99345F] ${
-                      filterHour === value
-                        ? "border-[#81274F] bg-[#81274F] text-white"
-                        : "border-[#E7D9E0] bg-[#FBF7F9] text-[#4A3541] hover:border-[#B35680] hover:bg-[#FFF1F7]"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          )}
 
           {normalizedSearch ? (
             <section
@@ -6625,9 +6810,26 @@ export function AppointmentsBrowser({
             </section>
           ) : null}
 
+          {repubblicaBoard && !normalizedSearch && layoutMode === "board" ? (
+            <div className="repubblica-agenda-legend space-y-3 px-1 pt-1 sm:px-0">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-[#6D6067]" aria-label="Legenda agenda">
+                <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3.5 w-5 rounded-[4px] border-2 border-[#287D75]" /> Contorno · In contemporanea</span>
+                <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3.5 w-5 rounded-full border border-[#CCD9D1] bg-[#EBF1ED]" /> Etichetta · Stato</span>
+                <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="grid size-4 place-items-center rounded-full border border-[#AE3741] font-bold text-[#AE3741]">!</span> Rosso · Annullato o non presentato</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-lg font-bold capitalize tracking-tight text-[#2B2429]">{agendaDateHeading}</h2>
+                <div className="flex gap-1" role="group" aria-label="Scorri le colonne">
+                  <button type="button" aria-label="Scorri a sinistra" onClick={() => scrollAppointmentBoard("left")} className="grid size-10 place-items-center rounded-lg border border-[#DAD6D3] text-[#4B4248] hover:bg-[#F7F5F4]"><ChevronLeft className="size-4" /></button>
+                  <button type="button" aria-label="Scorri a destra" onClick={() => scrollAppointmentBoard("right")} className="grid size-10 place-items-center rounded-lg border border-[#DAD6D3] text-[#4B4248] hover:bg-[#F7F5F4]"><ChevronRight className="size-4" /></button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {!normalizedSearch && layoutMode === "board" ? (
-            <section className="overflow-hidden rounded-[24px] border border-[#E7DDE2] bg-white shadow-[0_16px_45px_rgba(72,45,58,0.08)]">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EEE4E9] bg-[linear-gradient(110deg,#FFF7FB_0%,#FFFFFF_56%,#F8F5FA_100%)] px-4 py-5 sm:px-6">
+            <section className={repubblicaBoard ? "min-w-0 bg-transparent" : "overflow-hidden rounded-[24px] border border-[#E7DDE2] bg-white shadow-[0_16px_45px_rgba(72,45,58,0.08)]"}>
+              <div className={repubblicaBoard ? "hidden" : "flex flex-wrap items-center justify-between gap-4 border-b border-[#EEE4E9] bg-[linear-gradient(110deg,#FFF7FB_0%,#FFFFFF_56%,#F8F5FA_100%)] px-4 py-5 sm:px-6"}>
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · {boardSalonName}</p>
                   <div>
@@ -6699,7 +6901,7 @@ export function AppointmentsBrowser({
               {visibleAppointmentBoardColumns.length ? (
                 <div
                   ref={boardScrollContainerRef}
-                  className="appointments-board-scroll overflow-x-auto scroll-smooth bg-[#FBFAFB] p-3 sm:p-5"
+                  className={`appointments-board-scroll overflow-x-auto scroll-smooth ${repubblicaBoard ? "px-1 pb-4 sm:px-0" : "bg-[#FBFAFB] p-3 sm:p-5"}`}
                   tabIndex={0}
                   aria-label="Colonne degli appuntamenti"
                 >
@@ -6742,14 +6944,14 @@ export function AppointmentsBrowser({
                           setDraggedBoardBookingId(null);
                           if (column.id !== "unassigned") void moveBoardBooking(bookingId, column.id);
                         }}
-                        className={`appointments-board-column flex w-[294px] shrink-0 flex-col rounded-[22px] border p-3 transition ${
+                        className={`appointments-board-column flex shrink-0 flex-col border p-3 transition ${repubblicaBoard ? "w-[min(18.5rem,calc(100vw-3rem))] rounded-[19px]" : "w-[294px] rounded-[22px]"} ${
                           boardDropTargetId === column.id
                             ? "border-[#7CB5F5] bg-[#EDF6FF] ring-2 ring-[#4C9AFF] ring-offset-2"
                             : boardWorkerDropTarget?.id === column.id
                               ? boardWorkerDropTarget.position === "before"
                                 ? "border-[#DDE1E7] bg-[#F5F6F8] shadow-[-5px_0_0_#4C9AFF]"
                                 : "border-[#DDE1E7] bg-[#F5F6F8] shadow-[5px_0_0_#4C9AFF]"
-                              : "border-[#E2E4E8] bg-[#F5F6F8] shadow-[0_6px_18px_rgba(35,43,54,0.05)]"
+                              : repubblicaBoard ? "border-[#E7DFE2] bg-white/60" : "border-[#E2E4E8] bg-[#F5F6F8] shadow-[0_6px_18px_rgba(35,43,54,0.05)]"
                         }`}
                       >
                         <header
@@ -6809,6 +7011,8 @@ export function AppointmentsBrowser({
                             if (column.bookings.slice(0, bookingIndex).some(previous => visit.some(item => item.id === previous.id))) return null;
                             const visitEnd = visit.reduce((latest, item) => Date.parse(item.endDate || item.startDate) > Date.parse(latest) ? (item.endDate || item.startDate) : latest, visit[0].endDate || visit[0].startDate);
                             const status = getBookingStatus(booking);
+                            const overlappingIds = overlapsByWorker.get(column.id);
+                            const overlaps = visit.some((item) => overlappingIds?.has(item.id));
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
                             const otherNotePreviews = getBookingNotePreviews(
                               booking,
@@ -6828,6 +7032,8 @@ export function AppointmentsBrowser({
                               ) : null}
                               <div
                                 data-appointment-state={booking.isCanceled ? "canceled" : status.toLowerCase()}
+                                data-appointment-overlap={overlaps || undefined}
+                                aria-describedby={overlaps ? `overlap-${column.id}-${booking.id}` : undefined}
                                 role="button"
                                 tabIndex={0}
                                 onPointerDown={(event) => startBoardTouchGesture(event, booking, status)}
@@ -6892,8 +7098,9 @@ export function AppointmentsBrowser({
                                   draggedBoardBookingId === booking.id || touchDraggedBoardBookingId === booking.id
                                     ? "scale-[0.98] opacity-45 ring-2 ring-[#4C9AFF]"
                                     : ""
-                                }`}
+                                } ${overlaps ? "ring-2 ring-inset ring-[#287D75]" : ""}`}
                               >
+                                {overlaps ? <span id={`overlap-${column.id}-${booking.id}`} className="sr-only">Appuntamenti in contemporanea</span> : null}
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
                                     <p className="text-[9px] font-black uppercase tracking-wider text-[#7B6872]">{formatDate(booking.startDate)}</p>
@@ -7049,8 +7256,8 @@ export function AppointmentsBrowser({
                 <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
                   <div>
                     <UsersRound className="mx-auto size-7 text-[#CDA7B9]" />
-                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente disponibile al {boardSalonName}</p>
-                    <p className="mt-1 text-xs font-semibold text-black/40">{boardStaffError || "Controlla che il personale sia attivo e assegnato al salone."}</p>
+                    <p className="mt-3 text-sm font-black text-[#33252C]">{repubblicaBoard && !showEmptyBoardWorkers ? "Nessuna colonna da mostrare" : `Nessun dipendente disponibile al ${boardSalonName}`}</p>
+                    <p className="mt-1 text-xs font-semibold text-black/55">{boardStaffError || (repubblicaBoard && !showEmptyBoardWorkers ? "Puoi mostrare anche il personale fuori turno." : "Controlla che il personale sia attivo e assegnato al salone.")}</p>
                   </div>
                 </div>
               )}
@@ -7058,7 +7265,7 @@ export function AppointmentsBrowser({
           ) : null}
 
           {!normalizedSearch && layoutMode === "table" ? (
-          <section className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]">
+          <section className={`overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px] ${repubblicaBoard ? "bg-white/85" : ""}`}>
             <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#E6D9DF] bg-[#F8F2F5] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#765866] xl:grid">
               <span>Appuntamento</span>
               <span>Cliente</span>
@@ -7704,7 +7911,7 @@ export function AppointmentsBrowser({
         </div>
 
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap gap-2">
+          {!isPC && <div className="flex flex-wrap gap-2">
             {salonOptions.map((option) => (
               <button
                 key={option.value}
@@ -7720,7 +7927,7 @@ export function AppointmentsBrowser({
                 {option.label}
               </button>
             ))}
-          </div>
+          </div>}
 
           <div className="flex flex-wrap items-center gap-2">
             {viewOptions.map((option) => (

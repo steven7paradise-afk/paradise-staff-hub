@@ -214,6 +214,25 @@ html:not(.dark) .paradise-theme-root {
   background: #f6eef2;
 }
 
+.app-content-surface:has(.repubblica-agenda) {
+  background: linear-gradient(155deg, #fff 15%, #faf7f8 100%);
+}
+
+.app-content-surface:has(.repubblica-agenda) .app-liquid-canvas {
+  background: transparent;
+}
+
+.repubblica-agenda-toolbar {
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 1px 2px rgb(61 29 43 / 4%), 0 8px 26px rgb(61 29 43 / 4%);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.dark .repubblica-agenda-toolbar {
+  background: rgb(30 27 32 / 94%);
+}
+
 /* Appuntamenti: le card usano tinte chiare per distinguere gli stati. In
    modalità notte conserviamo quelle differenze con superfici scure colorate,
    evitando testo bianco sopra pannelli rimasti chiari. */
@@ -287,6 +306,14 @@ html:not(.dark) .paradise-theme-root {
   border-color: rgba(255, 255, 255, 0.16) !important;
   border-left-width: 1px !important;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18) !important;
+}
+
+.dark .repubblica-agenda .appointments-board-card[data-appointment-overlap="true"] {
+  box-shadow: inset 0 0 0 2px #53a99f !important;
+}
+
+.dark .repubblica-agenda-legend :is(h2, button, [aria-label="Legenda agenda"]) {
+  color: #e7dfe3;
 }
 
 .dark .appointments-workspace .appointments-board-card:hover {

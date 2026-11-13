@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
+import { appointmentSalonSlugFromName, isCashierAppointmentSalon, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "./appointment-salon-url";
 
 export const appointmentsPcCookieName = "appointments_pc_token";
 export const appointmentsPcWorkerCookieName = "appointments_pc_worker";
@@ -59,38 +60,68 @@ export async function generateOneTimeCode(locationId: string, name: string): Pro
   return code;
 }
 
-export async function activatePC(code: string, ip: string | null): Promise<{ accessToken: string; name: string; locationId: string }> {
+export class PCActivationError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+export async function appointmentSalonForPC(locationId: string) {
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { active: true, name: true },
+  });
+  return location?.active ? appointmentSalonSlugFromName(location.name) : null;
+}
+
+export async function appointmentStaffLocationsForPC(locationId: string, salon: AppointmentSalonSlug) {
+  if (salon !== "repubblica") return [locationId];
+  const locations = await prisma.location.findMany({ select: { id: true, active: true, name: true } });
+  if (!repubblicaIncludesLegacyBuenosAires(locations, locationId)) return [locationId];
+  return [locationId, ...locations
+    .filter((location) => !location.active && appointmentSalonSlugFromName(location.name) === "buenos-aires")
+    .map((location) => location.id)];
+}
+
+export async function isAppointmentStaffLocationForPC(locationId: string, staffLocationId: string) {
+  if (locationId === staffLocationId) return true;
+  const salon = await appointmentSalonForPC(locationId);
+  if (salon !== "repubblica") return false;
+  return (await appointmentStaffLocationsForPC(locationId, salon)).includes(staffLocationId);
+}
+
+export async function activatePC(code: string, ip: string | null) {
   const setting = await prisma.setting.findUnique({
     where: { key: "appointments_authorized_pcs" },
   });
 
   const currentList = Array.isArray(setting?.value) ? (setting.value as unknown as AuthorizedPC[]) : [];
-  const index = currentList.findIndex((item) => item.code === code && item.activatedAt === null);
+  const pc = currentList.find((item) => item.code === code && item.activatedAt === null && !item.archivedAt);
 
-  if (index === -1) {
-    throw new Error("Codice di attivazione non valido o già utilizzato.");
+  if (!setting || !pc) {
+    throw new PCActivationError("Codice di attivazione non valido o già utilizzato.", 410);
+  }
+
+  const salon = await appointmentSalonForPC(pc.locationId);
+  if (!isCashierAppointmentSalon(salon)) {
+    throw new PCActivationError("La sede associata a questo link non è disponibile.", 409);
   }
 
   const accessToken = randomBytes(32).toString("hex");
-  const accessTokenHash = hashToken(accessToken);
-
-  currentList[index] = {
-    ...currentList[index],
+  const activatedPc = {
+    ...pc,
     activatedAt: new Date().toISOString(),
-    accessTokenHash,
+    accessTokenHash: hashToken(accessToken),
     registeredIp: ip,
   };
 
-  await prisma.setting.update({
-    where: { key: "appointments_authorized_pcs" },
-    data: { value: currentList as any },
+  const updated = await prisma.setting.updateMany({
+    where: { key: setting.key, value: { equals: currentList.map((item) => ({ ...item })) } },
+    data: { value: currentList.map((item) => ({ ...(item === pc ? activatedPc : item) })) },
   });
+  if (updated.count !== 1) throw new PCActivationError("Il codice è cambiato durante l’attivazione. Riapri il link e riprova.", 409);
 
-  return {
-    accessToken,
-    name: currentList[index].name,
-    locationId: currentList[index].locationId,
-  };
+  return { accessToken, name: pc.name, locationId: pc.locationId, salon };
 }
 
 export async function reconnectPC(code: string, ip: string | null): Promise<{ accessToken: string; name: string; locationId: string }> {
@@ -153,7 +184,7 @@ export async function verifyOneTimeCode(code: string): Promise<AuthorizedPC> {
   });
 
   const currentList = Array.isArray(setting?.value) ? (setting.value as unknown as AuthorizedPC[]) : [];
-  const pc = currentList.find((item) => item.code === code && item.activatedAt === null);
+  const pc = currentList.find((item) => item.code === code && item.activatedAt === null && !item.archivedAt);
 
   if (!pc) {
     throw new Error("Codice di attivazione non valido o già utilizzato.");

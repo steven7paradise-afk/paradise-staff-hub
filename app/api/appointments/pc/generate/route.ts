@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateOneTimeCode } from "@/lib/appointments-pc-auth";
+import { appointmentSalonForPC, generateOneTimeCode } from "@/lib/appointments-pc-auth";
+import { isCashierAppointmentSalon } from "@/lib/appointment-salon-url";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
 
     if (!locationId || !name) {
       return NextResponse.json({ error: "Sede o nome del PC mancanti." }, { status: 400 });
+    }
+    if (!isCashierAppointmentSalon(await appointmentSalonForPC(locationId))) {
+      return NextResponse.json({ error: "Scegli una sede attiva che supporta il PC Cassa." }, { status: 400 });
     }
 
     const code = await generateOneTimeCode(locationId, name);

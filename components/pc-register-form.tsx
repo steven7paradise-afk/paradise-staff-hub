@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
@@ -15,7 +15,9 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
   const [activatedName, setActivatedName] = useState(initialPcName);
   const [appointmentUrl, setAppointmentUrl] = useState("/appointments");
 
-  const handleActivate = async () => {
+  const handleActivate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (status === "loading") return;
     setStatus("loading");
     setErrorMessage("");
 
@@ -26,10 +28,10 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
         body: JSON.stringify({ code }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
-        throw new Error(data.error || "Impossibile attivare il dispositivo.");
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Impossibile attivare il dispositivo. Riprova.");
       }
 
       setActivatedName(data.name || initialPcName);
@@ -97,7 +99,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
       </div>
 
       {errorMessage && (
-        <div className="flex items-center gap-2.5 p-4 rounded-2xl bg-[#FFF5F6] border border-[#FADCDD] text-xs text-[#A04E59] font-semibold text-left leading-relaxed">
+        <div role="alert" className="flex items-center gap-2.5 p-4 rounded-2xl bg-[#FFF5F6] border border-[#FADCDD] text-xs text-[#A04E59] font-semibold text-left leading-relaxed">
           <AlertCircle size={16} className="shrink-0 text-[#A04E59]" />
           <span>{errorMessage}</span>
         </div>
@@ -112,17 +114,17 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
         Clicca sul pulsante qui sotto per confermare l'attivazione e registrare questo computer come cassa del salone.
       </p>
 
-      <div className="pt-4">
+      <form action="/api/appointments/pc/register" method="post" onSubmit={handleActivate} className="pt-4">
+        <input type="hidden" name="code" value={code} />
         <button
-          type="button"
-          onClick={handleActivate}
+          type="submit"
           disabled={status === "loading"}
           className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition disabled:opacity-50"
         >
           {status === "loading" && <Loader2 className="size-4 animate-spin text-white" />}
           <span>{status === "loading" ? "ATTIVAZIONE..." : "CONFERMA E ATTIVA PC"}</span>
         </button>
-      </div>
+      </form>
     </div>
   );
 }

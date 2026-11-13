@@ -10,7 +10,7 @@ test("PC registration dialog is included in the reachable appointment workspace"
   function visit(node: ts.Node) {
     if (ts.isReturnStatement(node) && node.expression) {
       const body = node.expression.getText(tree);
-      if (body.includes('className="appointments-workspace w-full"')) workspaceReturn = body;
+      if (/className=(?:"|\{`)appointments-workspace w-full\b/.test(body)) workspaceReturn = body;
     }
     ts.forEachChild(node, visit);
   }

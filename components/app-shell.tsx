@@ -25,6 +25,9 @@ import pkg from "@/package.json";
 import { redirect } from "next/navigation";
 import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
 import { resolveSidebarLayout, type SidebarFolder } from "@/lib/sidebar-layout";
+import { cookies } from "next/headers";
+import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonForPC, appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -108,11 +111,18 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcSalon, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcSalon?: AppointmentSalonSlug | null; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
   const [session, branding] = await Promise.all([getRenderSession(), getBrandingTheme()]);
   const isPcCassa = pcMode;
   if (!session?.user?.id && !isPcCassa) redirect("/login");
-  const pcProfileChooserHref = pcProfileChooserHrefOverride || "/appointments/buenos-aires?choose=1";
+  let activePcSalon = pcSalon;
+  if (isPcCassa && activePcSalon === undefined) {
+    const token = (await cookies()).get(appointmentsPcCookieName)?.value;
+    const device = await checkPCAuthorization(token);
+    if (device) activePcSalon = await appointmentSalonForPC(device.locationId);
+  }
+  const pcAppointmentsHref = appointmentSalonUrl(activePcSalon || "buenos-aires");
+  const pcProfileChooserHref = pcProfileChooserHrefOverride || `${pcAppointmentsHref}?choose=1`;
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
   const settingsKeys = [
@@ -427,11 +437,11 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     // layout personalizzato dei dipendenti, che potrebbe non contenere queste
     // pagine e lasciare quindi visibile una sidebar completamente vuota.
     sidebarItems = [
-      { href: "/appointments/buenos-aires", label: "Appuntamenti", iconName: "CalendarDays", section: "", badge: undefined },
+      { href: pcAppointmentsHref, label: "Appuntamenti", iconName: "CalendarDays", section: "", badge: undefined },
       { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "", badge: undefined },
       { href: "/shopify-orders", label: "Ordini Shopify", iconName: "ShoppingCart", section: "", badge: undefined },
     ];
-    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms", "/shopify-orders"] }];
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: [pcAppointmentsHref, "/service-forms", "/shopify-orders"] }];
   }
   const aside = (
       <aside className={cn(
@@ -504,7 +514,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             name={displayUser?.name ?? session?.user?.name ?? "Paradise"}
             photoUrl={displayUser?.photo_url ? resolveDrivePhotoUrl(displayUser.photo_url) : null}
             userId={isPcCassa ? "PC_CASSA" : session?.user?.id || ""}
-            profileHref={isPcCassa ? "/appointments/buenos-aires?choose=1" : "/profile"}
+            profileHref={isPcCassa ? pcProfileChooserHref : "/profile"}
           />
         </div> : null}
         <div className="sr-only">

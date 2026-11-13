@@ -16,6 +16,9 @@ test("the cashier PC remains locked out of unrelated protected areas", () => {
 });
 
 test("the outer cashier lock allows operational pages without opening administrative APIs", () => {
+  assert.equal(isPcCassaProxyAllowedPath("/appointments/register"), true);
+  assert.equal(isPcCassaProxyAllowedPath("/appointments/repubblica"), true);
+  assert.equal(isPcCassaProxyAllowedPath("/appointments/repubblica/settings"), false);
   assert.equal(isPcCassaProxyAllowedPath("/shopify-orders"), true);
   assert.equal(isPcCassaProxyAllowedPath("/client-control/giornata"), true);
   assert.equal(isPcCassaProxyAllowedPath("/api/service-forms"), true);

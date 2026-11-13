@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { appointmentSalonSlugFromName, appointmentSalonUrl } from "@/lib/appointment-salon-url";
-import { appointmentsPcCookieName, checkPCAuthorization, verifyOneTimeCode } from "@/lib/appointments-pc-auth";
-import { prisma } from "@/lib/prisma";
+import { appointmentSalonUrl } from "@/lib/appointment-salon-url";
+import { appointmentSalonForPC, appointmentsPcCookieName, checkPCAuthorization, verifyOneTimeCode } from "@/lib/appointments-pc-auth";
 import { PcRegisterForm } from "@/components/pc-register-form";
 
 export const dynamic = "force-dynamic";
@@ -21,15 +20,14 @@ export default async function AppointmentsRegisterPage({
 
   const cookieStore = await cookies();
   const existingPcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
-  if (existingPcAuth) {
-    const location = await prisma.location.findUnique({
-      where: { id: existingPcAuth.locationId },
-      select: { name: true },
-    });
-    existingAppointmentUrl = `${appointmentSalonUrl(appointmentSalonSlugFromName(location?.name))}?choose=1`;
+  if (existingPcAuth && (!code || existingPcAuth.code === code) && resolvedSearchParams.activation !== "retry") {
+    const salon = await appointmentSalonForPC(existingPcAuth.locationId);
+    if (salon) existingAppointmentUrl = `${appointmentSalonUrl(salon)}?choose=1`;
   }
 
-  if (!code) {
+  if (resolvedSearchParams.activation === "retry") {
+    error = "Impossibile attivare il dispositivo. Riapri il link originale e riprova.";
+  } else if (!code) {
     error = "Codice di attivazione mancante. Usa un link di registrazione valido.";
   } else {
     try {
@@ -104,11 +102,8 @@ export default async function AppointmentsRegisterPage({
             </p>
 
             <div className="pt-4">
-              <Link
-                href="/appointments/buenos-aires?choose=1"
-                className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition"
-              >
-                Apri agenda Buenos Aires
+              <Link href="/appointments" className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition">
+                Torna agli appuntamenti
               </Link>
             </div>
           </div>

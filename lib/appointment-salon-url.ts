@@ -1,4 +1,4 @@
-export type AppointmentSalonSlug = "buenos-aires" | "duomo" | "ufficio";
+export type AppointmentSalonSlug = "buenos-aires" | "repubblica" | "duomo" | "ufficio";
 
 export function appointmentSalonSlugFromName(value?: string | null): AppointmentSalonSlug | null {
   const source = String(value ?? "")
@@ -6,6 +6,7 @@ export function appointmentSalonSlugFromName(value?: string | null): Appointment
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
+  if (source.includes("repubblica")) return "repubblica";
   if (source.includes("buenos") || source.includes("corso")) return "buenos-aires";
   if (source.includes("duomo")) return "duomo";
   if (source.includes("ufficio")) return "ufficio";
@@ -17,17 +18,27 @@ export function normalizeAppointmentSalonSlug(value?: string | string[] | null):
   const slug = String(raw ?? "")
     .trim()
     .toLowerCase()
-    .replace(/^salone-/, "")
-    .replace(/^salone_/, "")
-    .replace(/\s+/g, "-");
+    .replace(/\s+/g, "-")
+    .replace(/^salone[-_]/, "");
 
   if (slug === "buenos" || slug === "corso" || slug === "corso-buenos-aires") return "buenos-aires";
-  if (slug === "buenos-aires" || slug === "duomo" || slug === "ufficio") return slug;
+  if (slug === "buenos-aires" || slug === "repubblica" || slug === "duomo" || slug === "ufficio") return slug;
   return null;
 }
 
 export function appointmentSalonUrl(slug?: AppointmentSalonSlug | null) {
   return slug ? `/appointments/${slug}` : "/appointments";
+}
+
+export function isCashierAppointmentSalon(salon: AppointmentSalonSlug | null): salon is "repubblica" | "buenos-aires" {
+  return salon === "repubblica" || salon === "buenos-aires";
+}
+
+export function repubblicaIncludesLegacyBuenosAires(locations: { id: string; active: boolean; name: string }[], locationId: string) {
+  const activeLocations = locations.filter((location) => location.active);
+  const republica = activeLocations.filter((location) => appointmentSalonSlugFromName(location.name) === "repubblica");
+  return republica.length === 1 && republica[0].id === locationId &&
+    !activeLocations.some((location) => appointmentSalonSlugFromName(location.name) === "buenos-aires");
 }
 
 export function isSameAppointmentDestination(currentHref: string, destination: string) {

@@ -19,7 +19,7 @@ import { hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
-import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
 import { syncSystemazioneFasceTable } from "@/lib/systemazione-fasce-table";
 
@@ -267,7 +267,7 @@ export default async function AppointmentsPage({
   const hasAdministratorSession = Boolean(
     session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
   );
-  const pcAuth = hasAdministratorSession ? null : await checkPCAuthorization(pcToken);
+  const pcAuth = !hasAdministratorSession || forcePcSalon ? await checkPCAuthorization(pcToken) : null;
   if (pcAuth) {
     isPC = true;
     pcLocationId = pcAuth.locationId;
@@ -280,8 +280,8 @@ export default async function AppointmentsPage({
     } as any;
   }
 
-  const forcedPcSalon = forcePcSalon || (isAdminRemoteController ? requestedSalon || "buenos-aires" : null);
-  if (forcedPcSalon && (pcAuth || isAdminRemoteController)) {
+  const forcedPcSalon = isAdminRemoteController ? requestedSalon || "buenos-aires" : null;
+  if (forcedPcSalon && !pcAuth) {
     const forcedLocation = await prisma.location.findFirst({
       where: {
         active: true,
@@ -311,7 +311,6 @@ export default async function AppointmentsPage({
   const requestedView = resolvedSearchParams?.view;
   const initialView = requestedView === "week" || requestedView === "month" ? requestedView : "day";
   const requestedFocus = parseLocalDateParam(resolvedSearchParams?.focus);
-  const appointmentRange = resolveAppointmentsRange(resolvedSearchParams);
   const kioskWorkerName = typeof resolvedSearchParams?.worker === "string" ? resolvedSearchParams.worker.trim() : "";
 
   const role = sessionUser.role as Role;
@@ -344,7 +343,18 @@ export default async function AppointmentsPage({
 
   if (!canView) redirect("/dashboard");
 
-  const isArchive = resolvedSearchParams.scope === "all";
+  const locationsPromise = prisma.location.findMany({
+    where: { active: true },
+    select: { id: true, name: true, active: true },
+  });
+  const locations = isPC ? await locationsPromise : null;
+  const pcSalon = isPC
+    ? appointmentSalonSlugFromName(locations?.find((location) => location.id === pcLocationId)?.name)
+    : null;
+  const isRepubblicaPc = pcSalon === "repubblica";
+  const allowLegacyBuenosAires = Boolean(isRepubblicaPc && locations && repubblicaIncludesLegacyBuenosAires(locations, pcLocationId));
+  const isArchive = resolvedSearchParams.scope === "all" && !isRepubblicaPc;
+  const appointmentRange = resolveAppointmentsRange(isRepubblicaPc ? { ...resolvedSearchParams, scope: undefined } : resolvedSearchParams);
   const updateOnChange = repubblicaBoard && !isPC;
   const appointmentRevision = updateOnChange && appointmentsRealtimeEnabled()
     ? await readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end)
@@ -359,27 +369,24 @@ export default async function AppointmentsPage({
 
   // These reads are independent. Starting Cowlendar together with the local
   // lookups saves an entire network round-trip on every appointments load.
-  const [localUsers, locations, bookings] = await Promise.all([
+  const [localUsers, activeLocations, bookings] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
-      select: { id: true, name: true, role: true, photo_url: true, mansione: true, location: { select: { name: true } } },
+      select: { id: true, name: true, role: true, photo_url: true, mansione: true, sede_id: true, location: { select: { active: true, name: true } } },
     }),
-    prisma.location.findMany({
-      where: { active: true },
-      select: { id: true, name: true },
-    }),
+    locations ?? locationsPromise,
     bookingsPromise,
   ]);
-  const pcSalon = isPC
-    ? appointmentSalonSlugFromName(locations.find((location) => location.id === pcLocationId)?.name)
-    : null;
-  const initialSalon = requestedSalon || pcSalon || "tutti";
+  const initialSalon = pcSalon || requestedSalon || "tutti";
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
 
-  const corsoUsers = localUsers.filter((user) =>
-    isCorsoLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || normalizeName(user.name) === "franci"
-  );
+  const corsoUsers = localUsers.filter((user) => isRepubblicaPc
+    ? user.sede_id === pcLocationId || (allowLegacyBuenosAires && user.location?.active === false && isCorsoLocation(user.location.name)) || normalizeName(user.name) === "franci"
+    : isCorsoLocation(user.location?.name) || appointmentSalonSlugFromName(user.location?.name) === "repubblica" || canWorkAcrossAppointmentLocations(user.role) || normalizeName(user.name) === "franci");
+  const teamLocationName = (user: (typeof localUsers)[number]) => isRepubblicaPc && user.sede_id !== pcLocationId && user.location?.active === false && isCorsoLocation(user.location.name)
+    ? "Salone Repubblica"
+    : user.location?.name;
   const pcDisplayUser = (isPC || isAdminRemoteController) && kioskWorkerName
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
     : null;
@@ -395,7 +402,7 @@ export default async function AppointmentsPage({
       id: matchedUser.id,
       name: matchedUser.name,
       role: matchedUser.role,
-      locationName: matchedUser.location?.name,
+      locationName: teamLocationName(matchedUser),
       photoUrl: matchedUser.photo_url || mate.thumbnail || null,
     });
   }
@@ -407,7 +414,7 @@ export default async function AppointmentsPage({
       id: user.id,
       name: user.name,
       role: user.role,
-      locationName: user.location?.name,
+      locationName: teamLocationName(user),
       photoUrl: user.photo_url || null,
     });
   }
@@ -513,12 +520,15 @@ export default async function AppointmentsPage({
         })
         .filter((s): s is "duomo" | "buenos-aires" | "repubblica" | "ufficio" => s !== null && s !== "altro");
 
-      const inferredSalon: "duomo" | "buenos-aires" | "repubblica" | "ufficio" | "altro" =
-        teammateSalons.find((s) => s === "buenos-aires" || s === "duomo" || s === "repubblica") ||
-        [booking.service?.title, booking.booking_str, ...(booking.teammates ?? []).map((mate) => `${mate.firstname ?? ""} ${mate.lastname ?? ""}`)]
-          .map(getSalonFromText)
-          .find((value) => value !== "altro") ||
-        "altro";
+      const bookingSalon = [booking.service?.title, booking.booking_str].map(getSalonFromText).find((value) => value !== "altro");
+      const inferredSalon: AppointmentSalonSlug | "altro" = (isRepubblicaPc ? bookingSalon : null) ||
+        teammateSalons.find((salon) => salon === "buenos-aires" || salon === "duomo" || salon === "repubblica") ||
+        bookingSalon ||
+        (booking.teammates ?? []).map((mate) => getSalonFromText(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`))
+          .find((value) => value !== "altro") || "altro";
+      if (isRepubblicaPc && inferredSalon !== "repubblica" && !(allowLegacyBuenosAires && inferredSalon === "buenos-aires")) {
+        return null;
+      }
 
       const usedKeys = new Set([
         "id",
@@ -627,6 +637,7 @@ export default async function AppointmentsPage({
         extraDetails,
       };
     })
+    .filter((booking) => booking !== null)
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
   if (!isArchive) after(async () => {
@@ -646,6 +657,7 @@ export default async function AppointmentsPage({
       role={role}
       hideHeader
       pcMode={isPC}
+      pcSalon={pcSalon}
       pcDisplayUser={pcDisplayUser ? { name: pcDisplayUser.name, photo_url: pcDisplayUser.photo_url } : kioskWorkerName ? { name: kioskWorkerName, photo_url: null } : null}
       remoteController={isAdminRemoteController}
       pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/${requestedSalon || "buenos-aires"}?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
@@ -682,8 +694,8 @@ export default async function AppointmentsPage({
         initialAnchorDate={requestedFocus || appointmentDateKey()}
         initialRangeFrom={appointmentRange.start}
         initialRangeTo={appointmentRange.end}
-        initialScopeAll={resolvedSearchParams?.scope === "all"}
-        locations={locations}
+        initialScopeAll={isArchive}
+        locations={activeLocations}
         navigationBasePath={navigationBasePath}
         pageTitle={pageTitle}
         pageSubtitle={pageSubtitle}

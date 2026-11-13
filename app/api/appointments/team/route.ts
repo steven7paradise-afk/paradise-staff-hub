@@ -1,3 +1,4 @@
+import { appointmentSalonSlugFromName, isCashierAppointmentSalon } from "@/lib/appointment-salon-url";
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
 import { NextRequest, NextResponse } from "next/server";
 import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
@@ -38,14 +39,6 @@ type StaffAlias = {
 function normalizeStaffAliases(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, StaffAlias>;
-}
-
-function isBuenosAiresLocation(value?: string | null) {
-  const normalized = (value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  return normalized.includes("buenos") || normalized.includes("corso");
 }
 
 function isFranci(value?: string | null) {
@@ -118,7 +111,7 @@ export async function POST(request: NextRequest) {
     });
     const usersById = new Map(
       activeUsers
-        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
+        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isCashierAppointmentSalon(appointmentSalonSlugFromName(user.location?.name)) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
         .map((user) => [user.id, user]),
     );
     const teammates = requestedIds.flatMap((id) => {
@@ -147,7 +140,7 @@ export async function POST(request: NextRequest) {
     const shopifyTeammateNames = formatShopifyStaffNames(
       teammates.map((teammate) => teammate.name),
       salonRoster
-        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isBuenosAiresLocation(user.location?.name) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
+        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isCashierAppointmentSalon(appointmentSalonSlugFromName(user.location?.name)) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
         .map((user) => user.name),
     ).join(", ");
 

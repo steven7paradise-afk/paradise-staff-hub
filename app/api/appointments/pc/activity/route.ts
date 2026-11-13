@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization, isAppointmentStaffLocationForPC } from "@/lib/appointments-pc-auth";
 import { appointmentSessionRemainingSeconds } from "@/lib/appointment-idle-session";
 import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
 import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   });
   const privileged = worker && (isAppointmentPinOnlyRole(worker.role) || isAlwaysActiveAppointmentStaff(worker.name, worker.id));
   if (!worker || (!privileged && (
-    (worker.sede_id !== null && worker.sede_id !== pc.locationId) ||
+    (worker.sede_id !== null && !(await isAppointmentStaffLocationForPC(pc.locationId, worker.sede_id))) ||
     !["IN", "BREAK"].includes(deriveAttendanceState(worker.attendance_logs).status)
   ))) return NextResponse.json({ error: "Profilo non disponibile." }, { status: 401 });
   const response = NextResponse.json({ success: true }, { headers: { "Cache-Control": "private, no-store" } });
