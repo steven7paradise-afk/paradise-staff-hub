@@ -69,19 +69,45 @@ export default async function TabletClockPage({
     if (params.device) nextParams.set("device", params.device);
     redirect(`/tablet-clock/nfc?${nextParams.toString()}`);
   }
-  const [cookieStore, headerStore, session] = await Promise.all([
-    cookies(),
-    headers(),
-    auth()
-  ]);
-  const requestedDevice = params.device ?? cookieStore.get(tabletDeviceCookieName)?.value ?? "";
-  
-  let device = null;
-  let branding = null;
-  let tabletBranding = null;
-  let clientControlFormId: string | null = null;
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  // An old shortcut may still point at the device ID used before reactivation.
+  const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? params.device ?? "";
+  const branding = getBrandingTheme().catch(() => undefined);
+  let authorizationUnavailable = false;
+  const device = await authorizedTablet(
+    requestedDevice,
+    cookieStore.get(tabletCookieName)?.value,
+    requestIp(headerStore),
+  ).catch((error) => {
+    console.error("Error checking tablet authorization:", error);
+    authorizationUnavailable = true;
+    return null;
+  });
+
+  if (!device) {
+    return (
+      <TabletClock
+        device={null}
+        branding={await branding}
+        clientControlFormId={null}
+        authorizationUnavailable={authorizationUnavailable}
+      />
+    );
+  }
+
+  const tabletBranding = prisma.setting
+    .findUnique({ where: { key: "tablet_branding" } })
+    .then((setting) => (setting?.value ?? null) as React.ComponentProps<typeof TabletClock>["tabletBranding"])
+    .catch(() => null);
+  const clientControlFormId = auth()
+    .then((session) => ensureClientControlForm(session?.user?.id ?? null))
+    .then((form) => form.active ? form.id : null)
+    .catch((error) => {
+      console.error("Error loading the tablet client control form:", error);
+      return null;
+    });
   let todayAppointments = [] as any[];
-  
+
   try {
     const now = new Date();
     // Format start of today and end of tomorrow in Europe/Rome timezone
@@ -91,10 +117,7 @@ export default async function TabletClockPage({
     const startIso = `${romeDateTodayStr}T00:00:00.000Z`;
     const endIso = `${romeDateTomorrowStr}T23:59:59.999Z`;
 
-    const [dev, brand, tabletSetting, bookingsRaw, localUsers, clientControlResponses] = await Promise.all([
-      authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)),
-      getBrandingTheme(),
-      prisma.setting.findUnique({ where: { key: "tablet_branding" } }),
+    const [bookingsRaw, localUsers, clientControlResponses] = await Promise.all([
       hasCowlendarToken()
         ? getCowlendarBookingsForRange({
             startDate: startIso,
@@ -124,20 +147,13 @@ export default async function TabletClockPage({
       })
     ]);
 
-    device = dev;
-    branding = brand;
-    tabletBranding = tabletSetting ? (tabletSetting.value as any) : null;
-    
-    if (dev?.location?.id) {
-      const clientControlForm = await ensureClientControlForm(session?.user?.id ?? null);
-      clientControlFormId = clientControlForm.active ? clientControlForm.id : null;
-
+    if (device.location?.id) {
       const orderIds = bookingsRaw.map((b) => b.order_id).filter(Boolean);
       const shopifyOrderNames = await getShopifyOrderNamesBulk(orderIds);
 
 
       // Filter today's appointments for this salon!
-      const salonLower = dev.location.name.toLowerCase();
+      const salonLower = device.location.name.toLowerCase();
       const targetSalonKey: "duomo" | "buenos-aires" | "altro" =
         salonLower.includes("duomo") ? "duomo" :
         (salonLower.includes("buenos aires") || salonLower.includes("corso buenos aires")) ? "buenos-aires" :
@@ -293,21 +309,19 @@ export default async function TabletClockPage({
       todayAppointments = activeTodayBookings;
     }
   } catch (error) {
-    console.error("Error loading tablet page data:", error);
-    // Safe fallbacks
-    branding = await getBrandingTheme();
+    console.error("Error loading tablet appointments:", error);
   }
 
   return (
     <TabletClock
-      device={device ? {
+      device={{
         id: device.device_id,
         name: device.device_name,
         locationName: device.location.name,
-      } : null}
-      branding={branding}
-      tabletBranding={tabletBranding}
-      clientControlFormId={clientControlFormId}
+      }}
+      branding={await branding}
+      tabletBranding={await tabletBranding}
+      clientControlFormId={await clientControlFormId}
       todayAppointments={todayAppointments}
       badgeToken={params.badge ?? null}
     />

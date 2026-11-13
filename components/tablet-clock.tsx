@@ -399,6 +399,7 @@ export function TabletClock({
   clientControlFormId,
   todayAppointments = [],
   badgeToken,
+  authorizationUnavailable = false,
 }: {
   device: TabletDevice | null;
   branding?: BrandingTheme;
@@ -406,6 +407,7 @@ export function TabletClock({
   clientControlFormId: string | null;
   todayAppointments?: any[];
   badgeToken?: string | null;
+  authorizationUnavailable?: boolean;
 }) {
   const router = useRouter();
 
@@ -1785,7 +1787,18 @@ export function TabletClock({
       >
         <div className="rounded-[28px] border border-[#eadfd6] bg-white/80 px-10 py-12 text-center shadow-lg">
           <ShieldCheck className="mx-auto size-12 text-red-500" />
-          <p className="mt-5 text-xl font-semibold">Dispositivo non autorizzato alla timbratura</p>
+          <h1 className="mt-5 text-xl font-semibold">
+            {authorizationUnavailable ? "Verifica del tablet non disponibile" : "Dispositivo non autorizzato alla timbratura"}
+          </h1>
+          {authorizationUnavailable ? (
+            <button type="button" className="mt-4 min-h-11 rounded-xl bg-black px-5 text-white" onClick={() => router.refresh()}>
+              Riprova
+            </button>
+          ) : (
+            <p className="mx-auto mt-3 max-w-md text-sm">
+              Da Impostazioni → Dispositivi, genera un link di attivazione e aprilo sul tablet, nel browser che usi per timbrare e dalla rete del salone.
+            </p>
+          )}
         </div>
       </main>
     );
