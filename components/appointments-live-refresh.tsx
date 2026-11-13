@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 export function AppointmentsLiveRefresh({
@@ -8,17 +8,25 @@ export function AppointmentsLiveRefresh({
   from,
   to,
   paused = false,
+  onRosterChange,
 }: {
   revision: string | null;
   from: string;
   to: string;
   paused?: boolean;
+  onRosterChange?: (revision: string) => void;
 }) {
   const router = useRouter();
   const [nextRevision, setNextRevision] = useState<string | null>(null);
   const [refreshing, startTransition] = useTransition();
-  const lastRequested = useRef<string | null>(null);
+  const lastRequested = useRef<{ fromRevision: string; toRevision: string } | null>(null);
   const enabled = revision !== null;
+  const receiveRevision = useEffectEvent((incoming: string) => {
+    setNextRevision(incoming === revision ? null : incoming);
+  });
+  const updateRoster = useEffectEvent((rosterRevision: string) => {
+    onRosterChange?.(rosterRevision);
+  });
 
   useEffect(() => {
     if (!enabled) return;
@@ -32,7 +40,10 @@ export function AppointmentsLiveRefresh({
       stream = source;
       source.addEventListener("open", () => { delay = 2000; });
       source.addEventListener("appointments.changed", (event: MessageEvent<string>) => {
-        if (event.data) setNextRevision(event.data);
+        if (event.data) receiveRevision(event.data);
+      });
+      source.addEventListener("roster.changed", (event: MessageEvent<string>) => {
+        if (event.data) updateRoster(event.data);
       });
       source.addEventListener("error", () => {
         // Native EventSource reconnects after a dropped stream. Reopen only
@@ -54,15 +65,16 @@ export function AppointmentsLiveRefresh({
   }, [enabled, from, to]);
 
   useEffect(() => {
-    if (!enabled || paused || refreshing || !nextRevision ||
-        nextRevision === revision || nextRevision === lastRequested.current) return;
+    if (!revision || paused || refreshing || !nextRevision || nextRevision === revision) return;
+    if (lastRequested.current?.fromRevision === revision &&
+        lastRequested.current.toRevision === nextRevision) return;
     let timer: number | undefined;
     const refreshIfVisible = () => {
       if (document.hidden) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         if (document.hidden) return;
-        lastRequested.current = nextRevision;
+        lastRequested.current = { fromRevision: revision, toRevision: nextRevision };
         startTransition(() => router.refresh());
       }, 250);
     };
@@ -73,7 +85,7 @@ export function AppointmentsLiveRefresh({
       window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [enabled, nextRevision, paused, refreshing, revision, router, startTransition]);
+  }, [nextRevision, paused, refreshing, revision, router, startTransition]);
 
   return null;
 }

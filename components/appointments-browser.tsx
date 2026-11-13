@@ -1321,6 +1321,7 @@ export function AppointmentsBrowser({
   const [view, setView] = useState<ViewMode>(initialView);
   const [layoutMode, setLayoutMode] = useState<"table" | "board">("board");
   const boardSalonName = repubblicaBoard ? "Salone Repubblica" : "Salone Corso";
+  const [boardRosterRevision, setBoardRosterRevision] = useState("initial");
   const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
   const [boardStaffLoading, setBoardStaffLoading] = useState(false);
   const [boardStaffError, setBoardStaffError] = useState("");
@@ -1475,7 +1476,7 @@ export function AppointmentsBrowser({
       controller.abort();
       window.clearInterval(interval);
     };
-  }, [layoutMode, repubblicaBoard, rosterSnapshot]);
+  }, [boardRosterRevision, layoutMode, repubblicaBoard, rosterSnapshot]);
 
   useEffect(() => {
     try {
@@ -4851,7 +4852,9 @@ export function AppointmentsBrowser({
     <div className="relative min-h-screen bg-transparent text-[#1C1C1C]">
       {repubblicaBoard && initialRangeFrom && initialRangeTo ? (
         <AppointmentsLiveRefresh
+          key={`${initialRangeFrom}:${initialRangeTo}`}
           revision={appointmentRevision}
+          onRosterChange={setBoardRosterRevision}
           from={initialRangeFrom}
           to={initialRangeTo}
           paused={Boolean(clientControlOpen || selectedBookingId || quickNoteBookingId ||

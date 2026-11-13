@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { BOOKING_EVENTS, verifyCowlendarSignature } from "@/lib/cowlendar-webhook";
-import { APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "@/lib/appointment-realtime";
+import { APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL, APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "@/lib/appointment-realtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
         create: { key: APPOINTMENT_ARCHIVE_INVALIDATION_KEY, value: revision },
         update: { value: revision },
       });
+      await tx.$queryRaw`SELECT pg_notify(${APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL}, ${revision})::text`;
       await publishAppointmentChange(tx);
     }, { timeout: 8000 });
     return Response.json({ ok: true });

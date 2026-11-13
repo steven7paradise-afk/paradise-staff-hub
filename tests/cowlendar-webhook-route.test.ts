@@ -16,7 +16,7 @@ test("webhook authenticates before database access and only acknowledges committ
   let transactions = 0;
   let duplicate = false;
   let fail = false;
-  let notifications = 0;
+  const notifications: string[] = [];
   let invalidations = 0;
   let archiveInvalidations = 0;
   const originalTransaction = prisma.$transaction;
@@ -28,7 +28,7 @@ test("webhook authenticates before database access and only acknowledges committ
       createMany: async () => ({ count: duplicate ? 0 : 1 }),
       deleteMany: async () => { invalidations++; },
       upsert: async () => ({}),
-    }, $executeRaw: async () => { archiveInvalidations++; }, $queryRaw: async () => { notifications++; } });
+    }, $executeRaw: async () => { archiveInvalidations++; }, $queryRaw: async (_: TemplateStringsArray, channel: string) => { notifications.push(channel); } });
   }) as typeof prisma.$transaction;
   function request(type = "booking.created", shop = "example.myshopify.com", signed = true) {
     const timestamp = String(Math.floor(Date.now() / 1000));
@@ -45,12 +45,12 @@ test("webhook authenticates before database access and only acknowledges committ
   assert.equal((await POST(request("subscription.created"))).status, 200);
   assert.equal(transactions, 0);
   assert.equal((await POST(request())).status, 200);
-  assert.equal(notifications, 1);
+  assert.deepEqual(notifications, ["paradise_appointment_archive_invalidated", "paradise_appointment_changes"]);
   assert.equal(invalidations, 1);
   assert.equal(archiveInvalidations, 1);
   duplicate = true;
   assert.equal((await POST(request())).status, 200);
-  assert.equal(notifications, 1);
+  assert.equal(notifications.length, 2);
   fail = true;
   assert.equal((await POST(request())).status, 503);
   process.env.APPOINTMENTS_REALTIME_ENABLED = "false";

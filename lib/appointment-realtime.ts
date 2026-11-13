@@ -4,13 +4,11 @@ import { prisma } from "./prisma";
 import { APPOINTMENT_EVENTS_CHANNEL, APPOINTMENT_REVISION_KEY } from "./cowlendar-webhook";
 
 export const APPOINTMENT_ARCHIVE_INVALIDATION_KEY = "appointment_archive_invalidation_revision";
+export const APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL = "paradise_appointment_archive_invalidated";
 
-export async function readAppointmentRevision(): Promise<string | null> {
-  if (process.env.APPOINTMENTS_REALTIME_ENABLED !== "true" || !process.env.APPOINTMENTS_REALTIME_DATABASE_URL) {
-    return null;
-  }
-  const setting = await prisma.setting.findUnique({ where: { key: APPOINTMENT_REVISION_KEY }, select: { value: true } });
-  return typeof setting?.value === "string" ? setting.value : "initial";
+export function appointmentsRealtimeEnabled() {
+  return process.env.APPOINTMENTS_REALTIME_ENABLED === "true" &&
+    Boolean(process.env.APPOINTMENTS_REALTIME_DATABASE_URL);
 }
 
 export async function publishAppointmentChange(tx: Prisma.TransactionClient) {

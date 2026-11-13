@@ -1,6 +1,7 @@
 import { appointmentCustomerPhone } from "@/lib/appointment-visits";
 import { readAppointmentArchive, scheduleAppointmentArchive } from "@/lib/appointment-archive";
-import { readAppointmentRevision } from "@/lib/appointment-realtime";
+import { appointmentsRealtimeEnabled } from "@/lib/appointment-realtime";
+import { readAppointmentRangeRevision } from "@/lib/appointment-range-revision";
 import { AppointmentsLiveRefresh } from "@/components/appointments-live-refresh";
 import { AppointmentArchiveStatus } from "@/components/appointment-archive-status";
 import { AppointmentArchiveBrowser } from "@/components/appointment-archive-browser";
@@ -345,8 +346,9 @@ export default async function AppointmentsPage({
 
   const isArchive = resolvedSearchParams.scope === "all";
   const updateOnChange = repubblicaBoard && !isPC;
-  // Read the revision before the data so a change during render is replayed.
-  const appointmentRevision = updateOnChange ? await readAppointmentRevision().catch(() => "initial") : null;
+  const appointmentRevision = updateOnChange && appointmentsRealtimeEnabled()
+    ? await readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end)
+    : null;
   const archive = await readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
     ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
   });
@@ -658,7 +660,7 @@ export default async function AppointmentsPage({
 
       <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} updatedAt={archive.updatedAt} stale={updateOnChange ? archive.invalidated : archive.stale} updateOnChange={updateOnChange} />
       {updateOnChange && (isArchive || waitingForArchive) ? (
-        <AppointmentsLiveRefresh revision={appointmentRevision} from={appointmentRange.start} to={appointmentRange.end} />
+        <AppointmentsLiveRefresh key={`${appointmentRange.start}:${appointmentRange.end}`} revision={appointmentRevision} from={appointmentRange.start} to={appointmentRange.end} />
       ) : null}
       {isArchive ? <AppointmentArchiveBrowser
         month={appointmentRange.start.slice(0, 7)} query={String(resolvedSearchParams.q || "")}

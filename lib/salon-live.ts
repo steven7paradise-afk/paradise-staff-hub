@@ -3,6 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { APPOINTMENT_EVENTS_CHANNEL, APPOINTMENT_REVISION_KEY } from "./cowlendar-webhook";
 import { appointmentSalonSlugFromName } from "./appointment-salon-url";
+export const APPOINTMENT_ROSTER_EVENTS_CHANNEL = "paradise_appointment_roster_changes";
+export const APPOINTMENT_ROSTER_REVISION_KEY = "appointments_roster_revision";
+
 export class SalonLiveError extends Error {}
 export async function bookingDeskLocation(serviceTitle: string, fallbackLocationId: string) {
   const slug = appointmentSalonSlugFromName(serviceTitle);
@@ -17,9 +20,21 @@ export async function liveChanged(tx: Prisma.TransactionClient) {
   const revision = randomUUID();
   await tx.setting.upsert({ where: { key: APPOINTMENT_REVISION_KEY }, create: { key: APPOINTMENT_REVISION_KEY, value: revision }, update: { value: revision } });
   await tx.$queryRaw`SELECT pg_notify(${APPOINTMENT_EVENTS_CHANNEL}, ${revision})::text`;
+  return revision;
 }
-// Also refresh clients on attendance changes without sending personal data through NOTIFY.
-export async function publishLiveChange() { await prisma.$transaction(liveChanged); }
+
+// Older clients also rely on the general notification for attendance.
+export async function publishLiveChange() {
+  await prisma.$transaction(async (tx) => {
+    const revision = await liveChanged(tx);
+    await tx.setting.upsert({
+      where: { key: APPOINTMENT_ROSTER_REVISION_KEY },
+      create: { key: APPOINTMENT_ROSTER_REVISION_KEY, value: revision },
+      update: { value: revision },
+    });
+    await tx.$queryRaw`SELECT pg_notify(${APPOINTMENT_ROSTER_EVENTS_CHANNEL}, ${revision})::text`;
+  });
+}
 
 export async function productByBarcode(barcode: string) {
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
