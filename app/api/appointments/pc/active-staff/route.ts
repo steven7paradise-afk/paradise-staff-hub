@@ -27,13 +27,15 @@ function normalizeStaffAliases(value: unknown) {
 export async function GET(request: NextRequest) {
   const requestedSalon = request.nextUrl.searchParams.get("salone");
   const salonSlug = requestedSalon === "repubblica" ? requestedSalon : normalizeAppointmentSalonSlug(requestedSalon);
-  const includeAllSalonStaff = request.nextUrl.searchParams.get("scope") === "salon";
-  const isPinEntry = request.nextUrl.searchParams.get("scope") === "pin-entry";
+  const scope = request.nextUrl.searchParams.get("scope");
+  const isRepubblicaBoard = scope === "repubblica-board";
+  const includeAllSalonStaff = scope === "salon";
+  const isPinEntry = scope === "pin-entry";
   const session = await auth();
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
 
-  if (!isAuthorized) {
+  if (!isAuthorized && !isRepubblicaBoard) {
     const cookieStore = await cookies();
     const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
     const pcAuth = await checkPCAuthorization(pcToken);
@@ -48,7 +50,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (salonSlug) {
+    if (isRepubblicaBoard) {
+      const locations = await prisma.location.findMany({
+        where: { active: true, name: { equals: "Salone Repubblica", mode: "insensitive" } },
+        select: { id: true },
+        take: 2,
+      });
+      if (locations.length !== 1) {
+        return NextResponse.json({ error: "Sede Salone Repubblica non identificata." }, { status: 404 });
+      }
+      locationId = locations[0].id;
+    } else if (salonSlug) {
       const forcedLocation = await prisma.location.findFirst({
         where: {
           active: true,
@@ -71,20 +83,25 @@ export async function GET(request: NextRequest) {
 
     const [workers, aliasSetting] = await Promise.all([
       prisma.user.findMany({
-      where: { active: true, ...(isPinEntry ? { role: { notIn: ["ADMIN", "SUPER_ADMIN", "ZERO"] }, employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}) },
-      select: {
-        id: true,
-        name: true,
-        photo_url: true,
-        sede_id: true,
-        location: { select: { name: true } },
-        attendance_logs: {
-          where: { date: { gte: today, lt: tomorrow } },
-          select: { type: true, timestamp: true },
-          orderBy: { timestamp: "asc" },
+        where: {
+          active: true,
+          ...(isRepubblicaBoard ? { sede_id: locationId } : {}),
+          ...(isRepubblicaBoard || isPinEntry ? { employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}),
+          ...(isPinEntry ? { role: { notIn: ["ADMIN", "SUPER_ADMIN", "ZERO"] } } : {}),
         },
-      },
-      orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          photo_url: true,
+          sede_id: true,
+          location: { select: { name: true } },
+          attendance_logs: {
+            where: { date: { gte: today, lt: tomorrow } },
+            select: { type: true, timestamp: true },
+            orderBy: { timestamp: "asc" },
+          },
+        },
+        orderBy: { name: "asc" },
       }),
       prisma.setting.findUnique({ where: { key: STAFF_ALIAS_SETTING_KEY } }),
     ]);
@@ -116,12 +133,12 @@ export async function GET(request: NextRequest) {
             .map(([externalId]) => externalId),
         };
       })
-      .filter((worker) => includeAllSalonStaff
-        ? worker.alwaysActive || (!locationId || worker.sede_id === locationId)
-        : worker.alwaysActive || (
-            (worker.status === "IN" || worker.status === "BREAK") &&
-            (!locationId || worker.sede_id === locationId)
-          ));
+      .filter((worker) => {
+        // The board roster is already restricted by sede_id in the query.
+        if (isRepubblicaBoard || worker.alwaysActive) return true;
+        if (locationId && worker.sede_id !== locationId) return false;
+        return includeAllSalonStaff || worker.status === "IN" || worker.status === "BREAK";
+      });
 
     clockedInWorkers.sort((a, b) => a.name.localeCompare(b.name, "it"));
 

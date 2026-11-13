@@ -237,12 +237,14 @@ function isUsefulBookingDetailField(key: string) {
 export default async function AppointmentsPage({
   searchParams,
   forcePcSalon,
+  repubblicaBoard = false,
   navigationBasePath,
   pageTitle = "Appuntamenti",
   pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   forcePcSalon?: AppointmentSalonSlug;
+  repubblicaBoard?: boolean;
   navigationBasePath?: string;
   pageTitle?: string;
   pageSubtitle?: string;
@@ -656,6 +658,7 @@ export default async function AppointmentsPage({
         corsoTeamOptions={corsoTeamOptions}
         isPC={isPC}
         pcLocationId={pcLocationId}
+        repubblicaBoard={repubblicaBoard && !isPC}
         initialSalon={initialSalon}
         initialPcWorkerName={kioskWorkerName}
         initialView={initialView}

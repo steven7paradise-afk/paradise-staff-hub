@@ -1173,6 +1173,7 @@ export function AppointmentsBrowser({
   corsoTeamOptions,
   isPC = false,
   pcLocationId = "",
+  repubblicaBoard = false,
   initialSalon = "tutti",
   initialPcWorkerName = "",
   initialView = "day",
@@ -1190,6 +1191,7 @@ export function AppointmentsBrowser({
   corsoTeamOptions: TeamOption[];
   isPC?: boolean;
   pcLocationId?: string;
+  repubblicaBoard?: boolean;
   initialSalon?: SalonFilter;
   initialPcWorkerName?: string;
   initialView?: ViewMode;
@@ -1314,6 +1316,7 @@ export function AppointmentsBrowser({
 
   const [view, setView] = useState<ViewMode>(initialView);
   const [layoutMode, setLayoutMode] = useState<"table" | "board">("board");
+  const boardSalonName = repubblicaBoard ? "Salone Repubblica" : "Salone Corso";
   const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
   const [boardStaffLoading, setBoardStaffLoading] = useState(false);
   const [boardStaffError, setBoardStaffError] = useState("");
@@ -1445,7 +1448,8 @@ export function AppointmentsBrowser({
       setBoardStaffLoading(true);
       setBoardStaffError("");
       try {
-        const response = await fetch("/api/appointments/pc/active-staff?salone=buenos-aires&scope=salon", {
+        const params = repubblicaBoard ? "scope=repubblica-board" : "salone=buenos-aires&scope=salon";
+        const response = await fetch(`/api/appointments/pc/active-staff?${params}`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
         });
@@ -1465,7 +1469,7 @@ export function AppointmentsBrowser({
       active = false;
       window.clearInterval(interval);
     };
-  }, [layoutMode]);
+  }, [layoutMode, repubblicaBoard]);
 
   useEffect(() => {
     try {
@@ -4365,25 +4369,27 @@ export function AppointmentsBrowser({
     const bookingsByWorker = new Map<string, AppointmentRecord[]>(
       workers.map((worker) => [worker.id, []]),
     );
-    const unassignedBookings: AppointmentRecord[] = [];
+    const otherBookings: AppointmentRecord[] = [];
 
     for (const booking of filteredBookings) {
       const belongsToCorso = booking.inferredSalon === "buenos-aires";
       const assignedWorkerIds = new Set<string>();
+      const matchByName = !repubblicaBoard || belongsToCorso ||
+        booking.inferredSalon === "repubblica" || booking.inferredSalon === "altro";
 
       for (const teammate of getBookingTeam(booking)) {
         const worker =
           workersById.get(teammate.id) ||
           workersByExternalId.get(teammate.id) ||
-          workers.find((candidate) =>
+          (matchByName && workers.find((candidate) =>
             staffNamesReferToSamePerson(candidate.name, teammate.name),
-          );
+          ));
         if (!worker || assignedWorkerIds.has(worker.id)) continue;
         assignedWorkerIds.add(worker.id);
         bookingsByWorker.get(worker.id)?.push(booking);
       }
 
-      if (assignedWorkerIds.size === 0 && belongsToCorso) unassignedBookings.push(booking);
+      if (assignedWorkerIds.size === 0 && (repubblicaBoard || belongsToCorso)) otherBookings.push(booking);
     }
 
     const durationHours = (bookings: AppointmentRecord[]) => bookings.reduce((sum, booking) => {
@@ -4417,12 +4423,12 @@ export function AppointmentsBrowser({
     const emptyWorkerColumns = workerColumns.filter(
       (column) => column.bookings.length === 0 && column.id !== selectedWorkerColumn?.id,
     );
-    const unassignedColumn = unassignedBookings.length
+    const unassignedColumn = otherBookings.length
       ? (() => {
-          const bookings = sortBookings(unassignedBookings);
+          const bookings = sortBookings(otherBookings);
           return {
             id: "unassigned",
-            name: "Non assegnati",
+            name: repubblicaBoard ? "Altri appuntamenti" : "Non assegnati",
             photoUrl: null,
             status: "IN",
             clockedInAt: null,
@@ -4451,7 +4457,7 @@ export function AppointmentsBrowser({
         ];
 
     return columns;
-  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, filteredBookings, normalizedSearch, teamByBooking]);
+  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, filteredBookings, normalizedSearch, repubblicaBoard, teamByBooking]);
   const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
     (column) =>
       column.id !== "unassigned" &&
@@ -6518,7 +6524,7 @@ export function AppointmentsBrowser({
             <section className="overflow-hidden rounded-[24px] border border-[#E7DDE2] bg-white shadow-[0_16px_45px_rgba(72,45,58,0.08)]">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EEE4E9] bg-[linear-gradient(110deg,#FFF7FB_0%,#FFFFFF_56%,#F8F5FA_100%)] px-4 py-5 sm:px-6">
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · Salone Corso</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · {boardSalonName}</p>
                   <div>
                     <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#261C22]">Agenda dello staff</h2>
                     <p className="mt-1 text-[11px] font-semibold text-[#76656E]">Ogni colonna mostra la giornata di una lavoratrice. Gli annullati restano sempre in fondo.</p>
@@ -6580,6 +6586,11 @@ export function AppointmentsBrowser({
                 </div>
               </div>
 
+              {boardStaffError && visibleAppointmentBoardColumns.length > 0 ? (
+                <p role="status" className="border-b border-[#EEE4E9] px-4 py-3 text-xs font-semibold text-[#76656E]">
+                  {boardStaffError}
+                </p>
+              ) : null}
               {visibleAppointmentBoardColumns.length ? (
                 <div
                   ref={boardScrollContainerRef}
@@ -6662,7 +6673,7 @@ export function AppointmentsBrowser({
                               <p className={`mt-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
                                 <span className={`size-1.5 rounded-full ${column.status === "BREAK" ? "bg-amber-500" : column.status === "IN" ? "bg-emerald-500" : "bg-slate-400"}`} />
                                 {column.id === "unassigned"
-                                  ? "Da assegnare"
+                                  ? (repubblicaBoard ? "Senza colonna staff" : "Da assegnare")
                                   : column.status === "BREAK"
                                     ? "In pausa"
                                     : column.status === "IN"
@@ -6926,14 +6937,14 @@ export function AppointmentsBrowser({
                 <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
                   <div>
                     <Loader2 className="mx-auto size-7 animate-spin text-[#A93469]" />
-                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale del Salone Corso...</p>
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale del {boardSalonName}...</p>
                   </div>
                 </div>
               ) : (
                 <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
                   <div>
                     <UsersRound className="mx-auto size-7 text-[#CDA7B9]" />
-                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente disponibile al Salone Corso</p>
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente disponibile al {boardSalonName}</p>
                     <p className="mt-1 text-xs font-semibold text-black/40">{boardStaffError || "Controlla che il personale sia attivo e assegnato al salone."}</p>
                   </div>
                 </div>
