@@ -1,6 +1,7 @@
 import { appendClientControlChecks } from "@/lib/client-control-checks-note";
 import { clientControlProductSelection } from "@/lib/client-control-products";
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
+import { saveAppointmentChange } from "@/lib/appointment-realtime";
 import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, parseWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import { NextRequest, NextResponse } from "next/server";
@@ -769,20 +770,24 @@ export async function POST(request: NextRequest) {
   if (bookingId && !isDraft) {
     try {
       const SETTING_KEY = "appointment_status_overrides";
-      const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } }).catch(() => null);
-      const currentMap = (currentSetting?.value && typeof currentSetting.value === "object" ? currentSetting.value : {}) as Record<string, any>;
-      const updatedMap = {
-        ...currentMap,
-        [bookingId]: {
-          status: isNoShow ? "NON_PRESENTATO" : "COMPLETATO",
-          updatedAt: new Date().toISOString(),
-          updatedBy: "Controllo Cliente",
-        },
-      };
-      await prisma.setting.upsert({
-        where: { key: SETTING_KEY },
-        update: { value: updatedMap },
-        create: { key: SETTING_KEY, value: updatedMap },
+      await saveAppointmentChange(async (tx) => {
+        const currentSetting = await tx.setting.findUnique({ where: { key: SETTING_KEY } });
+        const currentMap = currentSetting?.value && typeof currentSetting.value === "object" && !Array.isArray(currentSetting.value)
+          ? currentSetting.value
+          : {};
+        const updatedMap = {
+          ...currentMap,
+          [bookingId]: {
+            status: isNoShow ? "NON_PRESENTATO" : "COMPLETATO",
+            updatedAt: new Date().toISOString(),
+            updatedBy: "Controllo Cliente",
+          },
+        };
+        await tx.setting.upsert({
+          where: { key: SETTING_KEY },
+          update: { value: updatedMap },
+          create: { key: SETTING_KEY, value: updatedMap },
+        });
       });
     } catch (err) {
       console.error("Failed to auto-set appointment status to COMPLETATO:", err);

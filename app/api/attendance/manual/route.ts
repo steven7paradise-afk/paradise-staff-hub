@@ -1,9 +1,11 @@
 import { sendWidgetUpdate } from "@/lib/mobile-widget-push";
 import { AttendanceType } from "@prisma/client";
 import { after, NextRequest, NextResponse } from "next/server";
+import { appointmentDateKey } from "@/lib/appointment-date";
 import { auth } from "@/lib/auth";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
 import { prisma } from "@/lib/prisma";
+import { publishLiveChange } from "@/lib/salon-live";
 import { unlockWorkHourRecord } from "@/lib/work-hour-sync";
 
 const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -39,6 +41,7 @@ export async function POST(request: NextRequest) {
   const log = await prisma.attendanceLog.create({
     data: { user_id: user.id, location_id: user.sede_id, device_id: device.id, type, timestamp, date, time, note: storedNote },
   });
+  if (day === appointmentDateKey()) after(publishLiveChange);
   after(async () => { await sendWidgetUpdate(user.id).catch(() => console.warn("Widget push unavailable")); });
 
   await unlockWorkHourRecord(user.id, timestamp);

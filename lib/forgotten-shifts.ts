@@ -1,6 +1,7 @@
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { publishLiveChange } from "@/lib/salon-live";
 import { forgottenShiftExitTime } from "@/lib/forgotten-shift-policy";
 
 function localDay(date: Date) {
@@ -46,6 +47,7 @@ export async function closeForgottenShifts(now = new Date()) {
     return referenceLog ? [{ log: referenceLog, exitTime }] : [];
   });
 
+  let closedShifts = false;
   for (const { log, exitTime } of openShifts) {
     const timeString = new Intl.DateTimeFormat("en-GB", {
       hour: "2-digit",
@@ -69,6 +71,8 @@ export async function closeForgottenShifts(now = new Date()) {
       },
     });
 
+    closedShifts = true;
+
     const admins = await prisma.user.findMany({
       where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] } },
       select: { id: true, email: true },
@@ -81,5 +85,8 @@ export async function closeForgottenShifts(now = new Date()) {
     await Promise.allSettled([sendEmail({ to: log.user.email, ...template }), ...admins.map((admin) => sendEmail({ to: admin.email, ...template }))]);
   }
 
+  if (closedShifts) {
+    await publishLiveChange().catch((error) => console.error("Notifica chiusura turno non inviata:", error));
+  }
   return { closed: openShifts.length };
 }

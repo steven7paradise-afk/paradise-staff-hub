@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
         where: { id: device.id },
         data: { last_used_at: actualTimestamp },
       }),
-      ...(type === "ENTRATA" ? [publishLiveChange()] : []),
+      publishLiveChange(),
     ]);
     for (const result of results) {
       if (result.status === "rejected") {

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { saveAppointmentChange } from "@/lib/appointment-realtime";
 import { getCowlendarBookingsForRange, type CowlendarBooking } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 
@@ -280,16 +281,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Appuntamento odierno non trovato." }, { status: 404 });
     }
 
-    const currentSetting = await prisma.setting.findUnique({ where: { key: BOT_UPDATE_SETTING_KEY } });
-    const currentUpdates = recordMap<BotUpdate>(currentSetting?.value);
-
     if (clearUpdate) {
-      const nextUpdates = { ...currentUpdates };
-      delete nextUpdates[String(booking.id)];
-      await prisma.setting.upsert({
-        where: { key: BOT_UPDATE_SETTING_KEY },
-        create: { key: BOT_UPDATE_SETTING_KEY, value: nextUpdates },
-        update: { value: nextUpdates },
+      await saveAppointmentChange(async (tx) => {
+        const current = await tx.setting.findUnique({ where: { key: BOT_UPDATE_SETTING_KEY } });
+        const nextUpdates = { ...recordMap<BotUpdate>(current?.value) };
+        delete nextUpdates[String(booking.id)];
+        await tx.setting.upsert({
+          where: { key: BOT_UPDATE_SETTING_KEY },
+          create: { key: BOT_UPDATE_SETTING_KEY, value: nextUpdates },
+          update: { value: nextUpdates },
+        });
       });
 
       return NextResponse.json({
@@ -307,22 +308,25 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString(),
       source: "BOT",
     };
-    await prisma.setting.upsert({
-      where: { key: BOT_UPDATE_SETTING_KEY },
-      create: { key: BOT_UPDATE_SETTING_KEY, value: { ...currentUpdates, [String(booking.id)]: update } },
-      update: { value: { ...currentUpdates, [String(booking.id)]: update } },
-    });
-
     const updateLabel = update.delayMinutes
       ? `Sta arrivando con ${update.delayMinutes} minuti di ritardo.`
       : "La cliente ha comunicato che sta arrivando.";
-    const comment = await prisma.shopifyOrderComment.create({
-      data: {
-        order_name: String(booking.id),
-        user_name: "Bot appuntamenti",
-        user_role: "BOT",
-        message: `${updateLabel}${message ? ` Messaggio: “${message}”` : ""}`,
-      },
+    const comment = await saveAppointmentChange(async (tx) => {
+      const current = await tx.setting.findUnique({ where: { key: BOT_UPDATE_SETTING_KEY } });
+      const nextUpdates = { ...recordMap<BotUpdate>(current?.value), [String(booking.id)]: update };
+      await tx.setting.upsert({
+        where: { key: BOT_UPDATE_SETTING_KEY },
+        create: { key: BOT_UPDATE_SETTING_KEY, value: nextUpdates },
+        update: { value: nextUpdates },
+      });
+      return tx.shopifyOrderComment.create({
+        data: {
+          order_name: String(booking.id),
+          user_name: "Bot appuntamenti",
+          user_role: "BOT",
+          message: `${updateLabel}${message ? ` Messaggio: “${message}”` : ""}`,
+        },
+      });
     });
 
     return NextResponse.json({

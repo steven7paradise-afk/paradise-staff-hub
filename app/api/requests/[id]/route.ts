@@ -1,12 +1,14 @@
 import { isAdminCorrectedAttendance } from "@/lib/scheduled-attendance";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { RequestStatus } from "@prisma/client";
+import { appointmentDateKey } from "@/lib/appointment-date";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { createNotification, createNotifications } from "@/lib/notifications";
 import { ensureLeaveAssistanceWorkflow, shouldCreateLeaveAssistanceWorkflow } from "@/lib/leave-assistance-workflow";
 import { prisma } from "@/lib/prisma";
+import { publishLiveChange } from "@/lib/salon-live";
 import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule, UNJUSTIFIED_ABSENCE_MARKER } from "@/lib/schedule-sync";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
 import { COUNT_FROM_ACTUAL_ENTRY_MARKER } from "@/lib/work-hours";
@@ -228,6 +230,7 @@ export async function PATCH(
   }
 
   if (shouldUnlockWorkHours) {
+    if (existing.start_date.toISOString().slice(0, 10) === appointmentDateKey()) after(publishLiveChange);
     await unlockWorkHourRecord(existing.user_id, existing.start_date).catch((error) => {
       console.error("Errore durante il ricalcolo delle ore dopo la gestione del ritardo:", error);
     });
