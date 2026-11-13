@@ -36,6 +36,7 @@ test("failed upstream import does not overwrite or delete the saved archive", as
   });
   mockMethod(t, prisma.appointmentArchiveSync, "upsert", async () => ({}));
   const state = mockMethod(t, prisma.appointmentArchiveSync, "updateMany", async () => ({ count: 1 }));
+  mockMethod(t, prisma, "$queryRaw", async () => [{ completed_at: null, lease_until: null, error: false }]);
   const transaction = mockMethod(t, prisma, "$transaction", async () => { throw new Error("Must not publish failed import"); });
   t.mock.method(console, "error", () => {});
   await syncAppointmentArchive("2026-09", true);
@@ -49,7 +50,68 @@ test("failed upstream import does not overwrite or delete the saved archive", as
 test("an active import lease prevents duplicate external downloads", async t => {
   const network = t.mock.method(globalThis, "fetch", async () => { throw new Error("Should not fetch"); });
   mockMethod(t, prisma.appointmentArchiveSync, "upsert", async () => ({}));
-  mockMethod(t, prisma.appointmentArchiveSync, "updateMany", async () => ({ count: 0 }));
+  mockMethod(t, prisma, "$queryRaw", async () => []);
   await syncAppointmentArchive("2026-09", true);
   assert.equal(network.mock.callCount(), 0);
+});
+
+test("archive changes publish only after saving data and unchanged imports stay quiet", async t => {
+  const token = process.env.COWLENDAR_API_TOKEN;
+  const enabled = process.env.APPOINTMENTS_REALTIME_ENABLED;
+  process.env.COWLENDAR_API_TOKEN = "test-only";
+  process.env.APPOINTMENTS_REALTIME_ENABLED = "true";
+  t.after(() => {
+    if (token === undefined) delete process.env.COWLENDAR_API_TOKEN; else process.env.COWLENDAR_API_TOKEN = token;
+    if (enabled === undefined) delete process.env.APPOINTMENTS_REALTIME_ENABLED; else process.env.APPOINTMENTS_REALTIME_ENABLED = enabled;
+  });
+
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [] }));
+  mockMethod(t, prisma.appointmentArchiveSync, "upsert", async () => ({}));
+  mockMethod(t, prisma.setting, "findUnique", async () => ({ value: "source-revision" }));
+  mockMethod(t, prisma, "$queryRaw", async () => [{ completed_at: new Date(), lease_until: null, error: false }]);
+  const steps: string[] = [];
+  let changed = false;
+  let deleted = 0;
+  let dbRevision = "source-revision";
+  let markedStale = false;
+  mockMethod(t, prisma, "$transaction", async run => run({
+    appointmentArchiveSync: {
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }: { data: { completed_at?: Date, lease_until?: Date } }) => {
+        if (data.completed_at) steps.push("completed");
+        else if (data.lease_until?.getTime() === 0) {
+          markedStale = true;
+          dbRevision = "source-revision";
+        }
+      },
+    },
+    appointmentArchive: {
+      deleteMany: async () => { steps.push("removed"); return { count: deleted }; },
+    },
+    setting: {
+      findUnique: async () => ({ value: dbRevision }),
+      upsert: async () => { steps.push("revision"); },
+    },
+    $queryRaw: async (query: TemplateStringsArray) => {
+      if (query.join("").includes("pg_notify")) { steps.push("notify"); return []; }
+      steps.push("saved");
+      return [{ changed }];
+    },
+  }));
+
+  await syncAppointmentArchive("2026-09");
+  assert.deepEqual(steps.splice(0), ["saved", "removed", "completed"]);
+  changed = true;
+  await syncAppointmentArchive("2026-09");
+  assert.deepEqual(steps.splice(0), ["saved", "removed", "completed", "revision", "notify"]);
+  changed = false;
+  deleted = 1;
+  await syncAppointmentArchive("2026-09");
+  assert.deepEqual(steps.splice(0), ["saved", "removed", "completed", "revision", "notify"]);
+
+  deleted = 0;
+  dbRevision = "newer-source-revision";
+  await syncAppointmentArchive("2026-09");
+  assert.equal(markedStale, true);
+  assert.deepEqual(steps, ["saved", "removed", "completed"], "Only the fresh retry can publish the archive");
 });

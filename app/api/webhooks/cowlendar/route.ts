@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { APPOINTMENT_EVENTS_CHANNEL, APPOINTMENT_REVISION_KEY, BOOKING_EVENTS, verifyCowlendarSignature } from "@/lib/cowlendar-webhook";
+import { BOOKING_EVENTS, verifyCowlendarSignature } from "@/lib/cowlendar-webhook";
+import { APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "@/lib/appointment-realtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,15 +47,20 @@ export async function POST(request: Request) {
         { key: { startsWith: "cowlendar_cache_bookings_" } },
         { key: { startsWith: "cowlendar_cache_range_" } },
       ] } });
-      // Invalidate freshness, never delete the persistent archive on an external event.
-      await tx.appointmentArchiveSync.updateMany({
-        where: { completed_at: { not: null }, lease_until: null },
-        data: { lease_until: new Date(0) },
-      });
+      // Preserve active leases and the archive. Lock their rows before changing
+      // the invalidation revision so an in-flight import cannot publish stale data.
+      const now = new Date();
+      await tx.$executeRaw`
+        UPDATE appointment_archive_sync
+        SET lease_until = CASE WHEN lease_until > ${now} THEN lease_until ELSE ${new Date(0)} END
+      `;
       const revision = randomUUID();
-      await tx.setting.upsert({ where: { key: APPOINTMENT_REVISION_KEY },
-        create: { key: APPOINTMENT_REVISION_KEY, value: revision }, update: { value: revision } });
-      await tx.$queryRaw`SELECT pg_notify(${APPOINTMENT_EVENTS_CHANNEL}, ${revision})::text`;
+      await tx.setting.upsert({
+        where: { key: APPOINTMENT_ARCHIVE_INVALIDATION_KEY },
+        create: { key: APPOINTMENT_ARCHIVE_INVALIDATION_KEY, value: revision },
+        update: { value: revision },
+      });
+      await publishAppointmentChange(tx);
     }, { timeout: 8000 });
     return Response.json({ ok: true });
   } catch {

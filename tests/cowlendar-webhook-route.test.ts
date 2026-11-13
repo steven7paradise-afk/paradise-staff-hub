@@ -28,7 +28,7 @@ test("webhook authenticates before database access and only acknowledges committ
       createMany: async () => ({ count: duplicate ? 0 : 1 }),
       deleteMany: async () => { invalidations++; },
       upsert: async () => ({}),
-    }, appointmentArchiveSync: { updateMany: async () => { archiveInvalidations++; } }, $queryRaw: async () => { notifications++; } });
+    }, $executeRaw: async () => { archiveInvalidations++; }, $queryRaw: async () => { notifications++; } });
   }) as typeof prisma.$transaction;
   function request(type = "booking.created", shop = "example.myshopify.com", signed = true) {
     const timestamp = String(Math.floor(Date.now() / 1000));
