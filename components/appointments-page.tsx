@@ -1,5 +1,7 @@
 import { appointmentCustomerPhone } from "@/lib/appointment-visits";
 import { readAppointmentArchive, scheduleAppointmentArchive } from "@/lib/appointment-archive";
+import { readAppointmentRevision } from "@/lib/appointment-realtime";
+import { AppointmentsLiveRefresh } from "@/components/appointments-live-refresh";
 import { AppointmentArchiveStatus } from "@/components/appointment-archive-status";
 import { AppointmentArchiveBrowser } from "@/components/appointment-archive-browser";
 import { redirect } from "next/navigation";
@@ -342,6 +344,9 @@ export default async function AppointmentsPage({
   if (!canView) redirect("/dashboard");
 
   const isArchive = resolvedSearchParams.scope === "all";
+  const updateOnChange = repubblicaBoard && !isPC;
+  // Read the revision before the data so a change during render is replayed.
+  const appointmentRevision = updateOnChange ? await readAppointmentRevision().catch(() => "initial") : null;
   const archive = await readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
     ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
   });
@@ -577,6 +582,10 @@ export default async function AppointmentsPage({
         booking.booking_str ||
         "Cliente";
 
+      const savedStatus = statusOverrides[String(booking.id)];
+      const sheetStatus = sheetStatusOverrides[String(booking.id)];
+      const currentStatus = updateOnChange && savedStatus?.status ? savedStatus : sheetStatus || savedStatus;
+
       return {
         id: booking.id,
         customerName: customerFullName,
@@ -600,9 +609,9 @@ export default async function AppointmentsPage({
         financialStatus: booking.financial_status || null,
         attendance: booking.attendance || null,
         isCanceled: Boolean(booking.is_canceled),
-        localStatus: sheetStatusOverrides[String(booking.id)]?.status ?? statusOverrides[String(booking.id)]?.status ?? null,
-        statusUpdatedAt: sheetStatusOverrides[String(booking.id)]?.updatedAt ?? statusOverrides[String(booking.id)]?.updatedAt ?? null,
-        statusUpdatedBy: sheetStatusOverrides[String(booking.id)]?.updatedBy ?? statusOverrides[String(booking.id)]?.updatedBy ?? null,
+        localStatus: currentStatus?.status ?? savedStatus?.status ?? null,
+        statusUpdatedAt: currentStatus?.updatedAt ?? savedStatus?.updatedAt ?? null,
+        statusUpdatedBy: currentStatus?.updatedBy ?? savedStatus?.updatedBy ?? null,
         statusStartedAt: statusOverrides[String(booking.id)]?.startedAt ?? null,
         statusStoppedAt: statusOverrides[String(booking.id)]?.stoppedAt ?? null,
         statusElapsedSeconds: statusOverrides[String(booking.id)]?.elapsedSeconds ?? 0,
@@ -626,6 +635,8 @@ export default async function AppointmentsPage({
     }
   });
 
+  const waitingForArchive = !archive.ready && !safeBookings.length;
+
   return (
     <AppShell
       title="Appuntamenti"
@@ -645,7 +656,10 @@ export default async function AppointmentsPage({
         </div>
       ) : null}
 
-      <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} updatedAt={archive.updatedAt} stale={archive.stale} />
+      <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} updatedAt={archive.updatedAt} stale={updateOnChange ? archive.invalidated : archive.stale} updateOnChange={updateOnChange} />
+      {updateOnChange && (isArchive || waitingForArchive) ? (
+        <AppointmentsLiveRefresh revision={appointmentRevision} from={appointmentRange.start} to={appointmentRange.end} />
+      ) : null}
       {isArchive ? <AppointmentArchiveBrowser
         month={appointmentRange.start.slice(0, 7)} query={String(resolvedSearchParams.q || "")}
         page={archive.page} count={archive.count} ready={archive.ready}
@@ -658,7 +672,8 @@ export default async function AppointmentsPage({
         corsoTeamOptions={corsoTeamOptions}
         isPC={isPC}
         pcLocationId={pcLocationId}
-        repubblicaBoard={repubblicaBoard && !isPC}
+        repubblicaBoard={updateOnChange}
+        appointmentRevision={appointmentRevision}
         initialSalon={initialSalon}
         initialPcWorkerName={kioskWorkerName}
         initialView={initialView}

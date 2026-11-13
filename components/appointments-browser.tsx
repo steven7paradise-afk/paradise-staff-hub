@@ -11,6 +11,7 @@ import { AppointmentWorkerConfirmation } from "./appointment-worker-confirmation
 import { isPastCompletedAppointment, hasRecentWorkerConfirmation, rememberWorkerConfirmation, workerConfirmationSessionStorage } from "@/lib/appointment-worker-confirmation";
 
 import { useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { AppointmentsLiveRefresh } from "./appointments-live-refresh";
 import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -1174,6 +1175,7 @@ export function AppointmentsBrowser({
   isPC = false,
   pcLocationId = "",
   repubblicaBoard = false,
+  appointmentRevision = null,
   initialSalon = "tutti",
   initialPcWorkerName = "",
   initialView = "day",
@@ -1192,6 +1194,7 @@ export function AppointmentsBrowser({
   isPC?: boolean;
   pcLocationId?: string;
   repubblicaBoard?: boolean;
+  appointmentRevision?: string | null;
   initialSalon?: SalonFilter;
   initialPcWorkerName?: string;
   initialView?: ViewMode;
@@ -1219,6 +1222,7 @@ export function AppointmentsBrowser({
   );
 
   useEffect(() => {
+    if (repubblicaBoard) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let requestInProgress = false;
@@ -1270,7 +1274,7 @@ export function AppointmentsBrowser({
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", synchronizeWhenVisible);
     };
-  }, []);
+  }, [repubblicaBoard]);
 
   // Signature Modal states
   const [signModalOpen, setSignModalOpen] = useState(false);
@@ -1289,14 +1293,14 @@ export function AppointmentsBrowser({
   const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get("refresh") === "true") {
+    if (!repubblicaBoard && searchParams.get("refresh") === "true") {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("refresh");
       const base = navigationBasePath || appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon);
       router.replace(params.size ? `${base}?${params.toString()}` : base, { scroll: false });
     }
     setIsRefreshing(false);
-  }, [searchParams, router]);
+  }, [searchParams, repubblicaBoard, router]);
 
   useEffect(() => {
     const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
@@ -1440,9 +1444,10 @@ export function AppointmentsBrowser({
     setVisibleCount(appointmentsPageSize);
   }, [initialAnchorDate, initialRangeFrom, initialRangeTo, initialScopeAll, initialView]);
 
+  const rosterSnapshot = repubblicaBoard ? initialBookings : null;
   useEffect(() => {
     if (layoutMode !== "board") return;
-    let active = true;
+    const controller = new AbortController();
 
     async function loadBoardStaff() {
       setBoardStaffLoading(true);
@@ -1452,24 +1457,25 @@ export function AppointmentsBrowser({
         const response = await fetch(`/api/appointments/pc/active-staff?${params}`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
+          signal: controller.signal,
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || "Impossibile recuperare il personale del salone.");
-        if (active) setBoardActiveStaff(Array.isArray(data) ? data : []);
+        if (!controller.signal.aborted) setBoardActiveStaff(Array.isArray(data) ? data : []);
       } catch (error) {
-        if (active) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale del salone.");
+        if (!controller.signal.aborted) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale del salone.");
       } finally {
-        if (active) setBoardStaffLoading(false);
+        if (!controller.signal.aborted) setBoardStaffLoading(false);
       }
     }
 
     void loadBoardStaff();
-    const interval = window.setInterval(loadBoardStaff, 60 * 1000);
+    const interval = repubblicaBoard ? undefined : window.setInterval(loadBoardStaff, 60 * 1000);
     return () => {
-      active = false;
+      controller.abort();
       window.clearInterval(interval);
     };
-  }, [layoutMode, repubblicaBoard]);
+  }, [layoutMode, repubblicaBoard, rosterSnapshot]);
 
   useEffect(() => {
     try {
@@ -1553,7 +1559,7 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     // Refresh data without resetting the operator's date, filters or open order.
-    if (selectedBookingId || isFilterModalOpen || isDatePickerOpen) return;
+    if (repubblicaBoard || selectedBookingId || isFilterModalOpen || isDatePickerOpen) return;
     const timer = window.setInterval(() => {
       if (document.hidden || document.querySelector('dialog[open], [role="dialog"]')) return;
       const focused = document.activeElement;
@@ -1561,7 +1567,7 @@ export function AppointmentsBrowser({
       router.refresh();
     }, 300_000);
     return () => window.clearInterval(timer);
-  }, [selectedBookingId, isFilterModalOpen, isDatePickerOpen, router]);
+  }, [selectedBookingId, isFilterModalOpen, isDatePickerOpen, repubblicaBoard, router]);
 
   const [statusByBooking, setStatusByBooking] = useState<
     Record<string, AppointmentStatusValue>
@@ -1598,6 +1604,29 @@ export function AppointmentsBrowser({
       ]),
     ),
   );
+  const lastAppliedBookings = useRef(initialBookings);
+  useEffect(() => {
+    if (!repubblicaBoard || lastAppliedBookings.current === initialBookings) return;
+    lastAppliedBookings.current = initialBookings;
+    setStatusByBooking((current) => Object.fromEntries(initialBookings.flatMap((booking) => {
+      const status = booking.id === savingStatusId ? current[booking.id] : normalizeAppointmentStatus(booking.localStatus);
+      return status ? [[booking.id, status]] : [];
+    })));
+    setStatusTimingByBooking((current) => Object.fromEntries(initialBookings.map((booking) => [
+      booking.id,
+      booking.id === savingStatusId && current[booking.id] ? current[booking.id] : {
+        startedAt: booking.statusStartedAt,
+        stoppedAt: booking.statusStoppedAt,
+        elapsedSeconds: Number(booking.statusElapsedSeconds || 0),
+      },
+    ])));
+    setTeamByBooking((current) => Object.fromEntries(initialBookings.map((booking) => [
+      booking.id,
+      booking.id === savingTeamId && current[booking.id] ? current[booking.id] : booking.teammates,
+    ])));
+    setParadiseNotes(Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])));
+  }, [initialBookings, repubblicaBoard, savingStatusId, savingTeamId]);
+
   const normalizedSearch = normalizeSearchValue(searchTerm);
   function getBookingTeam(booking?: AppointmentRecord | null): BookingTeammate[] {
     if (!booking) return [];
@@ -4545,7 +4574,7 @@ export function AppointmentsBrowser({
     }
 
     const status = getBookingStatus(booking);
-    const customerUpdate = liveCustomerUpdates[booking.id] || booking.customerUpdate;
+    const customerUpdate = repubblicaBoard ? booking.customerUpdate : liveCustomerUpdates[booking.id] || booking.customerUpdate;
     const timing = statusTimingByBooking[booking.id] || {};
     const elapsedSeconds = Math.max(0, Number(timing.elapsedSeconds || 0));
 
@@ -4820,6 +4849,17 @@ export function AppointmentsBrowser({
 
   return (
     <div className="relative min-h-screen bg-transparent text-[#1C1C1C]">
+      {repubblicaBoard && initialRangeFrom && initialRangeTo ? (
+        <AppointmentsLiveRefresh
+          revision={appointmentRevision}
+          from={initialRangeFrom}
+          to={initialRangeTo}
+          paused={Boolean(clientControlOpen || selectedBookingId || quickNoteBookingId ||
+            isFilterModalOpen || isDatePickerOpen || savingStatusId || savingTeamId ||
+            draggedBoardBookingId || touchDraggedBoardBookingId || draggedBoardWorkerId ||
+            boardStatusMenu || signModalOpen || isRefreshing)}
+        />
+      ) : null}
       {/* Floating Push Toast Notification Banner */}
       {toastNotification.show && (
         <div
