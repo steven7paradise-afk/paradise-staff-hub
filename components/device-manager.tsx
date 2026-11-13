@@ -24,7 +24,8 @@ async function requestActivationLink<T>(path: string, body?: { name: string; loc
   if (!response.ok || typeof data?.activationUrl !== "string" || !data.activationUrl) {
     throw new Error(data?.error || "Link non creato. Riprova.");
   }
-  return { data, url: data.activationUrl };
+  const { activationUrl: url, ...device } = data;
+  return { data: device, url };
 }
 
 export function DeviceManager({ initialDevices, locations, initialRules, initialPcs = [] }: { initialDevices: Device[]; locations: Location[]; initialRules: Record<string, ClockRule>; initialPcs?: AuthorizedPC[] }) {
@@ -55,7 +56,7 @@ export function DeviceManager({ initialDevices, locations, initialRules, initial
         deviceId = device.id;
       } else {
         const result = await requestActivationLink<Device>("/api/devices", { name, locationId: draft.locationId });
-        const { activationUrl: _activationUrl, error: _error, ...registered } = result.data;
+        const registered = result.data;
         setDevices((current) => [registered, ...current.filter((item) => item.id !== registered.id)]);
         setDraft({ name: "", locationId: locations[0]?.id ?? "" });
         deviceId = registered.id;
