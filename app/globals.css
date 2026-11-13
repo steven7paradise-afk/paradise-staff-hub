@@ -233,6 +233,55 @@ html:not(.dark) .paradise-theme-root {
   background: rgb(30 27 32 / 94%);
 }
 
+.repubblica-agenda .repubblica-worker-heading {
+  background: rgb(255 255 255 / 86%);
+  border-color: #eee5e9;
+  box-shadow: 0 1px 2px rgb(61 29 43 / 4%);
+}
+
+.repubblica-worker-attendance {
+  color: #565364;
+  background: #f0edf2;
+}
+
+.repubblica-worker-attendance[data-worker-attendance="IN"] {
+  color: #28594b;
+  background: #e8f1eb;
+}
+
+.repubblica-worker-attendance[data-worker-attendance="BREAK"] {
+  color: #7d5017;
+  background: #fff0d6;
+}
+
+.dark .repubblica-worker-attendance {
+  color: #ded8e1;
+  background: #3c3841;
+}
+
+.dark .repubblica-worker-attendance[data-worker-attendance="IN"] {
+  color: #c7e6d3;
+  background: #31473a;
+}
+
+.dark .repubblica-worker-attendance[data-worker-attendance="BREAK"] {
+  color: #ffe1aa;
+  background: #4b3d2d;
+}
+
+.dark .repubblica-agenda .repubblica-agenda-empty {
+  background: rgb(255 255 255 / 5%);
+  border-color: rgb(255 255 255 / 18%);
+}
+
+.dark .repubblica-agenda :is(.repubblica-worker-metrics, .repubblica-card-grip) {
+  color: #d6cbd3;
+}
+
+.dark .repubblica-agenda .repubblica-card-grip:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
 /* Appuntamenti: le card usano tinte chiare per distinguere gli stati. In
    modalità notte conserviamo quelle differenze con superfici scure colorate,
    evitando testo bianco sopra pannelli rimasti chiari. */

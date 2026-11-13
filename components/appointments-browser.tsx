@@ -6968,16 +6968,16 @@ export function AppointmentsBrowser({
                             setDraggedBoardWorkerId(null);
                             setBoardWorkerDropTarget(null);
                           }}
-                          className={`appointments-board-worker mb-3 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          className={`appointments-board-worker mb-3 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm ${repubblicaBoard ? "repubblica-worker-heading" : ""} ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
                           title={column.id !== "unassigned" ? "Tieni premuto e trascina per riordinare" : undefined}
                         >
                           <div className="flex items-center gap-2.5">
                             <Avatar name={column.name} photoUrl={column.photoUrl} size="size-10" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="truncate text-[13px] font-black text-[#25202A]">{column.name}</p>
+                                <p className={`truncate text-[#25202A] ${repubblicaBoard ? "text-sm font-semibold" : "text-[13px] font-black"}`} title={column.name}>{column.name}</p>
                               </div>
-                              <p className={`mt-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
+                              <p data-worker-attendance={column.status || "off"} className={`mt-1 inline-flex items-center gap-1.5 ${repubblicaBoard ? "repubblica-worker-attendance rounded-full px-2 py-0.5 text-[11px] font-semibold" : "text-[8px] font-black uppercase tracking-wider"} ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
                                 <span className={`size-1.5 rounded-full ${column.status === "BREAK" ? "bg-amber-500" : column.status === "IN" ? "bg-emerald-500" : "bg-slate-400"}`} />
                                 {column.id === "unassigned"
                                   ? (repubblicaBoard ? "Senza colonna staff" : "Da assegnare")
@@ -6990,13 +6990,13 @@ export function AppointmentsBrowser({
                                         : "Non timbrato"}
                               </p>
                               {column.id !== "unassigned" && (column.status === "BREAK" || column.status === "IN") && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
-                                <p className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B778C]">
+                                <p className="mt-0.5 text-[10px] font-medium tabular-nums text-[#6B778C]">
                                   Tempo trascorso <LivePcWorkerTimer startedAt={(column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) as string} />
                                 </p>
                               ) : null}
                             </div>
                           </div>
-                          <div className="mt-3 flex items-center gap-2 border-t border-[#F0EBEE] pt-2 text-[9px] font-black text-[#756A71]">
+                          <div className={`mt-3 flex items-center gap-2 border-t border-[#F0EBEE] pt-2 text-[#756A71] ${repubblicaBoard ? "repubblica-worker-metrics text-[11px] font-semibold tabular-nums" : "text-[9px] font-black"}`}>
                             <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
                             <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.bookings.filter((booking) => !booking.isCanceled).length} attivi</span>
                             {column.bookings.some((booking) => booking.isCanceled) ? (
@@ -7082,7 +7082,7 @@ export function AppointmentsBrowser({
                                     isTouchPress,
                                   );
                                 }}
-                                className={`appointments-board-card w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)] ${
+                                className={`appointments-board-card w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9f3f5b] ${repubblicaBoard ? "cursor-pointer shadow-[0_2px_6px_rgba(61,29,43,0.04)] transition-shadow hover:shadow-[0_4px_14px_rgba(61,29,43,0.12)]" : "shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)]"} ${
                                   booking.isCanceled || status === "NON_PRESENTATO"
                                     ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
                                     : status === "RIPROGRAMMATO"
@@ -7102,14 +7102,23 @@ export function AppointmentsBrowser({
                               >
                                 {overlaps ? <span id={`overlap-${column.id}-${booking.id}`} className="sr-only">Appuntamenti in contemporanea</span> : null}
                                 <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#7B6872]">{formatDate(booking.startDate)}</p>
-                                    <p className="mt-1 text-sm font-black tabular-nums text-[#241D21]">{formatTime(visit[0].startDate)} – {formatTime(visitEnd)}</p>
-                                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(visit[0].startDate, visitEnd)}</p>
-                                  </div>
+                                  {repubblicaBoard ? (
+                                    <div className="min-w-0">
+                                      <p className="text-base font-semibold leading-tight tracking-tight tabular-nums text-[#241D21]">{formatTime(visit[0].startDate)} – {formatTime(visitEnd)}</p>
+                                      <p className="mt-1 flex flex-wrap gap-x-1 text-[10px] font-medium text-[#6F6269]">
+                                        <span>{formatDate(booking.startDate)}</span><span aria-hidden="true">·</span><span>{formatDuration(visit[0].startDate, visitEnd)}</span>
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <p className="text-[9px] font-black uppercase tracking-wider text-[#7B6872]">{formatDate(booking.startDate)}</p>
+                                      <p className="mt-1 text-sm font-black tabular-nums text-[#241D21]">{formatTime(visit[0].startDate)} – {formatTime(visitEnd)}</p>
+                                      <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(visit[0].startDate, visitEnd)}</p>
+                                    </div>
+                                  )}
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`appointments-board-status rounded-full border px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
-                                      {visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                                    <span className={`appointments-board-status rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
+                                      {!repubblicaBoard && visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                                     </span>
                                     <button
                                       type="button"
@@ -7149,7 +7158,7 @@ export function AppointmentsBrowser({
                                         event.preventDefault();
                                         event.stopPropagation();
                                       }}
-                                      className="grid size-10 shrink-0 touch-none cursor-grab place-items-center rounded-xl border border-[#DDD6DA] bg-white text-[#71666D] shadow-sm transition hover:border-[#B35680] hover:text-[#9E3262] active:cursor-grabbing active:scale-95"
+                                      className={`grid size-10 shrink-0 touch-none cursor-grab place-items-center rounded-xl text-[#71666D] transition-colors hover:text-[#9E3262] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9f3f5b] active:cursor-grabbing ${repubblicaBoard ? "repubblica-card-grip hover:bg-white/75" : "border border-[#DDD6DA] bg-white shadow-sm hover:border-[#B35680] active:scale-95"}`}
                                       aria-label={`Sposta appuntamento di ${booking.customerName}`}
                                       title="Trascina per spostare"
                                     >
@@ -7157,14 +7166,14 @@ export function AppointmentsBrowser({
                                     </button>
                                   </div>
                                 </div>
-                                <p className="mt-3 truncate text-sm font-black text-[#241D21]">{booking.customerName}</p>
+                                <p className={`mt-3 truncate text-[#241D21] ${repubblicaBoard ? "text-[15px] font-semibold leading-tight" : "text-sm font-black"}`} title={booking.customerName}>{booking.customerName}</p>
                                 {visit.length > 1 ? <div className="mt-2 space-y-2" aria-label={`Servizi della visita di ${booking.customerName}`}>
                                   <p className="text-xs font-semibold text-[#97335d]">Unica visita · {visit.length} servizi</p>
                                   {visit.map(service => <button key={service.id} type="button" className="block w-full rounded-lg border border-[#E2CED8] bg-white p-2 text-left text-xs text-[#352a33]" onPointerDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); void openClientControlForBooking(service, undefined, false);}} onKeyDown={event => event.stopPropagation()}>
                                     <span className="block font-semibold">{formatTime(service.startDate)} · {service.serviceTitle}</span>
                                     <span className="mt-1 block text-[11px] text-[#71656d]">{getBookingTeam(service).map(worker => worker.name).join(", ")} · {appointmentStatusLabels[getBookingStatus(service)]}</span>
                                   </button>)}
-                                </div> : <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#6F6269]">{booking.serviceTitle}</p>}
+                                </div> : <p className={`mt-1 line-clamp-2 leading-snug text-[#6F6269] ${repubblicaBoard ? "text-xs font-medium" : "text-[10px] font-bold"}`}>{booking.serviceTitle}</p>}
                                 {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
@@ -7233,10 +7242,10 @@ export function AppointmentsBrowser({
                               </div>
                             );
                           }) : (
-                            <div className="grid min-h-32 place-items-center rounded-[5px] border border-dashed border-[#C1C7D0] bg-white/40 px-4 text-center">
+                            <div className={`grid min-h-32 place-items-center border border-dashed bg-white/40 px-4 text-center ${repubblicaBoard ? "repubblica-agenda-empty rounded-2xl border-[#DED3D8]" : "rounded-[5px] border-[#C1C7D0]"}`}>
                               <div>
                                 <CalendarDays className="mx-auto size-5 text-black/20" />
-                                <p className="mt-2 text-[10px] font-black uppercase tracking-wider text-black/35">Nessun appuntamento</p>
+                                <p className={`mt-2 ${repubblicaBoard ? "text-xs font-medium text-[#6F6269]" : "text-[10px] font-black uppercase tracking-wider text-black/35"}`}>Nessun appuntamento</p>
                               </div>
                             </div>
                           )}
