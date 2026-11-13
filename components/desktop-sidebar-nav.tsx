@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { BriefcaseBusiness, ChevronDown, Search, UserRound, X } from "lucide-react";
+import { ArrowUpRight, BriefcaseBusiness, ChevronDown, Folder, Search, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { SidebarLogo } from "./sidebar-logo";
 import { DynamicIcon } from "./dynamic-icon";
+import styles from "./direction-sidebar.module.css";
 
 type MenuItem = {
   href: string;
@@ -35,7 +36,14 @@ type DesktopSidebarNavProps = {
   unreadNotifications: number;
   items: MenuItem[];
   sidebarConfig: SidebarFolder[] | null;
+  directionSidebar?: boolean;
 };
+
+const directionShortcuts = ["/dashboard", "/appointments", "/client-control", "/cash"];
+
+function normalizeSearch(value: string) {
+  return value.trim().toLocaleLowerCase("it").normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
 
 export function DesktopSidebarNav({
   logoUrl,
@@ -47,23 +55,37 @@ export function DesktopSidebarNav({
   unreadNotifications,
   items,
   sidebarConfig,
+  directionSidebar = false,
 }: DesktopSidebarNavProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const [activeArea, setActiveArea] = useState<"LAVORO" | "PERSONALE">("LAVORO");
   const pathname = usePathname();
+  const sectionPrefix = useId();
+  const searchInput = useRef<HTMLInputElement>(null);
 
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
     return folder?.labels?.[href] || fallback;
   };
 
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-  const filteredItems = items.filter((item) =>
-    getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
-  );
+  const normalizedSearch = directionSidebar ? normalizeSearch(searchQuery) : searchQuery.trim().toLowerCase();
+  const shortcuts = directionSidebar && !normalizedSearch
+    ? directionShortcuts.flatMap((href) => {
+        const item = items.find((entry) => entry.href === href);
+        return item && (!sidebarConfig || sidebarConfig.some((folder) => folder.routes.includes(href))) ? [item] : [];
+      })
+    : [];
+  const filteredItems = items.filter((item) => {
+    if (shortcuts.includes(item)) return false;
+    const label = getSidebarLabel(item.href, item.label);
+    return directionSidebar
+      ? normalizeSearch(`${label} ${item.label}`).includes(normalizedSearch)
+      : label.toLowerCase().includes(normalizedSearch);
+  });
   const hasAreaSwitch = sidebarConfig !== null
     && !sidebarConfig.some((folder) => folder.id === "pc-cassa" || folder.id === "ex-dipendente");
+  const areas = directionSidebar ? ["LAVORO", "PERSONALE"] as const : ["PERSONALE", "LAVORO"] as const;
   const activePageArea = sidebarConfig?.find((folder) =>
     folder.routes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
   )?.area ?? "LAVORO";
@@ -109,7 +131,8 @@ export function DesktopSidebarNav({
 
   const openSidebarSearch = () => {
     window.dispatchEvent(new CustomEvent("paradise-sidebar-expand"));
-    window.setTimeout(() => document.getElementById("desktop-sidebar-search")?.focus(), 320);
+    if (directionSidebar) window.requestAnimationFrame(() => searchInput.current?.focus());
+    else window.setTimeout(() => searchInput.current?.focus(), 320);
   };
 
   useEffect(() => {
@@ -124,38 +147,93 @@ export function DesktopSidebarNav({
     setOpenSectionId((current) => sections.some((section) => section.id === current) ? current : sections[0]?.id ?? null);
   }, [activeArea, activeSectionId, pathname]);
 
+  const clearSearch = () => {
+    setSearchQuery("");
+    if (directionSidebar) searchInput.current?.focus();
+  };
+
+  const renderItem = (item: MenuItem) => {
+    const isActive = isItemActive(item.href);
+    const displayLabel = getSidebarLabel(item.href, item.label);
+    const itemBadge = item.href === "/notifications" ? unreadNotifications : item.badge ?? 0;
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={displayLabel}
+        aria-label={directionSidebar ? itemBadge > 0 ? `${displayLabel}, ${itemBadge}` : displayLabel : undefined}
+        aria-current={isActive ? "page" : undefined}
+        className={cn(
+          "sidebar-nav-link group relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
+          isActive
+            ? "active border-white/12 bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)] shadow-none"
+            : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-black/[0.035] hover:opacity-100"
+        )}
+      >
+        <span
+          className={cn(
+            "grid size-7 shrink-0 place-items-center rounded-md transition",
+            directionSidebar && styles.linkIcon,
+            isActive ? "bg-black/[0.05] text-[color:var(--sidebar-active-icon)]" : "text-[color:var(--sidebar-icon)] group-hover:bg-black/[0.035]"
+          )}
+          aria-hidden="true"
+        >
+          <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
+        </span>
+        <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
+        {itemBadge > 0 || (!directionSidebar && item.href === "/requests") ? (
+          <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
+            {itemBadge > 99 ? "99+" : itemBadge}
+          </span>
+        ) : null}
+      </Link>
+    );
+  };
+
   return (
-    <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
+    <div className={cn("app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]", directionSidebar && styles.navigation)}>
       <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-black/[0.07] px-1 pb-5 pt-2">
         <div className="sidebar-brand-logo flex h-12 w-24 shrink-0 items-center justify-start overflow-hidden">
-          <SidebarLogo url={logoUrl} color={logoColor} />
+          {directionSidebar ? (
+            <img src="/paradise-logo-sidebar.png" width={2528} height={1163} alt="Paradise Beauty" className={styles.whiteLogo} />
+          ) : <SidebarLogo url={logoUrl} color={logoColor} />}
         </div>
         <div className="sidebar-brand-icon hidden size-11 shrink-0 place-items-center overflow-hidden rounded-2xl">
-          <img src="/favicon.png" alt="" className="size-11 object-cover select-none pointer-events-none" aria-hidden="true" />
+          {directionSidebar ? (
+            <img src="/paradise-logo-sidebar.png" width={2528} height={1163} alt="Paradise Beauty" className={styles.whiteLogo} />
+          ) : <img src="/favicon.png" alt="" className="size-11 object-cover select-none pointer-events-none" aria-hidden="true" />}
         </div>
         <div className="sidebar-label text-left min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]">Staff Hub</p>
-          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">Area operativa</p>
+          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">{directionSidebar ? "Direzione" : "Area operativa"}</p>
         </div>
       </div>
 
-      <div className="sidebar-label relative mx-1 mt-4 shrink-0">
+      <div className={cn("sidebar-label relative mx-1 mt-4 shrink-0", directionSidebar && styles.search)}>
         <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500 dark:text-zinc-300">
           <Search size={13} className="opacity-75" />
         </span>
         <input
           id="desktop-sidebar-search"
+          ref={searchInput}
           type="search"
           aria-label="Cerca in tutte le pagine"
           placeholder="Cerca una pagina"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={directionSidebar ? (event) => {
+            if (event.key === "Escape" && searchQuery) {
+              event.preventDefault();
+              clearSearch();
+            }
+          } : undefined}
           className="h-11 w-full rounded-xl border border-black/[0.08] bg-black/[0.025] py-2 pl-9 pr-11 text-xs font-bold text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-black/20 focus:bg-white dark:border-white/10 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-white/45 dark:focus:border-white/20 dark:focus:bg-white/[0.06]"
         />
         {searchQuery ? (
           <button
             type="button"
-            onClick={() => setSearchQuery("")}
+            onClick={clearSearch}
             className="absolute inset-y-0 right-0 grid w-11 place-items-center text-black/40 transition hover:text-black dark:text-white/45 dark:hover:text-white"
             aria-label="Cancella ricerca"
           >
@@ -165,8 +243,8 @@ export function DesktopSidebarNav({
       </div>
 
       {hasAreaSwitch ? (
-        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-black/[0.07] bg-black/[0.025] p-1 dark:border-white/10 dark:bg-white/[0.035]">
-          {(["PERSONALE", "LAVORO"] as const).map((area) => {
+        <div className={cn("sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-black/[0.07] bg-black/[0.025] p-1 dark:border-white/10 dark:bg-white/[0.035]", directionSidebar && styles.areas)}>
+          {areas.map((area) => {
             const selected = activeArea === area;
             const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
             return (
@@ -198,95 +276,85 @@ export function DesktopSidebarNav({
         >
           <Search className="size-[18px]" />
         </button>
-        {hasAreaSwitch ? (
-          <>
+        {hasAreaSwitch ? areas.map((area) => {
+          const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
+          const label = area === "PERSONALE" ? "Personale" : "Lavoro";
+          return (
             <button
+              key={area}
               type="button"
-              onClick={() => setActiveArea("PERSONALE")}
-              className={cn("sidebar-compact-tool", activeArea === "PERSONALE" && "is-active")}
-              aria-label="Mostra area Personale"
-              aria-pressed={activeArea === "PERSONALE"}
-              title="Personale"
+              onClick={() => setActiveArea(area)}
+              className={cn("sidebar-compact-tool", activeArea === area && "is-active")}
+              aria-label={`Mostra area ${label}`}
+              aria-pressed={activeArea === area}
+              title={label}
             >
-              <UserRound className="size-[18px]" />
+              <Icon className="size-[18px]" />
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveArea("LAVORO")}
-              className={cn("sidebar-compact-tool", activeArea === "LAVORO" && "is-active")}
-              aria-label="Mostra area Lavoro"
-              aria-pressed={activeArea === "LAVORO"}
-              title="Lavoro"
-            >
-              <BriefcaseBusiness className="size-[18px]" />
-            </button>
-          </>
-        ) : null}
+          );
+        }) : null}
       </div>
 
-      <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto" aria-label="Navigazione principale">
-        <div className="space-y-4 px-1 pb-4">
-          {sections.map((section) => (
-            <div key={section.id} className="space-y-1">
-              {section.title ? (
-                <button
-                  type="button"
-                  onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                  className="sidebar-section-toggle sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-black/[0.035]"
-                  aria-expanded={openSectionId === section.id}
-                >
-                  <p className="truncate text-xs font-semibold text-[color:var(--sidebar-text)] opacity-40">
-                    {section.title.toLowerCase() === "impostazione" ? "Impostazioni" : section.title}
-                  </p>
-                  <ChevronDown className={cn("size-3.5 shrink-0 text-[color:var(--sidebar-text)] opacity-35 transition-transform", openSectionId === section.id && "rotate-180")} />
-                </button>
-              ) : null}
-
-              {openSectionId === section.id || !section.title || searchQuery.trim() ? (
-                <div className="space-y-1">
-                  {section.items.map((item) => {
-                    const isActive = isItemActive(item.href);
-                    const displayLabel = getSidebarLabel(item.href, item.label);
-                    const itemBadge = item.href === "/notifications" ? unreadNotifications : item.badge ?? 0;
-
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        title={displayLabel}
-                        aria-current={isActive ? "page" : undefined}
-                        className={cn(
-                          "sidebar-nav-link group relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
-                          isActive
-                            ? "active border-white/12 bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)] shadow-none"
-                            : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-black/[0.035] hover:opacity-100"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "grid size-7 shrink-0 place-items-center rounded-md transition",
-                            isActive ? "bg-black/[0.05] text-[color:var(--sidebar-active-icon)]" : "text-[color:var(--sidebar-icon)] group-hover:bg-black/[0.035]"
-                          )}
-                        >
-                          <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
-                        </span>
-                        <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
-
-                        {item.href === "/requests" || itemBadge > 0 ? (
-                          <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
-                            {itemBadge > 99 ? "99+" : itemBadge}
-                          </span>
-                        ) : null}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : null}
+      <nav className={cn("mt-4 flex-1 overflow-y-auto", directionSidebar ? styles.menu : "no-scrollbar")} aria-label="Navigazione principale">
+        <div className={cn("space-y-4 px-1 pb-4", directionSidebar && styles.menuGroups)}>
+          {shortcuts.length > 0 ? (
+            <div role="group" aria-label="Accesso rapido" className={styles.shortcuts}>
+              {shortcuts.map(renderItem)}
             </div>
-          ))}
+          ) : null}
+          {sections.map((section) => {
+            const isOpen = openSectionId === section.id || !section.title || Boolean(normalizedSearch);
+            const sectionTitle = section.title.toLowerCase() === "impostazione" ? "Impostazioni" : section.title;
+            const sectionContentId = `${sectionPrefix}-${encodeURIComponent(section.id)}`;
+            return (
+              <div key={section.id} className="space-y-1">
+                {directionSidebar && section.title ? (
+                  <button
+                    type="button"
+                    className={cn("sidebar-compact-tool", styles.compactSection)}
+                    aria-label={sectionTitle}
+                    title={sectionTitle}
+                    onClick={() => {
+                      setOpenSectionId(section.id);
+                      window.dispatchEvent(new CustomEvent("paradise-sidebar-expand"));
+                      window.requestAnimationFrame(() => document.getElementById(sectionContentId + "-toggle")?.focus());
+                    }}
+                  >
+                    <DynamicIcon name={section.items[0].iconName} className="size-[18px]" />
+                  </button>
+                ) : null}
+                {section.title ? (
+                  <button
+                    type="button"
+                    id={directionSidebar ? sectionContentId + "-toggle" : undefined}
+                    onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
+                    className={cn("sidebar-section-toggle sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-black/[0.035]", directionSidebar && styles.sectionButton)}
+                    aria-expanded={directionSidebar ? isOpen : openSectionId === section.id}
+                    aria-controls={directionSidebar ? sectionContentId : undefined}
+                    disabled={directionSidebar && Boolean(normalizedSearch)}
+                  >
+                    {directionSidebar ? <Folder aria-hidden="true" /> : null}
+                    <p className="truncate text-xs font-semibold text-[color:var(--sidebar-text)] opacity-40">
+                      {sectionTitle}
+                    </p>
+                    <ChevronDown className={cn("size-3.5 shrink-0 text-[color:var(--sidebar-text)] opacity-35 transition-transform", isOpen && "rotate-180")} aria-hidden="true" />
+                  </button>
+                ) : null}
+                {directionSidebar || isOpen ? (
+                  <div
+                    id={directionSidebar ? sectionContentId : undefined}
+                    className={cn("space-y-1", directionSidebar && section.title && styles.sectionItems)}
+                    hidden={!isOpen}
+                  >
+                    {isOpen ? section.items.map(renderItem) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
 
-          {sections.length === 0 ? (
-            <div className="sidebar-label rounded-lg border border-dashed border-black/10 px-3 py-4 text-center text-xs font-bold text-[color:var(--sidebar-text)] opacity-50">
+          {sections.length === 0 && shortcuts.length === 0 ? (
+            <div role={directionSidebar ? "status" : undefined} className={cn("sidebar-label rounded-lg border border-dashed border-black/10 px-3 py-4 text-center text-xs font-bold text-[color:var(--sidebar-text)] opacity-50", directionSidebar && styles.empty)}>
               Nessuna pagina trovata.
             </div>
           ) : null}
@@ -303,18 +371,19 @@ export function DesktopSidebarNav({
                 {userName.slice(0, 2).toUpperCase()}
               </span>
             )}
-            <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />
+            {directionSidebar ? null : <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />}
           </span>
           <span className="sidebar-label min-w-0 text-left">
             <span className="block truncate text-xs font-black">{userName}</span>
             <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
           </span>
+          {directionSidebar ? <ArrowUpRight className={cn("sidebar-label", styles.profileArrow)} aria-hidden="true" /> : null}
         </Link>
         {["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? (
           <Link
             href="/remote"
             title="Controlla da remoto un PC del salone"
-            className="sidebar-label inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-black/10 bg-black/[0.03] px-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition hover:bg-black/[0.06]"
+            className={cn("sidebar-label inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-black/10 bg-black/[0.03] px-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition hover:bg-black/[0.06]", directionSidebar && styles.remote)}
           >
             <DynamicIcon name="MonitorCog" className="size-3.5" />
             Remoto

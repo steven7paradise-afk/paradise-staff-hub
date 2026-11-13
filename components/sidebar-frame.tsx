@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import styles from "./direction-sidebar.module.css";
 
 export function SidebarFrame({
   aside,
@@ -13,6 +14,7 @@ export function SidebarFrame({
   transparentMain = false,
   forceCollapsed = false,
   hideDesktopSidebar = false,
+  directionSidebar = false,
 }: {
   aside: React.ReactNode;
   main: React.ReactNode;
@@ -21,33 +23,36 @@ export function SidebarFrame({
   transparentMain?: boolean;
   forceCollapsed?: boolean;
   hideDesktopSidebar?: boolean;
+  directionSidebar?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(!directionSidebar);
   const [isTablet, setIsTablet] = useState(false);
   const pathname = usePathname();
   const isCollapsed = forceCollapsed || collapsed;
+  const preferenceKey = directionSidebar ? "paradise-direction-sidebar-collapsed" : "paradise-sidebar-collapsed";
 
   useEffect(() => {
     if (forceCollapsed) return;
-    setCollapsed(window.localStorage.getItem("paradise-sidebar-collapsed") !== "0");
-  }, [forceCollapsed]);
+    const preference = window.localStorage.getItem(preferenceKey);
+    setCollapsed(directionSidebar ? preference === "1" : preference !== "0");
+  }, [directionSidebar, forceCollapsed, preferenceKey]);
 
   useEffect(() => {
     if (forceCollapsed) return;
 
     const expandSidebar = () => {
       setCollapsed(false);
-      window.localStorage.setItem("paradise-sidebar-collapsed", "0");
+      window.localStorage.setItem(preferenceKey, "0");
     };
 
     window.addEventListener("paradise-sidebar-expand", expandSidebar);
     return () => window.removeEventListener("paradise-sidebar-expand", expandSidebar);
-  }, [forceCollapsed]);
+  }, [forceCollapsed, preferenceKey]);
 
   const toggleCollapsed = () => {
     setCollapsed((value) => {
       const nextValue = !value;
-      window.localStorage.setItem("paradise-sidebar-collapsed", nextValue ? "1" : "0");
+      window.localStorage.setItem(preferenceKey, nextValue ? "1" : "0");
       return nextValue;
     });
   };
@@ -91,6 +96,7 @@ export function SidebarFrame({
       <div
         className={cn(
           "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:bottom-0 xl:left-0 xl:top-0 xl:z-40 xl:h-screen xl:overflow-visible",
+          directionSidebar && styles.frame,
           hideDesktopSidebar && "xl:hidden",
           isCollapsed
             ? "xl:w-[88px] border-r border-black/[0.07] bg-[color:var(--user-sidebar-color,var(--light-sidebar,#fff))]"
@@ -101,8 +107,12 @@ export function SidebarFrame({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="absolute right-2 top-3 z-50 hidden size-7 place-items-center rounded-md border border-black/10 bg-white text-black/55 transition hover:border-black/20 hover:text-black xl:grid"
+            className={cn(
+              "absolute right-2 top-3 z-50 hidden size-7 place-items-center rounded-md border border-black/10 bg-white text-black/55 transition hover:border-black/20 hover:text-black xl:grid",
+              directionSidebar && styles.toggle,
+            )}
             aria-label={isCollapsed ? "Apri menu" : "Chiudi menu"}
+            aria-expanded={!isCollapsed}
             title={isCollapsed ? "Apri menu" : "Chiudi menu"}
           >
             {isCollapsed ? <ChevronsRight className="size-4" /> : <ChevronsLeft className="size-4" />}
@@ -110,7 +120,7 @@ export function SidebarFrame({
         ) : null}
         {aside}
       </div>
-      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
+      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", directionSidebar && styles.content, hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
         <div className="xl:flex xl:h-screen xl:flex-col">
           <div className={cn(
             "app-content-surface flex-1 overflow-hidden border-0 shadow-none xl:flex xl:flex-col",

@@ -475,7 +475,7 @@ export default async function DashboardPage() {
     };
 
     return (
-      <AppShell title="Dashboard" subtitle="Direzione operativa" role={role as any} hideHeader transparentMain>
+      <AppShell title="Dashboard" subtitle="Direzione operativa" role={role as any} hideHeader transparentMain directionSidebar>
         <ManagementDashboard data={managementData} userId={session.user.id} />
       </AppShell>
     );
