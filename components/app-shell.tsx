@@ -201,7 +201,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   ]);
   const displayUser = pcDisplayUser ?? currentUser;
   const isFormerEmployee = currentUser?.employee_status === FORMER_EMPLOYEE_STATUS;
-  const directionSidebar = !isPcCassa && !remoteController && !compactDarkSidebar;
   if (isFormerEmployee && formerEmployeeAccessDates(currentUser.workforce_data, currentUser.last_edited_at).until.getTime() < Date.now()) {
     redirect("/login?documentAccessExpired=1");
   }
@@ -462,9 +461,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
             sidebarConfig={effectiveSidebarConfig}
-            directionSidebar={directionSidebar}
-            homeHref={isFormerEmployee ? "/documents" : "/dashboard"}
-            profileHref="/profile"
+            directionSidebar
+            homeHref={isPcCassa ? pcAppointmentsHref : isFormerEmployee ? "/documents" : "/dashboard"}
+            profileHref={isPcCassa ? pcProfileChooserHref : "/profile"}
             logoutRedirectTo={isPcCassa ? pcProfileChooserHref : undefined}
             logoutSkipSignOut={isPcCassa}
             logoutLabel={isPcCassa ? "Cambia profilo" : "Esci"}
@@ -481,10 +480,11 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userPhoto={displayUser?.photo_url ?? null}
             roleLabel={isPcCassa ? "PC Cassa" : currentUser?.mansione?.trim() || (currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole])}
             currentRole={currentRole}
+            cashierMode={isPcCassa}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
             sidebarConfig={effectiveSidebarConfig}
-            directionSidebar={directionSidebar}
+            directionSidebar
           />
         </div>
 
@@ -559,7 +559,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       transparentMain={transparentMain}
       forceCollapsed={isPcCassa || compactDarkSidebar}
       hideDesktopSidebar={hideDesktopSidebar}
-      directionSidebar={directionSidebar}
+      directionSidebar
     />
   );
 }

@@ -1,0 +1,101 @@
+.rail {
+  --email-rail-surface: #28151e;
+  --email-rail-control: #381e2a;
+  --email-rail-active: #653148;
+  --email-rail-ink: #fff7fa;
+  --email-rail-muted: #d5bbc8;
+  --email-rail-line: #593643;
+  --email-rail-accent: #f5b7d1;
+
+  min-height: 0;
+  margin: 8px 6px 8px 8px;
+  padding: 12px 4px;
+  overflow-y: auto;
+  border: 1px solid var(--email-rail-line);
+  border-radius: 16px;
+  background: var(--email-rail-surface);
+  color: var(--email-rail-ink);
+  scrollbar-width: none;
+}
+
+.brand,
+.action {
+  display: grid;
+  width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 11px;
+}
+
+.brand {
+  padding: 7px;
+  background: var(--email-rail-ink);
+}
+
+.brand img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.navigation {
+  display: grid;
+  gap: 5px;
+  margin-block: 18px 12px;
+}
+
+.action {
+  color: var(--email-rail-muted);
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+a.action:hover {
+  border-color: var(--email-rail-line);
+  background: var(--email-rail-control);
+  color: var(--email-rail-ink);
+}
+
+.divider {
+  height: 1px;
+  margin: 4px 7px;
+  background: var(--email-rail-line);
+}
+
+.current {
+  position: relative;
+  background: var(--email-rail-active);
+  color: var(--email-rail-ink);
+}
+
+.current::before {
+  position: absolute;
+  inset: 12px auto 12px 0;
+  width: 2px;
+  border-radius: 4px;
+  background: var(--email-rail-accent);
+  content: "";
+}
+
+.profile {
+  margin-top: auto;
+  border-color: var(--email-rail-line);
+  border-radius: 50%;
+  background: var(--email-rail-control);
+  color: var(--email-rail-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rail a:focus-visible {
+  outline: 2px solid var(--email-rail-accent);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action {
+    transition: none;
+  }
+}

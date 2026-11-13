@@ -1,0 +1,122 @@
+.header {
+  background: #fffafd;
+  border-bottom-color: #eedde5;
+}
+
+:global(.dark) .header {
+  background: #1e141a;
+  border-bottom-color: #49313e;
+}
+
+.trigger {
+  color: #653148;
+  background: #f6e8ef;
+}
+
+.trigger:hover {
+  background: #f0dce7;
+}
+
+:global(.dark) .trigger {
+  color: #fff7fa;
+  background: #381e2a;
+}
+
+.drawer:global(.mobile-liquid-sidebar),
+:global(.dark) .drawer:global(.mobile-liquid-sidebar) {
+  --mobile-sidebar-surface: #28151e;
+  --mobile-sidebar-control: #381e2a;
+  --mobile-sidebar-active: #653148;
+  --mobile-sidebar-ink: #fff7fa;
+  --mobile-sidebar-muted: #d5bbc8;
+  --mobile-sidebar-border: #5c394b;
+  --mobile-sidebar-accent: #f5b7d1;
+  --light-sidebar-text: var(--mobile-sidebar-ink);
+  --light-sidebar-icon: var(--mobile-sidebar-muted);
+  --dark-sidebar-text: var(--mobile-sidebar-ink);
+  --dark-sidebar-icon: var(--mobile-sidebar-muted);
+  --sidebar-active-bg: var(--mobile-sidebar-active);
+  --sidebar-active-text: var(--mobile-sidebar-ink);
+  --sidebar-active-icon: var(--mobile-sidebar-accent);
+  background: var(--mobile-sidebar-surface) !important;
+  border-color: var(--mobile-sidebar-border) !important;
+  color: var(--mobile-sidebar-ink);
+  box-shadow: 16px 0 52px rgb(12 4 9 / 42%);
+}
+
+.drawer:global(.mobile-liquid-sidebar)[aria-hidden="true"],
+:global(.dark) .drawer:global(.mobile-liquid-sidebar)[aria-hidden="true"] {
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.drawer:global(.mobile-liquid-sidebar) :is(input, :global(.mobile-sidebar-close), :global(.mobile-sidebar-profile), :global(.mobile-sidebar-theme), :global(.mobile-sidebar-area-switch), .logout) {
+  background: var(--mobile-sidebar-control) !important;
+  border-color: var(--mobile-sidebar-border) !important;
+  color: var(--mobile-sidebar-ink) !important;
+  box-shadow: none;
+}
+
+.drawer:global(.mobile-liquid-sidebar) input::placeholder,
+.drawer:global(.mobile-liquid-sidebar) :is(:global(.mobile-sidebar-muted), :global(.mobile-sidebar-section), :global(.mobile-sidebar-area-button), :global(.mobile-sidebar-link-icon)) {
+  color: var(--mobile-sidebar-muted) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.drawer input {
+  font-size: 16px;
+}
+
+.drawer input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.drawer:global(.mobile-liquid-sidebar) :is(:global(.mobile-sidebar-area-button.is-active), :global(.mobile-sidebar-link.active)) {
+  background: var(--mobile-sidebar-active) !important;
+  border-color: transparent !important;
+  color: var(--mobile-sidebar-ink) !important;
+  box-shadow: none;
+}
+
+.drawer :global(.mobile-sidebar-link.active)::before {
+  position: absolute;
+  inset-block: 12px;
+  inset-inline-start: 3px;
+  width: 2px;
+  border-radius: 3px;
+  background: var(--mobile-sidebar-accent);
+  content: "";
+}
+
+.drawer:global(.mobile-liquid-sidebar) :is(:global(.mobile-sidebar-link:not(.active)), :global(.mobile-sidebar-section)):hover {
+  background: var(--mobile-sidebar-control) !important;
+}
+
+.drawer:global(.mobile-liquid-sidebar) :is(.logout, :global(.mobile-sidebar-close)):hover {
+  background: var(--mobile-sidebar-active) !important;
+}
+
+.drawer :is(a, button, input):focus-visible,
+.trigger:focus-visible {
+  outline: 2px solid var(--mobile-sidebar-accent, #a7476d);
+  outline-offset: -2px;
+}
+
+.navigation {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mobile-sidebar-border) transparent;
+}
+
+.badge {
+  background: #f5d8e6;
+  color: #562039;
+  -webkit-text-fill-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer *,
+  .trigger {
+    transition: none !important;
+  }
+}

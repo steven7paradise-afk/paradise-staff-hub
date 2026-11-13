@@ -97,6 +97,7 @@ export function SidebarFrame({
         className={cn(
           "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:bottom-0 xl:left-0 xl:top-0 xl:z-40 xl:h-screen xl:overflow-visible",
           directionSidebar && styles.frame,
+          directionSidebar && forceCollapsed && styles.fixedRail,
           hideDesktopSidebar && "xl:hidden",
           isCollapsed
             ? "xl:w-[88px] border-r border-black/[0.07] bg-[color:var(--user-sidebar-color,var(--light-sidebar,#fff))]"

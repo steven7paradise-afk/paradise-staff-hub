@@ -34,6 +34,7 @@ type DesktopSidebarNavProps = {
   userPhoto: string | null;
   roleLabel: string;
   currentRole: string;
+  cashierMode?: boolean;
   unreadNotifications: number;
   items: MenuItem[];
   sidebarConfig: SidebarFolder[] | null;
@@ -53,6 +54,7 @@ export function DesktopSidebarNav({
   userPhoto,
   roleLabel,
   currentRole,
+  cashierMode = false,
   unreadNotifications,
   items,
   sidebarConfig,
@@ -78,7 +80,7 @@ export function DesktopSidebarNav({
   const isItemActive = (href: string) => directionSidebar ? href === activeHref : matchesPath(href);
 
   const normalizedSearch = directionSidebar ? normalizeSearch(searchQuery) : searchQuery.trim().toLowerCase();
-  const shortcuts = directionSidebar && !normalizedSearch
+  const shortcuts = directionSidebar && !cashierMode && !normalizedSearch
     ? directionShortcuts.flatMap((href) => {
         const item = items.find((entry) => entry.href === href);
         return item && (!sidebarConfig || sidebarConfig.some((folder) => folder.routes.includes(href))) ? [item] : [];
@@ -196,6 +198,24 @@ export function DesktopSidebarNav({
     );
   };
 
+  const profileIdentity = (
+    <>
+      <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-black/10 bg-black/[0.035]">
+        {userPhoto ? (
+          <img src={resolveDrivePhotoUrl(userPhoto)} alt="" className="size-full object-cover" />
+        ) : (
+          <span aria-hidden="true" className="grid size-full place-items-center text-[11px] font-black">
+            {userName.slice(0, 2).toUpperCase()}
+          </span>
+        )}
+      </span>
+      <span className="sidebar-label min-w-0 text-left">
+        <span className="block truncate text-xs font-black">{userName}</span>
+        <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
+      </span>
+    </>
+  );
+
   return (
     <div className={cn("app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]", directionSidebar && styles.navigation)}>
       <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-black/[0.07] px-1 pb-5 pt-2">
@@ -211,7 +231,7 @@ export function DesktopSidebarNav({
         </div>
         <div className="sidebar-label text-left min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]">Staff Hub</p>
-          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">{directionSidebar && canViewManagementDashboard(currentRole) ? "Direzione" : "Area operativa"}</p>
+          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">{cashierMode ? "PC Cassa" : directionSidebar && canViewManagementDashboard(currentRole) ? "Direzione" : "Area operativa"}</p>
         </div>
       </div>
 
@@ -271,7 +291,7 @@ export function DesktopSidebarNav({
         </div>
       ) : null}
 
-      <div className="sidebar-compact-tools mt-3 hidden shrink-0 flex-col items-center gap-1" aria-label="Strumenti rapidi">
+      {!cashierMode ? <div className="sidebar-compact-tools mt-3 hidden shrink-0 flex-col items-center gap-1" aria-label="Strumenti rapidi">
         <button
           type="button"
           onClick={openSidebarSearch}
@@ -298,7 +318,7 @@ export function DesktopSidebarNav({
             </button>
           );
         }) : null}
-      </div>
+      </div> : null}
 
       <nav className={cn("mt-4 flex-1 overflow-y-auto", directionSidebar ? styles.menu : "no-scrollbar")} aria-label="Navigazione principale">
         <div className={cn("space-y-4 px-1 pb-4", directionSidebar && styles.menuGroups)}>
@@ -367,24 +387,17 @@ export function DesktopSidebarNav({
       </nav>
 
       <div className="sidebar-profile mx-1 mt-2 flex shrink-0 flex-wrap items-center gap-2 border-t border-black/[0.07] px-2 pt-4 text-[color:var(--sidebar-text)]">
-        <Link href="/profile" title={`${userName} - ${roleLabel}`} className="sidebar-profile-identity flex w-full min-w-0 items-center gap-3 transition hover:opacity-80">
-          <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-black/10 bg-black/[0.035]">
-            {userPhoto ? (
-              <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
-            ) : (
-              <span className="grid size-full place-items-center text-[11px] font-black">
-                {userName.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-            {directionSidebar ? null : <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />}
-          </span>
-          <span className="sidebar-label min-w-0 text-left">
-            <span className="block truncate text-xs font-black">{userName}</span>
-            <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
-          </span>
-          {directionSidebar ? <ArrowUpRight className={cn("sidebar-label", styles.profileArrow)} aria-hidden="true" /> : null}
-        </Link>
-        {["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? (
+        {cashierMode ? (
+          <div title={`${userName} · ${roleLabel}`} className="sidebar-profile-identity flex w-full min-w-0 items-center gap-3">
+            {profileIdentity}
+          </div>
+        ) : (
+          <Link href="/profile" aria-label={`Apri il profilo di ${userName}`} title={`${userName} · ${roleLabel}`} className="sidebar-profile-identity flex w-full min-w-0 items-center gap-3 transition hover:opacity-80">
+            {profileIdentity}
+            {directionSidebar ? <ArrowUpRight className={cn("sidebar-label", styles.profileArrow)} aria-hidden="true" /> : null}
+          </Link>
+        )}
+        {!cashierMode && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? (
           <Link
             href="/remote"
             title="Controlla da remoto un PC del salone"
