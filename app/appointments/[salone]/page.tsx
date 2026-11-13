@@ -2,15 +2,10 @@ import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import AppointmentsPage from "@/components/appointments-page";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
-import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
-import { appointmentSalonForPC, appointmentStaffLocationsForPC, appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { appointmentSalonForPC, appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization, findAppointmentPcWorker } from "@/lib/appointments-pc-auth";
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import {
-  appointmentStaffDisplayName,
-  isAlwaysActiveAppointmentStaff,
-} from "@/lib/appointment-staff-access";
+import { appointmentStaffDisplayName } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -37,23 +32,9 @@ export default async function SalonAppointmentsPage({
   const isAdminRemote = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
   const pcSalon = pcAuth && !isAdminRemote ? await appointmentSalonForPC(pcAuth.locationId) : null;
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
-  const selectedWorkerIdentity = selectedWorker ? decodeURIComponent(selectedWorker) : "";
-  const selectedWorkerCandidate = pcAuth && selectedWorkerIdentity
-    ? await prisma.user.findFirst({
-        where: {
-          active: true,
-          OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
-        },
-        select: { id: true, name: true, sede_id: true, role: true },
-      }).catch(() => null)
+  const selectedWorkerRecord = pcAuth
+    ? await findAppointmentPcWorker(pcAuth.locationId, pcSalon, selectedWorker).catch(() => null)
     : null;
-  const selectedWorkerRecord = selectedWorkerCandidate && pcAuth && (
-    selectedWorkerCandidate.sede_id === pcAuth.locationId ||
-    selectedWorkerCandidate.sede_id === null ||
-    isAppointmentPinOnlyRole(selectedWorkerCandidate.role) ||
-    isAlwaysActiveAppointmentStaff(selectedWorkerCandidate.name, selectedWorkerCandidate.id) ||
-    (pcSalon === "repubblica" && (await appointmentStaffLocationsForPC(pcAuth.locationId, pcSalon)).includes(selectedWorkerCandidate.sede_id))
-  ) ? selectedWorkerCandidate : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
   const requestedWorker = typeof resolvedSearchParams.worker === "string"
     ? resolvedSearchParams.worker.trim()
@@ -63,6 +44,8 @@ export default async function SalonAppointmentsPage({
   if (isAdministratorSession && !remoteTarget && !isPcNavigation) {
     return await AppointmentsPage({
       searchParams: Promise.resolve({ ...resolvedSearchParams, salone }),
+      repubblicaBoard: salone === "repubblica",
+      navigationBasePath: salone === "repubblica" ? appointmentSalonUrl(salone) : undefined,
     });
   }
 
@@ -110,5 +93,6 @@ export default async function SalonAppointmentsPage({
       worker: appointmentStaffDisplayName(selectedWorkerRecord.name, selectedWorkerRecord.id),
     }),
     forcePcSalon: salone,
+    repubblicaBoard: salone === "repubblica" && !isAdminRemote,
   });
 }

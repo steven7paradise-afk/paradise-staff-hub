@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { Client } from "pg";
-import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { appointmentSalonForPC, appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization, findAppointmentPcWorker } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
 import { archiveMonths } from "@/lib/appointment-archive-range";
 import { addAppointmentDays, appointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
@@ -61,8 +61,18 @@ export async function GET(request: NextRequest) {
   }
   const range = from && to ? { from, to } : null;
   const token = request.cookies.get(appointmentsPcCookieName)?.value;
+  const workerCookie = request.cookies.get(appointmentsPcWorkerCookieName)?.value;
+  const cashierScope = request.nextUrl.searchParams.get("scope") === "cashier";
+  if (cashierScope && !range) return new Response(null, { status: 400 });
   const authorized = async () => {
     if (!range) return Boolean(await checkPCAuthorization(token) || await getOperationalUser(request));
+    if (cashierScope) {
+      if (!workerCookie) return false;
+      const pc = await checkPCAuthorization(token);
+      if (!pc) return false;
+      const salon = await appointmentSalonForPC(pc.locationId);
+      return salon === "repubblica" && Boolean(await findAppointmentPcWorker(pc.locationId, salon, workerCookie));
+    }
     const user = await getOperationalUser(request, { preferAuthenticatedAdmin: true });
     if (!user || user.isPC) return false;
     const profile = await prisma.user.findUnique({

@@ -355,8 +355,9 @@ export default async function AppointmentsPage({
   const allowLegacyBuenosAires = Boolean(isRepubblicaPc && locations && repubblicaIncludesLegacyBuenosAires(locations, pcLocationId));
   const isArchive = resolvedSearchParams.scope === "all" && !isRepubblicaPc;
   const appointmentRange = resolveAppointmentsRange(isRepubblicaPc ? { ...resolvedSearchParams, scope: undefined } : resolvedSearchParams);
-  const updateOnChange = repubblicaBoard && !isPC;
-  const appointmentRevision = updateOnChange && appointmentsRealtimeEnabled()
+  const useRepubblicaBoard = repubblicaBoard && (!isPC || isRepubblicaPc);
+  const updateOnChange = useRepubblicaBoard && appointmentsRealtimeEnabled();
+  const appointmentRevision = updateOnChange
     ? await readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end)
     : null;
   const archive = await readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
@@ -672,7 +673,7 @@ export default async function AppointmentsPage({
 
       <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} updatedAt={archive.updatedAt} stale={updateOnChange ? archive.invalidated : archive.stale} updateOnChange={updateOnChange} />
       {updateOnChange && (isArchive || waitingForArchive) ? (
-        <AppointmentsLiveRefresh key={`${appointmentRange.start}:${appointmentRange.end}`} revision={appointmentRevision} from={appointmentRange.start} to={appointmentRange.end} />
+        <AppointmentsLiveRefresh key={`${appointmentRange.start}:${appointmentRange.end}`} revision={appointmentRevision} cashier={isRepubblicaPc} from={appointmentRange.start} to={appointmentRange.end} />
       ) : null}
       {isArchive ? <AppointmentArchiveBrowser
         month={appointmentRange.start.slice(0, 7)} query={String(resolvedSearchParams.q || "")}
@@ -686,7 +687,7 @@ export default async function AppointmentsPage({
         corsoTeamOptions={corsoTeamOptions}
         isPC={isPC}
         pcLocationId={pcLocationId}
-        repubblicaBoard={updateOnChange}
+        repubblicaBoard={useRepubblicaBoard}
         appointmentRevision={appointmentRevision}
         initialSalon={initialSalon}
         initialPcWorkerName={kioskWorkerName}

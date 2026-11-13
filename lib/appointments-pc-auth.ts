@@ -1,5 +1,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
+import { FORMER_EMPLOYEE_STATUS } from "./former-employee";
+import { isAppointmentPinOnlyRole } from "./appointment-pin-entry";
+import { isAlwaysActiveAppointmentStaff } from "./appointment-staff-access";
 import { appointmentSalonSlugFromName, isCashierAppointmentSalon, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "./appointment-salon-url";
 
 export const appointmentsPcCookieName = "appointments_pc_token";
@@ -88,6 +91,26 @@ export async function isAppointmentStaffLocationForPC(locationId: string, staffL
   const salon = await appointmentSalonForPC(locationId);
   if (salon !== "repubblica") return false;
   return (await appointmentStaffLocationsForPC(locationId, salon)).includes(staffLocationId);
+}
+
+export async function findAppointmentPcWorker(locationId: string, salon: AppointmentSalonSlug | null, cookieValue?: string) {
+  if (!cookieValue) return null;
+  let identity: string;
+  try { identity = decodeURIComponent(cookieValue).trim(); } catch { return null; }
+  if (!identity) return null;
+  const worker = await prisma.user.findFirst({
+    where: {
+      active: true,
+      employee_status: { not: FORMER_EMPLOYEE_STATUS },
+      OR: [{ id: identity }, { name: identity }],
+    },
+    select: { id: true, name: true, sede_id: true, role: true },
+  });
+  if (!worker) return null;
+  if (worker.sede_id === null || worker.sede_id === locationId || isAppointmentPinOnlyRole(worker.role) ||
+      isAlwaysActiveAppointmentStaff(worker.name, worker.id)) return worker;
+  return salon === "repubblica" && (await appointmentStaffLocationsForPC(locationId, salon)).includes(worker.sede_id)
+    ? worker : null;
 }
 
 export async function activatePC(code: string, ip: string | null) {

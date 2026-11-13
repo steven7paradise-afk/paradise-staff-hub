@@ -28,7 +28,7 @@ type RepubblicaAgendaToolbarProps = {
   dateOpen: boolean;
   onDateOpenChange: (open: boolean) => void;
   onDateRangeChange: (from: string, to: string) => void;
-  onArchiveMonth: (month: string) => void;
+  onArchiveMonth?: (month: string) => void;
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -39,6 +39,7 @@ type RepubblicaAgendaToolbarProps = {
   searchOpen: boolean;
   onSearchToggle: () => void;
   searchField: ReactNode;
+  operatorAction?: { name: string; onChange: () => void };
   workerValue: string;
   workerOptions: FilterOption[];
   onWorkerChange: (value: string) => void;
@@ -84,7 +85,7 @@ function DateRangeControls({
   from: string;
   to: string;
   onApply: (from: string, to: string) => void;
-  onArchiveMonth: (month: string) => void;
+  onArchiveMonth?: (month: string) => void;
 }) {
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
@@ -119,7 +120,7 @@ function DateRangeControls({
           Applica periodo
         </button>
       </div>
-      <div className="grid gap-2 border-t border-[color:var(--agenda-divider)] pt-3">
+      {onArchiveMonth ? <div className="grid gap-2 border-t border-[color:var(--agenda-divider)] pt-3">
         <label className={labelClass}>
           Mese dello storico
           <input type="month" className={`${inputClass} w-full`} value={archiveMonth} onChange={(event) => setArchiveMonth(event.target.value)} />
@@ -127,7 +128,7 @@ function DateRangeControls({
         <button type="button" className={controlClass} disabled={!archiveMonth} onClick={() => onArchiveMonth(archiveMonth)}>
           Apri archivio
         </button>
-      </div>
+      </div> : null}
     </div>
   );
 }
@@ -154,6 +155,7 @@ export function RepubblicaAgendaToolbar({
   searchOpen,
   onSearchToggle,
   searchField,
+  operatorAction,
   workerValue,
   workerOptions,
   onWorkerChange,
@@ -248,7 +250,12 @@ export function RepubblicaAgendaToolbar({
             <span><strong className="font-semibold tabular-nums text-[color:var(--agenda-text)]">{visitCount}</strong> {visitCount === 1 ? "visita" : "visite"} in agenda</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {operatorAction ? <button type="button" className={controlClass} onClick={operatorAction.onChange} title="Cambia profilo">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-600" />
+            <span>{operatorAction.name}</span>
+            <span className="text-xs text-[color:var(--agenda-muted)]">Cambia</span>
+          </button> : null}
           <button
             type="button"
             className={`${controlClass} min-w-11 px-0`}
@@ -341,10 +348,10 @@ export function RepubblicaAgendaToolbar({
                   closeDate();
                   onDateRangeChange(from, to);
                 }}
-                onArchiveMonth={(month) => {
+                onArchiveMonth={onArchiveMonth ? (month) => {
                   closeDate();
                   onArchiveMonth(month);
-                }}
+                } : undefined}
               />
             </div>
           ) : null}

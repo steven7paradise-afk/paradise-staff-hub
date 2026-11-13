@@ -8,12 +8,14 @@ export function AppointmentsLiveRefresh({
   from,
   to,
   paused = false,
+  cashier = false,
   onRosterChange,
 }: {
   revision: string | null;
   from: string;
   to: string;
   paused?: boolean;
+  cashier?: boolean;
   onRosterChange?: (revision: string) => void;
 }) {
   const router = useRouter();
@@ -31,6 +33,7 @@ export function AppointmentsLiveRefresh({
   useEffect(() => {
     if (!enabled) return;
     const params = new URLSearchParams({ from, to });
+    if (cashier) params.set("scope", "cashier");
     let stream: EventSource | undefined;
     let retry: number | undefined;
     let delay = 2000;
@@ -62,7 +65,7 @@ export function AppointmentsLiveRefresh({
       window.clearTimeout(retry);
       stream?.close();
     };
-  }, [enabled, from, to]);
+  }, [cashier, enabled, from, to]);
 
   useEffect(() => {
     if (!revision || paused || refreshing || !nextRevision || nextRevision === revision) return;

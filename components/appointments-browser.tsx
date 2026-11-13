@@ -1341,8 +1341,9 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
-    setSalon(isPC ? initialSalon : salonFromUrl || initialSalon);
-  }, [initialSalon, isPC, searchParams]);
+    const hasFixedSalon = isPC || (repubblicaBoard && Boolean(navigationBasePath && navigationBasePath !== "/appointments"));
+    setSalon(hasFixedSalon ? initialSalon : salonFromUrl || initialSalon);
+  }, [initialSalon, isPC, navigationBasePath, repubblicaBoard, searchParams]);
 
   function updateSalonFilter(nextSalon: SalonFilter) {
     if (isPC) return;
@@ -1359,6 +1360,7 @@ export function AppointmentsBrowser({
   const [view, setView] = useState<ViewMode>(initialView);
   const [layoutMode, setLayoutMode] = useState<"table" | "board">("board");
   const pcRepubblica = isPC && initialSalon === "repubblica";
+  const agendaDefaultSalon = navigationBasePath === "/appointments" ? "tutti" : initialSalon;
   const hasSeparateCorsoLocation = locations.some((location) => appointmentSalonSlugFromName(location.name) === "buenos-aires");
   const legacyCorsoOnRepubblica = (repubblicaBoard || pcRepubblica) && !hasSeparateCorsoLocation;
   const boardSalonName = repubblicaBoard || pcRepubblica ? "Salone Repubblica" : "Salone Corso";
@@ -1496,7 +1498,7 @@ export function AppointmentsBrowser({
       setBoardStaffLoading(true);
       setBoardStaffError("");
       try {
-        const params = repubblicaBoard
+        const params = repubblicaBoard && !pcRepubblica
           ? "scope=repubblica-board"
           : `salone=${pcRepubblica ? "repubblica" : "buenos-aires"}&scope=salon`;
         const response = await fetch(`/api/appointments/pc/active-staff?${params}`, {
@@ -1605,9 +1607,10 @@ export function AppointmentsBrowser({
     }
     const worker = searchParams.get("worker");
     if (worker) params.set("worker", worker);
+    if (searchParams.has("work")) params.set("work", searchParams.get("work") || "");
     if (options?.forceRefresh) params.set("refresh", "true");
 
-    if (navigationBasePath && targetSalon !== "tutti") {
+    if (navigationBasePath === "/appointments" && targetSalon !== "tutti") {
       params.set("salone", targetSalon);
     }
     const base = navigationBasePath || appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon);
@@ -5007,6 +5010,7 @@ export function AppointmentsBrowser({
         <AppointmentsLiveRefresh
           key={`${initialRangeFrom}:${initialRangeTo}`}
           revision={appointmentRevision}
+          cashier={pcRepubblica}
           onRosterChange={setBoardRosterRevision}
           from={initialRangeFrom}
           to={initialRangeTo}
@@ -6146,7 +6150,7 @@ export function AppointmentsBrowser({
                 setIsDatePickerOpen(false);
                 navigateToAppointmentRange(view, date, { from, to });
               }}
-              onArchiveMonth={(month) => {
+              onArchiveMonth={isPC ? undefined : (month) => {
                 const day = `${month}-01`;
                 const date = isAppointmentDateKey(day) && dateFromLocalKey(day);
                 if (!date) return;
@@ -6172,6 +6176,7 @@ export function AppointmentsBrowser({
                 if (searchPanelOpen) setSearchTerm("");
                 else requestAnimationFrame(() => document.getElementById("appointments-client-search")?.focus());
               }}
+              operatorAction={isPC && pcActiveWorker ? { name: pcActiveWorker.name, onChange: () => { void handlePcLogout(); } } : undefined}
               searchField={searchPanelOpen ? <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} plain /> : null}
               workerValue={filterStaff}
               workerOptions={agendaWorkerOptions}
@@ -6182,7 +6187,7 @@ export function AppointmentsBrowser({
                 setFilterStatus(value);
                 setShowCanceled(value === "ANNULLATO");
               }}
-              canReset={Boolean(activeAdvancedFilterCount || filterHour || searchTerm || salon !== "tutti")}
+              canReset={Boolean(activeAdvancedFilterCount || filterHour || searchTerm || (!isPC && salon !== agendaDefaultSalon))}
               onReset={() => {
                 setFilterStaff("all");
                 setFilterPayment("all");
@@ -6190,7 +6195,7 @@ export function AppointmentsBrowser({
                 setShowCanceled(false);
                 setFilterHour("");
                 setSearchTerm("");
-                if (salon !== "tutti") updateSalonFilter("tutti");
+                if (!isPC && salon !== agendaDefaultSalon) updateSalonFilter(agendaDefaultSalon);
               }}
               hideOffShift={!showEmptyBoardWorkers}
               onHideOffShiftChange={(hide) => setShowEmptyBoardWorkers(!hide)}
@@ -6200,15 +6205,15 @@ export function AppointmentsBrowser({
               hourValue={filterHour}
               onHourChange={setFilterHour}
               onAdvancedOpenChange={setIsFilterModalOpen}
-              onGeneratePcLink={currentUser?.role && pcLinkManagerRoles.has(currentUser.role) ? openPcLinkDialog : undefined}
+              onGeneratePcLink={!isPC && currentUser?.role && pcLinkManagerRoles.has(currentUser.role) ? openPcLinkDialog : undefined}
               advancedFilters={
                 <>
-                  <label className="grid gap-1 text-xs font-semibold text-[#6D6067]">
+                  {!isPC && navigationBasePath === "/appointments" ? <label className="grid gap-1 text-xs font-semibold text-[#6D6067]">
                     Salone
                     <select value={salon} onChange={(event) => updateSalonFilter(event.target.value as SalonFilter)} className="min-h-11 rounded-[10px] border border-[#DAD6D3] bg-white px-3 text-sm font-semibold text-[#2B2429]">
                       {salonOptions.filter((option) => !legacyCorsoOnRepubblica || option.value !== "buenos-aires").map((option) => <option key={option.value} value={option.value}>{option.value === "tutti" ? "Tutti i saloni" : option.label}</option>)}
                     </select>
-                  </label>
+                  </label> : null}
                   <label className="grid gap-1 text-xs font-semibold text-[#6D6067]">
                     Pagamento
                     <select value={filterPayment} onChange={(event) => setFilterPayment(event.target.value)} className="min-h-11 rounded-[10px] border border-[#DAD6D3] bg-white px-3 text-sm font-semibold text-[#2B2429]">
