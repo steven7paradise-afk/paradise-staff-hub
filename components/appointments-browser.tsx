@@ -67,6 +67,7 @@ import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { AppointmentPaymentNotice, AppointmentPaymentHistory } from "@/components/appointment-payment-notice";
 import { clientControlParagraph, clientControlServiceSentence } from "@/lib/client-control-summary";
 import serviceDetailsStyles from "./service-details.module.css";
+import canceledStyles from "./appointments-canceled.module.css";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { CLIENT_CONTROL_DISCOVERY_OPTIONS, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
@@ -2537,6 +2538,10 @@ export function AppointmentsBrowser({
     openServiceDetails = false,
     boardWorker?: { id: string; name: string },
   ) {
+    if (repubblicaBoard && booking.isCanceled) {
+      setSelectedBookingId(booking.id);
+      return;
+    }
     clientControlRequestRef.current?.abort();
     const requestController = new AbortController();
     clientControlRequestRef.current = requestController;
@@ -3974,6 +3979,7 @@ export function AppointmentsBrowser({
     teammateIds: string[],
     signedBy?: string,
   ) {
+    if (repubblicaBoard && booking.isCanceled) return false;
     const previousTeam = getBookingTeam(booking);
     const previousClientControlStaffIds =
       clientControlFormRef.current.bookingId === booking.id
@@ -4186,7 +4192,7 @@ export function AppointmentsBrowser({
   async function moveBoardBooking(bookingId: string, teammateId: string) {
     if (!bookingId || !teammateId || teammateId === "unassigned") return;
     const booking = initialBookings.find((item) => item.id === bookingId);
-    if (!booking) return;
+    if (!booking || (repubblicaBoard && booking.isCanceled)) return;
     if (isPC && !pcActiveWorker) {
       setPcScreenLocked(true);
       return;
@@ -4278,6 +4284,7 @@ export function AppointmentsBrowser({
     booking: AppointmentRecord,
     status: AppointmentStatusValue,
   ) {
+    if (repubblicaBoard && booking.isCanceled) return;
     if (event.pointerType !== "touch") {
       startBoardLongPress(event, booking, status);
       return;
@@ -4555,6 +4562,7 @@ export function AppointmentsBrowser({
     }
 
     const durationHours = (bookings: AppointmentRecord[]) => bookings.reduce((sum, booking) => {
+      if (repubblicaBoard && booking.isCanceled) return sum;
       const start = new Date(booking.startDate).getTime();
       const end = new Date(booking.endDate || "").getTime();
       if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return sum;
@@ -4703,7 +4711,7 @@ export function AppointmentsBrowser({
   ) {
     if (booking.isCanceled) {
       return (
-        <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
+        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${repubblicaBoard ? canceledStyles.status : "border-red-100 bg-red-50 text-red-700"}`}>
           Annullato
         </span>
       );
@@ -6705,6 +6713,7 @@ export function AppointmentsBrowser({
                     <div className={visit.length > 1 ? "grid gap-2 sm:grid-cols-2" : ""}>
                     {visit.map((booking) => {
                     const status = getBookingStatus(booking);
+                    const canceledEntry = repubblicaBoard && booking.isCanceled;
                     const selectableStatus =
                       status === "ARRIVATO_IN_RITARDO"
                         ? "IN_ATTESA"
@@ -6721,7 +6730,8 @@ export function AppointmentsBrowser({
                     return (
                       <article
                         key={`instant-${booking.id}`}
-                        className="rounded-2xl border border-[#E8DCE2] bg-white p-4 text-left shadow-sm transition hover:border-[#D86B9B] hover:shadow-md"
+                        data-appointment-state={canceledEntry ? "canceled" : undefined}
+                        className={`rounded-2xl border p-4 text-left shadow-sm transition hover:shadow-md ${canceledEntry ? canceledStyles.entry : "border-[#E8DCE2] bg-white hover:border-[#D86B9B]"}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -6730,7 +6740,7 @@ export function AppointmentsBrowser({
                               {formatDate(booking.startDate)} · {formatTime(booking.startDate)}–{formatTime(booking.endDate)}
                             </p>
                           </div>
-                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase ${canceledEntry ? canceledStyles.status : booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
                             {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                           </span>
                         </div>
@@ -6742,7 +6752,7 @@ export function AppointmentsBrowser({
                         </div>
                         <AppointmentNotePreviews notes={notePreviews} expandable />
                         <div className="mt-4 flex flex-col gap-3 border-t border-[#F0E5EA] pt-3 sm:flex-row sm:items-end sm:justify-between">
-                          <label className="min-w-0 flex-1">
+                          {!canceledEntry && <label className="min-w-0 flex-1">
                             <span className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.15em] text-[#806774]">
                               Stato cliente
                             </span>
@@ -6785,7 +6795,7 @@ export function AppointmentsBrowser({
                                 />
                               )}
                             </span>
-                          </label>
+                          </label>}
                           <button
                             type="button"
                             onClick={() => void openClientControlForBooking(booking)}
@@ -6820,7 +6830,8 @@ export function AppointmentsBrowser({
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-[#6D6067]" aria-label="Legenda agenda">
                 <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3.5 w-5 rounded-[4px] border-2 border-[#287D75]" /> Contorno · In contemporanea</span>
                 <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3.5 w-5 rounded-full border border-[#CCD9D1] bg-[#EBF1ED]" /> Etichetta · Stato</span>
-                <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="grid size-4 place-items-center rounded-full border border-[#AE3741] font-bold text-[#AE3741]">!</span> Rosso · Annullato o non presentato</span>
+                <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="grid size-4 place-items-center rounded-full border border-[#AE3741] font-bold text-[#AE3741]">!</span> Rosso · Non presentato</span>
+                <span className="inline-flex items-center gap-2"><span aria-hidden="true" className={`h-3.5 w-5 rounded-full border ${canceledStyles.status}`} /> Grigio · Annullato</span>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-lg font-bold capitalize tracking-tight text-[#2B2429]">{agendaDateHeading}</h2>
@@ -7005,7 +7016,7 @@ export function AppointmentsBrowser({
                             <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
                             <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.bookings.filter((booking) => !booking.isCanceled).length} attivi</span>
                             {column.bookings.some((booking) => booking.isCanceled) ? (
-                              <span className="rounded-lg bg-[#FFF0F1] px-2 py-1 text-[#B83B49]">{column.bookings.filter((booking) => booking.isCanceled).length} ann.</span>
+                              <span className={`rounded-lg px-2 py-1 ${repubblicaBoard ? canceledStyles.status : "bg-[#FFF0F1] text-[#B83B49]"}`}>{column.bookings.filter((booking) => booking.isCanceled).length} ann.</span>
                             ) : null}
                           </div>
                         </header>
@@ -7016,6 +7027,7 @@ export function AppointmentsBrowser({
                             if (column.bookings.slice(0, bookingIndex).some(previous => visit.some(item => item.id === previous.id))) return null;
                             const visitEnd = visit.reduce((latest, item) => Date.parse(item.endDate || item.startDate) > Date.parse(latest) ? (item.endDate || item.startDate) : latest, visit[0].endDate || visit[0].startDate);
                             const status = getBookingStatus(booking);
+                            const canceledEntry = repubblicaBoard && booking.isCanceled;
                             const overlappingIds = overlapsByWorker.get(column.id);
                             const overlaps = visit.some((item) => overlappingIds?.has(item.id));
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
@@ -7024,15 +7036,14 @@ export function AppointmentsBrowser({
                               paradiseNote,
                               status === "COMPLETATO",
                               visitShopifyNotes[booking.id],
-                            )
-                              .filter((note) => note.key !== "office");
+                            ).filter((note) => canceledEntry || note.key !== "office");
                             return (
                               <div key={booking.id} className="space-y-2.5">
                               {booking.isCanceled && (bookingIndex === 0 || !column.bookings[bookingIndex - 1]?.isCanceled) ? (
-                                <div className="flex items-center gap-2 px-1 pt-2" aria-label="Appuntamenti annullati">
-                                  <span className="h-px flex-1 bg-[#E9C7CC]" />
-                                  <span className="text-[8px] font-black uppercase tracking-[0.16em] text-[#B85561]">Annullati</span>
-                                  <span className="h-px flex-1 bg-[#E9C7CC]" />
+                                <div className={`flex items-center gap-2 px-1 pt-2 text-[9px] font-bold uppercase tracking-[0.14em] ${repubblicaBoard ? canceledStyles.divider : "text-[#B85561]"}`}>
+                                  {!repubblicaBoard ? <span aria-hidden="true" className="h-px flex-1 bg-[#E9C7CC]" /> : null}
+                                  Annullati
+                                  {!repubblicaBoard ? <span aria-hidden="true" className="h-px flex-1 bg-[#E9C7CC]" /> : null}
                                 </div>
                               ) : null}
                               <div
@@ -7088,7 +7099,7 @@ export function AppointmentsBrowser({
                                   );
                                 }}
                                 className={`appointments-board-card w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9f3f5b] ${repubblicaBoard ? "cursor-pointer shadow-[0_2px_6px_rgba(61,29,43,0.04)] transition-shadow hover:shadow-[0_4px_14px_rgba(61,29,43,0.12)]" : "shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)]"} ${
-                                  booking.isCanceled || status === "NON_PRESENTATO"
+                                  canceledEntry ? canceledStyles.entry : booking.isCanceled || status === "NON_PRESENTATO"
                                     ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
                                     : status === "RIPROGRAMMATO"
                                     ? "border-violet-200 border-l-violet-500 bg-violet-50"
@@ -7122,10 +7133,10 @@ export function AppointmentsBrowser({
                                     </div>
                                   )}
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`appointments-board-status rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
+                                    <span className={`rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} ${canceledEntry ? canceledStyles.status : `appointments-board-status ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}`}>
                                       {!repubblicaBoard && visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                                     </span>
-                                    <button
+                                    {!canceledEntry ? <button
                                       type="button"
                                       draggable={savingTeamId !== booking.id}
                                       onDragStart={(event) => {
@@ -7168,7 +7179,7 @@ export function AppointmentsBrowser({
                                       title="Trascina per spostare"
                                     >
                                       <GripVertical className="size-5" strokeWidth={2.5} />
-                                    </button>
+                                    </button> : null}
                                   </div>
                                 </div>
                                 <p className={`mt-3 truncate text-[#241D21] ${repubblicaBoard ? "text-[15px] font-semibold leading-tight" : "text-sm font-black"}`} title={booking.customerName}>{booking.customerName}</p>
@@ -7179,7 +7190,7 @@ export function AppointmentsBrowser({
                                     <span className="mt-1 block text-[11px] text-[#71656d]">{getBookingTeam(service).map(worker => worker.name).join(", ")} · {appointmentStatusLabels[getBookingStatus(service)]}</span>
                                   </button>)}
                                 </div> : <p className={`mt-1 line-clamp-2 leading-snug text-[#6F6269] ${repubblicaBoard ? "text-xs font-medium" : "text-[10px] font-bold"}`}>{booking.serviceTitle}</p>}
-                                {paradiseNote || canManageParadiseNotes ? (
+                                {!canceledEntry && (paradiseNote || canManageParadiseNotes) ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
                                       <div className="appointments-board-office-note relative overflow-hidden rounded-xl border border-[#E8D7A6] bg-[#FFF7E6] transition hover:bg-[#FFF0C2]">
@@ -7294,6 +7305,7 @@ export function AppointmentsBrowser({
               {tableBookings.length ? (
                 tableBookings.map((booking) => {
                   const status = getBookingStatus(booking);
+                  const canceledEntry = repubblicaBoard && booking.isCanceled;
                   const contacts = getCustomerContactLines(booking);
                   const isSelected = selectedBooking?.id === booking.id;
                   const assignedTeam = getBookingTeam(booking);
@@ -7301,6 +7313,7 @@ export function AppointmentsBrowser({
                   return (
                     <div
                       key={booking.id}
+                      data-appointment-state={canceledEntry ? "canceled" : undefined}
                       role="button"
                       tabIndex={0}
                       onClick={(event) => {
@@ -7321,7 +7334,7 @@ export function AppointmentsBrowser({
                       }}
                       className={[
                         "group grid w-full cursor-pointer grid-cols-2 gap-x-3 gap-y-2.5 px-3 py-3 text-left transition duration-200 sm:px-4 sm:py-4 xl:grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] xl:items-center xl:gap-5 xl:px-5 xl:py-5",
-                        isSelected
+                        canceledEntry ? canceledStyles.entry : isSelected
                           ? "bg-[linear-gradient(90deg,#FFF0F7,#FBF8FF)] shadow-[inset_4px_0_0_#D93B8F]"
                           : "bg-white hover:bg-[#FCF7F9] hover:shadow-[inset_4px_0_0_#E9A9C7]",
                       ].join(" ")}
@@ -7399,7 +7412,7 @@ export function AppointmentsBrowser({
                           void openClientControlForBooking(booking);
                         }}
                         className="group/staff col-span-2 min-w-0 rounded-[14px] border border-[#F3E8ED] bg-[#FFFBFD] p-2 text-left transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] xl:col-auto xl:rounded-[18px] xl:border-transparent xl:bg-transparent xl:p-2"
-                        title="Cambia collaboratrice"
+                        title={canceledEntry ? "Dettaglio prenotazione" : "Cambia collaboratrice"}
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           {assignedTeam.slice(0, 2).map((mate) => (
@@ -7417,9 +7430,9 @@ export function AppointmentsBrowser({
                             {assignedTeam.map((mate) => mate.name).join(", ") ||
                               "Non assegnato"}
                           </span>
-                          <span className="ml-auto shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#B83D7F] opacity-0 transition group-hover/staff:opacity-100">
+                          {!canceledEntry ? <span className="ml-auto shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#B83D7F] opacity-0 transition group-hover/staff:opacity-100">
                             Cambia
-                          </span>
+                          </span> : null}
                         </div>
                         <p className="mt-0.5 truncate text-[10px] font-medium text-[#7A5B4B] xl:mt-1 xl:text-xs">
                           {getSalonLabel(booking.inferredSalon)}
@@ -7448,7 +7461,7 @@ export function AppointmentsBrowser({
                         onClick={(event) => event.stopPropagation()}
                       >
                         {renderStatusControl(booking, true)}
-                        {booking.isCanceled ? (
+                        {booking.isCanceled && !canceledEntry ? (
                           <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Annullato
                           </span>
@@ -7464,7 +7477,7 @@ export function AppointmentsBrowser({
                         }}
                         onClick={(event) => event.stopPropagation()}
                         className="hidden size-11 place-items-center rounded-[15px] border border-[#EAD8E1] bg-white text-[#A14770] shadow-sm transition group-hover:border-[#E88AC5] group-hover:bg-[#FFF1F8] hover:scale-105 xl:grid"
-                        title="Compila controllo cliente"
+                        title={canceledEntry ? "Dettaglio prenotazione" : "Compila controllo cliente"}
                       >
                         <ChevronRight className="size-5" />
                       </button>
@@ -7656,7 +7669,7 @@ export function AppointmentsBrowser({
                   </h2>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span
-                      className={`inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}
+                      className={`inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${repubblicaBoard && selectedBooking.isCanceled ? canceledStyles.status : selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}
                     >
                       {selectedBooking.isCanceled
                         ? "Annullato"
@@ -7695,7 +7708,7 @@ export function AppointmentsBrowser({
                   <div className="mt-4">
                     <WhatsAppSheetNote booking={selectedBooking} always />
                   </div>
-                  <button
+                  {(!repubblicaBoard || !selectedBooking.isCanceled) && <button
                     type="button"
                     onPointerDown={(event) => {
                       event.stopPropagation();
@@ -7706,7 +7719,7 @@ export function AppointmentsBrowser({
                   >
                     <ChevronRight className="size-4" />
                     Compila controllo cliente
-                  </button>
+                  </button>}
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
@@ -7876,9 +7889,9 @@ export function AppointmentsBrowser({
                   </section>
                 ) : null}
 
-                <section className="border-t border-[#E8D8CF] pt-5">
+                {(!repubblicaBoard || !selectedBooking.isCanceled) && <section className="border-t border-[#E8D8CF] pt-5">
                   <ClientControlStaffPicker booking={selectedBooking} />
-                </section>
+                </section>}
               </div>
             </aside>
           </div>

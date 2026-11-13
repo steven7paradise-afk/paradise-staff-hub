@@ -1,3 +1,5 @@
+import { compareCanceledAppointmentsLast } from "./appointment-order";
+
 type VisitBooking = {
   id: string; customerEmail?: string | null; customerPhone?: string | null;
   dateKey: string; inferredSalon: string; startDate: string; endDate?: string | null; isCanceled?: boolean;
@@ -10,7 +12,10 @@ const email = (value?: string | null) => (value || "").trim().toLowerCase();
 /** Keep booking IDs and service actions intact; group only overlapping or consecutive visits. */
 export function appointmentVisits<T extends VisitBooking>(bookings: T[]): T[][] {
   const groups: T[][] = [];
-  for (const booking of [...bookings].sort((a,b) => Date.parse(a.startDate)-Date.parse(b.startDate))) {
+  const orderedBookings = [...bookings].sort((left, right) =>
+    compareCanceledAppointmentsLast(left, right) || Date.parse(left.startDate) - Date.parse(right.startDate),
+  );
+  for (const booking of orderedBookings) {
     const start = Date.parse(booking.startDate);
     const match = groups.find(group => !booking.isCanceled && group.every(item => !item.isCanceled) && group.some(item => {
       if (item.dateKey !== booking.dateKey || item.inferredSalon !== booking.inferredSalon || item.inferredSalon === "altro") return false;

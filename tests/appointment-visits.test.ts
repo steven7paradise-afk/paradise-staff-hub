@@ -12,6 +12,14 @@ test('consecutive services join without losing their original records',()=>{
 });
 test('names alone never merge two clients',()=>assert.equal(appointmentVisits([{...a,customerPhone:null,customerEmail:null},{...b,customerPhone:null,customerEmail:null}]).length,2));
 
+test("places an earlier canceled visit after active visits in search results", () => {
+  const canceled = { ...a, id: "canceled", startDate: "2026-10-07T08:00:00Z", isCanceled: true };
+  assert.deepEqual(appointmentVisits([b, canceled, a]).map((visit) => visit.map(({ id }) => id)), [
+    [a.id, b.id],
+    [canceled.id],
+  ]);
+});
+
 test('Shopify note on reapplication is also shown on color with no order', async () => {
  const {shopifyNotesForVisits} = await import('../lib/appointment-visits');
  const notes = {a:'Nota Shopify riapplicazione'};

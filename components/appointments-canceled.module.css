@@ -1,0 +1,54 @@
+.entry {
+  background-color: #f3f4f5;
+  border-color: #d9dcdf;
+  border-inline-start-color: #8b9299;
+  filter: grayscale(1);
+}
+
+.entry:hover {
+  background-color: #eaeced;
+  border-color: #9da3a9;
+}
+
+.status {
+  background: #e4e7ea;
+  border-color: #d1d5d9;
+  color: #434a51;
+}
+
+.divider {
+  color: #515860;
+}
+
+.divider::before,
+.divider::after {
+  height: 1px;
+  flex: 1;
+  background: #d0d4d8;
+  content: "";
+}
+
+:global(.dark) .entry[data-appointment-state="canceled"] {
+  background: #28292b !important;
+  border-color: #484b50 !important;
+}
+
+:global(.dark) .entry[data-appointment-state="canceled"]:hover {
+  background: #323437 !important;
+  border-color: #71767c !important;
+}
+
+:global(.dark) .status {
+  background: #35383c;
+  border-color: #565b60;
+  color: #e1e4e7;
+}
+
+:global(.dark) .divider {
+  color: #c2c7cc;
+}
+
+:global(.dark) .divider::before,
+:global(.dark) .divider::after {
+  background: #53565a;
+}
