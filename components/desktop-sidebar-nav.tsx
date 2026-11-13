@@ -201,7 +201,7 @@ export function DesktopSidebarNav({
         </div>
         <div className="sidebar-brand-icon hidden size-11 shrink-0 place-items-center overflow-hidden rounded-2xl">
           {directionSidebar ? (
-            <img src="/paradise-logo-sidebar.png" width={2528} height={1163} alt="Paradise Beauty" className={styles.whiteLogo} />
+            <img src="/paradise-sidebar-monogram.png" width={1798} height={1259} alt="Paradise Beauty" className={styles.monogram} />
           ) : <img src="/favicon.png" alt="" className="size-11 object-cover select-none pointer-events-none" aria-hidden="true" />}
         </div>
         <div className="sidebar-label text-left min-w-0">
