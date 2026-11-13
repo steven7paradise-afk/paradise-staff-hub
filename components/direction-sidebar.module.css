@@ -1,15 +1,85 @@
+.frame,
+.mobile,
+.emailRail {
+  --direction-surface: #2a1720;
+  --direction-ink: #fff5f8;
+  --direction-muted: #d4bbc7;
+  --direction-line: #593643;
+  --direction-hover: #3b242f;
+  --direction-focus: #f5b7d1;
+  --direction-active: #613044;
+  --sidebar-active-bg: var(--direction-active);
+  --sidebar-active-text: var(--direction-ink);
+  --sidebar-active-icon: #f8bbd4;
+}
+
+.whiteLogo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.mobileMonogram,
+.emailMonogram {
+  background: #fff5f8;
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.mobile:global(.mobile-liquid-sidebar),
+:global(.dark) .mobile:global(.mobile-liquid-sidebar) {
+  --light-sidebar-text: var(--direction-ink);
+  --light-sidebar-icon: var(--direction-muted);
+  --dark-sidebar-text: var(--direction-ink);
+  --dark-sidebar-icon: var(--direction-muted);
+  --user-sidebar-color: var(--direction-surface);
+  background: var(--direction-surface) !important;
+  border-color: var(--direction-line);
+  color: var(--direction-ink);
+}
+
+.mobile:global(.mobile-liquid-sidebar) :is(input, :global(.mobile-sidebar-close), :global(.mobile-sidebar-profile), :global(.mobile-sidebar-theme), :global(.mobile-sidebar-area-switch)) {
+  background: var(--direction-hover) !important;
+  border-color: var(--direction-line) !important;
+  color: var(--direction-ink) !important;
+}
+
+.mobile:global(.mobile-liquid-sidebar) input::placeholder,
+.mobile:global(.mobile-liquid-sidebar) :is(:global(.mobile-sidebar-muted), :global(.mobile-sidebar-section), :global(.mobile-sidebar-icon), :global(.mobile-sidebar-area-button)) {
+  color: var(--direction-muted) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.mobile:global(.mobile-liquid-sidebar) :is(:global(.mobile-sidebar-area-button.is-active), :global(.mobile-sidebar-link.active)) {
+  background: var(--direction-active) !important;
+  color: var(--direction-ink) !important;
+  box-shadow: none;
+}
+
+.mobile:global(.mobile-liquid-sidebar) :global(.mobile-sidebar-link:not(.active):hover) {
+  background: var(--direction-hover) !important;
+}
+
+.mobile :is(a, button, input):focus-visible,
+.emailRail :is(a, button):focus-visible {
+  outline: 2px solid var(--direction-focus);
+  outline-offset: -2px;
+}
+
+.emailRail {
+  background: var(--direction-surface);
+}
+
+.emailRail .emailCurrent {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-icon);
+}
+
 @media (min-width: 1280px) {
   .frame:global(.app-liquid-sidebar) {
-    --direction-surface: #2a1720;
-    --direction-ink: #fff5f8;
-    --direction-muted: #d4bbc7;
-    --direction-line: #593643;
-    --direction-hover: #3b242f;
-    --direction-focus: #f5b7d1;
     --direction-duration: 180ms;
-    --sidebar-active-bg: #613044;
-    --sidebar-active-text: var(--direction-ink);
-    --sidebar-active-icon: #f8bbd4;
     background: var(--direction-surface) !important;
     border: 1px solid var(--direction-line) !important;
     border-radius: 15px !important;
@@ -72,14 +142,6 @@
     width: 94px;
     height: 46px;
     padding: 2px 3px;
-  }
-
-  .whiteLogo {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    filter: brightness(0) invert(1);
   }
 
   .frame .navigation :global(.sidebar-brand .sidebar-label) p:first-child {
@@ -404,6 +466,7 @@
 @media (prefers-reduced-motion: reduce) {
   .frame,
   .frame *,
+  .mobile,
   .content {
     transition: none !important;
   }

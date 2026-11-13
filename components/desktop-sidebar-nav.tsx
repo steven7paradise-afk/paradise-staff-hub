@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ArrowUpRight, BriefcaseBusiness, ChevronDown, Folder, Search, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { canViewManagementDashboard } from "@/lib/dashboard-access";
 import { cn } from "@/lib/utils";
 import { SidebarLogo } from "./sidebar-logo";
 import { DynamicIcon } from "./dynamic-icon";
@@ -69,6 +70,13 @@ export function DesktopSidebarNav({
     return folder?.labels?.[href] || fallback;
   };
 
+  const matchesPath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const activeHref = directionSidebar ? items.reduce<string>((best, { href }) => {
+    if (href.length <= best.length || !matchesPath(href)) return best;
+    return !sidebarConfig || sidebarConfig.some((folder) => folder.routes.includes(href)) ? href : best;
+  }, "") : "";
+  const isItemActive = (href: string) => directionSidebar ? href === activeHref : matchesPath(href);
+
   const normalizedSearch = directionSidebar ? normalizeSearch(searchQuery) : searchQuery.trim().toLowerCase();
   const shortcuts = directionSidebar && !normalizedSearch
     ? directionShortcuts.flatMap((href) => {
@@ -86,9 +94,7 @@ export function DesktopSidebarNav({
   const hasAreaSwitch = sidebarConfig !== null
     && !sidebarConfig.some((folder) => folder.id === "pc-cassa" || folder.id === "ex-dipendente");
   const areas = directionSidebar ? ["LAVORO", "PERSONALE"] as const : ["PERSONALE", "LAVORO"] as const;
-  const activePageArea = sidebarConfig?.find((folder) =>
-    folder.routes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
-  )?.area ?? "LAVORO";
+  const activePageArea = sidebarConfig?.find((folder) => folder.routes.some(isItemActive))?.area ?? "LAVORO";
 
   // Group items by Section or Config Folders
   const getRenderSections = () => {
@@ -126,7 +132,6 @@ export function DesktopSidebarNav({
   };
 
   const sections = getRenderSections();
-  const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
   const openSidebarSearch = () => {
@@ -206,7 +211,7 @@ export function DesktopSidebarNav({
         </div>
         <div className="sidebar-label text-left min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]">Staff Hub</p>
-          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">{directionSidebar ? "Direzione" : "Area operativa"}</p>
+          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">{directionSidebar && canViewManagementDashboard(currentRole) ? "Direzione" : "Area operativa"}</p>
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import styles from "./direction-sidebar.module.css";
 import {
   Archive,
   ArrowLeft,
@@ -274,9 +275,11 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     <div className="h-[calc(100dvh-68px)] w-full overflow-hidden bg-white lg:h-auto xl:h-dvh">
       {notice ? <div role="status" className="fixed right-5 top-5 z-[100] rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-2xl">{notice}</div> : null}
       <div className="grid h-full w-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:h-auto lg:min-h-[calc(100dvh-68px)] lg:grid-cols-[220px_300px_minmax(0,1fr)] lg:grid-rows-none xl:h-dvh xl:min-h-0 xl:grid-cols-[76px_220px_300px_minmax(0,1fr)] 2xl:grid-cols-[84px_240px_340px_minmax(0,1fr)]">
-        <aside className="hidden flex-col items-center bg-[#211E20] px-2 py-5 text-white xl:flex">
+        <aside className={`hidden flex-col items-center px-2 py-5 text-white xl:flex ${styles.emailRail}`}>
           <Link href="/dashboard" className="flex h-14 w-full items-center justify-center" title="Paradise Dashboard">
-            <img src="/logo.png" alt="Paradise Beauty" className="max-h-8 max-w-[58px] brightness-0 invert" />
+            <span className={`grid size-10 place-items-center ${styles.emailMonogram}`}>
+              <img src="/paradise-sidebar-monogram.png" alt="Paradise Beauty" className="size-full object-contain" />
+            </span>
           </Link>
           <nav className="mt-7 flex w-full flex-col items-center gap-3" aria-label="Navigazione Paradise">
             <Link href="/dashboard" title="Dashboard" className="grid size-11 place-items-center rounded-2xl text-white/70 transition hover:bg-white/10 hover:text-white"><LayoutDashboard className="size-5" /></Link>
@@ -284,7 +287,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
             <Link href="/schedules" title="Planning" className="grid size-11 place-items-center rounded-2xl text-white/70 transition hover:bg-white/10 hover:text-white"><CalendarDays className="size-5" /></Link>
             <Link href="/appointments" title="Appuntamenti" className="grid size-11 place-items-center rounded-2xl text-white/70 transition hover:bg-white/10 hover:text-white"><Inbox className="size-5" /></Link>
             <div className="my-1 h-px w-8 bg-white/15" />
-            <div className="grid size-11 place-items-center rounded-2xl bg-[#F49BC4] text-[#211E20] shadow-[0_10px_24px_rgba(244,155,196,.24)]" title="Email"><Mail className="size-5" /></div>
+            <div aria-current="page" aria-label="Email" className={`grid size-11 place-items-center rounded-xl ${styles.emailCurrent}`} title="Email"><Mail className="size-5" /></div>
           </nav>
           <Link href="/profile" title={currentUserName} className="mt-auto grid size-10 place-items-center rounded-full border border-white/20 bg-white/10 text-[11px] font-black text-white transition hover:bg-white/20">{initials(currentUserName)}</Link>
         </aside>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,7 @@ export function SidebarFrame({
   const isCollapsed = forceCollapsed || collapsed;
   const preferenceKey = directionSidebar ? "paradise-direction-sidebar-collapsed" : "paradise-sidebar-collapsed";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (forceCollapsed) return;
     const preference = window.localStorage.getItem(preferenceKey);
     setCollapsed(directionSidebar ? preference === "1" : preference !== "0");

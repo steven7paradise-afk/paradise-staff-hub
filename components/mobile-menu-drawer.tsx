@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
 import { ThemeToggleButton } from "./top-controls";
 import { LogoutButton } from "./logout-button";
+import styles from "./direction-sidebar.module.css";
 
 type MobileMenuDrawerProps = {
   logoUrl?: string | null;
@@ -24,6 +25,7 @@ type MobileMenuDrawerProps = {
   logoutLabel?: string;
   homeHref?: string;
   profileHref?: string;
+  directionSidebar?: boolean;
 };
 
 export function MobileMenuDrawer({
@@ -40,6 +42,7 @@ export function MobileMenuDrawer({
   logoutLabel = "Esci",
   homeHref = "/dashboard",
   profileHref = "/profile",
+  directionSidebar = false,
 }: MobileMenuDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,8 +127,8 @@ export function MobileMenuDrawer({
       <div className="fixed inset-x-0 top-0 z-40 bg-[color:var(--user-background-color,var(--background))]">
         <div className="flex min-h-[calc(env(safe-area-inset-top)+76px)] items-end gap-3 border-b border-black/[0.06] bg-white px-5 pb-3 pt-[calc(env(safe-area-inset-top)+10px)] dark:border-white/[0.08] dark:bg-[#171719]">
           <Link href={homeHref} className="flex min-w-0 items-center gap-3" aria-label="Vai alla dashboard">
-            <span className="grid size-10 shrink-0 place-items-center overflow-hidden">
-              <img src="/favicon.png" alt="" className="size-10 rounded-xl object-contain" aria-hidden="true" />
+            <span className={cn("grid size-10 shrink-0 place-items-center overflow-hidden", directionSidebar && styles.mobileMonogram)}>
+              <img src={directionSidebar ? "/paradise-sidebar-monogram.png" : "/favicon.png"} alt="" className="size-full rounded-xl object-contain" aria-hidden="true" />
             </span>
             <span className="hidden min-w-0 text-left min-[380px]:block">
               <span className="block text-[11px] font-black uppercase tracking-[0.18em] text-black/85 dark:text-white">Paradise</span>
@@ -168,8 +171,10 @@ export function MobileMenuDrawer({
       <div
         className={cn(
           "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(88vw,332px)] flex-col justify-between overflow-hidden rounded-r-[26px] border-r p-3.5 pb-[max(.875rem,env(safe-area-inset-bottom))] pt-[max(.875rem,env(safe-area-inset-top))] font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out will-change-transform sm:p-4",
+          directionSidebar && styles.mobile,
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
+        inert={!isOpen}
       >
         <div className="flex min-h-0 flex-1 flex-col">
           
@@ -177,7 +182,11 @@ export function MobileMenuDrawer({
           <div className="mobile-sidebar-divider relative flex items-center justify-between border-b px-1 pb-4">
             <Link href={homeHref} onClick={() => setIsOpen(false)} className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-20 shrink-0 items-center overflow-hidden">
-                <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-10 w-full object-contain object-left dark:invert" />
+                <img
+                  src={directionSidebar ? "/paradise-logo-sidebar.png" : logoUrl || "/logo.png"}
+                  alt="Paradise Beauty"
+                  className={cn("max-h-10 w-full object-contain object-left", directionSidebar ? styles.whiteLogo : "dark:invert")}
+                />
               </span>
               <span className="min-w-0 text-left">
                 <span className="mobile-sidebar-text block truncate text-[11px] font-black uppercase tracking-[0.16em]">Staff Hub</span>
@@ -268,6 +277,7 @@ export function MobileMenuDrawer({
                           <Link
                             key={item.href}
                             href={item.href}
+                            aria-current={isActive ? "page" : undefined}
                             onClick={() => setIsOpen(false)}
                             className={cn(
                             "mobile-sidebar-link relative flex min-h-11 items-center justify-between gap-2.5 rounded-xl border border-transparent px-2 py-1.5 text-[13px] font-bold tracking-tight transition",
