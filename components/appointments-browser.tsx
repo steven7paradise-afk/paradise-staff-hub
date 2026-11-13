@@ -475,6 +475,11 @@ const viewOptions: Array<{ value: ViewMode; label: string }> = [
 ];
 
 const appointmentsPageSize = 25;
+const appointmentHourFormatter = new Intl.DateTimeFormat("it-IT", {
+  timeZone: "Europe/Rome",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
 
 const appointmentStatusOptions: Array<{
   value: AppointmentStatusValue;
@@ -1390,6 +1395,7 @@ export function AppointmentsBrowser({
   const [filterStaff, setFilterStaff] = useState<string>("all");
   const [filterPayment, setFilterPayment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterHour, setFilterHour] = useState("");
   const [dateFilter, setDateFilter] = useState(() => initialAppointmentDateFilter({
     initialRangeFrom,
     initialRangeTo,
@@ -3107,10 +3113,33 @@ export function AppointmentsBrowser({
     });
   }
 
-  const activeBookingsCount = initialBookings.filter(
+  const bookingsByHour = useMemo(() => {
+    const byHour = new Map<string, AppointmentRecord[]>();
+    if (!repubblicaBoard) return byHour;
+
+    for (const booking of initialBookings) {
+      const startsAt = new Date(booking.startDate);
+      if (Number.isNaN(startsAt.getTime())) continue;
+
+      const hour = appointmentHourFormatter.format(startsAt);
+      const bookings = byHour.get(hour);
+      if (bookings) bookings.push(booking);
+      else byHour.set(hour, [booking]);
+    }
+
+    return byHour;
+  }, [initialBookings, repubblicaBoard]);
+  const hourOptions = useMemo(() => {
+    const hours = new Set(bookingsByHour.keys());
+    if (filterHour) hours.add(filterHour);
+    return [...hours].sort();
+  }, [bookingsByHour, filterHour]);
+  const hourScopedBookings = filterHour ? bookingsByHour.get(filterHour) || [] : initialBookings;
+
+  const activeBookingsCount = hourScopedBookings.filter(
     (booking) => !booking.isCanceled,
   ).length;
-  const canceledBookingsCount = initialBookings.filter(
+  const canceledBookingsCount = hourScopedBookings.filter(
     (booking) => booking.isCanceled,
   ).length;
   const dateFilterLabel = useMemo(() => {
@@ -3174,12 +3203,12 @@ export function AppointmentsBrowser({
 
   const filteredBookings = useMemo(() => {
     const statusScoped = normalizedSearch
-      ? (initialBookings || [])
+      ? hourScopedBookings
       : showCanceled
-        ? (initialBookings || []).filter((booking) => booking.isCanceled)
+        ? hourScopedBookings.filter((booking) => booking.isCanceled)
         : filterStatus === "all"
-          ? (initialBookings || [])
-          : (initialBookings || []).filter((booking) => !booking.isCanceled);
+          ? hourScopedBookings
+          : hourScopedBookings.filter((booking) => !booking.isCanceled);
     const base =
       salon === "tutti" || normalizedSearch
         ? statusScoped
@@ -3266,7 +3295,7 @@ export function AppointmentsBrowser({
     filterStaff,
     filterPayment,
     filterStatus,
-    initialBookings,
+    hourScopedBookings,
     bookingSearchIndex,
     normalizedSearch,
     salon,
@@ -3277,7 +3306,7 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     setVisibleCount(appointmentsPageSize);
-  }, [dateFilter, normalizedSearch, salon, showCanceled, view, anchorDate]);
+  }, [dateFilter, filterHour, normalizedSearch, salon, showCanceled, view, anchorDate]);
 
   const selectedBooking = useMemo(
     () =>
@@ -4818,18 +4847,18 @@ export function AppointmentsBrowser({
   };
 
   const tableBookings = filteredBookings.slice(0, visibleCount);
-  const confirmedBookingsCount = initialBookings.filter(
+  const confirmedBookingsCount = hourScopedBookings.filter(
     (booking) => !booking.isCanceled && getBookingStatus(booking) === "PRENOTATO",
   ).length;
-  const noShowBookingsCount = initialBookings.filter(
+  const noShowBookingsCount = hourScopedBookings.filter(
     (booking) => !booking.isCanceled && getBookingStatus(booking) === "NON_PRESENTATO",
   ).length;
-  const arrivedBookingsCount = initialBookings.filter((booking) => {
+  const arrivedBookingsCount = hourScopedBookings.filter((booking) => {
     if (booking.isCanceled) return false;
     const status = getBookingStatus(booking);
     return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
   }).length;
-  const completedBookingsCount = initialBookings.filter(
+  const completedBookingsCount = hourScopedBookings.filter(
     (booking) => !booking.isCanceled && getBookingStatus(booking) === "COMPLETATO",
   ).length;
   const selectedStatus = selectedBooking
@@ -6072,6 +6101,7 @@ export function AppointmentsBrowser({
               {filterStatus !== "all" ? ` · ${filterStatus === "ANNULLATO" ? "Annullato" : appointmentStatusOptions.find(option => option.value === filterStatus)?.label || filterStatus}` : ""}
               {filterStaff !== "all" ? ` · ${filterStaff}` : ""}
               {filterPayment !== "all" ? ` · ${filterPayment}` : ""}
+              {filterHour ? ` · ${filterHour}:00–${filterHour}:59` : ""}
             </p>
             <div id="appointments-search-panel" hidden={!searchPanelOpen}>
             <div className="mt-4 overflow-x-auto rounded-[16px] border border-[#E7D9E0] bg-[#F1E8ED] p-1 sm:mt-7 sm:rounded-[20px] sm:p-1.5">
@@ -6080,7 +6110,7 @@ export function AppointmentsBrowser({
                   {
                     value: "all",
                     label: "Tutti",
-                    count: initialBookings.length,
+                    count: hourScopedBookings.length,
                   },
                   {
                     value: "PRENOTATO",
@@ -6095,7 +6125,7 @@ export function AppointmentsBrowser({
                   {
                     value: "RIPROGRAMMATO",
                     label: "Riprogrammato",
-                    count: initialBookings.filter(b=>!b.isCanceled&&getBookingStatus(b)==="RIPROGRAMMATO").length,
+                    count: hourScopedBookings.filter(b=>!b.isCanceled&&getBookingStatus(b)==="RIPROGRAMMATO").length,
                   },
                   {
                     value: "ANNULLATO",
@@ -6391,6 +6421,7 @@ export function AppointmentsBrowser({
                           setFilterStaff("all");
                           setFilterPayment("all");
                           setFilterStatus("all");
+                          setFilterHour("");
                         }}
                         className="text-xs font-bold text-red-600 hover:underline"
                       >
@@ -6426,6 +6457,37 @@ export function AppointmentsBrowser({
             </div>
             </div>
           </section>
+
+          {repubblicaBoard ? (
+            <section aria-labelledby="appointments-hour-filter" className="rounded-[22px] border border-[#E7D9E0] bg-white px-3 py-3 sm:px-5">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h2 id="appointments-hour-filter" className="flex items-center gap-2 text-sm font-bold text-[#261C22]">
+                  <Clock3 aria-hidden="true" className="size-4 text-[#9E3262]" />
+                  Orario di inizio
+                </h2>
+                <p aria-live="polite" className="text-xs font-semibold tabular-nums text-[#76656E]">
+                  {filteredBookings.length === 1 ? "1 appuntamento" : `${filteredBookings.length} appuntamenti`}
+                </p>
+              </div>
+              <div role="group" aria-labelledby="appointments-hour-filter" className="flex flex-wrap gap-2">
+                {[{ value: "", label: "Tutte le ore" }, ...hourOptions.map((hour) => ({ value: hour, label: `${hour}:00` }))].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={filterHour === value}
+                    onClick={() => setFilterHour(value)}
+                    className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-3 text-sm font-bold tabular-nums outline-offset-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#99345F] ${
+                      filterHour === value
+                        ? "border-[#81274F] bg-[#81274F] text-white"
+                        : "border-[#E7D9E0] bg-[#FBF7F9] text-[#4A3541] hover:border-[#B35680] hover:bg-[#FFF1F7]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {normalizedSearch ? (
             <section
