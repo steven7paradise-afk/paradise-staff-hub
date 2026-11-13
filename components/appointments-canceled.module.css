@@ -1,13 +1,29 @@
+.section {
+  padding: 14px;
+  border: 1px solid #dfe2e4;
+  border-radius: 16px;
+  background: #f7f8f8;
+  color: #31373d;
+}
+
 .entry {
-  background-color: #f3f4f5;
+  background: #eff1f2;
   border-color: #d9dcdf;
-  border-inline-start-color: #8b9299;
-  filter: grayscale(1);
+  color: #31373d;
 }
 
 .entry:hover {
-  background-color: #eaeced;
-  border-color: #9da3a9;
+  background: #e7e9eb;
+  border-color: #acb1b6;
+}
+
+.entry:focus-visible {
+  outline: 2px solid #606a74;
+  outline-offset: 2px;
+}
+
+.secondary {
+  color: #555d65;
 }
 
 .status {
@@ -16,39 +32,33 @@
   color: #434a51;
 }
 
-.divider {
-  color: #515860;
+:global(.dark) .section {
+  background: #202124;
+  border-color: #45474b;
+  color: #eef0f2;
 }
 
-.divider::before,
-.divider::after {
-  height: 1px;
-  flex: 1;
-  background: #d0d4d8;
-  content: "";
+:global(.dark) .entry {
+  background: #28292b;
+  border-color: #484b50;
+  color: #eef0f2;
 }
 
-:global(.dark) .entry[data-appointment-state="canceled"] {
-  background: #28292b !important;
-  border-color: #484b50 !important;
+:global(.dark) .entry:hover {
+  background: #323437;
+  border-color: #71767c;
 }
 
-:global(.dark) .entry[data-appointment-state="canceled"]:hover {
-  background: #323437 !important;
-  border-color: #71767c !important;
+:global(.dark) .entry:focus-visible {
+  outline-color: #bfc5cc;
+}
+
+:global(.dark) .secondary {
+  color: #c2c7cc;
 }
 
 :global(.dark) .status {
   background: #35383c;
   border-color: #565b60;
   color: #e1e4e7;
-}
-
-:global(.dark) .divider {
-  color: #c2c7cc;
-}
-
-:global(.dark) .divider::before,
-:global(.dark) .divider::after {
-  background: #53565a;
 }

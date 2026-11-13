@@ -3409,6 +3409,16 @@ export function AppointmentsBrowser({
     });
   }, [bookingHours, bookingsBeforeHour, filterHour, statusByBooking]);
 
+  const { agendaBookings, canceledAgendaBookings } = useMemo(() => {
+    if (!repubblicaBoard) return { agendaBookings: filteredBookings, canceledAgendaBookings: [] };
+    const agendaBookings: AppointmentRecord[] = [];
+    const canceledAgendaBookings: AppointmentRecord[] = [];
+    for (const booking of filteredBookings) {
+      (booking.isCanceled ? canceledAgendaBookings : agendaBookings).push(booking);
+    }
+    return { agendaBookings, canceledAgendaBookings };
+  }, [filteredBookings, repubblicaBoard]);
+
   useEffect(() => {
     setVisibleCount(appointmentsPageSize);
   }, [dateFilter, filterHour, filterPayment, filterStaff, filterStatus, normalizedSearch, salon, showCanceled, view, anchorDate]);
@@ -4537,7 +4547,7 @@ export function AppointmentsBrowser({
     );
     const otherBookings: AppointmentRecord[] = [];
 
-    for (const booking of filteredBookings) {
+    for (const booking of agendaBookings) {
       const belongsToCorso = booking.inferredSalon === "buenos-aires" || (pcRepubblica && booking.inferredSalon === "repubblica");
       const assignedWorkerIds = new Set<string>();
 
@@ -4562,7 +4572,6 @@ export function AppointmentsBrowser({
     }
 
     const durationHours = (bookings: AppointmentRecord[]) => bookings.reduce((sum, booking) => {
-      if (repubblicaBoard && booking.isCanceled) return sum;
       const start = new Date(booking.startDate).getTime();
       const end = new Date(booking.endDate || "").getTime();
       if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return sum;
@@ -4627,7 +4636,7 @@ export function AppointmentsBrowser({
         ];
 
     return columns;
-  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, filteredBookings, normalizedSearch, pcRepubblica, repubblicaBoard, repubblicaWorkersByBooking, teamByBooking]);
+  }, [boardActiveStaff, boardWorkerOrder, effectivePcWorkerName, agendaBookings, normalizedSearch, pcRepubblica, repubblicaBoard, repubblicaWorkersByBooking, teamByBooking]);
   const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
     (column) =>
       column.id !== "unassigned" &&
@@ -4971,7 +4980,7 @@ export function AppointmentsBrowser({
     setPcGenModalOpen(true);
   }
 
-  const tableBookings = filteredBookings.slice(0, visibleCount);
+  const tableBookings = agendaBookings.slice(0, visibleCount);
   const visibleVisitCount = repubblicaBoard
     ? new Set([...visitsByBooking.values()].filter((visit) => showCanceled || !visit[0].isCanceled)).size
     : 0;
@@ -6687,7 +6696,7 @@ export function AppointmentsBrowser({
 
           )}
 
-          {normalizedSearch ? (
+          {normalizedSearch && (!repubblicaBoard || filterStatus !== "ANNULLATO" || agendaBookings.length > 0) ? (
             <section
               className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]"
               aria-live="polite"
@@ -6706,14 +6715,13 @@ export function AppointmentsBrowser({
                 </span>
               </div>
 
-              {filteredBookings.length ? (
+              {agendaBookings.length ? (
                 <div className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
-                  {appointmentVisits(filteredBookings).slice(0, 30).map(visit => <div key={visit[0].id} className={visit.length > 1 ? "rounded-2xl border-2 border-[#C979A0] bg-[#FFF5FA] p-2 sm:col-span-2" : ""}>
+                  {appointmentVisits(agendaBookings).slice(0, 30).map(visit => <div key={visit[0].id} className={visit.length > 1 ? "rounded-2xl border-2 border-[#C979A0] bg-[#FFF5FA] p-2 sm:col-span-2" : ""}>
                     {visit.length > 1 && <header className="px-2 py-3"><h3 className="font-bold text-[#352a33]">{visit[0].customerName}</h3><p className="text-sm text-[#97335d]">Unica visita · {visit.length} servizi · {formatDate(visit[0].startDate)}</p></header>}
                     <div className={visit.length > 1 ? "grid gap-2 sm:grid-cols-2" : ""}>
                     {visit.map((booking) => {
                     const status = getBookingStatus(booking);
-                    const canceledEntry = repubblicaBoard && booking.isCanceled;
                     const selectableStatus =
                       status === "ARRIVATO_IN_RITARDO"
                         ? "IN_ATTESA"
@@ -6730,8 +6738,7 @@ export function AppointmentsBrowser({
                     return (
                       <article
                         key={`instant-${booking.id}`}
-                        data-appointment-state={canceledEntry ? "canceled" : undefined}
-                        className={`rounded-2xl border p-4 text-left shadow-sm transition hover:shadow-md ${canceledEntry ? canceledStyles.entry : "border-[#E8DCE2] bg-white hover:border-[#D86B9B]"}`}
+                        className="rounded-2xl border border-[#E8DCE2] bg-white p-4 text-left shadow-sm transition hover:border-[#D86B9B] hover:shadow-md"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -6740,7 +6747,7 @@ export function AppointmentsBrowser({
                               {formatDate(booking.startDate)} · {formatTime(booking.startDate)}–{formatTime(booking.endDate)}
                             </p>
                           </div>
-                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase ${canceledEntry ? canceledStyles.status : booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
                             {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                           </span>
                         </div>
@@ -6752,7 +6759,7 @@ export function AppointmentsBrowser({
                         </div>
                         <AppointmentNotePreviews notes={notePreviews} expandable />
                         <div className="mt-4 flex flex-col gap-3 border-t border-[#F0E5EA] pt-3 sm:flex-row sm:items-end sm:justify-between">
-                          {!canceledEntry && <label className="min-w-0 flex-1">
+                          <label className="min-w-0 flex-1">
                             <span className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.15em] text-[#806774]">
                               Stato cliente
                             </span>
@@ -6795,7 +6802,7 @@ export function AppointmentsBrowser({
                                 />
                               )}
                             </span>
-                          </label>}
+                          </label>
                           <button
                             type="button"
                             onClick={() => void openClientControlForBooking(booking)}
@@ -6809,7 +6816,7 @@ export function AppointmentsBrowser({
                     );
                   })}</div></div>)}
                 </div>
-              ) : (
+              ) : canceledAgendaBookings.length ? null : (
                 <div className="p-8 text-center">
                   <Search className="mx-auto size-7 text-[#CFA8BA]" />
                   <p className="mt-3 text-sm font-black text-[#33252C]">Nessun appuntamento trovato</p>
@@ -6817,7 +6824,7 @@ export function AppointmentsBrowser({
                 </div>
               )}
 
-              {filteredBookings.length > 30 ? (
+              {agendaBookings.length > 30 ? (
                 <p className="border-t border-[#EEE2E8] px-5 py-3 text-center text-[10px] font-bold text-black/45">
                   Mostro i primi 30 risultati. Aggiungi qualche lettera per restringere la ricerca.
                 </p>
@@ -6825,7 +6832,7 @@ export function AppointmentsBrowser({
             </section>
           ) : null}
 
-          {repubblicaBoard && !normalizedSearch && layoutMode === "board" ? (
+          {repubblicaBoard && !normalizedSearch && layoutMode === "board" && filterStatus !== "ANNULLATO" ? (
             <div className="repubblica-agenda-legend space-y-3 px-1 pt-1 sm:px-0">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-[#6D6067]" aria-label="Legenda agenda">
                 <span className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3.5 w-5 rounded-[4px] border-2 border-[#287D75]" /> Contorno · In contemporanea</span>
@@ -6843,7 +6850,7 @@ export function AppointmentsBrowser({
             </div>
           ) : null}
 
-          {!normalizedSearch && layoutMode === "board" ? (
+          {!normalizedSearch && layoutMode === "board" && (!repubblicaBoard || filterStatus !== "ANNULLATO") ? (
             <section className={repubblicaBoard ? "min-w-0 bg-transparent" : "overflow-hidden rounded-[24px] border border-[#E7DDE2] bg-white shadow-[0_16px_45px_rgba(72,45,58,0.08)]"}>
               <div className={repubblicaBoard ? "hidden" : "flex flex-wrap items-center justify-between gap-4 border-b border-[#EEE4E9] bg-[linear-gradient(110deg,#FFF7FB_0%,#FFFFFF_56%,#F8F5FA_100%)] px-4 py-5 sm:px-6"}>
                 <div>
@@ -7016,7 +7023,7 @@ export function AppointmentsBrowser({
                             <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
                             <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.bookings.filter((booking) => !booking.isCanceled).length} attivi</span>
                             {column.bookings.some((booking) => booking.isCanceled) ? (
-                              <span className={`rounded-lg px-2 py-1 ${repubblicaBoard ? canceledStyles.status : "bg-[#FFF0F1] text-[#B83B49]"}`}>{column.bookings.filter((booking) => booking.isCanceled).length} ann.</span>
+                              <span className="rounded-lg bg-[#FFF0F1] px-2 py-1 text-[#B83B49]">{column.bookings.filter((booking) => booking.isCanceled).length} ann.</span>
                             ) : null}
                           </div>
                         </header>
@@ -7027,7 +7034,6 @@ export function AppointmentsBrowser({
                             if (column.bookings.slice(0, bookingIndex).some(previous => visit.some(item => item.id === previous.id))) return null;
                             const visitEnd = visit.reduce((latest, item) => Date.parse(item.endDate || item.startDate) > Date.parse(latest) ? (item.endDate || item.startDate) : latest, visit[0].endDate || visit[0].startDate);
                             const status = getBookingStatus(booking);
-                            const canceledEntry = repubblicaBoard && booking.isCanceled;
                             const overlappingIds = overlapsByWorker.get(column.id);
                             const overlaps = visit.some((item) => overlappingIds?.has(item.id));
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
@@ -7036,14 +7042,14 @@ export function AppointmentsBrowser({
                               paradiseNote,
                               status === "COMPLETATO",
                               visitShopifyNotes[booking.id],
-                            ).filter((note) => canceledEntry || note.key !== "office");
+                            ).filter((note) => note.key !== "office");
                             return (
                               <div key={booking.id} className="space-y-2.5">
                               {booking.isCanceled && (bookingIndex === 0 || !column.bookings[bookingIndex - 1]?.isCanceled) ? (
-                                <div className={`flex items-center gap-2 px-1 pt-2 text-[9px] font-bold uppercase tracking-[0.14em] ${repubblicaBoard ? canceledStyles.divider : "text-[#B85561]"}`}>
-                                  {!repubblicaBoard ? <span aria-hidden="true" className="h-px flex-1 bg-[#E9C7CC]" /> : null}
+                                <div className="flex items-center gap-2 px-1 pt-2 text-[9px] font-bold uppercase tracking-[0.14em] text-[#B85561]">
+                                  <span aria-hidden="true" className="h-px flex-1 bg-[#E9C7CC]" />
                                   Annullati
-                                  {!repubblicaBoard ? <span aria-hidden="true" className="h-px flex-1 bg-[#E9C7CC]" /> : null}
+                                  <span aria-hidden="true" className="h-px flex-1 bg-[#E9C7CC]" />
                                 </div>
                               ) : null}
                               <div
@@ -7099,7 +7105,7 @@ export function AppointmentsBrowser({
                                   );
                                 }}
                                 className={`appointments-board-card w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9f3f5b] ${repubblicaBoard ? "cursor-pointer shadow-[0_2px_6px_rgba(61,29,43,0.04)] transition-shadow hover:shadow-[0_4px_14px_rgba(61,29,43,0.12)]" : "shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)]"} ${
-                                  canceledEntry ? canceledStyles.entry : booking.isCanceled || status === "NON_PRESENTATO"
+                                  booking.isCanceled || status === "NON_PRESENTATO"
                                     ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
                                     : status === "RIPROGRAMMATO"
                                     ? "border-violet-200 border-l-violet-500 bg-violet-50"
@@ -7133,10 +7139,10 @@ export function AppointmentsBrowser({
                                     </div>
                                   )}
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} ${canceledEntry ? canceledStyles.status : `appointments-board-status ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}`}>
+                                    <span className={`rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} appointments-board-status ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
                                       {!repubblicaBoard && visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                                     </span>
-                                    {!canceledEntry ? <button
+                                    <button
                                       type="button"
                                       draggable={savingTeamId !== booking.id}
                                       onDragStart={(event) => {
@@ -7179,7 +7185,7 @@ export function AppointmentsBrowser({
                                       title="Trascina per spostare"
                                     >
                                       <GripVertical className="size-5" strokeWidth={2.5} />
-                                    </button> : null}
+                                    </button>
                                   </div>
                                 </div>
                                 <p className={`mt-3 truncate text-[#241D21] ${repubblicaBoard ? "text-[15px] font-semibold leading-tight" : "text-sm font-black"}`} title={booking.customerName}>{booking.customerName}</p>
@@ -7190,7 +7196,7 @@ export function AppointmentsBrowser({
                                     <span className="mt-1 block text-[11px] text-[#71656d]">{getBookingTeam(service).map(worker => worker.name).join(", ")} · {appointmentStatusLabels[getBookingStatus(service)]}</span>
                                   </button>)}
                                 </div> : <p className={`mt-1 line-clamp-2 leading-snug text-[#6F6269] ${repubblicaBoard ? "text-xs font-medium" : "text-[10px] font-bold"}`}>{booking.serviceTitle}</p>}
-                                {!canceledEntry && (paradiseNote || canManageParadiseNotes) ? (
+                                {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
                                       <div className="appointments-board-office-note relative overflow-hidden rounded-xl border border-[#E8D7A6] bg-[#FFF7E6] transition hover:bg-[#FFF0C2]">
@@ -7289,7 +7295,7 @@ export function AppointmentsBrowser({
             </section>
           ) : null}
 
-          {!normalizedSearch && layoutMode === "table" ? (
+          {!normalizedSearch && layoutMode === "table" && (!repubblicaBoard || filterStatus !== "ANNULLATO") ? (
           <section className={`overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px] ${repubblicaBoard ? "bg-white/85" : ""}`}>
             <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#E6D9DF] bg-[#F8F2F5] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#765866] xl:grid">
               <span>Appuntamento</span>
@@ -7305,7 +7311,6 @@ export function AppointmentsBrowser({
               {tableBookings.length ? (
                 tableBookings.map((booking) => {
                   const status = getBookingStatus(booking);
-                  const canceledEntry = repubblicaBoard && booking.isCanceled;
                   const contacts = getCustomerContactLines(booking);
                   const isSelected = selectedBooking?.id === booking.id;
                   const assignedTeam = getBookingTeam(booking);
@@ -7313,7 +7318,6 @@ export function AppointmentsBrowser({
                   return (
                     <div
                       key={booking.id}
-                      data-appointment-state={canceledEntry ? "canceled" : undefined}
                       role="button"
                       tabIndex={0}
                       onClick={(event) => {
@@ -7334,7 +7338,7 @@ export function AppointmentsBrowser({
                       }}
                       className={[
                         "group grid w-full cursor-pointer grid-cols-2 gap-x-3 gap-y-2.5 px-3 py-3 text-left transition duration-200 sm:px-4 sm:py-4 xl:grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] xl:items-center xl:gap-5 xl:px-5 xl:py-5",
-                        canceledEntry ? canceledStyles.entry : isSelected
+                        isSelected
                           ? "bg-[linear-gradient(90deg,#FFF0F7,#FBF8FF)] shadow-[inset_4px_0_0_#D93B8F]"
                           : "bg-white hover:bg-[#FCF7F9] hover:shadow-[inset_4px_0_0_#E9A9C7]",
                       ].join(" ")}
@@ -7412,7 +7416,7 @@ export function AppointmentsBrowser({
                           void openClientControlForBooking(booking);
                         }}
                         className="group/staff col-span-2 min-w-0 rounded-[14px] border border-[#F3E8ED] bg-[#FFFBFD] p-2 text-left transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] xl:col-auto xl:rounded-[18px] xl:border-transparent xl:bg-transparent xl:p-2"
-                        title={canceledEntry ? "Dettaglio prenotazione" : "Cambia collaboratrice"}
+                        title="Cambia collaboratrice"
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           {assignedTeam.slice(0, 2).map((mate) => (
@@ -7430,9 +7434,9 @@ export function AppointmentsBrowser({
                             {assignedTeam.map((mate) => mate.name).join(", ") ||
                               "Non assegnato"}
                           </span>
-                          {!canceledEntry ? <span className="ml-auto shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#B83D7F] opacity-0 transition group-hover/staff:opacity-100">
+                          <span className="ml-auto shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#B83D7F] opacity-0 transition group-hover/staff:opacity-100">
                             Cambia
-                          </span> : null}
+                          </span>
                         </div>
                         <p className="mt-0.5 truncate text-[10px] font-medium text-[#7A5B4B] xl:mt-1 xl:text-xs">
                           {getSalonLabel(booking.inferredSalon)}
@@ -7461,7 +7465,7 @@ export function AppointmentsBrowser({
                         onClick={(event) => event.stopPropagation()}
                       >
                         {renderStatusControl(booking, true)}
-                        {booking.isCanceled && !canceledEntry ? (
+                        {booking.isCanceled ? (
                           <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Annullato
                           </span>
@@ -7477,7 +7481,7 @@ export function AppointmentsBrowser({
                         }}
                         onClick={(event) => event.stopPropagation()}
                         className="hidden size-11 place-items-center rounded-[15px] border border-[#EAD8E1] bg-white text-[#A14770] shadow-sm transition group-hover:border-[#E88AC5] group-hover:bg-[#FFF1F8] hover:scale-105 xl:grid"
-                        title={canceledEntry ? "Dettaglio prenotazione" : "Compila controllo cliente"}
+                        title="Compila controllo cliente"
                       >
                         <ChevronRight className="size-5" />
                       </button>
@@ -7491,7 +7495,7 @@ export function AppointmentsBrowser({
               )}
             </div>
 
-            {filteredBookings.length > tableBookings.length ? (
+            {agendaBookings.length > tableBookings.length ? (
               <div className="grid gap-3 border-t border-[#E8D8CF] p-5 sm:grid-cols-2">
                 <button
                   type="button"
@@ -7500,18 +7504,56 @@ export function AppointmentsBrowser({
                   }
                   className="w-full rounded-2xl border border-[#E8D8CF] bg-white px-4 py-3 text-sm font-black text-[#4E382C] transition hover:bg-[#FFF7F3]"
                 >
-                  Carica altri {Math.min(appointmentsPageSize, filteredBookings.length - tableBookings.length)}
+                  Carica altri {Math.min(appointmentsPageSize, agendaBookings.length - tableBookings.length)}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVisibleCount(filteredBookings.length)}
+                  onClick={() => setVisibleCount(agendaBookings.length)}
                   className="w-full rounded-2xl bg-[#171717] px-4 py-3 text-sm font-black text-white transition hover:bg-[#D93B8F]"
                 >
-                  Mostra tutti ({filteredBookings.length})
+                  Mostra tutti ({agendaBookings.length})
                 </button>
               </div>
             ) : null}
           </section>
+          ) : null}
+          {repubblicaBoard && (canceledAgendaBookings.length > 0 || filterStatus === "ANNULLATO") ? (
+            <section aria-labelledby="agenda-canceled-heading" className={canceledStyles.section}>
+              <header className="flex items-center gap-2 px-1 pb-3">
+                <h2 id="agenda-canceled-heading" className="text-base font-semibold">Appuntamenti annullati</h2>
+                <span className={`rounded-full border px-2 py-0.5 text-xs tabular-nums ${canceledStyles.status}`}>
+                  {canceledAgendaBookings.length}
+                </span>
+              </header>
+              {canceledAgendaBookings.length ? (
+                <ul className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                  {canceledAgendaBookings.map((booking) => (
+                    <li key={booking.id}>
+                      <button
+                        type="button"
+                        data-appointment-state="canceled"
+                        className={`flex min-h-16 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left ${canceledStyles.entry}`}
+                        onClick={() => { void openClientControlForBooking(booking); }}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold" title={booking.customerName}>{booking.customerName}</span>
+                          <span className={`block text-xs ${canceledStyles.secondary}`}>
+                            {formatDate(booking.startDate)} · {formatTime(booking.startDate)} · {booking.serviceTitle}
+                          </span>
+                          {getBookingTeam(booking).length ? (
+                            <span className={`block truncate text-xs ${canceledStyles.secondary}`}>
+                              {getBookingTeam(booking).map((worker) => worker.name).join(", ")}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${canceledStyles.status}`}>Annullato</span>
+                        <ChevronRight aria-hidden="true" className={`size-4 shrink-0 ${canceledStyles.secondary}`} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className={`px-1 py-2 text-sm ${canceledStyles.secondary}`}>Nessun appuntamento annullato con questi filtri.</p>}
+            </section>
           ) : null}
         </main>
 
