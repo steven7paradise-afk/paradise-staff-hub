@@ -1,5 +1,6 @@
 import { appointmentCustomerPhone } from "@/lib/appointment-visits";
-import { readAppointmentArchive, scheduleAppointmentArchive } from "@/lib/appointment-archive";
+import { readAppointmentArchive, scheduleAppointmentArchive, scheduleTodayAppointmentRecovery } from "@/lib/appointment-archive";
+import { agendaSalonScope, resolveAgendaAppointmentSalon } from "@/lib/appointment-booking-salon";
 import { appointmentsRealtimeEnabled } from "@/lib/appointment-realtime";
 import { readAppointmentRangeRevision } from "@/lib/appointment-range-revision";
 import { AppointmentsLiveRefresh } from "@/components/appointments-live-refresh";
@@ -105,16 +106,6 @@ function dedupeDetails(items: Array<{ label: string; value: string }>) {
     seen.add(key);
     return true;
   });
-}
-
-function getSalonFromText(value?: string | null): "duomo" | "buenos-aires" | "repubblica" | "ufficio" | "altro" {
-  const source = normalizeName(value);
-  if (!source) return "altro";
-  if (source.includes("duomo")) return "duomo";
-  if (source.includes("repubblica")) return "repubblica";
-  if (source.includes("buenos aires") || source.includes("corso buenos aires")) return "buenos-aires";
-  if (source.includes("ufficio paradise") || source.includes("ufficio")) return "ufficio";
-  return "altro";
 }
 
 function isCorsoLocation(value?: string | null) {
@@ -370,10 +361,18 @@ export default async function AppointmentsPage({
     locations ?? locationsPromise,
   ]);
   if (hasCowlendarToken()) after(async () => {
+    const today = appointmentDateKey();
+    if (appointmentRange.start <= today && today <= appointmentRange.end &&
+      (forceRefresh || archive.failed || archive.invalidated || !archive.ready)) {
+      await scheduleTodayAppointmentRecovery();
+    }
     for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
   });
 
   const initialSalon = pcSalon || requestedSalon || "tutti";
+  const bookingSalonScope = useRepubblicaBoard
+    ? agendaSalonScope(activeLocations)
+    : { mergeLegacyCorso: false, defaultToRepubblica: false };
 
   const safeBookings = archive.bookings;
 
@@ -508,20 +507,12 @@ export default async function AppointmentsPage({
         : [];
       const teammates = storedTeammates.length ? storedTeammates : cowlendarBookingTeammates;
 
-      const teammateSalons = teammates
-        .map((mate) => {
-          const matchedUser = matchUserByTeamName(localUsers, mate.name);
-          if (!matchedUser?.location?.name) return null;
-          return getSalonFromText(matchedUser.location.name);
-        })
-        .filter((s): s is "duomo" | "buenos-aires" | "repubblica" | "ufficio" => s !== null && s !== "altro");
-
-      const bookingSalon = [booking.service?.title, booking.booking_str].map(getSalonFromText).find((value) => value !== "altro");
-      const inferredSalon: AppointmentSalonSlug | "altro" = (isRepubblicaPc ? bookingSalon : null) ||
-        teammateSalons.find((salon) => salon === "buenos-aires" || salon === "duomo" || salon === "repubblica") ||
-        bookingSalon ||
-        (booking.teammates ?? []).map((mate) => getSalonFromText(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`))
-          .find((value) => value !== "altro") || "altro";
+      const inferredSalon = resolveAgendaAppointmentSalon(
+        booking,
+        teammates.map(mate => matchUserByTeamName(localUsers, mate.name)?.location?.name),
+        bookingSalonScope,
+        useRepubblicaBoard,
+      );
       if (isRepubblicaPc && inferredSalon !== "repubblica" && !(allowLegacyBuenosAires && inferredSalon === "buenos-aires")) {
         return null;
       }

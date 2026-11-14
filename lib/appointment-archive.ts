@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "./appointment-realtime";
-import { appointmentDayBoundaryIso, appointmentMonthRange } from "./appointment-date";
+import { addAppointmentDays, appointmentDateKey, appointmentDayBoundaryIso, appointmentMonthRange } from "./appointment-date";
 import { archiveMonths, archiveSearchText } from "./appointment-archive-range";
 import { getCompleteCowlendarBookingsForRange, type CowlendarBooking } from "./cowlendar";
 import { getShopifyOrderNamesBulk } from "./shopify";
@@ -10,6 +10,8 @@ import { getAppointmentStatusesFromGoogleSheet } from "./google-sheet";
 // One import per process; database leases also prevent duplicate work across replicas.
 let queue = Promise.resolve();
 const queued = new Set<string>();
+let pendingTodayRecovery: Promise<number> | null = null;
+let nextTodayRecovery = 0;
 const FRESH_MS = 5 * 60_000;
 const LEASE_MS = 5 * 60_000;
 const STALE_LEASE = new Date(0);
@@ -167,6 +169,61 @@ export function scheduleAppointmentArchive(month: string, force = false) {
   queued.add(month);
   queue = queue.catch(() => {}).then(() => syncAppointmentArchive(month, force)).finally(() => queued.delete(month));
   return queue;
+}
+
+/** Recover new bookings without deleting rows or marking the monthly import complete. */
+export async function recoverAppointmentArchiveDay(day: string) {
+  const start = appointmentDayBoundaryIso(day);
+  const end = appointmentDayBoundaryIso(addAppointmentDays(day, 1));
+  const bookings = (await getCompleteCowlendarBookingsForRange(start, end, AbortSignal.timeout(25_000)))
+    .filter(booking => appointmentDateKey(new Date(booking.start_date)) === day);
+
+  if (!bookings.length) return 0;
+
+  const existing = await prisma.appointmentArchive.findMany({
+    where: { id: { in: bookings.map(booking => String(booking.id)) } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map(row => row.id));
+  const missing = bookings.filter(booking => !existingIds.has(String(booking.id)));
+  if (!missing.length) return 0;
+
+  const names = await bounded(
+    getShopifyOrderNamesBulk(missing.map(booking => booking.order_id)).catch(() => new Map<string, string>()),
+    new Map<string, string>(), 3_500,
+  );
+  const syncedAt = new Date();
+  return prisma.$transaction(async tx => {
+    const result = await tx.appointmentArchive.createMany({
+      data: missing.map(booking => {
+        const orderName = names.get(String(booking.order_id)) || null;
+        return {
+          id: String(booking.id),
+          start_at: new Date(booking.start_date),
+          search_text: archiveSearchText(booking, orderName || ""),
+          payload: { ...booking, archiveOrderName: orderName } as Prisma.InputJsonValue,
+          synced_at: syncedAt,
+        };
+      }),
+      skipDuplicates: true,
+    });
+    if (result.count) await publishAppointmentChange(tx);
+    return result.count;
+  });
+}
+
+export function scheduleTodayAppointmentRecovery() {
+  if (pendingTodayRecovery) return pendingTodayRecovery;
+  if (Date.now() < nextTodayRecovery) return Promise.resolve(0);
+
+  nextTodayRecovery = Date.now() + 60_000;
+  pendingTodayRecovery = recoverAppointmentArchiveDay(appointmentDateKey())
+    .catch(() => {
+      console.error("Recupero degli appuntamenti di oggi non riuscito.");
+      return 0;
+    })
+    .finally(() => { pendingTodayRecovery = null; });
+  return pendingTodayRecovery;
 }
 
 export async function readAppointmentArchive(start: string, end: string, options: { page?: number; search?: string } = {}) {

@@ -4,7 +4,7 @@ import { appointmentSalonForPC, appointmentsPcCookieName, appointmentsPcWorkerCo
 import { prisma } from "@/lib/prisma";
 import { archiveMonths } from "@/lib/appointment-archive-range";
 import { addAppointmentDays, appointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
-import { scheduleAppointmentArchive } from "@/lib/appointment-archive";
+import { scheduleAppointmentArchive, scheduleTodayAppointmentRecovery } from "@/lib/appointment-archive";
 import { readAppointmentRangeRevision } from "@/lib/appointment-range-revision";
 import { APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL, appointmentsRealtimeEnabled } from "@/lib/appointment-realtime";
 import { APPOINTMENT_ROSTER_EVENTS_CHANNEL, APPOINTMENT_ROSTER_REVISION_KEY } from "@/lib/salon-live";
@@ -163,7 +163,12 @@ export async function GET(request: NextRequest) {
       client.on("notification", (message) => {
         if (!/^[a-f0-9-]{36}$/.test(message.payload || "")) return;
         if (message.channel === APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL) {
-          scheduleInvalidatedMonths(months);
+          const today = appointmentDateKey();
+          if (range && range.from <= today && today <= range.to && hasCowlendarToken()) {
+            void scheduleTodayAppointmentRecovery().then(() => scheduleInvalidatedMonths(months));
+          } else {
+            scheduleInvalidatedMonths(months);
+          }
           return;
         }
         if (appointmentRevision === undefined) {

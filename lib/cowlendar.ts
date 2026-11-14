@@ -1,8 +1,18 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { prisma } from "@/lib/prisma";
 
 const COWLENDAR_API_BASE = "https://app.cowlendar.com/public-api/v1";
 const COWLENDAR_READ_TIMEOUT_MS = 8_000;
 const COWLENDAR_WRITE_TIMEOUT_MS = 12_000;
+const COWLENDAR_COMPLETE_PAGE_SPACING_MS = 250;
+const COWLENDAR_COMPLETE_MAX_RETRY_MS = 5_000;
+const COWLENDAR_COMPLETE_PAGE_RETRIES = 2;
+
+class CowlendarHttpError extends Error {
+  constructor(readonly status: number, readonly retryAfter: string | null) {
+    super(`Cowlendar ${status}`);
+  }
+}
 
 type CowlendarResponse<T> = {
   data: T[];
@@ -186,7 +196,7 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
   });
 
   if (!response.ok) {
-    throw new Error(`Cowlendar ${response.status}`);
+    throw new CowlendarHttpError(response.status, response.headers.get("Retry-After"));
   }
 
   return response.json() as Promise<CowlendarResponse<T>>;
@@ -555,24 +565,58 @@ export function hasCowlendarToken() {
   return Boolean(getCowlendarToken());
 }
 
+async function fetchCompleteBookingPage(query: URLSearchParams, signal: AbortSignal) {
+  for (let attempt = 0; ; attempt += 1) {
+    signal.throwIfAborted();
+    try {
+      return await cowlendarFetch<CowlendarBooking>(`/bookings?${query}`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(COWLENDAR_READ_TIMEOUT_MS)]),
+      });
+    } catch (error) {
+      if (!(error instanceof CowlendarHttpError) ||
+          ![429, 500, 502, 503, 504].includes(error.status) ||
+          attempt >= COWLENDAR_COMPLETE_PAGE_RETRIES) throw error;
+
+      const retryAfter = error.retryAfter?.trim() || "";
+      let retryAfterMs = 0;
+      if (retryAfter) {
+        retryAfterMs = /^\d+$/.test(retryAfter)
+          ? Number(retryAfter) * 1000
+          : Date.parse(retryAfter) - Date.now();
+      }
+      if (retryAfterMs > COWLENDAR_COMPLETE_MAX_RETRY_MS) throw error;
+      const delayMs = Number.isFinite(retryAfterMs) ? Math.max(500 * 2 ** attempt, retryAfterMs) : 500 * 2 ** attempt;
+      await sleep(delayMs, undefined, { signal });
+    }
+  }
+}
+
 // Reporting must never silently truncate a month or use a stale partial cache.
-export async function getCompleteCowlendarBookingsForRange(startDate: string, endDate: string, signal?: AbortSignal) {
+export async function getCompleteCowlendarBookingsForRange(
+  startDate: string,
+  endDate: string,
+  signal = AbortSignal.timeout(120_000),
+) {
   const bookings = new Map<string, CowlendarBooking>();
   const cursors = new Set<string>();
   let cursor: string | null = null;
   for (let page = 0; page < 200; page += 1) {
     const query = new URLSearchParams({ start: startDate, end: endDate, limit: "100", sort: "start_date" });
     if (cursor) query.set("cursor", cursor);
-    signal?.throwIfAborted();
-    const result = await cowlendarFetch<CowlendarBooking>(`/bookings?${query}`, signal ? { signal: AbortSignal.any([signal, AbortSignal.timeout(COWLENDAR_READ_TIMEOUT_MS)]) } : undefined);
-    if (!Array.isArray(result.data)) throw new Error("Calendario incompleto: risposta non valida");
+    if (page > 0) await sleep(COWLENDAR_COMPLETE_PAGE_SPACING_MS, undefined, { signal });
+    const result = await fetchCompleteBookingPage(query, signal);
+    const pagination = result?.pagination;
+    if (!Array.isArray(result?.data) || typeof pagination?.has_more !== "boolean" ||
+        (pagination.next_cursor !== null && typeof pagination.next_cursor !== "string")) {
+      throw new Error("Calendario incompleto: risposta non valida");
+    }
     for (const booking of result.data) {
       if (!booking.id || !Number.isFinite(Date.parse(booking.start_date))) throw new Error("Calendario incompleto: appuntamento non valido");
       bookings.set(booking.id, booking);
     }
-    if (!result.pagination?.has_more) return Array.from(bookings.values());
-    const next = result.pagination.next_cursor;
-    if (!next || cursors.has(next) || !result.data?.length) throw new Error("Calendario incompleto");
+    if (!pagination.has_more) return Array.from(bookings.values());
+    const next = pagination.next_cursor;
+    if (!next?.trim() || cursors.has(next) || !result.data.length) throw new Error("Calendario incompleto");
     cursors.add(next);
     cursor = next;
   }

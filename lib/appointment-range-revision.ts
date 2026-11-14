@@ -8,7 +8,7 @@ export async function readAppointmentRangeRevision(from: string, to: string): Pr
   const start = new Date(appointmentDayBoundaryIso(from));
   const end = new Date(appointmentDayBoundaryIso(to, true));
   const [snapshot] = await prisma.$queryRaw<{ revision: string }[]>`
-    SELECT md5(COALESCE(
+    SELECT md5(jsonb_build_array(
       string_agg(
         md5(jsonb_build_array(
           booking.id,
@@ -25,14 +25,14 @@ export async function readAppointmentRangeRevision(from: string, to: string): Pr
       ),
       (
         SELECT CASE
-          WHEN count(completed_at) = ${months.length}::integer THEN 'ready'
           WHEN bool_or(error) THEN 'failed'
+          WHEN count(completed_at) = ${months.length}::integer THEN 'ready'
           ELSE 'loading'
         END
         FROM appointment_archive_sync
         WHERE month = ANY(${months}::text[])
       )
-    )) AS revision
+    )::text) AS revision
     FROM appointment_archive AS booking
     LEFT JOIN settings AS status ON status.key = 'appointment_status_overrides'
     LEFT JOIN settings AS team ON team.key = 'appointment_team_overrides'

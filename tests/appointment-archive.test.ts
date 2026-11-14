@@ -65,7 +65,7 @@ test("archive changes publish only after saving data and unchanged imports stay 
     if (enabled === undefined) delete process.env.APPOINTMENTS_REALTIME_ENABLED; else process.env.APPOINTMENTS_REALTIME_ENABLED = enabled;
   });
 
-  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [] }));
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [], pagination: { has_more: false, next_cursor: null } }));
   mockMethod(t, prisma.appointmentArchiveSync, "upsert", async () => ({}));
   mockMethod(t, prisma.setting, "findUnique", async () => ({ value: "source-revision" }));
   mockMethod(t, prisma, "$queryRaw", async () => [{ completed_at: new Date(), lease_until: null, error: false }]);

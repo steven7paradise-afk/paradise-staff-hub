@@ -27,6 +27,14 @@ export function AppointmentArchiveStatus({ ready, failed, updatedAt, stale, upda
   return <div role="status" className="mx-4 my-3 rounded-xl border border-pink-100 bg-white px-4 py-3 text-sm text-neutral-700">
     {failed ? "Sincronizzazione non riuscita. I dati già salvati restano disponibili." : !ready ? "Importazione dello storico in corso. I risultati possono essere ancora incompleti." : waiting ? "Aggiornamento in background. Puoi usare i dati già salvati." : "Agenda salvata nel database."}
     {!updateOnChange && updatedAt ? <span className="ml-2">Ultimo aggiornamento: {new Date(updatedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" })}.</span> : null}
-    <button className="ml-3 font-semibold text-[#99345F] underline" onClick={() => startTransition(() => router.refresh())}>{updateOnChange ? "Riprova" : "Aggiorna vista"}</button>
+    <button className="ml-3 font-semibold text-[#99345F] underline" onClick={() => startTransition(() => {
+      if (!updateOnChange) {
+        router.refresh();
+        return;
+      }
+      const query = new URLSearchParams(params.toString());
+      query.set("refresh", "true");
+      router.replace(`${pathname}?${query}`, { scroll: false });
+    })}>{updateOnChange ? "Riprova" : "Aggiorna vista"}</button>
   </div>;
 }
