@@ -198,7 +198,7 @@ function RemoteAppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex min-h-dvh flex-col items-center px-4 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-5 sm:py-8 md:px-10 lg:px-14">
         <div className="mx-auto max-w-4xl space-y-4 text-center">
-          {remoteTarget ? null : <AppointmentsAdminUnlock salone={salone} />}
+          {remoteTarget ? null : <AppointmentsAdminUnlock />}
           <h1 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-6xl xl:text-7xl">
             Gestionale Paradise
           </h1>

@@ -123,7 +123,7 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
             <button type="button" onClick={() => changeTheme("light")} aria-label="Tema chiaro" aria-pressed={theme === "light"} title="Tema chiaro"><Sun aria-hidden className="size-5" /></button>
             <button type="button" onClick={() => changeTheme("dark")} aria-label="Tema scuro" aria-pressed={theme === "dark"} title="Tema scuro"><Moon aria-hidden className="size-5" /></button>
           </div>
-          <div className={styles.admin}><AppointmentsAdminUnlock salone={salon} compact /></div>
+          <div className={styles.admin}><AppointmentsAdminUnlock compact /></div>
         </div>
       </header>}
       <div className={styles.columns} onKeyDownCapture={event => {

@@ -1,18 +1,15 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { ArrowRight, Loader2, LockKeyhole, ShieldCheck, X } from "lucide-react";
+import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 
 export function AppointmentsAdminUnlock({
-  salone,
   compact = false,
 }: {
-  salone: string;
   compact?: boolean;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,15 +40,17 @@ export function AppointmentsAdminUnlock({
       const response = await fetch("/api/appointments/pc/admin-unlock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin, salone }),
+        body: JSON.stringify({ pin }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Accesso amministratore non riuscito.");
+      const destination = data?.appointmentUrl;
+      const salon = typeof destination === "string" ? normalizeAppointmentSalonSlug(destination.split("/")[2]) : null;
+      if (!salon || destination !== appointmentSalonUrl(salon)) throw new Error("Accesso amministratore non riuscito.");
       const login = await signIn("credentials", { pin, redirect: false });
-      if (login?.error) throw new Error("PIN amministratore non riconosciuto.");
+      if (!login?.ok || login.error) throw new Error("PIN amministratore non riconosciuto.");
       setPin("");
-      router.replace(data?.appointmentUrl || "/appointments");
-      router.refresh();
+      window.location.replace(destination);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Accesso amministratore non riuscito.");
       setPin("");

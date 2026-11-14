@@ -14,6 +14,11 @@ test("logout deletes server session before returning the salon chooser", async (
 test("logout failure is not treated as a successful local-only lock", async () => {
   await assert.rejects(endAppointmentWorkerSession((async () => new Response(null, {status:500})) as typeof fetch));
 });
+test("logout accepts the canonical Repubblica profile chooser", async () => {
+  const redirectTo = "/appointments/repubblica?choose=1";
+  const request = (async () => Response.json({ redirectTo })) as typeof fetch;
+  assert.equal(await endAppointmentWorkerSession(request), redirectTo);
+});
 test("logout never redirects to an external destination", async () => {
   assert.equal(await endAppointmentWorkerSession((async () => Response.json({redirectTo:"https://example.org"})) as typeof fetch), null);
 });

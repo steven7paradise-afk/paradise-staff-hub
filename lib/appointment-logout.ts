@@ -7,7 +7,7 @@ export async function endAppointmentWorkerSession(request: typeof fetch = fetch)
     if (!response.ok) throw new Error("Logout non riuscito. Riprova.");
     const data = await response.json();
     const destination = data?.redirectTo;
-    return typeof destination === "string" && /^\/appointments\/(buenos-aires|duomo|ufficio)\?choose=1$/.test(destination) ? destination : null;
+    return typeof destination === "string" && /^\/appointments\/(buenos-aires|repubblica|duomo|ufficio)\?choose=1$/.test(destination) ? destination : null;
   } catch {
     throw new Error("Impossibile completare l'uscita. Controlla la connessione e riprova.");
   } finally { clearTimeout(timeout); }

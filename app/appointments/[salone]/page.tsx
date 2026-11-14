@@ -31,16 +31,13 @@ export default async function SalonAppointmentsPage({
   );
   const isAdminRemote = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
   const pcSalon = pcAuth && !isAdminRemote ? await appointmentSalonForPC(pcAuth.locationId) : null;
-  const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
-  const selectedWorkerRecord = pcAuth
-    ? await findAppointmentPcWorker(pcAuth.locationId, pcSalon, selectedWorker).catch(() => null)
-    : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
   const requestedWorker = typeof resolvedSearchParams.worker === "string"
     ? resolvedSearchParams.worker.trim()
     : "";
 
-  const isPcNavigation = Boolean(pcAuth && (forceProfileChoice || requestedWorker || selectedWorkerRecord));
+  // A valid admin session owns the plain agenda URL even if an older worker cookie survives.
+  const isPcNavigation = Boolean(pcAuth && (forceProfileChoice || requestedWorker));
   if (isAdministratorSession && !remoteTarget && !isPcNavigation) {
     return await AppointmentsPage({
       searchParams: Promise.resolve({ ...resolvedSearchParams, salone }),
@@ -48,6 +45,11 @@ export default async function SalonAppointmentsPage({
       navigationBasePath: salone === "repubblica" ? appointmentSalonUrl(salone) : undefined,
     });
   }
+
+  const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
+  const selectedWorkerRecord = pcAuth
+    ? await findAppointmentPcWorker(pcAuth.locationId, pcSalon, selectedWorker).catch(() => null)
+    : null;
 
   // A PIN operator retains only this authorized PC's salon, including admins.
   if (pcAuth && !isAdminRemote) {
