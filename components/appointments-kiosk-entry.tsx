@@ -44,9 +44,21 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
 }
 
 export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string }) {
-  const router = useRouter();
   if (remoteTarget) return <RemoteAppointmentsKioskEntry salone={salone} pcName={pcName} remoteTarget={remoteTarget} />;
+  return <LocalAppointmentsKioskEntry salone={salone} pcName={pcName} />;
+}
+
+function LocalAppointmentsKioskEntry({ salone, pcName }: { salone: AppointmentSalonSlug; pcName?: string }) {
+  const router = useRouter();
+  const navigationFallback = useRef<number>(undefined);
+  useEffect(() => () => window.clearTimeout(navigationFallback.current), []);
+
   return <><RemoteControlBridge pcMode /><AppointmentsPinEntry salon={salone} pcName={pcName} onUnlock={(_, destination) => {
+    // Keep the local session and any screen share mounted while client routing succeeds.
+    navigationFallback.current = window.setTimeout(() => {
+      if (isSameAppointmentDestination(window.location.href, destination)) window.location.reload();
+      else window.location.replace(destination);
+    }, 6_000);
     if (isSameAppointmentDestination(window.location.href, destination)) router.refresh();
     else router.replace(destination);
   }} /></>;

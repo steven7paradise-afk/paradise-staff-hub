@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization, isAppointmentStaffLocationForPC } from "@/lib/appointments-pc-auth";
+import { appointmentSalonForPC, appointmentStaffLocationsForPC, appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization, isAppointmentStaffLocationForPC } from "@/lib/appointments-pc-auth";
 import { appointmentSessionRemainingSeconds } from "@/lib/appointment-idle-session";
 import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
-import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
+import { hasCurrentAttendanceAtAppointmentSalon, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 
 export async function POST(request: NextRequest) {
@@ -23,14 +23,25 @@ export async function POST(request: NextRequest) {
   const worker = await prisma.user.findFirst({
     where: { id: workerId, active: true },
     select: { id: true, name: true, role: true, sede_id: true,
-      attendance_logs: { where: { date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true }, orderBy: { timestamp: "asc" } },
+      attendance_logs: { where: { date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true, location_id: true }, orderBy: { timestamp: "asc" } },
     },
   });
   const privileged = worker && (isAppointmentPinOnlyRole(worker.role) || isAlwaysActiveAppointmentStaff(worker.name, worker.id));
-  if (!worker || (!privileged && (
-    (worker.sede_id !== null && !(await isAppointmentStaffLocationForPC(pc.locationId, worker.sede_id))) ||
-    !["IN", "BREAK"].includes(deriveAttendanceState(worker.attendance_logs).status)
-  ))) return NextResponse.json({ error: "Profilo non disponibile." }, { status: 401 });
+  if (!worker) return NextResponse.json({ error: "Profilo non disponibile." }, { status: 401 });
+  if (!privileged) {
+    const attendance = deriveAttendanceState(worker.attendance_logs);
+    const allowedLocation = worker.sede_id !== null
+      ? await isAppointmentStaffLocationForPC(pc.locationId, worker.sede_id)
+      : await appointmentSalonForPC(pc.locationId) !== "repubblica" ||
+        hasCurrentAttendanceAtAppointmentSalon(
+          attendance.status,
+          attendance.lastValidLog?.location_id,
+          await appointmentStaffLocationsForPC(pc.locationId, "repubblica"),
+        );
+    if (!allowedLocation || !["IN", "BREAK"].includes(attendance.status)) {
+      return NextResponse.json({ error: "Profilo non disponibile." }, { status: 401 });
+    }
+  }
   const response = NextResponse.json({ success: true }, { headers: { "Cache-Control": "private, no-store" } });
   response.cookies.set({ name: appointmentsPcWorkerCookieName, value: worker.id, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge });
   return response;

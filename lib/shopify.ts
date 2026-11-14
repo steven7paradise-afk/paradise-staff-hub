@@ -579,7 +579,7 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
  * Fetches the current note field of a Shopify order directly.
  * Handles inputs representing either order name (e.g. #22910) or direct order ID.
  */
-async function getShopifyOrderByNameOrId(orderName: string): Promise<any | null> {
+async function getShopifyOrderByNameOrId(orderName: string, signal?: AbortSignal): Promise<any | null> {
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
@@ -594,6 +594,7 @@ async function getShopifyOrderByNameOrId(orderName: string): Promise<any | null>
   if (/^\d{12,}$/.test(cleanName.replace("#", ""))) {
     const directId = cleanName.replace("#", "");
     const res = await fetch(`https://${shop}/admin/api/2024-04/orders/${directId}.json`, {
+      signal,
       headers: {
         "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
@@ -611,6 +612,7 @@ async function getShopifyOrderByNameOrId(orderName: string): Promise<any | null>
   }
 
   const searchRes = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(searchQuery)}&status=any`, {
+    signal,
     headers: {
       "X-Shopify-Access-Token": token,
       "Content-Type": "application/json",
@@ -624,6 +626,7 @@ async function getShopifyOrderByNameOrId(orderName: string): Promise<any | null>
 
     const nameWithoutHash = searchQuery.replace("#", "");
     const searchResNoHash = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(nameWithoutHash)}&status=any`, {
+      signal,
       headers: {
         "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
@@ -684,19 +687,19 @@ export async function getShopifyAppointmentDayPayments(bookingOrder: string, sta
   })), customer, start, anchor?.name || bookingOrder);
 }
 
-export async function getShopifyOrderNoteText(orderName: string): Promise<string | null> {
+export async function getShopifyOrderNoteText(orderName: string, signal?: AbortSignal): Promise<string | null> {
   try {
-    const order = await getShopifyOrderByNameOrId(orderName);
+    const order = await getShopifyOrderByNameOrId(orderName, signal);
     return order?.note || null;
   } catch (error) {
-    console.error("Error in getShopifyOrderNoteText:", error);
+    if (!signal?.aborted) console.error("Error in getShopifyOrderNoteText:", error);
   }
   return null;
 }
 
-export async function getShopifyOrderCowlendarText(orderName: string): Promise<string | null> {
+export async function getShopifyOrderCowlendarText(orderName: string, signal?: AbortSignal): Promise<string | null> {
   try {
-    const order = await getShopifyOrderByNameOrId(orderName);
+    const order = await getShopifyOrderByNameOrId(orderName, signal);
     if (!order) return null;
 
     const noteLines: string[] = [];
@@ -736,7 +739,7 @@ export async function getShopifyOrderCowlendarText(orderName: string): Promise<s
 
     return [...new Set(noteLines)].join("\n") || null;
   } catch (error) {
-    console.error("Error in getShopifyOrderCowlendarText:", error);
+    if (!signal?.aborted) console.error("Error in getShopifyOrderCowlendarText:", error);
     return null;
   }
 }

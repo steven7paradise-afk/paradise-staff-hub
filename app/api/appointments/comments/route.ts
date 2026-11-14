@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const orderName = searchParams.get("orderName");
+  const noteSignal = searchParams.get("scope") === "client-control" ? AbortSignal.timeout(2000) : undefined;
   const bookingId = searchParams.get("bookingId");
   const clientNameParam = searchParams.get("clientName");
   const cleanOrder = orderName ? orderName.replace(/^#/, "").trim() : "";
@@ -35,8 +36,8 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { created_at: "asc" },
       }),
-      orderName ? getShopifyOrderNoteText(orderName) : Promise.resolve(null),
-      orderName ? getShopifyOrderCowlendarText(orderName) : Promise.resolve(null),
+      orderName ? getShopifyOrderNoteText(orderName, noteSignal) : Promise.resolve(null),
+      orderName ? getShopifyOrderCowlendarText(orderName, noteSignal) : Promise.resolve(null),
       cleanBookingId
         ? prisma.serviceFormResponse.findFirst({
             where: {

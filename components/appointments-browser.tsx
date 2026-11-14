@@ -1329,7 +1329,8 @@ export function AppointmentsBrowser({
   const boardSalonName = repubblicaBoard || pcRepubblica ? "Salone Repubblica" : "Salone Corso";
   const [boardRosterRevision, setBoardRosterRevision] = useState("initial");
   const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
-  const [boardStaffLoading, setBoardStaffLoading] = useState(false);
+  const [boardStaffLoading, setBoardStaffLoading] = useState(true);
+  const [boardStaffRetry, setBoardStaffRetry] = useState(0);
   const [boardStaffError, setBoardStaffError] = useState("");
   const [draggedBoardBookingId, setDraggedBoardBookingId] = useState<string | null>(null);
   const [boardDropTargetId, setBoardDropTargetId] = useState<string | null>(null);
@@ -1453,40 +1454,55 @@ export function AppointmentsBrowser({
     setVisibleCount(appointmentsPageSize);
   }, [initialAnchorDate, initialRangeFrom, initialRangeTo, initialScopeAll, initialView]);
 
-  const rosterSnapshot = repubblicaBoard ? initialBookings : null;
+  const boardStaffScope = repubblicaBoard && !pcRepubblica
+    ? "scope=repubblica-board"
+    : layoutMode === "board" || repubblicaBoard
+      ? `salone=${pcRepubblica ? "repubblica" : "buenos-aires"}&scope=salon`
+      : null;
+
   useEffect(() => {
-    if (layoutMode !== "board" && !repubblicaBoard) return;
-    const controller = new AbortController();
+    if (!boardStaffScope) return;
+    let active = true;
+    let request: AbortController | null = null;
 
     async function loadBoardStaff() {
-      setBoardStaffLoading(true);
-      setBoardStaffError("");
+      if (request) return;
+      const controller = new AbortController();
+      request = controller;
+      const timeout = window.setTimeout(() => controller.abort(), 8000);
       try {
-        const params = repubblicaBoard && !pcRepubblica
-          ? "scope=repubblica-board"
-          : `salone=${pcRepubblica ? "repubblica" : "buenos-aires"}&scope=salon`;
-        const response = await fetch(`/api/appointments/pc/active-staff?${params}`, {
+        const response = await fetch(`/api/appointments/pc/active-staff?${boardStaffScope}`, {
           cache: "no-store",
           headers: { Accept: "application/json" },
           signal: controller.signal,
         });
         const data = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(data?.error || "Impossibile recuperare il personale del salone.");
-        if (!controller.signal.aborted) setBoardActiveStaff(Array.isArray(data) ? data : []);
+        if (!response.ok || !Array.isArray(data)) {
+          throw new Error(data?.error || "Impossibile recuperare il personale del salone.");
+        }
+        if (!active) return;
+        setBoardActiveStaff(data);
+        setBoardStaffError("");
       } catch (error) {
-        if (!controller.signal.aborted) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale del salone.");
+        if (!active) return;
+        setBoardStaffError(controller.signal.aborted
+          ? "Il personale non si è aggiornato in tempo."
+          : error instanceof Error ? error.message : "Impossibile recuperare il personale del salone.");
       } finally {
-        if (!controller.signal.aborted) setBoardStaffLoading(false);
+        window.clearTimeout(timeout);
+        request = null;
+        if (active) setBoardStaffLoading(false);
       }
     }
 
     void loadBoardStaff();
-    const interval = repubblicaBoard ? undefined : window.setInterval(loadBoardStaff, 60 * 1000);
+    const interval = repubblicaBoard ? undefined : window.setInterval(loadBoardStaff, 60_000);
     return () => {
-      controller.abort();
+      active = false;
+      request?.abort();
       window.clearInterval(interval);
     };
-  }, [boardRosterRevision, layoutMode, pcRepubblica, repubblicaBoard, rosterSnapshot]);
+  }, [boardRosterRevision, boardStaffRetry, boardStaffScope, repubblicaBoard]);
 
   useEffect(() => {
     try {
@@ -1695,6 +1711,7 @@ export function AppointmentsBrowser({
   const [clientControlLastSave, setClientControlLastSave] = useState<"draft" | "confirmed" | null>(null);
   const [clientControlLastVisitAt, setClientControlLastVisitAt] = useState<string | null>(null);
   const [clientControlHistoryLoaded, setClientControlHistoryLoaded] = useState(false);
+  const [clientControlLoadError, setClientControlLoadError] = useState("");
   const [serviceDetailsModalOpen, setServiceDetailsModalOpen] = useState(false);
   const [editingClientIdentity, setEditingClientIdentity] = useState(false);
   const clientControlRequestRef = useRef<AbortController | null>(null);
@@ -2429,24 +2446,20 @@ export function AppointmentsBrowser({
     }
   }
 
-  async function loadClientControlEmployees() {
+  async function loadClientControlEmployees(signal: AbortSignal) {
     if (clientControlEmployees.length) return clientControlEmployees;
-    setClientControlLoading(true);
-    try {
-      const response = await fetch("/api/client-control/analytics", {
-        cache: "no-store",
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok)
-        throw new Error(
-          data?.error || "Non riesco a caricare le collaboratrici.",
-        );
-      const employees = Array.isArray(data?.employees) ? data.employees : [];
-      setClientControlEmployees(employees);
-      return employees as ClientControlEmployee[];
-    } finally {
-      setClientControlLoading(false);
+    const response = await fetch("/api/client-control/analytics?scope=employees", {
+      cache: "no-store",
+      signal,
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !Array.isArray(data?.employees)) {
+      throw new Error(data?.error || "Non riesco a caricare le collaboratrici.");
     }
+    const employees = data.employees as ClientControlEmployee[];
+    if (signal.aborted) throw signal.reason;
+    setClientControlEmployees(employees);
+    return employees;
   }
 
   async function openClientControlForBooking(
@@ -2471,6 +2484,8 @@ export function AppointmentsBrowser({
     setIsStaffDropdownOpen(false);
     setClientControlLastVisitAt(null);
     setClientControlHistoryLoaded(false);
+    setClientControlLoadError("");
+    setClientControlLoading(true);
     const assignedTeam = getBookingTeam(booking);
     const questionWorker = boardWorker?.id !== "unassigned" && boardWorker
       ? boardWorker : assignedTeam.length === 1 ? assignedTeam[0] : null;
@@ -2607,26 +2622,30 @@ export function AppointmentsBrowser({
       });
     }
 
-    const [employees, bookingNotes] = await Promise.all([
-      loadClientControlEmployees().catch((error) => {
-        setClientControlMessage({
-          type: "error",
-          text:
-            error instanceof Error
-              ? error.message
-              : "Non riesco a caricare le collaboratrici.",
-        });
-        return [] as ClientControlEmployee[];
-      }),
+    const signal = requestController.signal;
+    const timeout = window.setTimeout(() => requestController.abort("timeout"), 8000);
+    const [employeesResult, bookingNotesResult] = await Promise.allSettled([
+      loadClientControlEmployees(signal),
       fetch(
-        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}&appointmentDate=${encodeURIComponent(booking.startDate)}`,
-        { signal: requestController.signal },
-      )
-        .then((response) => (response.ok ? response.json() : null))
-        .catch(() => null),
+        `/api/appointments/comments?scope=client-control&bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}&appointmentDate=${encodeURIComponent(booking.startDate)}`,
+        { signal, cache: "no-store" },
+      ).then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data?.comments)) throw new Error("Storico non disponibile.");
+        return data;
+      }),
     ]);
 
-    if (requestController.signal.aborted || clientControlRequestRef.current !== requestController) return;
+    window.clearTimeout(timeout);
+    if (clientControlRequestRef.current !== requestController) return;
+    setClientControlLoading(false);
+    if (signal.aborted || employeesResult.status === "rejected" || bookingNotesResult.status === "rejected") {
+      setClientControlLoadError("Non riesco a caricare tutti i dati della scheda. Riprova.");
+      setWorkerConfirmationOpen(false);
+      return;
+    }
+    const employees = employeesResult.value;
+    const bookingNotes = bookingNotesResult.value;
 
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
     if (existingAnswers) {
@@ -2781,6 +2800,7 @@ export function AppointmentsBrowser({
     keepOpen = false,
   ) {
     const formToSubmit = formOverride ?? clientControlForm;
+    if (formToSubmit.bookingId && !clientControlHistoryLoaded) return;
     if (!keepOpen) setClientControlLastSave(null);
     if (!saveAsDraft && clientControlAutoSaveTimerRef.current) {
       clearTimeout(clientControlAutoSaveTimerRef.current);
@@ -3424,14 +3444,28 @@ export function AppointmentsBrowser({
     setConfirmationAttendanceError("");
     const salonName = normalizeSalonName(clientControlForm.salon);
     const salonSlug = salonName === "repubblica" ? "repubblica" : salonName.includes("duomo") ? "duomo" : "buenos-aires";
-    fetch(`/api/appointments/pc/active-staff?salone=${salonSlug}&scope=salon`, { cache: "no-store", signal: controller.signal })
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    fetch(`/api/appointments/pc/active-staff?salone=${salonSlug}&scope=salon`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then(async response => {
         const data = await response.json();
-        if (!response.ok || !Array.isArray(data)) throw new Error("Non riesco a verificare le timbrature. Chiudi e riapri la scheda per riprovare.");
-        if (!controller.signal.aborted) setConfirmationAttendance(data);
-      }).catch(error => { if (!controller.signal.aborted) setConfirmationAttendanceError(error.message); })
-      .finally(() => { if (!controller.signal.aborted) setConfirmationAttendanceLoading(false); });
-    return () => controller.abort();
+        if (!response.ok || !Array.isArray(data)) throw new Error("Timbrature non disponibili");
+        if (active) setConfirmationAttendance(data);
+      }).catch(() => {
+        if (active) setConfirmationAttendanceError("Non riesco a verificare le timbrature. Chiudi e riapri la scheda per riprovare.");
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (active) setConfirmationAttendanceLoading(false);
+      });
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [workerConfirmationOpen, clientControlOpen, clientControlForm.bookingId, clientControlForm.salon]);
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
   const canCorrectClientIdentity = !isPC && canCorrectAppointmentClient(currentUser?.role);
@@ -4985,6 +5019,12 @@ export function AppointmentsBrowser({
             {/* Scrollable Content */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
               <div className="mx-auto w-full max-w-[1480px] space-y-3.5 px-4 py-3 sm:px-6 lg:px-8">
+              {clientControlLoadError && (
+                <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+                  <span>{clientControlLoadError}</span>
+                  {clientControlBooking && <button type="button" className="underline" onClick={() => void openClientControlForBooking(clientControlBooking, undefined, serviceDetailsModalOpen, workerConfirmationContext ?? undefined)}>Riprova</button>}
+                </div>
+              )}
               {/* Riepilogo ordinato della card appuntamento (Compact Official View) */}
               <section className="overflow-hidden rounded-[22px] border border-[#DDE2E7] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
                 <div className="flex flex-col gap-2 border-b border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -5013,7 +5053,7 @@ export function AppointmentsBrowser({
                           ? `Ultima visita: ${formatDate(clientControlLastVisitAt)}`
                           : clientControlHistoryLoaded
                             ? "Prima visita registrata"
-                            : "Controllo storico visite…"}
+                            : clientControlLoadError ? "Storico da caricare" : "Controllo storico visite…"}
                       </p>
                     </div>
                   </div>
@@ -5217,7 +5257,7 @@ export function AppointmentsBrowser({
                     ? `Ordine #${selectedShopifyNoteOrder.replace(/^#/, "")} confermato per la nota. Premi “Conferma controllo” per inviarla a Shopify.`
                     : "Alla conferma, la nota sarà scritta su tutti i pagamenti della cliente di questa giornata."}</p>
                   {selectedShopifyNoteOrder ? <button type="button"
-                    disabled={clientControlSubmitting || clientControlLoading}
+                    disabled={clientControlSubmitting || clientControlLoading || !clientControlHistoryLoaded}
                     onClick={() => setSelectedShopifyNoteOrder("")}
                     className="min-h-10 rounded-lg border border-slate-200 px-3 font-semibold hover:bg-slate-50 disabled:opacity-50"
                   >Usa tutti i pagamenti del giorno</button> : null}
@@ -5877,7 +5917,7 @@ export function AppointmentsBrowser({
                 <button
                   type="button"
                   onClick={() => void submitClientControlForm(undefined, true)}
-                  disabled={clientControlSubmitting || clientControlLoading}
+                  disabled={clientControlSubmitting || clientControlLoading || !clientControlHistoryLoaded}
                   className={`inline-flex items-center gap-2 rounded-2xl border-2 px-5 py-3 text-xs font-semibold transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "draft" ? "border-emerald-600 bg-emerald-600 text-white" : "border-[#334155] bg-white text-[#334155] hover:bg-[#F8FAFC]"}`}
                 >
                   <Save className="size-4" />
@@ -5886,7 +5926,7 @@ export function AppointmentsBrowser({
                 <button
                   type="button"
                   onClick={() => void submitClientControlForm()}
-                  disabled={clientControlSubmitting || clientControlLoading}
+                  disabled={clientControlSubmitting || clientControlLoading || !clientControlHistoryLoaded}
                   className={`inline-flex items-center gap-2 rounded-2xl border px-6 py-3.5 text-xs font-semibold transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "border-emerald-600 bg-emerald-600 text-white" : serviceDetailsStyles.softAction}`}
                 >
                   <Check className="size-4" />
@@ -6090,12 +6130,15 @@ export function AppointmentsBrowser({
               onViewChange={(nextView) => openAgendaPeriod(nextView, anchorDate)}
               onLayoutChange={setLayoutMode}
               isRefreshing={isRefreshing}
-              onRefresh={() => navigateToAppointmentRange(view, anchorDate, {
-                from: dateFilter.from,
-                to: dateFilter.to,
-                scopeAll: dateFilter.mode === "all",
-                forceRefresh: true,
-              })}
+              onRefresh={() => {
+                setBoardStaffRetry((attempt) => attempt + 1);
+                navigateToAppointmentRange(view, anchorDate, {
+                  from: dateFilter.from,
+                  to: dateFilter.to,
+                  scopeAll: dateFilter.mode === "all",
+                  forceRefresh: true,
+                });
+              }}
               searchOpen={searchPanelOpen}
               onSearchToggle={() => {
                 setSearchPanelOpen(!searchPanelOpen);
@@ -6827,9 +6870,10 @@ export function AppointmentsBrowser({
               </div>
 
               {boardStaffError && visibleAppointmentBoardColumns.length > 0 ? (
-                <p role="status" className="border-b border-[#EEE4E9] px-4 py-3 text-xs font-semibold text-[#76656E]">
-                  {boardStaffError}
-                </p>
+                <div role="status" className="flex items-center justify-between gap-3 border-b border-[#EEE4E9] px-4 py-3 text-xs font-semibold text-[#76656E]">
+                  <span>{boardStaffError}</span>
+                  <button type="button" className="shrink-0 underline" onClick={() => setBoardStaffRetry((attempt) => attempt + 1)}>Riprova</button>
+                </div>
               ) : null}
               {visibleAppointmentBoardColumns.length ? (
                 <div
@@ -7201,6 +7245,7 @@ export function AppointmentsBrowser({
                     <UsersRound className="mx-auto size-7 text-[#CDA7B9]" />
                     <p className="mt-3 text-sm font-black text-[#33252C]">{repubblicaBoard && !showEmptyBoardWorkers ? "Nessuna colonna da mostrare" : `Nessun dipendente disponibile al ${boardSalonName}`}</p>
                     <p className="mt-1 text-xs font-semibold text-black/55">{boardStaffError || (repubblicaBoard && !showEmptyBoardWorkers ? "Puoi mostrare anche il personale fuori turno." : "Controlla che il personale sia attivo e assegnato al salone.")}</p>
+                    {boardStaffError ? <button type="button" className="mt-3 text-xs font-semibold underline" onClick={() => setBoardStaffRetry((attempt) => attempt + 1)}>Riprova</button> : null}
                   </div>
                 </div>
               )}
@@ -8777,7 +8822,7 @@ export function AppointmentsBrowser({
                 <button
                   type="button"
                   onClick={() => void submitClientControlForm()}
-                  disabled={clientControlSubmitting || clientControlLoading}
+                  disabled={clientControlSubmitting || clientControlLoading || !clientControlHistoryLoaded}
                   className={`mt-5 h-13 w-full rounded-2xl px-5 py-4 text-sm font-black text-white shadow-lg transition active:scale-[0.99] disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "bg-emerald-600 shadow-emerald-200" : "bg-[#E88AC5] shadow-pink-200"}`}
                 >
                   {clientControlSubmitting

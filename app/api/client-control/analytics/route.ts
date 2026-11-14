@@ -39,6 +39,34 @@ function countsInAnalytics(answers: Record<string, unknown>) {
   return String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] ?? "Da controllare").trim().toLowerCase() !== "errore";
 }
 
+function loadEmployees() {
+  return prisma.user.findMany({
+    where: {
+      active: true,
+    },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      photo_url: true,
+      sede_id: true,
+      role: true,
+      location: { select: { id: true, name: true } },
+    },
+  });
+}
+
+function employeeOptions(employees: Awaited<ReturnType<typeof loadEmployees>>) {
+  return employees.map((employee) => ({
+    id: employee.id,
+    name: employee.name,
+    role: employee.role,
+    photoUrl: employee.photo_url,
+    locationId: employee.sede_id,
+    locationName: employee.location?.name ?? "Senza sede",
+  }));
+}
+
 export async function GET(request: NextRequest) {
   const operationalUser = await getOperationalUser(request);
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
@@ -57,6 +85,10 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
+  if (searchParams.get("scope") === "employees") {
+    return NextResponse.json({ employees: employeeOptions(await loadEmployees()) });
+  }
+
   const { key, start, end } = monthRange(searchParams.get("month"));
 
   const forms = await prisma.serviceForm.findMany({
@@ -92,20 +124,7 @@ export async function GET(request: NextRequest) {
     return correctness !== "finito";
   });
 
-  const employees = await prisma.user.findMany({
-    where: {
-      active: true,
-    },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      photo_url: true,
-      sede_id: true,
-      role: true,
-      location: { select: { id: true, name: true } },
-    },
-  });
+  const employees = await loadEmployees();
   const canonicalEmployeeNames = employees.map((employee) => employee.name).filter((name): name is string => Boolean(name?.trim()));
 
   const recent = responses.slice(0, 30).map((response) => {
@@ -201,14 +220,7 @@ export async function GET(request: NextRequest) {
     month: key,
     salons,
     recent,
-    employees: employees.map((employee) => ({
-      id: employee.id,
-      name: employee.name,
-      role: employee.role,
-      photoUrl: employee.photo_url,
-      locationId: employee.sede_id,
-      locationName: employee.location?.name ?? "Senza sede",
-    })),
+    employees: employeeOptions(employees),
     totals: {
       responses: countedResponses,
       rawResponses: responses.length,

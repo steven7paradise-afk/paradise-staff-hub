@@ -8,6 +8,7 @@ import {
   appointmentOperatorInSalon,
   isClockedInAppointmentWorker,
   isAvailableAppointmentServiceWorker,
+  isRepubblicaPinRosterWorker,
 } from "../lib/appointment-staff-access";
 
 test("Francesca titolare compare da Ufficio in entrambi i saloni anche senza timbratura", () => {
@@ -88,4 +89,18 @@ test("il selettore mostra i nomi brevi richiesti", () => {
 test("gli altri profili continuano a dipendere da sede e timbratura", () => {
   assert.equal(isAlwaysActiveAppointmentStaff("Melissa Valenti"), false);
   assert.equal(isAlwaysActiveAppointmentStaff(null), false);
+});
+
+
+test("Repubblica PIN list includes an unassigned worker only on an active local shift", () => {
+  const locations = ["repubblica", "legacy-corso"];
+  const worker = { assignedLocationId: null, attendanceLocationId: "repubblica", status: "IN", alwaysActive: false };
+
+  assert.equal(isRepubblicaPinRosterWorker(worker, locations), true);
+  assert.equal(isRepubblicaPinRosterWorker({ ...worker, status: "BREAK", attendanceLocationId: "legacy-corso" }, locations), true);
+  assert.equal(isRepubblicaPinRosterWorker({ ...worker, attendanceLocationId: "duomo" }, locations), false);
+  assert.equal(isRepubblicaPinRosterWorker({ ...worker, status: "OUT" }, locations), false);
+  assert.equal(isRepubblicaPinRosterWorker({ ...worker, status: "OUT", alwaysActive: true }, locations), false);
+  assert.equal(isRepubblicaPinRosterWorker({ ...worker, assignedLocationId: "duomo" }, locations), false);
+  assert.equal(isRepubblicaPinRosterWorker({ ...worker, assignedLocationId: "legacy-corso", attendanceLocationId: undefined }, locations), true);
 });

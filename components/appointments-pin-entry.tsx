@@ -5,10 +5,11 @@ import { ArrowLeft, ArrowRight, Loader2, Delete, RefreshCw, LockKeyhole, Sun, Mo
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentPinKey } from "@/lib/appointment-pin-keyboard";
-import type { AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { isAppointmentWorkerDestination, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import styles from "./appointments-pin-entry.module.css";
 
 const THEME_KEY = "paradise-appointments-entry-theme";
+const STAFF_REQUEST_TIMEOUT_MS = 6_000;
 
 export type PinEntryWorker = { id: string; name: string; photo_url?: string | null; locationName: string; status: string };
 
@@ -19,7 +20,8 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
 }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [entryState, setEntryState] = useState<"verifying" | "opening" | null>(null);
+  const busy = entryState !== null;
   const [selectedWorker, setSelectedWorker] = useState<PinEntryWorker | null>(null);
   const [pinOnly, setPinOnly] = useState(false);
   const pinLength = selectedWorker ? 2 : 4;
@@ -74,29 +76,34 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
     }
   }
   useEffect(() => {
-    const controller = new AbortController();
-    let pending = false;
+    let active = true;
+    let request: AbortController | null = null;
     async function loadStaff() {
-      if (pending) return;
-      pending = true;
+      if (request || inFlight.current) return;
+      const controller = new AbortController();
+      request = controller;
+      const timeout = window.setTimeout(() => controller.abort(), STAFF_REQUEST_TIMEOUT_MS);
       try {
         const response = await fetch(`/api/appointments/pc/active-staff?salone=${encodeURIComponent(salon)}&scope=pin-entry`, { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error("Staff non disponibile");
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error("Staff non disponibile");
-        if (!controller.signal.aborted) { setWorkers(data); setStaffState("ready"); }
+        if (active) { setWorkers(data); setStaffState("ready"); }
       } catch {
-        if (!controller.signal.aborted) setStaffState("error");
-      } finally { pending = false; }
+        if (active) setStaffState("error");
+      } finally {
+        window.clearTimeout(timeout);
+        request = null;
+      }
     }
     setStaffState("loading");
     void loadStaff();
     const interval = window.setInterval(loadStaff, 30_000);
-    return () => { controller.abort(); window.clearInterval(interval); };
+    return () => { active = false; request?.abort(); window.clearInterval(interval); };
   }, [salon, staffRetry]);
   async function enter() {
     if (inFlight.current || !/^\d+$/.test(pin) || pin.length !== pinLength) return;
-    inFlight.current = true; setBusy(true); setError("");
+    inFlight.current = true; setEntryState("verifying"); setError("");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 15_000);
     try {
@@ -104,13 +111,21 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(selectedWorker ? { workerId: selectedWorker.id, pinPrefix: pin, salone: salon } : { pin, salone: salon }), signal: controller.signal,
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Accesso non riuscito. Riprova.");
-      setPin(""); onUnlock(data.worker ?? selectedWorker, data.appointmentUrl);
+      const data = await response.json().catch(error => {
+        if (controller.signal.aborted) throw error;
+        return null;
+      });
+      const worker = data?.worker ?? selectedWorker;
+      if (!response.ok || !worker?.id || !isAppointmentWorkerDestination(data?.appointmentUrl)) {
+        throw new Error(data?.error || "Accesso non riuscito. Riprova.");
+      }
+      setPin("");
+      setEntryState("opening");
+      onUnlock(worker, data.appointmentUrl);
     } catch (err) {
       setPin("");
       setError(err instanceof DOMException && err.name === "AbortError" ? "Connessione lenta. Riprova." : err instanceof Error ? err.message : "Accesso non riuscito. Riprova.");
-      inFlight.current = false; setBusy(false);
+      inFlight.current = false; setEntryState(null);
     } finally { window.clearTimeout(timeout); }
   }
   return <section className={styles.screen} data-theme={theme ?? undefined} data-pin-only={pinOnly}>
@@ -146,9 +161,9 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
         editPin(action);
       }}>
       {!pinOnly && <section ref={profilePanel} tabIndex={-1} aria-label="Personale disponibile" className={styles.profiles}>
-        <div className={styles.panelHeading}><div><h2>Il tuo profilo {staffState === "ready" && <span className={styles.count}>{workers.length}</span>}</h2><p>Scegli la tua foto</p></div><button type="button" disabled={staffState === "loading" || busy} onClick={() => setStaffRetry(value => value + 1)} aria-label="Aggiorna personale" title="Aggiorna personale" className={styles.refresh}><RefreshCw aria-hidden className={`size-4 ${staffState === "loading" ? "animate-spin" : ""}`} /></button></div>
-        {staffState === "loading" && <p role="status" className={styles.message}>Caricamento personale…</p>}
-        {staffState === "error" && <div role="status" className={styles.message}>Foto non disponibili. Puoi comunque inserire il PIN. <button type="button" onClick={() => setStaffRetry(value => value + 1)} className={styles.link}>Riprova</button></div>}
+        <div className={styles.panelHeading}><div><h2>Il tuo profilo {(staffState === "ready" || workers.length > 0) && <span className={styles.count}>{workers.length}</span>}</h2><p>Scegli la tua foto</p></div><button type="button" disabled={staffState === "loading" || busy} onClick={() => setStaffRetry(value => value + 1)} aria-label="Aggiorna personale" title="Aggiorna personale" className={styles.refresh}><RefreshCw aria-hidden className={`size-4 ${staffState === "loading" ? "animate-spin" : ""}`} /></button></div>
+        {staffState === "loading" && workers.length === 0 && <p role="status" className={styles.message}>Caricamento personale…</p>}
+        {staffState === "error" && <div role="status" className={styles.message}>{workers.length ? "Personale non aggiornato. Restano visibili gli ultimi profili caricati." : "Foto non disponibili. Puoi comunque inserire il PIN."} <button type="button" onClick={() => setStaffRetry(value => value + 1)} className={styles.link}>Riprova</button></div>}
         {staffState === "ready" && workers.length === 0 && <p className={styles.message}>Nessun profilo disponibile in questo salone. Verifica la timbratura con la reception.</p>}
         {workers.length > 0 && <ul className={styles.profileGrid}>
           {workers.map(worker => <li key={worker.id} className="min-w-0 text-center">
@@ -176,7 +191,7 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "backspace"].map(key => <button key={key} type="button" disabled={busy} aria-label={key === "clear" ? "Cancella PIN" : key === "backspace" ? "Cancella una cifra" : key} onClick={() => editPin(key)}>{key === "backspace" ? <Delete aria-hidden className="size-5" /> : key === "clear" ? <span className="text-xs">Cancella</span> : key}</button>)}
         </div>
         {error && <p id="appointment-entry-error" role="alert" className={styles.error}>{error}</p>}
-        <button type="submit" disabled={busy || pin.length !== pinLength} className={styles.enter}>{busy ? <><Loader2 className="size-5 animate-spin" />Accesso…</> : <>Entra <ArrowRight aria-hidden className="size-4" /></>}</button>
+        <button type="submit" disabled={busy || pin.length !== pinLength} className={styles.enter}>{busy ? <><Loader2 aria-hidden className="size-5 animate-spin" /><span role="status">{entryState === "opening" ? "PIN verificato. Apro l’agenda…" : "Verifica PIN…"}</span></> : <>Entra <ArrowRight aria-hidden className="size-4" /></>}</button>
         {selectedWorker && <button type="button" disabled={busy} onClick={() => chooseWorker(null)} className={styles.link}>Usa il PIN completo</button>}
       </form>
       </div>

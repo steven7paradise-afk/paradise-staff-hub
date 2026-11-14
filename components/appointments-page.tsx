@@ -358,30 +358,24 @@ export default async function AppointmentsPage({
   const appointmentRange = resolveAppointmentsRange(isRepubblicaPc ? { ...resolvedSearchParams, scope: undefined } : resolvedSearchParams);
   const useRepubblicaBoard = repubblicaBoard && (!isPC || isRepubblicaPc);
   const updateOnChange = useRepubblicaBoard && appointmentsRealtimeEnabled();
-  const appointmentRevision = updateOnChange
-    ? await readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end)
-    : null;
-  const archive = await readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
-    ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
-  });
-  if (hasCowlendarToken()) after(async () => {
-    for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
-  });
-  const bookingsPromise = Promise.resolve(archive.bookings);
-
-  // These reads are independent. Starting Cowlendar together with the local
-  // lookups saves an entire network round-trip on every appointments load.
-  const [localUsers, activeLocations, bookings] = await Promise.all([
+  const [appointmentRevision, archive, localUsers, activeLocations] = await Promise.all([
+    updateOnChange ? readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end) : null,
+    readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
+      ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
+    }),
     prisma.user.findMany({
       where: { active: true },
       select: { id: true, name: true, role: true, photo_url: true, mansione: true, sede_id: true, location: { select: { active: true, name: true } } },
     }),
     locations ?? locationsPromise,
-    bookingsPromise,
   ]);
+  if (hasCowlendarToken()) after(async () => {
+    for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
+  });
+
   const initialSalon = pcSalon || requestedSalon || "tutti";
 
-  const safeBookings = Array.isArray(bookings) ? bookings : [];
+  const safeBookings = archive.bookings;
 
   const corsoUsers = localUsers.filter((user) => isRepubblicaPc
     ? user.sede_id === pcLocationId || (allowLegacyBuenosAires && user.location?.active === false && isCorsoLocation(user.location.name)) || normalizeName(user.name) === "franci"

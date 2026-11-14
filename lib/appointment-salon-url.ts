@@ -50,3 +50,12 @@ export function isSameAppointmentDestination(currentHref: string, destination: s
     return false;
   }
 }
+
+export function isAppointmentWorkerDestination(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^\/appointments\/([^/?#]+)\?worker=([^&#]+)$/.exec(value);
+  if (!match) return false;
+  const [, segment, worker] = match;
+  return appointmentSalonUrl(normalizeAppointmentSalonSlug(segment)) === `/appointments/${segment}` &&
+    Boolean(new URLSearchParams(`worker=${worker}`).get("worker")?.trim());
+}

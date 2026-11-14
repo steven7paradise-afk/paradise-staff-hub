@@ -2,7 +2,9 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
 import { FORMER_EMPLOYEE_STATUS } from "./former-employee";
 import { isAppointmentPinOnlyRole } from "./appointment-pin-entry";
-import { isAlwaysActiveAppointmentStaff } from "./appointment-staff-access";
+import { hasCurrentAttendanceAtAppointmentSalon, isAlwaysActiveAppointmentStaff } from "./appointment-staff-access";
+import { appointmentDateKey } from "./appointment-date";
+import { deriveAttendanceState } from "./attendance-state";
 import { appointmentSalonSlugFromName, isCashierAppointmentSalon, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "./appointment-salon-url";
 
 export const appointmentsPcCookieName = "appointments_pc_token";
@@ -91,6 +93,21 @@ export async function isAppointmentStaffLocationForPC(locationId: string, staffL
   const salon = await appointmentSalonForPC(locationId);
   if (salon !== "repubblica") return false;
   return (await appointmentStaffLocationsForPC(locationId, salon)).includes(staffLocationId);
+}
+
+export async function hasRepubblicaAttendanceForUnassignedWorker(locationId: string, workerId: string) {
+  const today = new Date(`${appointmentDateKey()}T00:00:00.000Z`);
+  const tomorrow = new Date(today);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const [logs, locationIds] = await Promise.all([
+    prisma.attendanceLog.findMany({
+      where: { user_id: workerId, date: { gte: today, lt: tomorrow } },
+      select: { type: true, timestamp: true, location_id: true },
+    }),
+    appointmentStaffLocationsForPC(locationId, "repubblica"),
+  ]);
+  const state = deriveAttendanceState(logs);
+  return hasCurrentAttendanceAtAppointmentSalon(state.status, state.lastValidLog?.location_id, locationIds);
 }
 
 export async function findAppointmentPcWorker(locationId: string, salon: AppointmentSalonSlug | null, cookieValue?: string) {

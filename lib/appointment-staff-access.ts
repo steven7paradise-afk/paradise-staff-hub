@@ -35,6 +35,27 @@ export function appointmentOperatorInSalon(employees: AssignmentEmployee[], oper
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+export function hasCurrentAttendanceAtAppointmentSalon(
+  status: string,
+  locationId: string | undefined,
+  eligibleLocationIds: string[],
+) {
+  return (status === "IN" || status === "BREAK") &&
+    Boolean(locationId && eligibleLocationIds.includes(locationId));
+}
+
+export function isRepubblicaPinRosterWorker(worker: {
+  assignedLocationId: string | null;
+  attendanceLocationId?: string;
+  status: string;
+  alwaysActive: boolean;
+}, eligibleLocationIds: string[]) {
+  if (worker.assignedLocationId && worker.alwaysActive) return true;
+  return hasCurrentAttendanceAtAppointmentSalon(
+    worker.status, worker.assignedLocationId ?? worker.attendanceLocationId, eligibleLocationIds,
+  );
+}
+
 export function isClockedInAppointmentWorker(worker: { status?: string; clockedInAt?: string | null }) {
   return ["IN", "BREAK"].includes(worker.status || "") &&
     Boolean(worker.clockedInAt && Number.isFinite(Date.parse(worker.clockedInAt)));

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appointmentSalonSlugFromName,
   appointmentSalonUrl,
+  isAppointmentWorkerDestination,
   isSameAppointmentDestination,
   normalizeAppointmentSalonSlug,
   repubblicaIncludesLegacyBuenosAires,
@@ -14,6 +15,13 @@ test("normalizza e costruisce gli indirizzi dei saloni", () => {
   assert.equal(appointmentSalonSlugFromName("Salone Repubblica"), "repubblica");
   assert.equal(normalizeAppointmentSalonSlug("Salone Repubblica"), "repubblica");
   assert.equal(appointmentSalonUrl("repubblica"), "/appointments/repubblica");
+});
+
+test("il PIN accetta solo la destinazione operativa di un salone", () => {
+  assert.equal(isAppointmentWorkerDestination("/appointments/repubblica?worker=Persona%20Demo"), true);
+  for (const invalid of [undefined, "/appointments", "/appointments/repubblica?choose=1", "/appointments/repubblica?worker=%20", "/appointments/corso?worker=Demo", "/appointments/repubblica?worker=Demo#extra", "//example.net/appointments/repubblica?worker=Demo"]) {
+    assert.equal(isAppointmentWorkerDestination(invalid), false);
+  }
 });
 
 test("la sede unica Repubblica include gli appuntamenti storici di Buenos Aires", () => {

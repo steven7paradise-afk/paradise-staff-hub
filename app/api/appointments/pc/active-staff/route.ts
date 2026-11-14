@@ -4,11 +4,13 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { appointmentSalonForPC, appointmentStaffLocationsForPC, checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
-import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import {
   appointmentStaffDisplayName,
+  hasCurrentAttendanceAtAppointmentSalon,
   isAlwaysActiveAppointmentStaff,
+  isRepubblicaPinRosterWorker,
 } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +36,6 @@ export async function GET(request: NextRequest) {
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
   let pcLocationId: string | null = null;
-  let staffLocationIds: string[] | null = null;
 
   if ((!isAuthorized || isPinEntry || includeAllSalonStaff) && !isRepubblicaBoard) {
     const cookieStore = await cookies();
@@ -52,22 +53,26 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (isRepubblicaBoard) {
-      const locations = await prisma.location.findMany({
-        where: { active: true, name: { equals: "Salone Repubblica", mode: "insensitive" } },
-        select: { id: true },
-        take: 2,
+    let resolvedSalon = salonSlug;
+    let staffLocationIds: string[] | null = null;
+    if (isRepubblicaBoard || (!pcLocationId && salonSlug === "repubblica")) {
+      const activeLocations = await prisma.location.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
       });
+      const locations = activeLocations.filter((location) => appointmentSalonSlugFromName(location.name) === "repubblica");
       if (locations.length !== 1) {
         return NextResponse.json({ error: "Sede Salone Repubblica non identificata." }, { status: 404 });
       }
       locationId = locations[0].id;
-      staffLocationIds = await appointmentStaffLocationsForPC(locationId, "repubblica");
+      resolvedSalon = "repubblica";
+      staffLocationIds = await appointmentStaffLocationsForPC(locationId, resolvedSalon);
     } else if (pcLocationId) {
       const pcSalon = await appointmentSalonForPC(pcLocationId);
       if (!pcSalon || (salonSlug && pcSalon !== salonSlug)) {
         return NextResponse.json({ error: "Apri la pagina del salone associato a questo computer." }, { status: 403 });
       }
+      resolvedSalon = pcSalon;
       staffLocationIds = await appointmentStaffLocationsForPC(pcLocationId, pcSalon);
     } else if (salonSlug) {
       const forcedLocation = await prisma.location.findFirst({
@@ -79,12 +84,12 @@ export async function GET(request: NextRequest) {
         },
         select: { id: true },
       });
-      if (salonSlug === "repubblica" && !forcedLocation) {
-        return NextResponse.json({ error: "Salone Repubblica non trovato." }, { status: 404 });
-      }
       locationId = forcedLocation?.id || locationId;
     }
 
+    const isRepubblicaRoster = isRepubblicaBoard || (includeAllSalonStaff && resolvedSalon === "repubblica");
+    const isRepubblicaPcPinEntry = isPinEntry && pcLocationId !== null && resolvedSalon === "repubblica";
+    const eligibleLocationIds = staffLocationIds ?? (locationId ? [locationId] : []);
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
     const today = new Date(`${day}T00:00:00.000Z`);
     const tomorrow = new Date(today);
@@ -94,8 +99,10 @@ export async function GET(request: NextRequest) {
       prisma.user.findMany({
         where: {
           active: true,
-          ...(isRepubblicaBoard && staffLocationIds ? { sede_id: { in: staffLocationIds } } : {}),
-          ...(isRepubblicaBoard || isPinEntry ? { employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}),
+          ...(isRepubblicaRoster ? {
+            OR: [{ sede_id: { in: eligibleLocationIds } }, { sede_id: null }],
+          } : {}),
+          ...(isRepubblicaRoster || isPinEntry ? { employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}),
           ...(isPinEntry ? { role: { notIn: ["ADMIN", "SUPER_ADMIN", "ZERO"] } } : {}),
         },
         select: {
@@ -106,7 +113,7 @@ export async function GET(request: NextRequest) {
           location: { select: { name: true } },
           attendance_logs: {
             where: { date: { gte: today, lt: tomorrow } },
-            select: { type: true, timestamp: true },
+            select: { type: true, timestamp: true, location_id: true },
             orderBy: { timestamp: "asc" },
           },
         },
@@ -116,40 +123,51 @@ export async function GET(request: NextRequest) {
     ]);
     const staffAliases = normalizeStaffAliases(aliasSetting?.value);
 
-    const clockedInWorkers = workers
-      .map((worker) => {
-        const state = deriveAttendanceState(worker.attendance_logs);
-        const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
-        return {
-          id: worker.id,
-          name: appointmentStaffDisplayName(worker.name, worker.id),
-          photo_url: worker.photo_url,
-          sede_id: worker.sede_id,
-          locationName: worker.sede_id && worker.sede_id !== locationId && staffLocationIds?.includes(worker.sede_id)
-            ? "Salone Repubblica"
-            : worker.location?.name ?? "",
-          status: alwaysActive ? "IN" : state.status,
+    const clockedInWorkers = workers.flatMap((worker) => {
+      const state = deriveAttendanceState(worker.attendance_logs);
+      const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
+      const status = alwaysActive ? "IN" : state.status;
+      const localAttendance = hasCurrentAttendanceAtAppointmentSalon(
+        state.status, state.lastValidLog?.location_id, eligibleLocationIds,
+      );
+      if (isRepubblicaRoster && !worker.sede_id && !localAttendance) return [];
+      if (isRepubblicaPcPinEntry) {
+        if (!isRepubblicaPinRosterWorker({
+          assignedLocationId: worker.sede_id,
+          attendanceLocationId: state.lastValidLog?.location_id,
+          status: state.status,
           alwaysActive,
-          clockedInAt: state.firstEntry
-            ? new Date(state.firstEntry.timestamp).toISOString()
-            : null,
-          breakStartedAt: state.status === "BREAK" && state.activePause
-            ? new Date(state.activePause.timestamp).toISOString()
-            : null,
-          externalIds: Object.entries(staffAliases)
-            .filter(([, alias]) =>
-              alias.userId === worker.id &&
-              !/^(staff disponibile|staff assente paradise|non assegnat[oi])$/i.test(String(alias.externalName || "").trim())
-            )
-            .map(([externalId]) => externalId),
-        };
-      })
-      .filter((worker) => {
-        // The board roster is already restricted by sede_id in the query.
-        if (isRepubblicaBoard || worker.alwaysActive) return true;
-        if (locationId && (!worker.sede_id || !(staffLocationIds || [locationId]).includes(worker.sede_id))) return false;
-        return includeAllSalonStaff || worker.status === "IN" || worker.status === "BREAK";
-      });
+        }, eligibleLocationIds)) return [];
+      } else if (!isRepubblicaRoster && !alwaysActive) {
+        if (locationId && (!worker.sede_id || !eligibleLocationIds.includes(worker.sede_id))) return [];
+        if (!includeAllSalonStaff && status !== "IN" && status !== "BREAK") return [];
+      }
+
+      return [{
+        id: worker.id,
+        name: appointmentStaffDisplayName(worker.name, worker.id),
+        photo_url: worker.photo_url,
+        sede_id: worker.sede_id,
+        locationName: resolvedSalon === "repubblica" && (
+          (worker.sede_id && worker.sede_id !== locationId && eligibleLocationIds.includes(worker.sede_id)) ||
+          (!worker.sede_id && localAttendance)
+        ) ? "Salone Repubblica" : worker.location?.name ?? "",
+        status,
+        alwaysActive,
+        clockedInAt: state.firstEntry
+          ? new Date(state.firstEntry.timestamp).toISOString()
+          : null,
+        breakStartedAt: state.status === "BREAK" && state.activePause
+          ? new Date(state.activePause.timestamp).toISOString()
+          : null,
+        externalIds: Object.entries(staffAliases)
+          .filter(([, alias]) =>
+            alias.userId === worker.id &&
+            !/^(staff disponibile|staff assente paradise|non assegnat[oi])$/i.test(String(alias.externalName || "").trim())
+          )
+          .map(([externalId]) => externalId),
+      }];
+    });
 
     clockedInWorkers.sort((a, b) => a.name.localeCompare(b.name, "it"));
 

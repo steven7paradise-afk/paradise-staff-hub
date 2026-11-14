@@ -2,13 +2,17 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
+  appointmentSalonForPC,
   appointmentsPcCookieName,
   appointmentsPcWorkerCookieName,
   appointmentsRemoteTargetCookieName,
   appointmentsRemoteWorkerCookieName,
   checkPCAuthorization,
+  hasRepubblicaAttendanceForUnassignedWorker,
   isAppointmentStaffLocationForPC,
 } from "@/lib/appointments-pc-auth";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
+import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
 import {
@@ -50,14 +54,22 @@ export async function getOperationalUser(
       ? await prisma.user.findFirst({
         where: {
           active: true,
+          employee_status: { not: FORMER_EMPLOYEE_STATUS },
           OR: [{ id: workerIdentity }, { name: workerIdentity }],
         },
         select: { id: true, name: true, email: true, role: true, sede_id: true },
         })
       : null;
-    const workerAtDeviceSalon = workerCandidate?.sede_id
-      ? await isAppointmentStaffLocationForPC(pcAuth.locationId, workerCandidate.sede_id)
-      : false;
+    let workerAtDeviceSalon = false;
+    if (workerCandidate?.sede_id) {
+      workerAtDeviceSalon = await isAppointmentStaffLocationForPC(pcAuth.locationId, workerCandidate.sede_id);
+    } else if (
+      workerCandidate && !isAppointmentPinOnlyRole(workerCandidate.role) &&
+      !isAlwaysActiveAppointmentStaff(workerCandidate.name, workerCandidate.id) &&
+      await appointmentSalonForPC(pcAuth.locationId) === "repubblica"
+    ) {
+      workerAtDeviceSalon = await hasRepubblicaAttendanceForUnassignedWorker(pcAuth.locationId, workerCandidate.id);
+    }
     const worker = workerCandidate && (workerAtDeviceSalon ||
       isAlwaysActiveAppointmentStaff(workerCandidate.name, workerCandidate.id)) ? workerCandidate : null;
 
