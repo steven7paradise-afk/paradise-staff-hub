@@ -20,7 +20,8 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
-import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
+import { appointmentDateKey, isAppointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
+import { resolveAgendaAppointmentStatus } from "@/lib/appointment-status";
 import { syncSystemazioneFasceTable } from "@/lib/systemazione-fasce-table";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -597,7 +598,7 @@ export default async function AppointmentsPage({
 
       const savedStatus = statusOverrides[String(booking.id)];
       const sheetStatus = sheetStatusOverrides[String(booking.id)];
-      const currentStatus = updateOnChange && savedStatus?.status ? savedStatus : sheetStatus || savedStatus;
+      const currentStatus = resolveAgendaAppointmentStatus(savedStatus, sheetStatus, useRepubblicaBoard);
 
       return {
         id: booking.id,
@@ -622,12 +623,13 @@ export default async function AppointmentsPage({
         financialStatus: booking.financial_status || null,
         attendance: booking.attendance || null,
         isCanceled: Boolean(booking.is_canceled),
-        localStatus: currentStatus?.status ?? savedStatus?.status ?? null,
-        statusUpdatedAt: currentStatus?.updatedAt ?? savedStatus?.updatedAt ?? null,
-        statusUpdatedBy: currentStatus?.updatedBy ?? savedStatus?.updatedBy ?? null,
-        statusStartedAt: statusOverrides[String(booking.id)]?.startedAt ?? null,
-        statusStoppedAt: statusOverrides[String(booking.id)]?.stoppedAt ?? null,
-        statusElapsedSeconds: statusOverrides[String(booking.id)]?.elapsedSeconds ?? 0,
+        localStatus: currentStatus?.status ?? null,
+        statusUpdatedAt: currentStatus?.updatedAt ?? null,
+        savedStatusUpdatedAt: savedStatus?.updatedAt ?? null,
+        statusUpdatedBy: currentStatus?.updatedBy ?? null,
+        statusStartedAt: savedStatus?.startedAt ?? null,
+        statusStoppedAt: savedStatus?.stoppedAt ?? null,
+        statusElapsedSeconds: savedStatus?.elapsedSeconds ?? 0,
         sheetMatched: Boolean(sheetStatusOverrides[String(booking.id)]),
         sheetNote: sheetStatusOverrides[String(booking.id)]?.sheetNote ?? null,
         customerUpdate: botUpdates[String(booking.id)] ?? null,

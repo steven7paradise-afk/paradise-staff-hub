@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveAppointmentChange } from "@/lib/appointment-realtime";
+import { saveAppointmentStatus } from "@/lib/appointment-status-store";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
-
-const SETTING_KEY = "appointment_status_overrides";
 
 const allowedStatuses = new Set([
   "PRENOTATO",
@@ -28,18 +26,6 @@ const statusLabels: Record<CowlendarAppointmentStatus | "RIPROGRAMMATO", string>
   ARRIVATO_IN_RITARDO: "Arrivato in ritardo",
   PAGATO: "Pagato",
 };
-
-function normalizeStatusMap(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, {
-    status?: string;
-    updatedAt?: string;
-    updatedBy?: string;
-    startedAt?: string | null;
-    stoppedAt?: string | null;
-    elapsedSeconds?: number;
-  }>;
-}
 
 function formatElapsedTime(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds));
@@ -112,53 +98,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
-    const currentMap = normalizeStatusMap(currentSetting?.value);
-    const previousEntry = currentMap[bookingId] || {};
-    const previousStatus = previousEntry.status;
     const signedBy = operationalUser?.isPC ? "" : String(body?.signedBy || "").trim();
     const updatedBy = signedBy || sessionUserName;
-
-    let startedAt = previousEntry.startedAt ?? null;
-    let stoppedAt = previousEntry.stoppedAt ?? null;
-    let elapsedSeconds = Number(previousEntry.elapsedSeconds || 0);
-
-    if (status === "INIZIATO" && (previousStatus !== "INIZIATO" || !startedAt)) {
-      startedAt = transitionAt.toISOString();
-      stoppedAt = null;
-      elapsedSeconds = 0;
-    } else if (status !== "INIZIATO" && previousStatus === "INIZIATO" && startedAt) {
-      const startedAtMs = new Date(startedAt).getTime();
-      if (Number.isFinite(startedAtMs)) {
-        elapsedSeconds = Math.max(0, Math.floor((transitionAt.getTime() - startedAtMs) / 1000));
-      }
-      stoppedAt = transitionAt.toISOString();
-    }
-
-    const updatedMap = {
-      ...currentMap,
-      [bookingId]: {
-        status,
-        updatedAt: transitionAt.toISOString(),
-        updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
-        startedAt,
-        stoppedAt,
-        elapsedSeconds,
-      },
-    };
-
-    await saveAppointmentChange((tx) => tx.setting.upsert({
-      where: { key: SETTING_KEY },
-      update: { value: updatedMap },
-      create: { key: SETTING_KEY, value: updatedMap },
-    }));
+    const { previousStatus, entry } = await saveAppointmentStatus(bookingId, {
+      status,
+      transitionAt,
+      updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
+      trackServiceTime: true,
+    });
 
     const previousLabel = previousStatus && allowedStatuses.has(previousStatus)
       ? statusLabels[previousStatus as CowlendarAppointmentStatus]
       : null;
     const nextLabel = statusLabels[status as CowlendarAppointmentStatus];
     const elapsedNote = previousStatus === "INIZIATO" && status !== "INIZIATO"
-      ? ` Tempo trascorso: ${formatElapsedTime(elapsedSeconds)}.`
+      ? ` Tempo trascorso: ${formatElapsedTime(entry.elapsedSeconds)}.`
       : "";
     // The local override is the source used by the appointments UI. Notes and
     // the external Cowlendar sync are useful audit/integration work, but they
@@ -204,7 +158,7 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({ success: true, status: updatedMap[bookingId], statusComment, cowlendarSync });
+    return NextResponse.json({ success: true, status: entry, statusComment, cowlendarSync });
   } catch (error) {
     console.error("Failed to update appointment status:", error);
     return NextResponse.json({ error: "Errore durante il salvataggio dello stato." }, { status: 500 });

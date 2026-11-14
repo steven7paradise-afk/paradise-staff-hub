@@ -1,7 +1,7 @@
 import { appendClientControlChecks } from "@/lib/client-control-checks-note";
 import { clientControlProductSelection } from "@/lib/client-control-products";
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
-import { saveAppointmentChange } from "@/lib/appointment-realtime";
+import { saveAppointmentStatus, type AppointmentStatusEntry } from "@/lib/appointment-status-store";
 import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, parseWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
 import { NextRequest, NextResponse } from "next/server";
@@ -766,33 +766,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // AUTO-UPDATE APPOINTMENT STATUS TO COMPLETATO
+  let appointmentStatus: AppointmentStatusEntry | null = null;
   if (bookingId && !isDraft) {
     try {
-      const SETTING_KEY = "appointment_status_overrides";
-      await saveAppointmentChange(async (tx) => {
-        const currentSetting = await tx.setting.findUnique({ where: { key: SETTING_KEY } });
-        const currentMap = currentSetting?.value && typeof currentSetting.value === "object" && !Array.isArray(currentSetting.value)
-          ? currentSetting.value
-          : {};
-        const updatedMap = {
-          ...currentMap,
-          [bookingId]: {
-            status: isNoShow ? "NON_PRESENTATO" : "COMPLETATO",
-            updatedAt: new Date().toISOString(),
-            updatedBy: "Controllo Cliente",
-          },
-        };
-        await tx.setting.upsert({
-          where: { key: SETTING_KEY },
-          update: { value: updatedMap },
-          create: { key: SETTING_KEY, value: updatedMap },
-        });
+      const { entry } = await saveAppointmentStatus(bookingId, {
+        status: isNoShow ? "NON_PRESENTATO" : "COMPLETATO",
+        updatedBy: "Controllo Cliente",
       });
+      appointmentStatus = entry;
     } catch (err) {
-      console.error("Failed to auto-set appointment status to COMPLETATO:", err);
+      console.error("Failed to auto-set appointment status:", err);
     }
   }
+
+  const warning = noteSync.failed.length
+    ? `Scheda salvata, ma la nota non è stata completata sugli ordini ${noteSync.failed.map(order => `#${order}`).join(", ")}. Premi di nuovo Conferma controllo per riprovare.`
+    : !isDraft && !targetOrders.length && (useDayPayments || customNote)
+      ? useDayPayments
+        ? "Scheda salvata. Nessun pagamento del giorno verificato: la nota non è stata inviata a Shopify."
+        : "Scheda salvata. Nessun numero d’ordine Shopify valido per inviare la nota."
+      : undefined;
+  const statusWarning = bookingId && !isDraft && !appointmentStatus
+    ? "Scheda salvata, ma lo stato dell’appuntamento non è stato aggiornato. Riprova a confermare."
+    : undefined;
 
   return NextResponse.json({
     ok: true,
@@ -800,13 +796,8 @@ export async function POST(request: NextRequest) {
     operation,
     draft: isDraft,
     noteSync,
-    warning: noteSync.failed.length
-      ? `Scheda salvata, ma la nota non è stata completata sugli ordini ${noteSync.failed.map(order => `#${order}`).join(", ")}. Premi di nuovo Conferma controllo per riprovare.`
-      : !isDraft && !targetOrders.length && (useDayPayments || customNote)
-        ? useDayPayments
-          ? "Scheda salvata. Nessun pagamento del giorno verificato: la nota non è stata inviata a Shopify."
-          : "Scheda salvata. Nessun numero d’ordine Shopify valido per inviare la nota."
-        : undefined,
+    appointmentStatus,
+    warning: [warning, statusWarning].filter(Boolean).join(" ") || undefined,
     createdAt: response.created_at.toISOString(),
   });
 }
