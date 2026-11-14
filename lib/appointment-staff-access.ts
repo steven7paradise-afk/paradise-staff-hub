@@ -96,8 +96,16 @@ export function matchAppointmentEmployeeIds(team: { id: string; name: string }[]
   }))];
 }
 
-const ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAMES = new Set(["franci"]);
-const ALWAYS_ACTIVE_APPOINTMENT_STAFF_IDS = new Set([FRANCESCA_ID]);
+const ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAME = "franci";
+
+export function repubblicaAppointmentRosterScope(eligibleLocationIds: string[]) {
+  return [
+    { sede_id: { in: eligibleLocationIds } },
+    { sede_id: null },
+    { id: FRANCESCA_ID },
+    { name: { equals: ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAME, mode: "insensitive" as const } },
+  ];
+}
 
 export function isAlwaysActiveAppointmentStaff(
   name: string | null | undefined,
@@ -107,9 +115,16 @@ export function isAlwaysActiveAppointmentStaff(
   const normalizedId = String(userId || "").trim();
 
   return (
-    ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAMES.has(normalizedName) ||
-    ALWAYS_ACTIVE_APPOINTMENT_STAFF_IDS.has(normalizedId)
+    normalizedName === ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAME ||
+    normalizedId === FRANCESCA_ID
   );
+}
+
+/** Match Cowlendar's public name only to the already identified owner. */
+export function matchesAppointmentOwnerName(employee: { id: string; name: string }, name?: string | null) {
+  const alias = normalizeAssignmentName(name);
+  return isAlwaysActiveAppointmentStaff(employee.name, employee.id) &&
+    [ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAME, "francesca", "francesca paradise"].includes(alias);
 }
 
 export function appointmentStaffDisplayName(
@@ -120,7 +135,7 @@ export function appointmentStaffDisplayName(
   const normalizedName = cleanName.toLocaleLowerCase("it");
   const normalizedId = String(userId || "").trim();
 
-  if (normalizedName === "franci" || normalizedId === FRANCESCA_ID) return "Francesca";
+  if (isAlwaysActiveAppointmentStaff(cleanName, normalizedId)) return "Francesca";
   if (normalizedName === "steven alvarez" || normalizedId === STEVEN_ID) return "Steven";
   return cleanName || "Staff";
 }

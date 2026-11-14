@@ -1,7 +1,7 @@
 import { appointmentSalonSlugFromName, isCashierAppointmentSalon } from "@/lib/appointment-salon-url";
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
 import { NextRequest, NextResponse } from "next/server";
-import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
+import { canWorkAcrossAppointmentLocations, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { saveAppointmentChange } from "@/lib/appointment-realtime";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
@@ -39,10 +39,6 @@ type StaffAlias = {
 function normalizeStaffAliases(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, StaffAlias>;
-}
-
-function isFranci(value?: string | null) {
-  return String(value || "").trim().toLocaleLowerCase("it") === "franci";
 }
 
 function isGenericStaffPlaceholder(value?: string | null) {
@@ -111,7 +107,7 @@ export async function POST(request: NextRequest) {
     });
     const usersById = new Map(
       activeUsers
-        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isCashierAppointmentSalon(appointmentSalonSlugFromName(user.location?.name)) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
+        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isCashierAppointmentSalon(appointmentSalonSlugFromName(user.location?.name)) || canWorkAcrossAppointmentLocations(user.role) || isAlwaysActiveAppointmentStaff(user.name, user.id))
         .map((user) => [user.id, user]),
     );
     const teammates = requestedIds.flatMap((id) => {
@@ -135,12 +131,12 @@ export async function POST(request: NextRequest) {
       where: {
         active: true,
       },
-      select: { name: true, role: true, location: { select: { name: true } } },
+      select: { id: true, name: true, role: true, location: { select: { name: true } } },
     });
     const shopifyTeammateNames = formatShopifyStaffNames(
       teammates.map((teammate) => teammate.name),
       salonRoster
-        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isCashierAppointmentSalon(appointmentSalonSlugFromName(user.location?.name)) || canWorkAcrossAppointmentLocations(user.role) || isFranci(user.name))
+        .filter((user) => canAssignAppointmentOfficeStaff(operatorProfile?.location?.name, user.location?.name) || isCashierAppointmentSalon(appointmentSalonSlugFromName(user.location?.name)) || canWorkAcrossAppointmentLocations(user.role) || isAlwaysActiveAppointmentStaff(user.name, user.id))
         .map((user) => user.name),
     ).join(", ");
 

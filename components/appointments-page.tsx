@@ -7,7 +7,7 @@ import { AppointmentsLiveRefresh } from "@/components/appointments-live-refresh"
 import { AppointmentArchiveStatus } from "@/components/appointment-archive-status";
 import { AppointmentArchiveBrowser } from "@/components/appointment-archive-browser";
 import { redirect } from "next/navigation";
-import { canWorkAcrossAppointmentLocations } from "@/lib/appointment-staff-access";
+import { canWorkAcrossAppointmentLocations, isAlwaysActiveAppointmentStaff, matchesAppointmentOwnerName } from "@/lib/appointment-staff-access";
 import { cookies } from "next/headers";
 import { after } from "next/server";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
@@ -51,19 +51,14 @@ function isUnassignedTeamName(value?: string | null) {
     normalized === "non assegnati";
 }
 
-function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: string) {
+function matchUserByTeamName<T extends { id: string; name: string }>(users: T[], teamName: string) {
   const normalizedTeamName = normalizeName(teamName);
   if (!normalizedTeamName) return null;
 
-  // Cowlendar espone Francesca con il nome pubblico "Francesca Paradise",
-  // mentre il suo profilo operativo interno si chiama "Franci".
-  if (normalizedTeamName === "francesca paradise") {
-    const franci = users.find((user) => normalizeName(user.name) === "franci");
-    if (franci) return franci;
-  }
-
   const exact = users.find((user) => normalizeName(user.name) === normalizedTeamName);
   if (exact) return exact;
+  const owner = users.find((user) => matchesAppointmentOwnerName(user, normalizedTeamName));
+  if (owner) return owner;
 
   const teamParts = normalizedTeamName.split(" ").filter(Boolean);
   if (teamParts.length === 1) {
@@ -376,14 +371,14 @@ export default async function AppointmentsPage({
 
   const safeBookings = archive.bookings;
 
-  const corsoUsers = localUsers.filter((user) => isRepubblicaPc
-    ? user.sede_id === pcLocationId || (allowLegacyBuenosAires && user.location?.active === false && isCorsoLocation(user.location.name)) || normalizeName(user.name) === "franci"
-    : isCorsoLocation(user.location?.name) || appointmentSalonSlugFromName(user.location?.name) === "repubblica" || canWorkAcrossAppointmentLocations(user.role) || normalizeName(user.name) === "franci");
+  const corsoUsers = localUsers.filter((user) => isAlwaysActiveAppointmentStaff(user.name, user.id) || (isRepubblicaPc
+    ? user.sede_id === pcLocationId || (allowLegacyBuenosAires && user.location?.active === false && isCorsoLocation(user.location.name))
+    : isCorsoLocation(user.location?.name) || appointmentSalonSlugFromName(user.location?.name) === "repubblica" || canWorkAcrossAppointmentLocations(user.role)));
   const teamLocationName = (user: (typeof localUsers)[number]) => isRepubblicaPc && user.sede_id !== pcLocationId && user.location?.active === false && isCorsoLocation(user.location.name)
     ? "Salone Repubblica"
     : user.location?.name;
   const pcDisplayUser = (isPC || isAdminRemoteController) && kioskWorkerName
-    ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
+    ? matchUserByTeamName(localUsers, kioskWorkerName)
     : null;
 
   const cowlendarTeamOptionsByName = new Map<string, { id: string; name: string; role: string; locationName?: string | null; photoUrl?: string | null }>();

@@ -11,6 +11,7 @@ import {
   hasCurrentAttendanceAtAppointmentSalon,
   isAlwaysActiveAppointmentStaff,
   isRepubblicaPinRosterWorker,
+  repubblicaAppointmentRosterScope,
 } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
         where: {
           active: true,
           ...(isRepubblicaRoster ? {
-            OR: [{ sede_id: { in: eligibleLocationIds } }, { sede_id: null }],
+            OR: repubblicaAppointmentRosterScope(eligibleLocationIds),
           } : {}),
           ...(isRepubblicaRoster || isPinEntry ? { employee_status: { not: FORMER_EMPLOYEE_STATUS } } : {}),
           ...(isPinEntry ? { role: { notIn: ["ADMIN", "SUPER_ADMIN", "ZERO"] } } : {}),
@@ -130,7 +131,7 @@ export async function GET(request: NextRequest) {
       const localAttendance = hasCurrentAttendanceAtAppointmentSalon(
         state.status, state.lastValidLog?.location_id, eligibleLocationIds,
       );
-      if (isRepubblicaRoster && !worker.sede_id && !localAttendance) return [];
+      if (isRepubblicaRoster && !alwaysActive && !worker.sede_id && !localAttendance) return [];
       if (isRepubblicaPcPinEntry) {
         if (!isRepubblicaPinRosterWorker({
           assignedLocationId: worker.sede_id,

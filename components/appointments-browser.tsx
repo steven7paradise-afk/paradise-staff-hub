@@ -9,7 +9,7 @@ import {
 } from "@/lib/appointment-status";
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
 import { AppointmentsPinEntry } from "@/components/appointments-pin-entry";
-import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
+import { canWorkAcrossAppointmentLocations, suggestEmployeeForAppointmentSalon, appointmentOperatorInSalon, isAvailableAppointmentServiceWorker, appointmentStaffDisplayName, isAlwaysActiveAppointmentStaff, matchesAppointmentOwnerName, matchAppointmentEmployeeIds } from "@/lib/appointment-staff-access";
 import { restoreClientControlProducts } from "@/lib/client-control-products";
 import { ClientControlChecks } from "./client-control-checks";
 import { WorkerServiceSections } from "./worker-service-sections";
@@ -623,14 +623,12 @@ function normalizeSearchValue(value?: string | null) {
 }
 
 function staffNamesReferToSamePerson(
-  workerName?: string | null,
+  workerProfile: { id: string; name: string },
   assignedName?: string | null,
 ) {
-  const normalizedWorker = normalizeSearchValue(workerName);
+  const normalizedWorker = normalizeSearchValue(workerProfile.name);
   const normalizedAssigned = normalizeSearchValue(assignedName);
-  // Cowlendar uses the public teammate name, while the internal app keeps the
-  // shorter staff profile name requested by the team.
-  if (normalizedWorker === "franci" && normalizedAssigned === "francesca paradise") return true;
+  if (matchesAppointmentOwnerName(workerProfile, assignedName)) return true;
   const worker = normalizedWorker.split(" ").filter(Boolean);
   const assigned = normalizedAssigned.split(" ").filter(Boolean);
   if (!worker.length || !assigned.length) return false;
@@ -1100,6 +1098,7 @@ type ActivePcWorker = {
   photo_url?: string | null;
   locationName: string;
   status: "IN" | "BREAK" | string;
+  alwaysActive?: boolean;
   clockedInAt?: string | null;
   breakStartedAt?: string | null;
   externalIds?: string[];
@@ -3153,7 +3152,7 @@ export function AppointmentsBrowser({
         const worker = workersById.get(teammate.id) || workersByExternalId.get(teammate.id);
         if (worker) ids.add(worker.id);
         else if (allowNameMatch) {
-          const names = boardActiveStaff.filter((candidate) => staffNamesReferToSamePerson(candidate.name, teammate.name));
+          const names = boardActiveStaff.filter((candidate) => staffNamesReferToSamePerson(candidate, teammate.name));
           if (names.length === 1) ids.add(names[0].id);
         }
       }
@@ -3948,7 +3947,7 @@ export function AppointmentsBrowser({
 
     if (
       !isCashierAppointmentSalon(booking.inferredSalon === "altro" || booking.inferredSalon === "tutti" ? null : booking.inferredSalon) &&
-      !nextTeam.every((teammate) => (officeStaffAccess.allowed && officeStaffAccess.workers.some(worker => worker.id === teammate.id)) || canWorkAcrossAppointmentLocations(teammate.role) || normalizeSearchValue(teammate.name) === "franci")
+      !nextTeam.every((teammate) => (officeStaffAccess.allowed && officeStaffAccess.workers.some(worker => worker.id === teammate.id)) || canWorkAcrossAppointmentLocations(teammate.role) || isAlwaysActiveAppointmentStaff(teammate.name, teammate.id))
     ) {
       alert(
         "Il team si può modificare solo per gli appuntamenti del salone.",
@@ -4470,6 +4469,7 @@ export function AppointmentsBrowser({
         name: worker.name,
         photoUrl: worker.photo_url || null,
         status: worker.status,
+        alwaysActive: worker.alwaysActive ?? isAlwaysActiveAppointmentStaff(worker.name, worker.id),
         clockedInAt: worker.clockedInAt || null,
         breakStartedAt: worker.breakStartedAt || null,
         externalIds: Array.isArray(worker.externalIds) ? worker.externalIds : [],
@@ -4510,7 +4510,7 @@ export function AppointmentsBrowser({
         const worker =
           workersById.get(teammate.id) ||
           workersByExternalId.get(teammate.id) ||
-          workers.find((candidate) => staffNamesReferToSamePerson(candidate.name, teammate.name));
+          workers.find((candidate) => staffNamesReferToSamePerson(candidate, teammate.name));
         if (!worker || assignedWorkerIds.has(worker.id)) continue;
         assignedWorkerIds.add(worker.id);
         bookingsByWorker.get(worker.id)?.push(booking);
@@ -4541,14 +4541,21 @@ export function AppointmentsBrowser({
       };
     });
 
-    const selectedWorkerColumn = effectivePcWorkerName
-      ? workerColumns.find((column) => staffNamesReferToSamePerson(column.name, effectivePcWorkerName)) || null
+    const selectedWorkerName = normalizeSearchValue(effectivePcWorkerName);
+    const staffNameMatches = selectedWorkerName
+      ? workerColumns.filter((column) => staffNamesReferToSamePerson(column, effectivePcWorkerName))
+      : [];
+    const selectedWorkerColumn = staffNameMatches.find((column) => normalizeSearchValue(column.name) === selectedWorkerName) ??
+      (staffNameMatches.length === 1 ? staffNameMatches[0] : null);
+    const ownerColumn = repubblicaBoard
+      ? workerColumns.find((column) => column.alwaysActive && column.id !== selectedWorkerColumn?.id)
       : null;
-    const bookedWorkerColumns = workerColumns.filter(
-      (column) => column.bookings.length > 0 && column.id !== selectedWorkerColumn?.id,
+    const otherWorkerColumns = workerColumns.filter((column) => column.id !== selectedWorkerColumn?.id && column.id !== ownerColumn?.id);
+    const bookedWorkerColumns = otherWorkerColumns.filter(
+      (column) => column.bookings.length > 0,
     );
-    const emptyWorkerColumns = workerColumns.filter(
-      (column) => column.bookings.length === 0 && column.id !== selectedWorkerColumn?.id,
+    const emptyWorkerColumns = otherWorkerColumns.filter(
+      (column) => column.bookings.length === 0,
     );
     const unassignedColumn = otherBookings.length
       ? (() => {
@@ -4558,6 +4565,7 @@ export function AppointmentsBrowser({
             name: repubblicaBoard ? "Altri appuntamenti" : "Non assegnati",
             photoUrl: null,
             status: "IN",
+            alwaysActive: false,
             clockedInAt: null,
             breakStartedAt: null,
             externalIds: [],
@@ -4567,17 +4575,18 @@ export function AppointmentsBrowser({
         })()
       : null;
 
-    // Sul PC del salone la persona selezionata resta sempre la prima colonna e
-    // gli appuntamenti da assegnare sono subito accanto. Le colonne vuote vanno
-    // in fondo e possono essere nascoste dalla board.
+    // Il profilo del PC viene prima della titolare. Le altre colonne vuote
+    // restano in fondo e possono essere nascoste.
     const columns = effectivePcWorkerName
       ? [
           ...(selectedWorkerColumn ? [selectedWorkerColumn] : []),
+          ...(ownerColumn ? [ownerColumn] : []),
           ...(unassignedColumn ? [unassignedColumn] : []),
           ...bookedWorkerColumns,
           ...emptyWorkerColumns,
         ]
       : [
+          ...(ownerColumn ? [ownerColumn] : []),
           ...bookedWorkerColumns,
           ...(unassignedColumn ? [unassignedColumn] : []),
           ...emptyWorkerColumns,
@@ -4588,10 +4597,12 @@ export function AppointmentsBrowser({
   const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
     (column) =>
       column.id !== "unassigned" &&
+      !column.alwaysActive &&
       column.bookings.length === 0 &&
       column.status !== "IN" &&
       column.status !== "BREAK" &&
-      !staffNamesReferToSamePerson(column.name, effectivePcWorkerName),
+      normalizeSearchValue(column.name) !== normalizeSearchValue(effectivePcWorkerName) &&
+      !matchesAppointmentOwnerName(column, effectivePcWorkerName),
   ).length;
   const visibleAppointmentBoardColumns = useMemo(() => {
     if (repubblicaBoard && filterStaff !== "all") {
@@ -4601,10 +4612,12 @@ export function AppointmentsBrowser({
     const visibleColumns = appointmentBoardColumns.filter(
       (column) =>
         column.id === "unassigned" ||
+        column.alwaysActive ||
         column.bookings.length > 0 ||
         column.status === "IN" ||
         column.status === "BREAK" ||
-        staffNamesReferToSamePerson(column.name, effectivePcWorkerName),
+        normalizeSearchValue(column.name) === normalizeSearchValue(effectivePcWorkerName) ||
+        matchesAppointmentOwnerName(column, effectivePcWorkerName),
     );
     return repubblicaBoard || visibleColumns.length ? visibleColumns : appointmentBoardColumns;
   }, [appointmentBoardColumns, effectivePcWorkerName, filterStaff, repubblicaBoard, showEmptyBoardWorkers]);
@@ -6964,6 +6977,8 @@ export function AppointmentsBrowser({
                                 <span className={`size-1.5 rounded-full ${column.status === "BREAK" ? "bg-amber-500" : column.status === "IN" ? "bg-emerald-500" : "bg-slate-400"}`} />
                                 {column.id === "unassigned"
                                   ? (repubblicaBoard ? "Senza colonna staff" : "Da assegnare")
+                                  : column.alwaysActive
+                                    ? "Sempre disponibile"
                                   : column.status === "BREAK"
                                     ? "In pausa"
                                     : column.status === "IN"
