@@ -9,6 +9,7 @@ export function AppointmentsLiveRefresh({
   to,
   paused = false,
   cashier = false,
+  acknowledgedRevisions,
   onRosterChange,
 }: {
   revision: string | null;
@@ -16,6 +17,7 @@ export function AppointmentsLiveRefresh({
   to: string;
   paused?: boolean;
   cashier?: boolean;
+  acknowledgedRevisions?: ReadonlySet<string>;
   onRosterChange?: (revision: string) => void;
 }) {
   const router = useRouter();
@@ -68,7 +70,7 @@ export function AppointmentsLiveRefresh({
   }, [cashier, enabled, from, to]);
 
   useEffect(() => {
-    if (!revision || paused || refreshing || !nextRevision || nextRevision === revision) return;
+    if (!revision || paused || refreshing || !nextRevision || nextRevision === revision || acknowledgedRevisions?.has(nextRevision)) return;
     if (lastRequested.current?.fromRevision === revision &&
         lastRequested.current.toRevision === nextRevision) return;
     let timer: number | undefined;
@@ -88,7 +90,7 @@ export function AppointmentsLiveRefresh({
       window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [nextRevision, paused, refreshing, revision, router, startTransition]);
+  }, [acknowledgedRevisions, nextRevision, paused, refreshing, revision, router, startTransition]);
 
   return null;
 }

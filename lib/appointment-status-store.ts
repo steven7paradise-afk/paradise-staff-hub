@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { publishAppointmentChange } from "./appointment-realtime";
+import { readAppointmentStatusRevisions, type AppointmentAgendaRange, type AppointmentAgendaRevision } from "./appointment-range-revision";
 import { prisma } from "./prisma";
 
 const STATUS_SETTING_KEY = "appointment_status_overrides";
@@ -19,6 +20,7 @@ type StatusUpdate = {
   updatedBy: string;
   transitionAt?: Date;
   trackServiceTime?: boolean;
+  agendaRange?: AppointmentAgendaRange;
 };
 
 type StatusEntryWithTiming = AppointmentStatusEntry & {
@@ -27,18 +29,20 @@ type StatusEntryWithTiming = AppointmentStatusEntry & {
   elapsedSeconds: number;
 };
 
+type StatusSave<T> = { previousStatus?: string; entry: T; agendaRevision?: AppointmentAgendaRevision };
+
 export async function saveAppointmentStatus(
   bookingId: string,
   update: StatusUpdate & { trackServiceTime: true },
-): Promise<{ previousStatus?: string; entry: StatusEntryWithTiming }>;
+): Promise<StatusSave<StatusEntryWithTiming>>;
 export async function saveAppointmentStatus(
   bookingId: string,
   update: StatusUpdate,
-): Promise<{ previousStatus?: string; entry: AppointmentStatusEntry }>;
+): Promise<StatusSave<AppointmentStatusEntry>>;
 export async function saveAppointmentStatus(
   bookingId: string,
   update: StatusUpdate,
-): Promise<{ previousStatus?: string; entry: AppointmentStatusEntry }> {
+): Promise<StatusSave<AppointmentStatusEntry>> {
   return prisma.$transaction(async (tx) => {
     const readForUpdate = () => tx.$queryRaw<Array<{ entry: Partial<AppointmentStatusEntry> | null }>>`
       SELECT value::jsonb -> ${bookingId}::text AS entry
@@ -88,6 +92,10 @@ export async function saveAppointmentStatus(
       }
     }
 
+    const agendaRevision = update.agendaRange
+      ? await readAppointmentStatusRevisions(tx, update.agendaRange, bookingId, entry)
+      : undefined;
+
     await tx.$executeRaw`
       UPDATE settings
       SET value = (CASE WHEN jsonb_typeof(value::jsonb) = 'object' THEN value::jsonb ELSE '{}'::jsonb END)
@@ -95,6 +103,6 @@ export async function saveAppointmentStatus(
       WHERE key = ${STATUS_SETTING_KEY}
     `;
     await publishAppointmentChange(tx);
-    return { previousStatus, entry };
+    return { previousStatus, entry, agendaRevision };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }

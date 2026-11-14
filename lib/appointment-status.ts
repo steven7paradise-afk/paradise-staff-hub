@@ -68,6 +68,7 @@ export function resolveAgendaAppointmentStatus(
 export type AppointmentStatusChange = {
   status: AppointmentStatusValue;
   updatedAt: string | null;
+  updatedBy?: string;
   startedAt: string | null;
   stoppedAt: string | null;
   elapsedSeconds: number;
@@ -83,6 +84,7 @@ export function parseSavedAppointmentStatus(value: unknown): AppointmentStatusCh
   return {
     status,
     updatedAt: entry.updatedAt,
+    ...(typeof entry.updatedBy === "string" ? { updatedBy: entry.updatedBy } : {}),
     startedAt: typeof entry.startedAt === "string" ? entry.startedAt : null,
     stoppedAt: typeof entry.stoppedAt === "string" ? entry.stoppedAt : null,
     elapsedSeconds: typeof entry.elapsedSeconds === "number" ? entry.elapsedSeconds : 0,

@@ -4,6 +4,15 @@ import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
+import { appointmentsRealtimeEnabled } from "@/lib/appointment-realtime";
+import { addAppointmentDays, isAppointmentDateKey } from "@/lib/appointment-date";
+
+function visibleAgendaRange(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const { from, to } = value as { from?: unknown; to?: unknown };
+  if (!isAppointmentDateKey(from) || !isAppointmentDateKey(to) || from > to || to > addAppointmentDays(from, 31)) return undefined;
+  return { from, to };
+}
 
 const allowedStatuses = new Set([
   "PRENOTATO",
@@ -100,11 +109,12 @@ export async function POST(request: NextRequest) {
 
     const signedBy = operationalUser?.isPC ? "" : String(body?.signedBy || "").trim();
     const updatedBy = signedBy || sessionUserName;
-    const { previousStatus, entry } = await saveAppointmentStatus(bookingId, {
+    const { previousStatus, entry, agendaRevision } = await saveAppointmentStatus(bookingId, {
       status,
       transitionAt,
       updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
       trackServiceTime: true,
+      agendaRange: appointmentsRealtimeEnabled() ? visibleAgendaRange(body.range) : undefined,
     });
 
     const previousLabel = previousStatus && allowedStatuses.has(previousStatus)
@@ -158,7 +168,7 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({ success: true, status: entry, statusComment, cowlendarSync });
+    return NextResponse.json({ success: true, status: entry, statusComment, cowlendarSync, agendaRevision });
   } catch (error) {
     console.error("Failed to update appointment status:", error);
     return NextResponse.json({ error: "Errore durante il salvataggio dello stato." }, { status: 500 });

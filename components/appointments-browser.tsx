@@ -1384,6 +1384,20 @@ export function AppointmentsBrowser({
   const [visibleCount, setVisibleCount] = useState(appointmentsPageSize);
   const pendingStatusSaves = useRef(new Set<string>());
   const [savingStatusIds, setSavingStatusIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [savedAgendaRevisions, setSavedAgendaRevisions] = useState<{
+    base: string;
+    changes: ReadonlyMap<string, string>;
+  } | null>(null);
+  const acknowledgedAgendaRevisions = useMemo(() => {
+    const acknowledged = new Set<string>();
+    if (!appointmentRevision || savedAgendaRevisions?.base !== appointmentRevision) return acknowledged;
+    let revision = savedAgendaRevisions.changes.get(appointmentRevision);
+    while (revision && !acknowledged.has(revision)) {
+      acknowledged.add(revision);
+      revision = savedAgendaRevisions.changes.get(revision);
+    }
+    return acknowledged;
+  }, [appointmentRevision, savedAgendaRevisions]);
   const [savingTeamId, setSavingTeamId] = useState<string | null>(null);
   const [teamByBooking, setTeamByBooking] = useState<
     Record<string, BookingTeammate[]>
@@ -3775,6 +3789,15 @@ export function AppointmentsBrowser({
     return visibleAppointmentStatusChange(statusByBooking[booking.id], booking.savedStatusUpdatedAt);
   }
 
+  function renderStatusAudit(booking: AppointmentRecord, className: string) {
+    const status = getBookingStatusChange(booking);
+    const author = status?.updatedBy ?? booking.statusUpdatedBy;
+    const timestamp = status?.updatedAt ?? booking.statusUpdatedAt;
+    return author ? <p className={className}>
+      Ultima modifica: {author}{timestamp ? ` · ${formatDateTime(timestamp)}` : ""}
+    </p> : null;
+  }
+
   function rememberSavedStatus(bookingId: string, saved: AppointmentStatusChange) {
     setStatusByBooking((current) => {
       const displayed = visibleAppointmentStatusChange(current[bookingId], saved.updatedAt);
@@ -3797,43 +3820,9 @@ export function AppointmentsBrowser({
     let optimisticStatus: AppointmentStatusChange | undefined;
 
     try {
-      if (nextStatus === "COMPLETATO") {
-        const controlResponse = await fetch(
-          `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`,
-          { cache: "no-store" },
-        );
-        const controlData = await controlResponse.json().catch(() => null);
-        const controlAnswers = (controlData?.existingControl?.answers || {}) as Record<string, unknown>;
-        const controlConfirmed = Boolean(
-          controlResponse.ok &&
-            controlData?.existingControl &&
-            controlAnswers.client_control_is_draft !== true &&
-            String(controlAnswers[CLIENT_CONTROL_FIELD_IDS.correctness] || "")
-              .trim()
-              .toLowerCase() === "controllato",
-        );
-
-        if (!controlResponse.ok || !controlData) {
-          showPushToast(
-            "Verifica non riuscita",
-            "Non posso completare l’appuntamento finché il Controllo Cliente non è verificato.",
-            "error",
-          );
-          return;
-        }
-        if (!controlConfirmed) {
-          showPushToast(
-            "Controllo Cliente richiesto",
-            "Conferma prima il Controllo Cliente; al termine l’appuntamento diventerà Completato.",
-            "error",
-          );
-          await openClientControlForBooking(booking);
-          return;
-        }
-      }
       const currentStatus = getBookingStatusChange(booking);
       const transitionAt = new Date();
-      optimisticStatus = {
+      const pendingStatus: AppointmentStatusChange = {
         status: nextStatus,
         updatedAt: null,
         startedAt: currentStatus ? currentStatus.startedAt : booking.statusStartedAt ?? null,
@@ -3841,25 +3830,28 @@ export function AppointmentsBrowser({
         elapsedSeconds: currentStatus?.elapsedSeconds ?? Number(booking.statusElapsedSeconds || 0),
       };
 
-      if (nextStatus === "INIZIATO" && (previousStatus !== "INIZIATO" || !optimisticStatus.startedAt)) {
-        optimisticStatus.startedAt = transitionAt.toISOString();
-        optimisticStatus.stoppedAt = null;
-        optimisticStatus.elapsedSeconds = 0;
-      } else if (nextStatus !== "INIZIATO" && previousStatus === "INIZIATO" && optimisticStatus.startedAt) {
-        optimisticStatus.stoppedAt = transitionAt.toISOString();
-        optimisticStatus.elapsedSeconds = Math.max(
+      if (nextStatus === "INIZIATO" && (previousStatus !== "INIZIATO" || !pendingStatus.startedAt)) {
+        pendingStatus.startedAt = transitionAt.toISOString();
+        pendingStatus.stoppedAt = null;
+        pendingStatus.elapsedSeconds = 0;
+      } else if (nextStatus !== "INIZIATO" && previousStatus === "INIZIATO" && pendingStatus.startedAt) {
+        pendingStatus.stoppedAt = transitionAt.toISOString();
+        pendingStatus.elapsedSeconds = Math.max(
           0,
-          Math.floor((transitionAt.getTime() - new Date(optimisticStatus.startedAt).getTime()) / 1000),
+          Math.floor((transitionAt.getTime() - new Date(pendingStatus.startedAt).getTime()) / 1000),
         );
       }
-
-      const pendingStatus = optimisticStatus;
-      setStatusByBooking((current) => ({ ...current, [bookingId]: pendingStatus }));
+      if (nextStatus !== "COMPLETATO") {
+        optimisticStatus = pendingStatus;
+        setStatusByBooking((current) => ({ ...current, [bookingId]: pendingStatus }));
+      }
 
       const response = await fetch("/api/appointments/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, status: nextStatus, signedBy }),
+        body: JSON.stringify({ bookingId, status: nextStatus, signedBy,
+          range: appointmentRevision && initialRangeFrom && initialRangeTo ? { from: initialRangeFrom, to: initialRangeTo } : undefined,
+        }),
       });
 
       if (handleExpiredPcWorker(response)) {
@@ -3867,12 +3859,25 @@ export function AppointmentsBrowser({
       }
 
       const data = await response.json().catch(() => null);
+      if (nextStatus === "COMPLETATO" && response.status === 409 && data?.code === "CLIENT_CONTROL_REQUIRED") {
+        showPushToast("Controllo Cliente richiesto", data.error, "error");
+        await openClientControlForBooking(booking);
+        return;
+      }
       const saved = parseSavedAppointmentStatus(data?.status);
       if (!response.ok || data?.success !== true || !saved || saved.status !== normalizeAppointmentStatus(nextStatus)) {
         throw new Error(data?.error || "Non sono riuscito a salvare lo stato.");
       }
 
       rememberSavedStatus(bookingId, saved);
+      const { before, after } = data.agendaRevision ?? {};
+      if (appointmentRevision && typeof before === "string" && typeof after === "string" && before !== after) {
+        setSavedAgendaRevisions((current) => {
+          const changes = new Map(current?.base === appointmentRevision ? current.changes : undefined);
+          changes.set(before, after);
+          return { base: appointmentRevision, changes };
+        });
+      }
       if (data?.statusComment && selectedBooking?.id === bookingId) {
         setDbComments((current) => [...current, data.statusComment]);
       }
@@ -4972,6 +4977,7 @@ export function AppointmentsBrowser({
           key={`${initialRangeFrom}:${initialRangeTo}`}
           revision={appointmentRevision}
           cashier={pcRepubblica}
+          acknowledgedRevisions={acknowledgedAgendaRevisions}
           onRosterChange={setBoardRosterRevision}
           from={initialRangeFrom}
           to={initialRangeTo}
@@ -7095,7 +7101,12 @@ export function AppointmentsBrowser({
                                     </div>
                                   )}
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} appointments-board-status ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[cardStatus]}`}>
+                                    <span className={`inline-flex items-center gap-1 rounded-full border ${repubblicaBoard ? "max-w-[7rem] px-2 py-1 text-center text-[10px] font-semibold leading-tight" : "px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm"} appointments-board-status ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[cardStatus]}`}>
+                                      {visit.some((service) => savingStatusIds.has(service.id)) ? (
+                                        <span role="status" aria-label="Salvataggio dello stato">
+                                          <Loader2 aria-hidden="true" className="size-3 motion-safe:animate-spin" />
+                                        </span>
+                                      ) : null}
                                       {!repubblicaBoard && visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[cardStatus]}
                                     </span>
                                     <button
@@ -7817,14 +7828,7 @@ export function AppointmentsBrowser({
                     {renderStatusControl(selectedBooking!)}
                     <WhatsAppSheetNote booking={selectedBooking} />
                   </div>
-                  {selectedBooking.statusUpdatedBy ? (
-                    <p className="mt-3 text-xs font-medium text-[#8A7266]">
-                      Ultima modifica: {selectedBooking.statusUpdatedBy}
-                      {selectedBooking.statusUpdatedAt
-                        ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}`
-                        : ""}
-                    </p>
-                  ) : null}
+                  {renderStatusAudit(selectedBooking, "mt-3 text-xs font-medium text-[#8A7266]")}
                   {selectedBooking.sheetNote ? (
                     <div className="mt-4 rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
                       <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">
@@ -9001,14 +9005,7 @@ export function AppointmentsBrowser({
                     <div className="mt-3">
                       <WhatsAppSheetNote booking={selectedBookingForView} />
                     </div>
-                    {selectedBookingForView.statusUpdatedBy ? (
-                      <p className="mt-2 text-xs font-bold text-black/40">
-                        Ultima modifica: {selectedBookingForView.statusUpdatedBy}
-                        {selectedBookingForView.statusUpdatedAt
-                          ? ` · ${formatDateTime(selectedBookingForView.statusUpdatedAt)}`
-                          : ""}
-                      </p>
-                    ) : null}
+                    {renderStatusAudit(selectedBookingForView, "mt-2 text-xs font-bold text-black/40")}
                     {selectedBookingForView.sheetNote ? (
                       <div className="mt-3 rounded-2xl border border-black/5 bg-[#FFF6F7] p-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">
