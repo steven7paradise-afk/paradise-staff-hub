@@ -21,6 +21,14 @@ export default async function SalonAppointmentsPage({
   if (!salone) notFound();
 
   const resolvedSearchParams = await searchParams;
+  if (salone === "ufficio") {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(resolvedSearchParams)) {
+      if (key === "salon" || key === "salone" || value === undefined) continue;
+      for (const entry of Array.isArray(value) ? value : [value]) query.append(key, entry);
+    }
+    redirect(query.size ? `/appointments?${query}` : "/appointments");
+  }
   const cookieStore = await cookies();
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = await checkPCAuthorization(pcToken);

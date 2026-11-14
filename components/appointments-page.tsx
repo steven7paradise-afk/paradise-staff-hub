@@ -20,7 +20,7 @@ import { hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
-import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonSlugFromName, normalizeAppointmentAgendaSalon, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentDateKey, isAppointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
 import { resolveAgendaAppointmentStatus } from "@/lib/appointment-status";
 import { syncSystemazioneFasceTable } from "@/lib/systemazione-fasce-table";
@@ -241,7 +241,7 @@ export default async function AppointmentsPage({
 }) {
   const session = await auth();
   const resolvedSearchParams = await searchParams;
-  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
+  const requestedSalon = normalizeAppointmentAgendaSalon(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
   const remoteTarget = typeof resolvedSearchParams?.remoteTarget === "string" ? resolvedSearchParams.remoteTarget.trim() : "";
   const isAdminRemoteController = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
 
@@ -364,7 +364,7 @@ export default async function AppointmentsPage({
     for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
   });
 
-  const initialSalon = pcSalon || requestedSalon || "tutti";
+  const initialSalon = normalizeAppointmentAgendaSalon(pcSalon) || requestedSalon || "tutti";
   const bookingSalonScope = useRepubblicaBoard
     ? agendaSalonScope(activeLocations)
     : { mergeLegacyCorso: false, defaultToRepubblica: false };

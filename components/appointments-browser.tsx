@@ -67,7 +67,7 @@ import {
   List,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
-import { appointmentSalonSlugFromName, appointmentSalonUrl, isCashierAppointmentSalon, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonSlugFromName, appointmentSalonUrl, isCashierAppointmentSalon, normalizeAppointmentAgendaSalon } from "@/lib/appointment-salon-url";
 import { appointmentDateKey, initialAppointmentDateFilter, isAppointmentDateKey } from "@/lib/appointment-date";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
@@ -115,7 +115,7 @@ function maskEmail(email?: string): string {
 }
 
 type ViewMode = "day" | "week" | "month";
-type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "repubblica" | "ufficio";
+type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "repubblica";
 type AppointmentDateFilterMode = "all" | "today" | "tomorrow" | "custom";
 type BookingTeammate = {
   id: string;
@@ -409,7 +409,6 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
   { value: "duomo", label: "Duomo" },
   { value: "buenos-aires", label: "Buenos Aires" },
   { value: "repubblica", label: "Repubblica" },
-  { value: "ufficio", label: "Ufficio Paradise" },
 ];
 
 const pcLinkManagerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -903,7 +902,6 @@ function getSalonLabel(value: AppointmentRecord["inferredSalon"]) {
   if (value === "duomo") return "Duomo";
   if (value === "repubblica") return "Repubblica";
   if (value === "buenos-aires") return "Buenos Aires";
-  if (value === "ufficio") return "Ufficio Paradise";
   return "Altro";
 }
 
@@ -1302,7 +1300,7 @@ export function AppointmentsBrowser({
   }, [initialSalon, navigationBasePath, repubblicaBoard, router, searchParams]);
 
   useEffect(() => {
-    const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
+    const salonFromUrl = normalizeAppointmentAgendaSalon(searchParams.get("salone") || searchParams.get("salon"));
     const hasFixedSalon = isPC || (repubblicaBoard && Boolean(navigationBasePath && navigationBasePath !== "/appointments"));
     setSalon(hasFixedSalon ? initialSalon : salonFromUrl || initialSalon);
   }, [initialSalon, isPC, navigationBasePath, repubblicaBoard, searchParams]);
@@ -5078,9 +5076,7 @@ export function AppointmentsBrowser({
                   </div>
                   <div className="flex items-center gap-2 self-start sm:self-auto">
                     {Boolean(
-                      salon === "ufficio" ||
-                        clientControlBooking?.inferredSalon === "ufficio" ||
-                        (clientControlForm.salon || "").toLowerCase().includes("ufficio"),
+                      (clientControlForm.salon || "").toLowerCase().includes("ufficio"),
                     ) ? (
                       <button
                         type="button"

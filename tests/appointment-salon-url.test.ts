@@ -5,6 +5,7 @@ import {
   appointmentSalonUrl,
   isAppointmentWorkerDestination,
   isSameAppointmentDestination,
+  normalizeAppointmentAgendaSalon,
   normalizeAppointmentSalonSlug,
   repubblicaIncludesLegacyBuenosAires,
 } from "../lib/appointment-salon-url";
@@ -15,6 +16,12 @@ test("normalizza e costruisce gli indirizzi dei saloni", () => {
   assert.equal(appointmentSalonSlugFromName("Salone Repubblica"), "repubblica");
   assert.equal(normalizeAppointmentSalonSlug("Salone Repubblica"), "repubblica");
   assert.equal(appointmentSalonUrl("repubblica"), "/appointments/repubblica");
+});
+
+test("l'Ufficio resta una sede interna ma non un filtro dell'agenda clienti", () => {
+  assert.equal(appointmentSalonSlugFromName("Ufficio Paradise"), "ufficio");
+  assert.equal(normalizeAppointmentAgendaSalon("ufficio"), null);
+  assert.equal(normalizeAppointmentAgendaSalon("Salone Repubblica"), "repubblica");
 });
 
 test("il PIN accetta solo la destinazione operativa di un salone", () => {

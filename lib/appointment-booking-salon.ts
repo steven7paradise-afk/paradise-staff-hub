@@ -45,28 +45,29 @@ export function resolveAgendaAppointmentSalon(
   teammateLocations: (string | null | undefined)[],
   scope: SalonScope,
   preferBookingLocation: boolean,
-): AppointmentSalonSlug | "altro" {
+): Exclude<AppointmentSalonSlug, "ufficio"> | "altro" {
   const canonical = (salon: AppointmentSalonSlug) =>
     salon === "buenos-aires" && scope.mergeLegacyCorso ? "repubblica" : salon;
-  const readSalons = (values: unknown[]) => [...new Set(values.flatMap(salonsFromText).map(canonical))];
+  const readSalons = (values: unknown[]) => [...new Set(values.flatMap(salonsFromText).map(canonical))]
+    .filter((salon): salon is Exclude<AppointmentSalonSlug, "ufficio"> => salon !== "ufficio");
 
   const formLocations = [booking.form_data?.sede, booking.form_data?.salone];
   const explicitFormSalons = readSalons(formLocations);
   if (explicitFormSalons.length > 1) return "altro";
   if (explicitFormSalons[0]) return explicitFormSalons[0];
   if (preferBookingLocation && formLocations.some(value =>
-    typeof value === "string" && value.trim() !== "" && !/^(?:no data|n\/a|-)$/i.test(value.trim()),
+    typeof value === "string" && value.trim() !== "" && !/^(?:no data|n\/a|-)$/i.test(value.trim()) &&
+    !salonsFromText(value).includes("ufficio"),
   )) return "altro";
 
   const explicitBookingSalons = readSalons([booking.service?.title, booking.booking_str]);
   if (preferBookingLocation && explicitBookingSalons.length > 1) return "altro";
   const bookingSalon = explicitBookingSalons[0];
-  const workerSalons = readSalons(teammateLocations);
-  const workerSalon = workerSalons.find(salon => salon !== "ufficio");
+  const workerSalon = readSalons(teammateLocations)[0];
   const externalSalon = readSalons((booking.teammates ?? []).map(mate =>
     `${mate.firstname ?? ""} ${mate.lastname ?? ""}`,
   ))[0];
   const inferred = (preferBookingLocation ? bookingSalon : undefined) || workerSalon || bookingSalon || externalSalon;
   // A collaborator's office assignment is not the venue of a salon service.
-  return inferred || (scope.defaultToRepubblica ? "repubblica" : workerSalons[0] || "altro");
+  return inferred || (scope.defaultToRepubblica ? "repubblica" : "altro");
 }

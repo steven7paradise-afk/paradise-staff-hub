@@ -30,6 +30,11 @@ export function appointmentSalonUrl(slug?: AppointmentSalonSlug | null) {
   return slug ? `/appointments/${slug}` : "/appointments";
 }
 
+export function normalizeAppointmentAgendaSalon(value?: string | string[] | null) {
+  const salon = normalizeAppointmentSalonSlug(value);
+  return salon === "ufficio" ? null : salon;
+}
+
 export function isCashierAppointmentSalon(salon: AppointmentSalonSlug | null): salon is "repubblica" | "buenos-aires" {
   return salon === "repubblica" || salon === "buenos-aires";
 }
