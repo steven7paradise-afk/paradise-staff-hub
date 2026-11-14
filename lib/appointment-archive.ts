@@ -1,11 +1,12 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "./appointment-realtime";
 import { addAppointmentDays, appointmentDateKey, appointmentDayBoundaryIso, appointmentMonthRange } from "./appointment-date";
-import { archiveMonths, archiveSearchText } from "./appointment-archive-range";
-import { getCompleteCowlendarBookingsForRange, type CowlendarBooking } from "./cowlendar";
+import { APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX, archiveMonths, archiveSearchText } from "./appointment-archive-range";
+import { cowlendarRateLimitDelay, getCompleteCowlendarBookingsForRange, type CowlendarBooking } from "./cowlendar";
 import { getShopifyOrderNamesBulk } from "./shopify";
 import { getAppointmentStatusesFromGoogleSheet } from "./google-sheet";
+import { COWLENDAR_WEBHOOK_VERSION_FIELD, cowlendarArchiveVersion, cowlendarWebhookVersion } from "./cowlendar-webhook-archive";
 
 // One import per process; database leases also prevent duplicate work across replicas.
 let queue = Promise.resolve();
@@ -40,6 +41,7 @@ async function importAppointmentArchive(month: string, force: boolean) {
   const range = appointmentMonthRange(`${month}-01`);
   const now = new Date();
   const lease = new Date(now.getTime() + LEASE_MS);
+  const rateLimitKey = `${APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX}${month}`;
   const realtimeEnabled = process.env.APPOINTMENTS_REALTIME_ENABLED === "true";
   await prisma.appointmentArchiveSync.upsert({ where: { month }, create: { month }, update: {} });
   const [previous] = await prisma.$queryRaw<ArchiveLease[]>`
@@ -81,11 +83,16 @@ async function importAppointmentArchive(month: string, force: boolean) {
       }))).catch(() => ({})), {}, 8_000),
     ]);
     deadline.throwIfAborted();
-    const rows = bookings.map(b => ({ id: String(b.id), start_at: b.start_date,
-      search_text: archiveSearchText(b, names.get(String(b.order_id)) || ""),
-      payload: { ...b, archiveOrderName: names.get(String(b.order_id)) || null },
-      sheet: (sheets as Record<string, unknown>)[b.id] || null,
-    }));
+    const rows = bookings.map(b => {
+      const payload: CowlendarBooking = { ...b, archiveOrderName: names.get(String(b.order_id)) || null };
+      delete payload[COWLENDAR_WEBHOOK_VERSION_FIELD];
+      return { id: String(b.id), start_at: b.start_date,
+        source_version: cowlendarArchiveVersion(b.updated_at),
+        search_text: archiveSearchText(b, names.get(String(b.order_id)) || ""),
+        payload,
+        sheet: (sheets as Record<string, unknown>)[b.id] || null,
+      };
+    });
     return await prisma.$transaction(async tx => {
       const ownership = await tx.appointmentArchiveSync.updateMany({
         where: { month, lease_until: lease },
@@ -98,19 +105,24 @@ async function importAppointmentArchive(month: string, force: boolean) {
         return "invalidated";
       }
 
-      // Compare what the upsert will persist against its old snapshot, while
-      // still marking unchanged rows as seen so the deletion pass keeps them.
+      // A signed webhook is authoritative until the normal list has caught up.
+      // Compare the same rows the transaction can overwrite.
+      const sourceCaughtUp = (saved: Prisma.Sql, sourceVersion: Prisma.Sql) => Prisma.sql`(
+        ${cowlendarWebhookVersion(saved)} IS NULL OR
+        ${sourceVersion} >= ${cowlendarWebhookVersion(saved)}
+      )`;
       const [comparison] = await tx.$queryRaw<{ changed: boolean }[]>`
         WITH incoming AS MATERIALIZED (
           SELECT * FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
-          AS r(id text, start_at timestamptz, search_text text, payload jsonb, sheet jsonb)
+          AS r(id text, start_at timestamptz, source_version numeric, search_text text, payload jsonb, sheet jsonb)
         ), changed AS (
           SELECT EXISTS (
             SELECT 1 FROM incoming r
             LEFT JOIN appointment_archive a ON a.id = r.id
-            WHERE a.id IS NULL OR (a.synced_at <= ${now} AND (
+            WHERE a.id IS NULL OR (a.synced_at <= ${now}
+              AND ${sourceCaughtUp(Prisma.sql`a.payload`, Prisma.sql`r.source_version`)} AND (
               a.start_at IS DISTINCT FROM r.start_at
-              OR (a.payload - 'archiveOrderName') IS DISTINCT FROM (r.payload - 'archiveOrderName')
+              OR (a.payload - 'archiveOrderName' - ${COWLENDAR_WEBHOOK_VERSION_FIELD}::text) IS DISTINCT FROM (r.payload - 'archiveOrderName')
               OR (r.payload->>'archiveOrderName' IS NOT NULL
                 AND a.payload->>'archiveOrderName' IS DISTINCT FROM r.payload->>'archiveOrderName')
               OR (NULLIF(r.sheet, 'null'::jsonb) IS NOT NULL
@@ -132,26 +144,34 @@ async function importAppointmentArchive(month: string, force: boolean) {
               THEN appointment_archive.sheet ELSE EXCLUDED.sheet END,
             synced_at = EXCLUDED.synced_at
           WHERE appointment_archive.synced_at <= EXCLUDED.synced_at
+            AND ${sourceCaughtUp(Prisma.sql`appointment_archive.payload`, Prisma.sql`(SELECT r.source_version FROM incoming r WHERE r.id = EXCLUDED.id)`)}
         )
         SELECT changed FROM changed`;
       const removed = await tx.appointmentArchive.deleteMany({ where: {
         start_at: { gte: new Date(appointmentDayBoundaryIso(range.start)), lte: new Date(appointmentDayBoundaryIso(range.end, true)) },
         synced_at: { lt: now },
+        NOT: { payload: { path: [COWLENDAR_WEBHOOK_VERSION_FIELD], not: Prisma.AnyNull } },
       } });
       await tx.appointmentArchiveSync.update({ where: { month }, data: { completed_at: new Date(), lease_until: null, error: false } });
+      if (previous.error) await tx.setting.deleteMany({ where: { key: rateLimitKey } });
       const needsCompletionNotice = force || !previous.completed_at || previous.error || previous.lease_until?.getTime() === STALE_LEASE.getTime();
       if (comparison?.changed || removed.count || needsCompletionNotice) await publishAppointmentChange(tx);
       return "completed";
     }, { timeout: 30_000 });
   } catch (error) {
+    const rateLimitDelay = cowlendarRateLimitDelay(error);
     const markFailed = async (tx: Prisma.TransactionClient) => {
       const updated = await tx.appointmentArchiveSync.updateMany({
         where: { month, lease_until: lease },
-        data: { lease_until: new Date(Date.now() + 60_000), error: true },
+        data: { lease_until: new Date(Date.now() + Math.max(60_000, rateLimitDelay ?? 0)), error: true },
       });
-      if (updated.count && !previous.error) await publishAppointmentChange(tx);
+      if (!updated.count) return;
+      const rateLimitChanged = rateLimitDelay === null
+        ? previous.error && (await tx.setting.deleteMany({ where: { key: rateLimitKey } })).count > 0
+        : (await tx.setting.createMany({ data: { key: rateLimitKey, value: true }, skipDuplicates: true })).count > 0;
+      if (!previous.error || rateLimitChanged) await publishAppointmentChange(tx);
     };
-    if (realtimeEnabled && !previous.error) await prisma.$transaction(markFailed);
+    if (realtimeEnabled || rateLimitDelay !== null || previous.error) await prisma.$transaction(markFailed);
     else await markFailed(prisma);
     console.error("Importazione archivio appuntamenti non riuscita", month, error instanceof Error ? error.message : "errore");
     return "failed";
@@ -241,11 +261,16 @@ export async function readAppointmentArchive(start: string, end: string, options
     }),
     prisma.appointmentArchiveSync.findMany({ where: { month: { in: months } } }),
   ]);
+  const failedMonths = sync.filter(s => s.error).map(s => s.month);
+  const rateLimited = failedMonths.length > 0 && Boolean(await prisma.setting.count({
+    where: { key: { in: failedMonths.map(month => `${APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX}${month}`) } },
+  }));
   const invalidated = sync.some(s => s.lease_until?.getTime() === STALE_LEASE.getTime());
   return { bookings: rows.map(r => r.payload as unknown as CowlendarBooking),
     sheets: Object.fromEntries(rows.filter(r => r.sheet).map(r => [r.id, r.sheet])), count, page, months,
     ready: months.every(month => sync.some(s => s.month === month && s.completed_at)),
-    failed: sync.some(s => s.error),
+    failed: failedMonths.length > 0,
+    rateLimited,
     invalidated,
     stale: invalidated || sync.some(s => !s.completed_at || Date.now() - s.completed_at.getTime() > FRESH_MS),
     updatedAt: sync.length && sync.every(s => s.completed_at) ? new Date(Math.min(...sync.map(s => s.completed_at!.getTime()))).toISOString() : null,

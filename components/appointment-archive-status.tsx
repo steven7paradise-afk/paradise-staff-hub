@@ -2,7 +2,7 @@
 import { useEffect, useTransition, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
-export function AppointmentArchiveStatus({ ready, failed, updatedAt, stale, updateOnChange = false }: { ready: boolean; failed: boolean; updatedAt: string | null; stale: boolean; updateOnChange?: boolean }) {
+export function AppointmentArchiveStatus({ ready, failed, rateLimited, updatedAt, stale, updateOnChange = false }: { ready: boolean; failed: boolean; rateLimited: boolean; updatedAt: string | null; stale: boolean; updateOnChange?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const pathname = usePathname();
@@ -25,7 +25,7 @@ export function AppointmentArchiveStatus({ ready, failed, updatedAt, stale, upda
   }, [waiting, failed, router, updateOnChange]);
   if (updateOnChange && ready && !failed) return null;
   return <div role="status" className="mx-4 my-3 rounded-xl border border-pink-100 bg-white px-4 py-3 text-sm text-neutral-700">
-    {failed ? "Sincronizzazione non riuscita. I dati già salvati restano disponibili." : !ready ? "Importazione dello storico in corso. I risultati possono essere ancora incompleti." : waiting ? "Aggiornamento in background. Puoi usare i dati già salvati." : "Agenda salvata nel database."}
+    {rateLimited ? "Cowlendar sta limitando le richieste. Gli appuntamenti salvati restano disponibili." : failed ? "Sincronizzazione non riuscita. I dati già salvati restano disponibili." : !ready ? "Importazione dello storico in corso. I risultati possono essere ancora incompleti." : waiting ? "Aggiornamento in background. Puoi usare i dati già salvati." : "Agenda salvata nel database."}
     {!updateOnChange && updatedAt ? <span className="ml-2">Ultimo aggiornamento: {new Date(updatedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" })}.</span> : null}
     <button className="ml-3 font-semibold text-[#99345F] underline" onClick={() => startTransition(() => {
       if (!updateOnChange) {

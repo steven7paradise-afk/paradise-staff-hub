@@ -55,6 +55,33 @@ test("an active import lease prevents duplicate external downloads", async t => 
   assert.equal(network.mock.callCount(), 0);
 });
 
+test("a rate limit preserves the archive and extends its retry lease", async t => {
+  const originalToken = process.env.COWLENDAR_API_TOKEN;
+  process.env.COWLENDAR_API_TOKEN = "test-archive-rate-limit";
+  t.after(() => {
+    if (originalToken === undefined) delete process.env.COWLENDAR_API_TOKEN;
+    else process.env.COWLENDAR_API_TOKEN = originalToken;
+  });
+  const fetch = t.mock.method(globalThis, "fetch", async () => new Response(null, {
+    status: 429, headers: { "Retry-After": "120" },
+  }));
+  mockMethod(t, prisma.appointmentArchiveSync, "upsert", async () => ({}));
+  mockMethod(t, prisma, "$queryRaw", async () => [{ completed_at: new Date(), lease_until: null, error: false }]);
+  const state = t.mock.fn(async (_args: { data: { error: boolean; lease_until: Date } }) => ({ count: 1 }));
+  const reason = t.mock.fn(async (_args: { data: { key: string; value: boolean } }) => ({ count: 1 }));
+  mockMethod(t, prisma, "$transaction", async run => run({
+    appointmentArchiveSync: { updateMany: state },
+    setting: { createMany: reason },
+  }));
+  t.mock.method(console, "error", () => {});
+  const startedAt = Date.now();
+  await syncAppointmentArchive("2026-09", true);
+  assert.equal(fetch.mock.callCount(), 1);
+  assert.equal(state.mock.calls[0].arguments[0].data.error, true);
+  assert.ok(state.mock.calls[0].arguments[0].data.lease_until.getTime() >= startedAt + 120_000);
+  assert.deepEqual(reason.mock.calls[0].arguments[0].data, { key: "appointment_archive_rate_limited:2026-09", value: true });
+});
+
 test("archive changes publish only after saving data and unchanged imports stay quiet", async t => {
   const token = process.env.COWLENDAR_API_TOKEN;
   const enabled = process.env.APPOINTMENTS_REALTIME_ENABLED;

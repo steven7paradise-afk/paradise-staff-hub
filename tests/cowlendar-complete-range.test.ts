@@ -6,9 +6,11 @@ const start = "2026-11-14T00:00:00.000Z";
 const end = "2026-11-15T00:00:00.000Z";
 const booking = (id: string) => ({ id, start_date: "2026-11-14T10:00:00.000Z" });
 
+let testTokenNumber = 0;
+
 function withTestToken(t: TestContext) {
   const original = process.env.COWLENDAR_API_TOKEN;
-  process.env.COWLENDAR_API_TOKEN = "test-only";
+  process.env.COWLENDAR_API_TOKEN = `test-only-${++testTokenNumber}`;
   t.after(() => {
     if (original === undefined) delete process.env.COWLENDAR_API_TOKEN;
     else process.env.COWLENDAR_API_TOKEN = original;
@@ -28,7 +30,7 @@ test("a rate-limited second page is retried without dropping earlier bookings", 
         pagination: { has_more: true, next_cursor: "next" },
       });
     }
-    if (cursors.length === 2) return new Response(null, { status: 429 });
+    if (cursors.length === 2) return new Response(null, { status: 429, headers: { "Retry-After": "0" } });
     return Response.json({
       data: [booking("second")],
       pagination: { has_more: false, next_cursor: null },
@@ -47,6 +49,15 @@ test("a long Retry-After prevents immediate requests", async (t) => {
     headers: { "Retry-After": "60" },
   }));
 
+  await assert.rejects(getCompleteCowlendarBookingsForRange(start, end), /Cowlendar 429/);
+  await assert.rejects(getCompleteCowlendarBookingsForRange(start, end), /Cowlendar 429/);
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test("an unspecified rate limit also pauses other complete-range requests", async (t) => {
+  withTestToken(t);
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 429 }));
+  await assert.rejects(getCompleteCowlendarBookingsForRange(start, end), /Cowlendar 429/);
   await assert.rejects(getCompleteCowlendarBookingsForRange(start, end), /Cowlendar 429/);
   assert.equal(fetchMock.mock.callCount(), 1);
 });

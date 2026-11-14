@@ -7,11 +7,42 @@ const COWLENDAR_WRITE_TIMEOUT_MS = 12_000;
 const COWLENDAR_COMPLETE_PAGE_SPACING_MS = 250;
 const COWLENDAR_COMPLETE_MAX_RETRY_MS = 5_000;
 const COWLENDAR_COMPLETE_PAGE_RETRIES = 2;
+const COWLENDAR_DEFAULT_RATE_PAUSE_MS = 60_000;
+const rateLimitUntilByToken = new Map<string, number>();
+
+function retryAfterMilliseconds(header: string | null, now: number) {
+  const value = header?.trim() || "";
+  if (!value) return null;
+  const delay = /^\d+$/.test(value) ? Number(value) * 1000 : Date.parse(value) - now;
+  return Number.isFinite(delay) ? Math.max(0, delay) : null;
+}
+
+function assertCowlendarAvailable(token: string) {
+  const until = rateLimitUntilByToken.get(token);
+  if (until === undefined) return;
+  const remaining = until - Date.now();
+  if (remaining > 0) throw new CowlendarHttpError(429, String(Math.ceil(remaining / 1000)));
+  rateLimitUntilByToken.delete(token);
+}
+
+function rememberCowlendarRateLimit(token: string, response: Response) {
+  if (response.status !== 429) return;
+  const now = Date.now();
+  const delay = retryAfterMilliseconds(response.headers.get("Retry-After"), now) ?? COWLENDAR_DEFAULT_RATE_PAUSE_MS;
+  rateLimitUntilByToken.set(token, Math.max(rateLimitUntilByToken.get(token) ?? 0, now + delay));
+  return String(Math.ceil(delay / 1000));
+}
 
 class CowlendarHttpError extends Error {
   constructor(readonly status: number, readonly retryAfter: string | null) {
     super(`Cowlendar ${status}`);
   }
+}
+
+export function cowlendarRateLimitDelay(error: unknown) {
+  return error instanceof CowlendarHttpError && error.status === 429
+    ? retryAfterMilliseconds(error.retryAfter, Date.now()) ?? COWLENDAR_DEFAULT_RATE_PAUSE_MS
+    : null;
 }
 
 type CowlendarResponse<T> = {
@@ -184,6 +215,7 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
     throw new Error("COWLENDAR_API_TOKEN mancante");
   }
 
+  assertCowlendarAvailable(token);
   const response = await fetch(`${COWLENDAR_API_BASE}${pathname}`, {
     ...init,
     signal: init?.signal || AbortSignal.timeout(COWLENDAR_READ_TIMEOUT_MS),
@@ -196,7 +228,8 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
   });
 
   if (!response.ok) {
-    throw new CowlendarHttpError(response.status, response.headers.get("Retry-After"));
+    const retryAfter = rememberCowlendarRateLimit(token, response) ?? response.headers.get("Retry-After");
+    throw new CowlendarHttpError(response.status, retryAfter);
   }
 
   return response.json() as Promise<CowlendarResponse<T>>;
@@ -208,7 +241,8 @@ async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
     throw new Error("COWLENDAR_API_TOKEN mancante");
   }
 
-  return fetch(`${COWLENDAR_API_BASE}${pathname}`, {
+  assertCowlendarAvailable(token);
+  const response = await fetch(`${COWLENDAR_API_BASE}${pathname}`, {
     ...init,
     signal: init?.signal || AbortSignal.timeout(COWLENDAR_WRITE_TIMEOUT_MS),
     headers: {
@@ -219,6 +253,8 @@ async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
     },
     cache: "no-store",
   });
+  rememberCowlendarRateLimit(token, response);
+  return response;
 }
 
 async function clearCowlendarBookingCaches() {
@@ -295,7 +331,7 @@ export async function updateCowlendarBookingStatus(bookingId: string, status: Co
 
       const text = await response.text().catch(() => "");
       lastError = `Cowlendar ${response.status}${text ? `: ${text}` : ""}`;
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401 || response.status === 403 || response.status === 429) {
         throw new Error(lastError);
       }
     }
@@ -345,7 +381,7 @@ export async function updateCowlendarBookingTeam(bookingId: string, teammateIds:
 
       const text = await response.text().catch(() => "");
       lastError = `Cowlendar ${response.status}${text ? `: ${text}` : ""}`;
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401 || response.status === 403 || response.status === 429) {
         throw new Error(lastError);
       }
     }
@@ -577,15 +613,9 @@ async function fetchCompleteBookingPage(query: URLSearchParams, signal: AbortSig
           ![429, 500, 502, 503, 504].includes(error.status) ||
           attempt >= COWLENDAR_COMPLETE_PAGE_RETRIES) throw error;
 
-      const retryAfter = error.retryAfter?.trim() || "";
-      let retryAfterMs = 0;
-      if (retryAfter) {
-        retryAfterMs = /^\d+$/.test(retryAfter)
-          ? Number(retryAfter) * 1000
-          : Date.parse(retryAfter) - Date.now();
-      }
+      const retryAfterMs = retryAfterMilliseconds(error.retryAfter, Date.now()) ?? 0;
       if (retryAfterMs > COWLENDAR_COMPLETE_MAX_RETRY_MS) throw error;
-      const delayMs = Number.isFinite(retryAfterMs) ? Math.max(500 * 2 ** attempt, retryAfterMs) : 500 * 2 ** attempt;
+      const delayMs = Math.max(500 * 2 ** attempt, retryAfterMs);
       await sleep(delayMs, undefined, { signal });
     }
   }

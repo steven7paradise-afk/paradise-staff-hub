@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { BOOKING_EVENTS, verifyCowlendarSignature } from "@/lib/cowlendar-webhook";
+import { applyCowlendarWebhookBooking, parseCowlendarWebhookBooking } from "@/lib/cowlendar-webhook-archive";
 import { APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL, APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "@/lib/appointment-realtime";
 
 export const runtime = "nodejs";
@@ -35,7 +36,10 @@ export async function POST(request: Request) {
     return new Response(null, { status: 400 });
   }
   if (event.type === "webhook.ping") return Response.json({ ok: true });
-  if (!BOOKING_EVENTS.has(event.type)) return Response.json({ ignored: true });
+  if (typeof event.type !== "string" || !event.type.startsWith("booking.")) {
+    return Response.json({ ignored: true });
+  }
+  const booking = BOOKING_EVENTS.has(event.type) ? parseCowlendarWebhookBooking(event.data, event.type) : null;
   try {
     await prisma.$transaction(async (tx) => {
       // Atomic deduplication across replicas. Store no customer data.
@@ -43,10 +47,17 @@ export async function POST(request: Request) {
         key: `cowlendar_event:${event.id}`, value: { receivedAt: new Date().toISOString() },
       }], skipDuplicates: true });
       if (!inserted.count) return;
+      if (booking && !await applyCowlendarWebhookBooking(tx, booking, new Date())) return;
+
       await tx.setting.deleteMany({ where: { OR: [
         { key: { startsWith: "cowlendar_cache_bookings_" } },
         { key: { startsWith: "cowlendar_cache_range_" } },
       ] } });
+      if (booking) {
+        await publishAppointmentChange(tx);
+        return;
+      }
+
       // Preserve active leases and the archive. Lock their rows before changing
       // the invalidation revision so an in-flight import cannot publish stale data.
       const now = new Date();

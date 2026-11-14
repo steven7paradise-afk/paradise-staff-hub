@@ -658,7 +658,7 @@ export default async function AppointmentsPage({
         </div>
       ) : null}
 
-      <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} updatedAt={archive.updatedAt} stale={updateOnChange ? archive.invalidated : archive.stale} updateOnChange={updateOnChange} />
+      <AppointmentArchiveStatus ready={archive.ready} failed={archive.failed} rateLimited={archive.rateLimited} updatedAt={archive.updatedAt} stale={updateOnChange ? archive.invalidated : archive.stale} updateOnChange={updateOnChange} />
       {updateOnChange && (isArchive || waitingForArchive) ? (
         <AppointmentsLiveRefresh key={`${appointmentRange.start}:${appointmentRange.end}`} revision={appointmentRevision} cashier={isRepubblicaPc} from={appointmentRange.start} to={appointmentRange.end} />
       ) : null}

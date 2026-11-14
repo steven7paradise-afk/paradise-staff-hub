@@ -1,5 +1,7 @@
 import { appointmentMonthRange, isAppointmentDateKey } from "./appointment-date";
 
+export const APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX = "appointment_archive_rate_limited:";
+
 export function archiveMonths(start: string, end: string) {
   if (!isAppointmentDateKey(start) || !isAppointmentDateKey(end) || start > end) throw new Error("Periodo non valido");
   const months: string[] = [];
