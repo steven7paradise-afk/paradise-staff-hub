@@ -26,8 +26,15 @@ test("respects explicit venue information over staff inference or defaults", () 
   assert.equal(resolveAgendaAppointmentSalon({ ...genericBooking, form_data: { salone: "Ufficio Paradise" } }, [], oneSalon, true), "ufficio");
   assert.equal(resolveAgendaAppointmentSalon({ ...genericBooking, form_data: { salone: "Studio Navigli" } }, [repubblica.name], oneSalon, true), "altro");
   assert.equal(resolveAgendaAppointmentSalon({ ...genericBooking, service: { title: "Piega | Duomo" } }, [repubblica.name], oneSalon, true), "duomo");
-  assert.equal(resolveAgendaAppointmentSalon(genericBooking, [office.name], oneSalon, true), "ufficio");
+  assert.equal(resolveAgendaAppointmentSalon({ ...genericBooking, service: { title: "Consulenza | Ufficio Paradise" } }, [repubblica.name], oneSalon, true), "ufficio");
   assert.equal(resolveAgendaAppointmentSalon({ ...genericBooking, form_data: { sede: repubblica.name, salone: office.name } }, [], oneSalon, true), "altro");
+});
+
+test("keeps undifferentiated salon services in Repubblica even when the collaborator is assigned to the office", () => {
+  const booking = { service: { title: "Microtessitura" }, teammates: [{ firstname: "Operatrice", lastname: "Paradise" }] };
+  assert.equal(resolveAgendaAppointmentSalon(booking, [office.name], oneSalon, true), "repubblica");
+  const twoSalons = agendaSalonScope([repubblica, office, { ...legacy, active: true }]);
+  assert.equal(resolveAgendaAppointmentSalon(booking, [office.name], twoSalons, true), "ufficio");
 });
 
 test("maps historical Buenos Aires labels to Repubblica only when no distinct location is active", () => {

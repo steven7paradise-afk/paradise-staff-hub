@@ -66,6 +66,7 @@ export function resolveAgendaAppointmentSalon(
   const externalSalon = readSalons((booking.teammates ?? []).map(mate =>
     `${mate.firstname ?? ""} ${mate.lastname ?? ""}`,
   ))[0];
-  const inferred = (preferBookingLocation ? bookingSalon : undefined) || workerSalon || bookingSalon || externalSalon || workerSalons[0];
-  return inferred || (scope.defaultToRepubblica ? "repubblica" : "altro");
+  const inferred = (preferBookingLocation ? bookingSalon : undefined) || workerSalon || bookingSalon || externalSalon;
+  // A collaborator's office assignment is not the venue of a salon service.
+  return inferred || (scope.defaultToRepubblica ? "repubblica" : workerSalons[0] || "altro");
 }
