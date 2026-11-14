@@ -15,7 +15,7 @@ export function DevOfficeWorkerPreview() {
     {assigned && <p role="status">Servizio assegnato a {assigned} (simulazione locale).</p>}
     {open && <AppointmentWorkerConfirmation name="Nicol" self={{ id: "salon-nicol", name: "Nicol" }} workers={[{ id: "salon-nicol", name: "Nicol", status: "IN" }]} canChooseOfficeStaff={office}
       officeWorkers={[{ id: "office-giuseppe", name: "Giuseppe Ufficio" }, { id: "office-francesca", name: "Francesca Ufficio" }, { id: "office-marta", name: "Marta Ufficio" }]}
-      workersLoading={false} workersError="" clientName="Cliente di esempio" loading={false}
+      workersLoading={false} workersError="" clientName="Cliente di esempio"
       onClose={() => setOpen(false)} onAssign={async worker => { setAssigned(worker.name); setOpen(false); return true; }} />}
   </main>;
 }

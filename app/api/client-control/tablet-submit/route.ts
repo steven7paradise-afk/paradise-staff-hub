@@ -1,6 +1,7 @@
 import { appendClientControlChecks } from "@/lib/client-control-checks-note";
 import { clientControlProductSelection } from "@/lib/client-control-products";
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
+import { visibleAgendaRange, type AppointmentAgendaRevision } from "@/lib/appointment-range-revision";
 import { saveAppointmentStatus, type AppointmentStatusEntry } from "@/lib/appointment-status-store";
 import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { combinedWorkerServiceNote, reconcileWorkerServices, orderedServiceStaff, parseWorkerServices, type WorkerServiceSection } from "@/lib/worker-service-sections";
@@ -169,6 +170,7 @@ export async function POST(request: NextRequest) {
     shopifyNoteOrder?: string;
     shopifyNoteScope?: "day" | "selected";
     appointmentStart?: string;
+    range?: unknown;
     instagramTag?: string;
     notes?: boolean;
     customNoteText?: string;
@@ -767,13 +769,16 @@ export async function POST(request: NextRequest) {
   }
 
   let appointmentStatus: AppointmentStatusEntry | null = null;
+  let agendaRevision: AppointmentAgendaRevision | undefined;
   if (bookingId && !isDraft) {
     try {
-      const { entry } = await saveAppointmentStatus(bookingId, {
+      const saved = await saveAppointmentStatus(bookingId, {
         status: isNoShow ? "NON_PRESENTATO" : "COMPLETATO",
         updatedBy: "Controllo Cliente",
+        agendaRange: visibleAgendaRange(body?.range),
       });
-      appointmentStatus = entry;
+      appointmentStatus = saved.entry;
+      agendaRevision = saved.agendaRevision;
     } catch (err) {
       console.error("Failed to auto-set appointment status:", err);
     }
@@ -797,6 +802,7 @@ export async function POST(request: NextRequest) {
     draft: isDraft,
     noteSync,
     appointmentStatus,
+    agendaRevision,
     warning: [warning, statusWarning].filter(Boolean).join(" ") || undefined,
     createdAt: response.created_at.toISOString(),
   });

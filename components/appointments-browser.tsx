@@ -1395,7 +1395,24 @@ export function AppointmentsBrowser({
     }
     return acknowledged;
   }, [appointmentRevision, savedAgendaRevisions]);
-  const [savingTeamId, setSavingTeamId] = useState<string | null>(null);
+  const agendaRange = appointmentRevision && initialRangeFrom && initialRangeTo
+    ? { from: initialRangeFrom, to: initialRangeTo }
+    : undefined;
+
+  // Acknowledge the saved edit without swallowing changes from other sessions.
+  function acknowledgeAgendaRevision(value: unknown) {
+    if (!appointmentRevision || !value || typeof value !== "object") return;
+    const { before, after } = value as { before?: unknown; after?: unknown };
+    if (typeof before !== "string" || typeof after !== "string" || before === after) return;
+    setSavedAgendaRevisions((current) => {
+      const changes = new Map(current?.base === appointmentRevision ? current.changes : undefined);
+      changes.set(before, after);
+      return { base: appointmentRevision, changes };
+    });
+  }
+
+  const pendingTeamSaves = useRef(new Set<string>());
+  const [savingTeamIds, setSavingTeamIds] = useState<ReadonlySet<string>>(() => new Set());
   const [teamByBooking, setTeamByBooking] = useState<
     Record<string, BookingTeammate[]>
   >(() =>
@@ -1633,10 +1650,10 @@ export function AppointmentsBrowser({
     lastAppliedBookings.current = initialBookings;
     setTeamByBooking((current) => Object.fromEntries(initialBookings.map((booking) => [
       booking.id,
-      booking.id === savingTeamId && current[booking.id] ? current[booking.id] : booking.teammates,
+      savingTeamIds.has(booking.id) && current[booking.id] ? current[booking.id] : booking.teammates,
     ])));
     setParadiseNotes(Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])));
-  }, [initialBookings, repubblicaBoard, savingTeamId]);
+  }, [initialBookings, repubblicaBoard, savingTeamIds]);
 
   const normalizedSearch = normalizeSearchValue(searchTerm);
   function getBookingTeam(booking?: AppointmentRecord | null): BookingTeammate[] {
@@ -1731,6 +1748,7 @@ export function AppointmentsBrowser({
     flushClientControlDraft();
     clientControlRequestRef.current?.abort();
     clientControlRequestRef.current = null;
+    paymentLookupSequence.current += 1;
     setClientControlOpen(false);
     setWorkerConfirmationOpen(false);
     setShowShopifyOrdersPanel(false);
@@ -1952,16 +1970,16 @@ export function AppointmentsBrowser({
     !manualPaymentMethod,
   );
 
-  async function handleShopifyOrderLookup(queryOverride?: string) {
+  async function handleShopifyOrderLookup(queryOverride?: string, signal?: AbortSignal) {
     const query = (queryOverride ?? clientControlForm.shopifyOrder ?? clientControlForm.clientName ?? "").trim();
     if (!query) return;
 
     setShopifyLookupLoading(true);
     try {
-      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`, { signal });
       const data = await res.json().catch(() => null);
 
-      if (res.ok && data) {
+      if (res.ok && data && !signal?.aborted) {
         setSelectedOrderDetails({
           id: data.id ? String(data.id) : undefined,
           orderName: data.orderName || query,
@@ -1991,23 +2009,26 @@ export function AppointmentsBrowser({
         });
       }
     } catch (err) {
-      console.error("Failed to lookup Shopify order:", err);
+      if (!signal?.aborted) console.error("Failed to lookup Shopify order:", err);
     } finally {
-      setShopifyLookupLoading(false);
+      if (!signal?.aborted) setShopifyLookupLoading(false);
     }
   }
 
-  async function handleSecondShopifyOrderLookup(queryOverride?: string) {
+  async function handleSecondShopifyOrderLookup(
+    queryOverride?: string,
+    signal = clientControlRequestRef.current?.signal,
+  ) {
     const query = (queryOverride ?? clientControlForm.secondShopifyOrder ?? "").trim();
     if (!query) return;
 
     setManualPaymentMethod(null);
     setSecondShopifyLookupLoading(true);
     try {
-      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`, { signal });
       const data = await res.json().catch(() => null);
 
-      if (res.ok && data) {
+      if (res.ok && data && !signal?.aborted) {
         setSecondOrderDetails({
           id: data.id ? String(data.id) : undefined,
           orderName: data.orderName || query,
@@ -2032,9 +2053,9 @@ export function AppointmentsBrowser({
         }));
       }
     } catch (err) {
-      console.error("Failed to lookup second Shopify order:", err);
+      if (!signal?.aborted) console.error("Failed to lookup second Shopify order:", err);
     } finally {
-      setSecondShopifyLookupLoading(false);
+      if (!signal?.aborted) setSecondShopifyLookupLoading(false);
     }
   }
 
@@ -2491,6 +2512,10 @@ export function AppointmentsBrowser({
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
     setSelectedShopifyNoteOrder("");
+    setSelectedOrderDetails(null);
+    setShopifyLookupLoading(false);
+    setSecondOrderDetails(null);
+    setSecondShopifyLookupLoading(false);
     setTodayOrdersList([]);
     setIsStaffDropdownOpen(false);
     setClientControlLastVisitAt(null);
@@ -2611,10 +2636,11 @@ export function AppointmentsBrowser({
         bookingId: booking.id,
       };
 
+      clientControlFormRef.current = baseForm;
       setClientControlForm(baseForm);
       setClientControlOpen(true);
 
-      // Pass the booking identity explicitly: React has not applied baseForm yet.
+      // Start payment history independently of the customer record and employee list.
       void fetchTodayShopifyOrders({
         clientName: baseForm.clientName,
         email: baseForm.email,
@@ -2622,7 +2648,7 @@ export function AppointmentsBrowser({
         shopifyOrder: baseForm.shopifyOrder,
       });
       if (booking.bookingStr || booking.customerName) {
-        void handleShopifyOrderLookup(booking.bookingStr || booking.customerName);
+        void handleShopifyOrderLookup(booking.bookingStr || booking.customerName, requestController.signal);
       }
     } catch (error) {
       console.error("Failed to open client control form:", error);
@@ -2757,7 +2783,7 @@ export function AppointmentsBrowser({
     if (existingAnswers) {
       const secOrder = String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || "").trim();
       if (secOrder) {
-        void handleSecondShopifyOrderLookup(secOrder);
+        void handleSecondShopifyOrderLookup(secOrder, signal);
       }
       if (existingAnswers.custom_grammi) {
         const g = String(existingAnswers.custom_grammi);
@@ -2873,6 +2899,7 @@ export function AppointmentsBrowser({
         shopifyNoteOrder: selectedShopifyNoteOrder,
         shopifyNoteScope: selectedShopifyNoteOrder ? "selected" : "day",
         appointmentStart: initialBookings.find(booking => booking.id === formToSubmit.bookingId)?.startDate,
+        range: agendaRange,
         manualPaymentMethod: manualPaymentMethodOverride ?? manualPaymentMethod ?? undefined,
         secondShopifyOrder: formToSubmit.secondShopifyOrder || "",
         customGrammi: (structuredServices ? primaryService?.grammi : customGrammiVal) || "",
@@ -2902,6 +2929,7 @@ export function AppointmentsBrowser({
       if (!response.ok)
         throw new Error(data?.error || "Errore durante il salvataggio.");
 
+      acknowledgeAgendaRevision(data?.agendaRevision);
       const savedOperation = data?.operation === "updated" ? "updated" : "created";
       const clientName = formToSubmit.clientName || "Cliente";
       const targetBookingId = formToSubmit.bookingId || selectedBooking?.id;
@@ -2933,18 +2961,20 @@ export function AppointmentsBrowser({
               targetBooking?.bookingStr || formToSubmit.shopifyOrder,
             teammateIds: selectedStaff.map((employee) => employee.id),
             teammates: selectedStaff,
+            range: agendaRange,
           }),
         });
 
-        if (teamResponse.ok) {
+        const teamResult = await teamResponse.json().catch(() => null);
+        if (teamResponse.ok && teamResult?.success === true) {
+          acknowledgeAgendaRevision(teamResult.agendaRevision);
           setTeamByBooking((current) => ({
             ...current,
             [targetBookingId]: selectedStaff,
           }));
         } else {
-          const teamError = await teamResponse.json().catch(() => null);
           teamSyncWarning = [teamSyncWarning,
-            teamError?.error ||
+            teamResult?.error ||
             "La scheda è salvata, ma la collaboratrice non è stata aggiornata nella lista appuntamenti."].filter(Boolean).join(" ");
         }
       }
@@ -3715,12 +3745,14 @@ export function AppointmentsBrowser({
         body: JSON.stringify({
           bookingId: quickNoteBooking.id,
           text: savedText,
+          range: agendaRange,
         }),
       });
       if (handleExpiredPcWorker(response)) return;
       const note = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(note?.error || "Nota non salvata");
-      setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: note.text || savedText }));
+      if (!response.ok || typeof note?.text !== "string") throw new Error(note?.error || "Nota non salvata");
+      setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: note.text }));
+      acknowledgeAgendaRevision(note.agendaRevision);
       setQuickNoteBookingId(null);
       setQuickNoteText("");
       showPushToast("Nota salvata", "La nota dell’ufficio è visibile sulla scheda.");
@@ -3847,7 +3879,7 @@ export function AppointmentsBrowser({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId, status: nextStatus, signedBy,
-          range: appointmentRevision && initialRangeFrom && initialRangeTo ? { from: initialRangeFrom, to: initialRangeTo } : undefined,
+          range: agendaRange,
         }),
       });
 
@@ -3867,14 +3899,7 @@ export function AppointmentsBrowser({
       }
 
       rememberSavedStatus(bookingId, saved);
-      const { before, after } = data.agendaRevision ?? {};
-      if (appointmentRevision && typeof before === "string" && typeof after === "string" && before !== after) {
-        setSavedAgendaRevisions((current) => {
-          const changes = new Map(current?.base === appointmentRevision ? current.changes : undefined);
-          changes.set(before, after);
-          return { base: appointmentRevision, changes };
-        });
-      }
+      acknowledgeAgendaRevision(data.agendaRevision);
       if (data?.statusComment && selectedBooking?.id === bookingId) {
         setDbComments((current) => [...current, data.statusComment]);
       }
@@ -3934,7 +3959,7 @@ export function AppointmentsBrowser({
     teammateIds: string[],
     signedBy?: string,
   ) {
-    if (repubblicaBoard && booking.isCanceled) return false;
+    if ((repubblicaBoard && booking.isCanceled) || pendingTeamSaves.current.has(booking.id)) return false;
     const previousTeam = getBookingTeam(booking);
     const previousClientControlStaffIds =
       clientControlFormRef.current.bookingId === booking.id
@@ -3967,7 +3992,8 @@ export function AppointmentsBrowser({
       clientControlFormRef.current = nextClientControlForm;
       setClientControlForm(nextClientControlForm);
     }
-    setSavingTeamId(booking.id);
+    pendingTeamSaves.current.add(booking.id);
+    setSavingTeamIds(new Set(pendingTeamSaves.current));
 
     try {
       const response = await fetch("/api/appointments/team", {
@@ -3980,6 +4006,7 @@ export function AppointmentsBrowser({
           teammates: nextTeam,
           sourceTeammates: previousTeam,
           signedBy,
+          range: agendaRange,
         }),
       });
 
@@ -3987,11 +4014,11 @@ export function AppointmentsBrowser({
         throw new Error("PC_WORKER_EXPIRED");
       }
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
+      const data = await response.json().catch(() => null);
+      if (!response.ok || data?.success !== true) {
         throw new Error(data?.error || "Non sono riuscito a salvare il team.");
       }
-      const data = await response.json().catch(() => null);
+      acknowledgeAgendaRevision(data.agendaRevision);
       if (booking.bookingStr && data?.shopifyNoteSaved === false) {
         showPushToast(
           "Collaboratrice salvata",
@@ -4033,14 +4060,15 @@ export function AppointmentsBrowser({
       }
       return false;
     } finally {
-      setSavingTeamId(null);
+      pendingTeamSaves.current.delete(booking.id);
+      setSavingTeamIds(new Set(pendingTeamSaves.current));
     }
   }
 
   async function confirmServiceWorker(employee: { id: string; name: string }) {
     const form = clientControlFormRef.current;
     const booking = initialBookings.find(item => item.id === form.bookingId);
-    if (!booking || !clientControlHistoryLoaded || clientControlLoading || savingTeamId) return false;
+    if (!booking || !clientControlHistoryLoaded || clientControlLoading || savingTeamIds.has(booking.id)) return false;
     const officeAllowed = officeStaffAccess.allowed && officeStaffAccess.workers.some(item => item.id === employee.id);
     if (!officeAllowed && !filteredClientControlEmployees.some(item => item.id === employee.id)) return false;
     if (!officeAllowed && employee.id !== confirmationSelf?.id && !confirmationWorkers.some(item => item.id === employee.id)) return false;
@@ -4079,7 +4107,7 @@ export function AppointmentsBrowser({
       );
       return;
     }
-    if (savingTeamId === booking.id) return;
+    if (savingTeamIds.has(booking.id)) return;
 
     if (employeeId === (currentForm.primaryStaffId || currentForm.staffIds[0])) {
       showPushToast("Lavoratrice principale", "La principale è quella della board. Per cambiarla, sposta l’appuntamento nella board corretta.", "error");
@@ -4816,7 +4844,7 @@ export function AppointmentsBrowser({
             <button
               key={mate.id}
               type="button"
-              disabled={savingTeamId === booking.id}
+              disabled={savingTeamIds.has(booking.id)}
               onClick={() => void selectCollaboratorAndOpenControl(booking, mate)}
               className={[
                 "group flex min-h-16 items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-55",
@@ -4832,7 +4860,7 @@ export function AppointmentsBrowser({
                   {assignedIds.has(mate.id) ? "Assegnata in Paradise" : "Assegna e apri controllo"}
                 </span>
               </span>
-              {savingTeamId === booking.id ? (
+              {savingTeamIds.has(booking.id) ? (
                 <Loader2 className="size-4 shrink-0 animate-spin text-[#B83D7F]" />
               ) : assignedIds.has(mate.id) ? (
                 <Check className="size-4 shrink-0 text-emerald-600" />
@@ -4993,7 +5021,7 @@ export function AppointmentsBrowser({
           from={initialRangeFrom}
           to={initialRangeTo}
           paused={Boolean(clientControlOpen || selectedBookingId || quickNoteBookingId ||
-            isFilterModalOpen || isDatePickerOpen || savingStatusIds.size > 0 || savingTeamId ||
+            isFilterModalOpen || isDatePickerOpen || savingStatusIds.size > 0 || savingTeamIds.size > 0 ||
             draggedBoardBookingId || touchDraggedBoardBookingId || draggedBoardWorkerId ||
             boardStatusMenu || signModalOpen || isRefreshing)}
         />
@@ -5132,6 +5160,7 @@ export function AppointmentsBrowser({
                       </p>
                       {canCorrectClientIdentity ? <button
                         type="button"
+                        disabled={!clientControlHistoryLoaded}
                         onClick={() => setEditingClientIdentity((current) => !current)}
                         aria-expanded={editingClientIdentity}
                         aria-controls="client-control-identity-editor"
@@ -5250,6 +5279,7 @@ export function AppointmentsBrowser({
 
 
 
+              <div inert={!clientControlHistoryLoaded} className="space-y-3.5">
               {/* Compact payment notice; history only opens on request. */}
               <div className="sticky top-0 z-30 -mx-4 border-b border-neutral-100 bg-white px-4 py-1 shadow-[0_4px_12px_rgba(0,0,0,0.025)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
                 <AppointmentPaymentNotice
@@ -5641,7 +5671,7 @@ export function AppointmentsBrowser({
                             : "Seleziona collaboratrice"}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-bold text-black/45">
-                          {savingTeamId === clientControlForm.bookingId
+                          {savingTeamIds.has(clientControlForm.bookingId ?? "")
                             ? "Salvataggio staff in corso…"
                             : clientControlForm.staffIds.length
                             ? `${clientControlForm.staffIds.length} ${clientControlForm.staffIds.length === 1 ? "persona selezionata" : "persone selezionate"}`
@@ -5649,7 +5679,7 @@ export function AppointmentsBrowser({
                         </span>
                       </span>
                     </span>
-                    {savingTeamId === clientControlForm.bookingId ? (
+                    {savingTeamIds.has(clientControlForm.bookingId ?? "") ? (
                       <Loader2 className="size-5 shrink-0 animate-spin text-[#334155]" />
                     ) : (
                       <ChevronDown className={`size-5 shrink-0 text-[#334155] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
@@ -5668,7 +5698,7 @@ export function AppointmentsBrowser({
                             <button
                               key={employee.id}
                               type="button"
-                              disabled={savingTeamId === clientControlForm.bookingId}
+                              disabled={savingTeamIds.has(clientControlForm.bookingId ?? "")}
                               onClick={() => void toggleClientControlStaff(employee.id)}
                               className={[
                                 "flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition disabled:pointer-events-none disabled:opacity-55",
@@ -5713,7 +5743,7 @@ export function AppointmentsBrowser({
                         aria-live="polite"
                         className="mt-2 flex items-center gap-2 rounded-xl border border-[#DDE2E7] bg-[#F8FAFC] px-3 py-2 text-[10px] font-bold text-black/50"
                       >
-                        {savingTeamId === clientControlForm.bookingId ? (
+                        {savingTeamIds.has(clientControlForm.bookingId ?? "") ? (
                           <>
                             <Loader2 className="size-3.5 animate-spin text-[#334155]" />
                             Salvataggio della collaboratrice…
@@ -5844,7 +5874,7 @@ export function AppointmentsBrowser({
                   onEditOfficeNote={canManageParadiseNotes && clientControlBooking ? () => openQuickNote(clientControlBooking) : undefined}
                   workers={clientControlEmployeeOptions}
                   sections={reconcileWorkerServices(clientControlForm.workerServices || [], orderedServiceStaff(clientControlForm.staffIds, clientControlForm.primaryStaffId))}
-                  disabled={clientControlLoading || !clientControlHistoryLoaded || Boolean(savingTeamId)}
+                  disabled={clientControlLoading || !clientControlHistoryLoaded || savingTeamIds.has(clientControlForm.bookingId ?? "")}
                   onChange={sections => setClientControlForm(current => ({ ...current,
                     workerServices: [...(current.workerServices || []).filter(section => !current.staffIds.includes(section.staffId)), ...sections],
                     primaryStaffId: sections[0]?.staffId,
@@ -5916,6 +5946,7 @@ export function AppointmentsBrowser({
                 <p role={clientControlMessage.type === "error" ? "alert" : "status"} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${clientControlMessage.type === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{clientControlMessage.text}</p>
               ) : null}
               </div>
+              </div>
             </div>
 
             {/* Footer Actions */}
@@ -5953,7 +5984,7 @@ export function AppointmentsBrowser({
           </div>
         </div>
       ) : null}
-      {clientControlOpen && workerConfirmationOpen ? <AppointmentWorkerConfirmation
+      {clientControlOpen && workerConfirmationOpen && clientControlHistoryLoaded ? <AppointmentWorkerConfirmation
         key={clientControlForm.bookingId}
         name={confirmationSelf ? appointmentStaffDisplayName(confirmationSelf.name, confirmationSelf.id).split(" ")[0] : ""}
         self={confirmationSelf}
@@ -5963,7 +5994,6 @@ export function AppointmentsBrowser({
         workersLoading={confirmationAttendanceLoading}
         workersError={confirmationAttendanceError}
         clientName={maskClientPrivacy ? maskClientName(clientControlForm.clientName) : clientControlForm.clientName}
-        loading={clientControlLoading || !clientControlHistoryLoaded}
         onAssign={confirmServiceWorker}
         onClose={closeClientControl}
       /> : null}
@@ -7122,7 +7152,7 @@ export function AppointmentsBrowser({
                                     </span>
                                     <button
                                       type="button"
-                                      draggable={savingTeamId !== booking.id}
+                                      draggable={!savingTeamIds.has(booking.id)}
                                       onDragStart={(event) => {
                                         event.stopPropagation();
                                         cancelBoardLongPress();

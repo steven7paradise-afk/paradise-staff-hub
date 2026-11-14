@@ -4,15 +4,7 @@ import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
-import { appointmentsRealtimeEnabled } from "@/lib/appointment-realtime";
-import { addAppointmentDays, isAppointmentDateKey } from "@/lib/appointment-date";
-
-function visibleAgendaRange(value: unknown) {
-  if (!value || typeof value !== "object") return undefined;
-  const { from, to } = value as { from?: unknown; to?: unknown };
-  if (!isAppointmentDateKey(from) || !isAppointmentDateKey(to) || from > to || to > addAppointmentDays(from, 31)) return undefined;
-  return { from, to };
-}
+import { visibleAgendaRange } from "@/lib/appointment-range-revision";
 
 const allowedStatuses = new Set([
   "PRENOTATO",
@@ -114,7 +106,7 @@ export async function POST(request: NextRequest) {
       transitionAt,
       updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
       trackServiceTime: true,
-      agendaRange: appointmentsRealtimeEnabled() ? visibleAgendaRange(body.range) : undefined,
+      agendaRange: visibleAgendaRange(body.range),
     });
 
     const previousLabel = previousStatus && allowedStatuses.has(previousStatus)

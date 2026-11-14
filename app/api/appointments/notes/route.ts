@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
 import { prisma } from "@/lib/prisma";
 import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
+import { readAppointmentEditRevisions, visibleAgendaRange } from "@/lib/appointment-range-revision";
 import { saveAppointmentChange } from "@/lib/appointment-realtime";
 
 const NOTE_KEY_PREFIX = "appointment_office_note:";
@@ -41,13 +43,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "La nota può contenere al massimo 1000 caratteri" }, { status: 400 });
     }
 
-    await saveAppointmentChange((tx) => tx.setting.upsert({
-      where: { key: `${NOTE_KEY_PREFIX}${bookingId}` },
-      create: { key: `${NOTE_KEY_PREFIX}${bookingId}`, value: { text } },
-      update: { value: { text } },
-    }));
+    const key = `${NOTE_KEY_PREFIX}${bookingId}`;
+    const agendaRange = visibleAgendaRange(body.range);
+    const agendaRevision = await saveAppointmentChange(async (tx) => {
+      if (agendaRange) {
+        await tx.$executeRaw`
+          INSERT INTO settings (id, key, value)
+          VALUES (${randomUUID()}, ${key}, '{}'::jsonb)
+          ON CONFLICT (key) DO NOTHING
+        `;
+        await tx.$queryRaw`SELECT id FROM settings WHERE key = ${key} FOR UPDATE`;
+      }
+      const revision = agendaRange
+        ? await readAppointmentEditRevisions(tx, agendaRange, bookingId, { kind: "office-note", text })
+        : undefined;
+      await tx.setting.upsert({ where: { key }, create: { key, value: { text } }, update: { value: { text } } });
+      return revision;
+    });
 
-    return NextResponse.json({ bookingId, text });
+    return NextResponse.json({ bookingId, text, agendaRevision });
   } catch (error) {
     console.error("Failed to save office appointment note:", error);
     return NextResponse.json({ error: "Errore durante il salvataggio della nota" }, { status: 500 });

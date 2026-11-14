@@ -16,7 +16,7 @@ function WorkerPhoto({ worker, large = false }: { worker: Worker; large?: boolea
   </span>;
 }
 
-export function AppointmentWorkerConfirmation({ name, self, workers, officeWorkers = [], canChooseOfficeStaff = false, workersLoading, workersError, clientName, loading, onAssign, onClose }: {
+export function AppointmentWorkerConfirmation({ name, self, workers, officeWorkers = [], canChooseOfficeStaff = false, workersLoading, workersError, clientName, onAssign, onClose }: {
   name: string;
   self?: Worker;
   workers: Worker[];
@@ -25,7 +25,6 @@ export function AppointmentWorkerConfirmation({ name, self, workers, officeWorke
   workersLoading: boolean;
   workersError: string;
   clientName: string;
-  loading: boolean;
   onAssign: (worker: Worker) => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -61,10 +60,10 @@ export function AppointmentWorkerConfirmation({ name, self, workers, officeWorke
       <p className={styles.eyebrow}>Collaboratrice del servizio</p>
       <button type="button" aria-label="Torna agli appuntamenti" onClick={onClose} disabled={Boolean(saving)}><X size={20} /></button>
     </div>
-    {!loading && showQuestion && <WorkerPhoto worker={self!} large />}
-    <h2 id="worker-confirm-title">{loading ? "Carico il personale…" : showQuestion ? `Ciao ${name}, hai seguito tu ${clientName || "questa cliente"}?` : `Chi ha seguito ${clientName || "questa cliente"}?`}</h2>
-    <p className={styles.description}>{loading ? "Un momento, verifico la scheda." : showQuestion ? "Conferma e continua a compilare la nota." : "Scegli chi ha seguito la cliente. La titolare è sempre disponibile; il personale del salone deve aver timbrato ed essere ancora in servizio."}</p>
-    {loading ? <Loader2 className="animate-spin" aria-label="Caricamento" /> : showQuestion ?
+    {showQuestion && <WorkerPhoto worker={self!} large />}
+    <h2 id="worker-confirm-title">{showQuestion ? `Ciao ${name}, hai seguito tu ${clientName || "questa cliente"}?` : `Chi ha seguito ${clientName || "questa cliente"}?`}</h2>
+    <p className={styles.description}>{showQuestion ? "Conferma e continua a compilare la nota." : "Scegli chi ha seguito la cliente. La titolare è sempre disponibile; il personale del salone deve aver timbrato ed essere ancora in servizio."}</p>
+    {showQuestion ?
       <div className={styles.actions}>
         <button type="button" className={styles.primary} disabled={Boolean(saving)} onClick={() => void assign(self!)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />} Sì, l’ho seguita io</button>
         <button type="button" disabled={Boolean(saving)} onClick={() => setChoose(true)}>No, scegli un’altra persona</button>
@@ -74,7 +73,7 @@ export function AppointmentWorkerConfirmation({ name, self, workers, officeWorke
         </button>)}
         {!workers.length && <p>Nessun collaboratore del salone risulta timbrato e ancora in servizio.</p>}
       </div>}
-    {!loading && !showQuestion && canChooseOfficeStaff && <div className={styles.officeSection}>
+    {!showQuestion && canChooseOfficeStaff && <div className={styles.officeSection}>
       <button type="button" className={styles.officeToggle} aria-expanded={officeOpen} aria-controls="office-worker-list" disabled={Boolean(saving)} onClick={() => setOfficeOpen(value => !value)}><Plus size={22} /><span>Personale Ufficio</span></button>
       {officeOpen && <div id="office-worker-list" className={styles.list} aria-label="Personale Ufficio">
         {officeWorkers.map(worker => <button type="button" key={worker.id} disabled={Boolean(saving)} onClick={() => void assign(worker)}>

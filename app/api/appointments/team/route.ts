@@ -2,7 +2,9 @@ import { appointmentSalonSlugFromName, isCashierAppointmentSalon } from "@/lib/a
 import { canAssignAppointmentOfficeStaff } from "@/lib/appointment-office-staff";
 import { NextRequest, NextResponse } from "next/server";
 import { canWorkAcrossAppointmentLocations, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
-import { saveAppointmentChange } from "@/lib/appointment-realtime";
+import { randomUUID } from "node:crypto";
+import { publishAppointmentChange } from "@/lib/appointment-realtime";
+import { readAppointmentEditRevisions, visibleAgendaRange } from "@/lib/appointment-range-revision";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { appendShopifyOrderNote } from "@/lib/shopify";
@@ -23,11 +25,6 @@ type TeamOverride = {
   updatedBy: string;
   orderName?: string | null;
 };
-
-function normalizeTeamOverrides(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, TeamOverride>;
-}
 
 type StaffAlias = {
   userId: string;
@@ -140,8 +137,6 @@ export async function POST(request: NextRequest) {
         .map((user) => user.name),
     ).join(", ");
 
-    const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
-    const currentOverrides = normalizeTeamOverrides(currentSetting?.value);
     const nextOverride: TeamOverride = {
       teammates,
       updatedAt: new Date().toISOString(),
@@ -149,49 +144,59 @@ export async function POST(request: NextRequest) {
       orderName: orderName || null,
     };
 
-    await saveAppointmentChange((tx) => tx.setting.upsert({
-      where: { key: SETTING_KEY },
-      update: {
-        value: {
-          ...currentOverrides,
-          [bookingId]: nextOverride,
-        },
-      },
-      create: {
-        key: SETTING_KEY,
-        value: {
-          ...currentOverrides,
-          [bookingId]: nextOverride,
-        },
-      },
-    }));
-
-    if (sourceTeammates.length === 1 && teammates.length === 1 && !isGenericStaffPlaceholder(sourceTeammates[0].name)) {
-      const source = sourceTeammates[0];
-      const sourceIsLocalUser = await prisma.user.findUnique({
-        where: { id: source.id },
-        select: { id: true },
-      });
-      if (!sourceIsLocalUser && source.id !== teammates[0].id) {
-        const aliasSetting = await prisma.setting.findUnique({
-          where: { key: STAFF_ALIAS_SETTING_KEY },
-        });
-        const currentAliases = normalizeStaffAliases(aliasSetting?.value);
-        const nextAlias: StaffAlias = {
-          userId: teammates[0].id,
-          externalName: source.name,
-          updatedAt: new Date().toISOString(),
-          updatedBy: storedUpdatedBy,
-        };
-        await prisma.setting.upsert({
-          where: { key: STAFF_ALIAS_SETTING_KEY },
-          update: { value: { ...currentAliases, [source.id]: nextAlias } },
-          create: {
-            key: STAFF_ALIAS_SETTING_KEY,
-            value: { [source.id]: nextAlias },
-          },
-        });
+    const agendaRange = visibleAgendaRange(body.range);
+    const agendaRevision = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO settings (id, key, value)
+        VALUES (${randomUUID()}, ${SETTING_KEY}, '{}'::jsonb)
+        ON CONFLICT (key) DO NOTHING
+      `;
+      if (agendaRange) {
+        await tx.$queryRaw`SELECT id FROM settings WHERE key = ${SETTING_KEY} FOR UPDATE`;
       }
+      const revision = agendaRange
+        ? await readAppointmentEditRevisions(tx, agendaRange, bookingId, { kind: "team", teammates })
+        : undefined;
+      await tx.$executeRaw`
+        UPDATE settings
+        SET value = (CASE WHEN jsonb_typeof(value) = 'object' THEN value ELSE '{}'::jsonb END)
+          || jsonb_build_object(${bookingId}::text, ${JSON.stringify(nextOverride)}::jsonb)
+        WHERE key = ${SETTING_KEY}
+      `;
+      await publishAppointmentChange(tx);
+      return revision;
+    });
+
+    try {
+      if (sourceTeammates.length === 1 && teammates.length === 1 && !isGenericStaffPlaceholder(sourceTeammates[0].name)) {
+        const source = sourceTeammates[0];
+        const sourceIsLocalUser = await prisma.user.findUnique({
+          where: { id: source.id },
+          select: { id: true },
+        });
+        if (!sourceIsLocalUser && source.id !== teammates[0].id) {
+          const aliasSetting = await prisma.setting.findUnique({
+            where: { key: STAFF_ALIAS_SETTING_KEY },
+          });
+          const currentAliases = normalizeStaffAliases(aliasSetting?.value);
+          const nextAlias: StaffAlias = {
+            userId: teammates[0].id,
+            externalName: source.name,
+            updatedAt: new Date().toISOString(),
+            updatedBy: storedUpdatedBy,
+          };
+          await prisma.setting.upsert({
+            where: { key: STAFF_ALIAS_SETTING_KEY },
+            update: { value: { ...currentAliases, [source.id]: nextAlias } },
+            create: {
+              key: STAFF_ALIAS_SETTING_KEY,
+              value: { [source.id]: nextAlias },
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Appointment team saved, but staff alias update failed:", error);
     }
 
     const teamComment = await prisma.shopifyOrderComment.create({
@@ -201,6 +206,9 @@ export async function POST(request: NextRequest) {
         user_role: sessionUserRole,
         message: `Collaboratrice assegnata in Paradise Staff Hub: ${teammateNames}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
       },
+    }).catch((error) => {
+      console.error("Appointment team saved, but audit note creation failed:", error);
+      return null;
     });
 
     let shopifyNoteSaved = false;
@@ -220,6 +228,7 @@ export async function POST(request: NextRequest) {
       override: nextOverride,
       teamComment,
       shopifyNoteSaved,
+      agendaRevision,
     });
   } catch (error) {
     console.error("Failed to save appointment team override:", error);

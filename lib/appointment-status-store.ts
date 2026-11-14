@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { publishAppointmentChange } from "./appointment-realtime";
-import { readAppointmentStatusRevisions, type AppointmentAgendaRange, type AppointmentAgendaRevision } from "./appointment-range-revision";
+import { readAppointmentEditRevisions, type AppointmentAgendaRange, type AppointmentAgendaRevision } from "./appointment-range-revision";
 import { prisma } from "./prisma";
 
 const STATUS_SETTING_KEY = "appointment_status_overrides";
@@ -93,7 +93,7 @@ export async function saveAppointmentStatus(
     }
 
     const agendaRevision = update.agendaRange
-      ? await readAppointmentStatusRevisions(tx, update.agendaRange, bookingId, entry)
+      ? await readAppointmentEditRevisions(tx, update.agendaRange, bookingId, { kind: "status", entry })
       : undefined;
 
     await tx.$executeRaw`

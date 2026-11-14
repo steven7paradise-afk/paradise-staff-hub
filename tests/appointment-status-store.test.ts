@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import test from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { Prisma } from "@prisma/client";
 import { Client } from "pg";
 import { APPOINTMENT_EVENTS_CHANNEL, APPOINTMENT_REVISION_KEY } from "../lib/cowlendar-webhook";
 
@@ -51,7 +52,7 @@ test("concurrent status saves keep each booking and its latest service timing", 
     else process.env.APPOINTMENTS_REALTIME_ENABLED = originalRealtime;
   });
   const { prisma } = await import("../lib/prisma");
-  const { readAppointmentRangeRevision } = await import("../lib/appointment-range-revision");
+  const { readAppointmentEditRevisions, readAppointmentRangeRevision } = await import("../lib/appointment-range-revision");
   const { saveAppointmentStatus } = await import("../lib/appointment-status-store");
   t.after(() => prisma.$disconnect());
 
@@ -118,6 +119,7 @@ test("concurrent status saves keep each booking and its latest service timing", 
     INSERT INTO ${schema}.appointment_archive (id, start_at, payload) VALUES
       ('booking-0', '2026-11-14 09:00:00Z', '{}'),
       ('booking-1', '2026-11-14 10:00:00Z', '{}'),
+      ('booking-external', '2026-11-14 10:30:00Z', '{}'),
       ('booking-2', '2026-11-15 11:00:00Z', '{}')
   `);
   const agendaRange = { from: "2026-11-14", to: "2026-11-14" };
@@ -148,6 +150,79 @@ test("concurrent status saves keep each booking and its latest service timing", 
     assert.deepEqual(outOfRange.agendaRevision, { before: after, after });
     assert.equal(await readVisibleRevision(), after);
     assert.notEqual(await readFollowingRevision(), followingRevision);
+  });
+
+  await t.test("the projected team or office note revision matches a committed edit in the visible range", async () => {
+    const teammates = [{ id: "worker-b", name: "Operatrice B", photoUrl: null }];
+    const noteText = "Nota aggiornata";
+    await prisma.setting.create({
+      data: {
+        key: "appointment_team_overrides",
+        value: { "booking-0": { teammates: [{ id: "worker-a", name: "Operatrice A", photoUrl: null }] } },
+      },
+    });
+    const edits = [
+      {
+        bookingId: "booking-0",
+        key: "appointment_team_overrides",
+        value: { "booking-0": { teammates, updatedAt: "2026-11-14T10:00:00Z" } },
+        change: { kind: "team", teammates },
+      },
+      ...["booking-0", "booking-2"].map(bookingId => ({
+        bookingId,
+        key: `appointment_office_note:${bookingId}`,
+        value: { text: noteText },
+        change: { kind: "office-note" as const, text: noteText },
+      })),
+    ] as const satisfies ReadonlyArray<{
+      bookingId: string;
+      key: string;
+      value: Prisma.InputJsonObject;
+      change: Parameters<typeof readAppointmentEditRevisions>[3];
+    }>;
+
+    for (const { bookingId, key, value, change } of edits) {
+      const before = await readVisibleRevision();
+      const beforeFollowingDay = await readFollowingRevision();
+      const projected = await prisma.$transaction(async (tx) => {
+        const revisions = await readAppointmentEditRevisions(tx, agendaRange, bookingId, change);
+        await tx.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+        return revisions;
+      });
+
+      const after = await readVisibleRevision();
+      const afterFollowingDay = await readFollowingRevision();
+      const editedVisibleDay = bookingId !== "booking-2";
+      assert.deepEqual(projected, { before, after });
+      assert.equal(before !== after, editedVisibleDay);
+      assert.equal(beforeFollowingDay !== afterFollowingDay, !editedVisibleDay);
+    }
+  });
+
+  await t.test("upstream status updates affect the revision only without a local status", async () => {
+    const updatePayload = async (bookingId: string, payload: Record<string, string | boolean>) => {
+      await maintenance.query(
+        `UPDATE ${schema}.appointment_archive SET payload = payload || $2::jsonb WHERE id = $1`,
+        [bookingId, JSON.stringify(payload)],
+      );
+    };
+
+    const upstreamUpdates: Record<string, string>[] = [
+      { status: "IN_ATTESA" },
+      { attendance: "IN_ATTESA" },
+      { confirmation_status: "CONFIRMED" },
+    ];
+    for (const payload of upstreamUpdates) {
+      const before = await readVisibleRevision();
+      await updatePayload("booking-0", payload);
+      assert.equal(await readVisibleRevision(), before);
+      await updatePayload("booking-external", payload);
+      assert.notEqual(await readVisibleRevision(), before);
+    }
+
+    const beforeCancellation = await readVisibleRevision();
+    await updatePayload("booking-0", { is_canceled: true });
+    assert.notEqual(await readVisibleRevision(), beforeCancellation);
   });
 
   await t.test("a concurrent office note cannot be acknowledged as the status change", async () => {
