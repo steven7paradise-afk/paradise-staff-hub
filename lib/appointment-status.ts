@@ -52,6 +52,21 @@ export function normalizeAppointmentStatus(value?: string | null): AppointmentSt
 
 type StatusSource = { status?: string | null; updatedAt?: string | null; updatedBy?: string | null };
 
+type ArrivalSource = StatusSource & { arrivedAt?: unknown };
+
+function validTimestamp(value: unknown): string | null {
+  return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+/** Older local arrivals only had a status timestamp. Never infer an arrival from a later state. */
+export function savedAppointmentArrival(entry?: ArrivalSource | null): string | null {
+  if (!entry) return null;
+  if (entry.arrivedAt !== undefined) return validTimestamp(entry.arrivedAt);
+  return normalizeAppointmentStatus(entry.status) === "IN_ATTESA"
+    ? validTimestamp(entry.updatedAt)
+    : null;
+}
+
 export function resolveAgendaAppointmentStatus(
   saved: StatusSource | undefined,
   sheet: StatusSource | undefined,
@@ -69,6 +84,7 @@ export type AppointmentStatusChange = {
   status: AppointmentStatusValue;
   updatedAt: string | null;
   updatedBy?: string;
+  arrivedAt: string | null;
   startedAt: string | null;
   stoppedAt: string | null;
   elapsedSeconds: number;
@@ -85,6 +101,7 @@ export function parseSavedAppointmentStatus(value: unknown): AppointmentStatusCh
     status,
     updatedAt: entry.updatedAt,
     ...(typeof entry.updatedBy === "string" ? { updatedBy: entry.updatedBy } : {}),
+    arrivedAt: savedAppointmentArrival({ status, updatedAt: entry.updatedAt, arrivedAt: entry.arrivedAt }),
     startedAt: typeof entry.startedAt === "string" ? entry.startedAt : null,
     stoppedAt: typeof entry.stoppedAt === "string" ? entry.stoppedAt : null,
     elapsedSeconds: typeof entry.elapsedSeconds === "number" ? entry.elapsedSeconds : 0,

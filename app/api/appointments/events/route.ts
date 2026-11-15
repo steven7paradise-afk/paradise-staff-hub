@@ -13,6 +13,8 @@ import { getOperationalUser } from "@/lib/operational-session";
 import { canAccessForUser } from "@/lib/roles";
 import { PAYMENT_EVENTS_CHANNEL, PAYMENT_REVISION_KEY } from "@/lib/shopify-payment-webhook";
 import { APPOINTMENT_EVENTS_CHANNEL, APPOINTMENT_REVISION_KEY } from "@/lib/cowlendar-webhook";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
+import { findAppointmentPcArrivalOperator } from "@/lib/appointment-pc-arrival-operator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,15 +67,17 @@ export async function GET(request: NextRequest) {
   const cashierScope = request.nextUrl.searchParams.get("scope") === "cashier";
   if (cashierScope && !range) return new Response(null, { status: 400 });
   const authorized = async () => {
-    if (!range) return Boolean(await checkPCAuthorization(token) || await getOperationalUser(request));
+    if (!range) return Boolean(await checkPCAuthorization(token) || await getOperationalUser(request, { allowReceptionArrival: true }));
     if (cashierScope) {
-      if (!workerCookie) return false;
       const pc = await checkPCAuthorization(token);
       if (!pc) return false;
       const salon = await appointmentSalonForPC(pc.locationId);
-      return salon === "repubblica" && Boolean(await findAppointmentPcWorker(pc.locationId, salon, workerCookie));
+      return salon === "repubblica" && Boolean(
+        await findAppointmentPcWorker(pc.locationId, salon, workerCookie) ||
+        await findAppointmentPcArrivalOperator(pc.locationId, token, request.cookies.get(appointmentPcArrivalCookieName)?.value),
+      );
     }
-    const user = await getOperationalUser(request, { preferAuthenticatedAdmin: true });
+    const user = await getOperationalUser(request, { preferAuthenticatedAdmin: true, allowReceptionArrival: true });
     if (!user || user.isPC) return false;
     const profile = await prisma.user.findUnique({
       where: { id: user.id },

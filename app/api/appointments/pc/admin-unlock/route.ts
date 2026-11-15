@@ -10,6 +10,7 @@ import { appointmentSalonUrl } from "@/lib/appointment-salon-url";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { pinLookup } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
 
 export const dynamic = "force-dynamic";
 
@@ -82,5 +83,6 @@ export async function POST(request: NextRequest) {
     path: "/",
     maxAge: 0,
   });
+  response.cookies.set(appointmentPcArrivalCookieName, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
   return response;
 }

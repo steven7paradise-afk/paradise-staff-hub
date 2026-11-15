@@ -9,6 +9,7 @@ import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-sh
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { FORMER_EMPLOYEE_STATUS, hasFormerEmployeeDocumentAccess, isFormerEmployeeAllowedPath } from "@/lib/former-employee";
 import { isPcCassaAllowedPath } from "@/lib/pc-cassa-access";
+import { isRepubblicaReceptionist, isReceptionArrivalAgendaPath } from "@/lib/appointment-arrival-access";
 
 function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/my-staff.webmanifest" && method === "GET") return true;
@@ -181,7 +182,7 @@ export const authConfig = {
             employee_status: true,
             workforce_data: true,
             last_edited_at: true,
-            location: { select: { name: true } },
+            location: { select: { name: true, active: true } },
           }
         });
 
@@ -193,11 +194,10 @@ export const authConfig = {
           if (isFormerEmployeeAllowedPath(pathname)) return true;
           return Response.redirect(new URL("/documents", request.nextUrl));
         }
-        if (
-          isShiftProtectedPath(pathname) &&
-          !(await canAccessSalonShiftModules(dbUser))
-        ) return false;
+        const outsideShift = isShiftProtectedPath(pathname) && !(await canAccessSalonShiftModules(dbUser));
+        if (outsideShift && !(isRepubblicaReceptionist(dbUser) && isReceptionArrivalAgendaPath(pathname, request.method))) return false;
         const permissions = await getEffectivePermissionSet(prisma, dbUser);
+        if (outsideShift && !canAccess("/appointments", dbUser.role, dbUser.mansione || undefined, permissions)) return false;
 
         return canAccess(
           pathname, 

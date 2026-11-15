@@ -8,6 +8,8 @@ import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appoin
 import { appointmentStaffDisplayName, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { mobileLoginAllowed, clearMobileLoginAttempts } from "@/lib/mobile-login-limit";
 import { isAppointmentEntryPin, isAppointmentPinOnlyRole, uniquelyMatchAppointmentPin } from "@/lib/appointment-pin-entry";
+import { isAppointmentReceptionist } from "@/lib/appointment-arrival-access";
+import { appointmentPcArrivalCookieName, signAppointmentPcArrival } from "@/lib/appointment-pc-arrival-session";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { pinLookup } from "@/lib/pin";
 
@@ -15,8 +17,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const jar = await cookies();
-  const pc = await checkPCAuthorization(jar.get(appointmentsPcCookieName)?.value);
-  if (!pc) return NextResponse.json({ error: "PC non autorizzato." }, { status: 401 });
+  const deviceToken = jar.get(appointmentsPcCookieName)?.value;
+  const pc = await checkPCAuthorization(deviceToken);
+  if (!pc || !deviceToken) return NextResponse.json({ error: "PC non autorizzato." }, { status: 401 });
   const limitKey = `appointment-pin:${pc.code}`;
   if (!mobileLoginAllowed(limitKey)) return NextResponse.json({ error: "Troppi tentativi. Attendi 15 minuti prima di riprovare." }, { status: 429 });
   const body = await request.json().catch(() => null);
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
   const tomorrow = new Date(today); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const candidates = await prisma.user.findMany({
     where: { active: true, employee_status: { not: FORMER_EMPLOYEE_STATUS }, pin_hash: { not: null }, OR: [{ pin_lookup: pinLookup(body.pin) }, { pin_lookup: null }] },
-    select: { id: true, name: true, role: true, sede_id: true, pin_hash: true, photo_url: true,
+    select: { id: true, name: true, role: true, mansione: true, sede_id: true, pin_hash: true, photo_url: true,
       location: { select: { name: true } },
       attendance_logs: { where: { date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true }, orderBy: { timestamp: "asc" } },
     },
@@ -44,13 +47,25 @@ export async function POST(request: NextRequest) {
     !(await appointmentStaffLocationsForPC(pc.locationId, salon)).includes(worker.sede_id)) {
     return NextResponse.json({ error: "PIN corretto, ma il profilo è associato a un'altra sede. Chiedi alla reception di verificare la sede del profilo e di questo PC." }, { status: 403 });
   }
-  if (!alwaysActive && !pinOnlyAdmin && (!state || !["IN", "BREAK"].includes(state.status))) return NextResponse.json({ error: "PIN corretto, ma non risulti timbrato adesso. Registra l'ingresso e riprova." }, { status: 403 });
+  const isReceptionAtDevice = salon === "repubblica" && worker.sede_id !== null && isAppointmentReceptionist(worker);
+  const arrivalOnly = isReceptionAtDevice && !alwaysActive && !pinOnlyAdmin && state?.status === "OUT";
+  if (!alwaysActive && !pinOnlyAdmin && !arrivalOnly && (!state || !["IN", "BREAK"].includes(state.status))) return NextResponse.json({ error: "PIN corretto, ma non risulti timbrato adesso. Registra l'ingresso e riprova." }, { status: 403 });
+  const needsArrivalGrant = salon === "repubblica" && (isReceptionAtDevice || pinOnlyAdmin);
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (needsArrivalGrant && !secret) return NextResponse.json({ error: "Accesso non disponibile. Riprova più tardi." }, { status: 503 });
   clearMobileLoginAttempts(limitKey);
   const name = appointmentStaffDisplayName(worker.name, worker.id);
   const response = NextResponse.json({
     appointmentUrl: `${appointmentSalonUrl(salon)}?worker=${encodeURIComponent(name)}`,
-    worker: { id: worker.id, name, photo_url: worker.photo_url, locationName: worker.location?.name ?? "", status: alwaysActive ? "IN" : state!.status },
+    worker: { id: worker.id, name, photo_url: worker.photo_url, locationName: worker.location?.name ?? "", status: alwaysActive ? "IN" : state!.status, arrivalOnly },
   }, { headers: { "Cache-Control": "private, no-store" } });
-  response.cookies.set({ name: appointmentsPcWorkerCookieName, value: worker.id, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: appointmentsPcWorkerCookieMaxAgeSeconds });
+  const cookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/", maxAge: appointmentsPcWorkerCookieMaxAgeSeconds };
+  response.cookies.set(appointmentsPcWorkerCookieName, arrivalOnly ? "" : worker.id, { ...cookieOptions, maxAge: arrivalOnly ? 0 : cookieOptions.maxAge });
+  if (needsArrivalGrant && secret) {
+    const expiresAt = Date.now() + cookieOptions.maxAge * 1000;
+    response.cookies.set(appointmentPcArrivalCookieName, signAppointmentPcArrival(worker.id, deviceToken, arrivalOnly, secret, expiresAt), cookieOptions);
+  } else {
+    response.cookies.set(appointmentPcArrivalCookieName, "", { ...cookieOptions, maxAge: 0 });
+  }
   return response;
 }

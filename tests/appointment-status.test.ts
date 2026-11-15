@@ -4,6 +4,7 @@ import {
   normalizeAppointmentStatus,
   parseSavedAppointmentStatus,
   resolveAgendaAppointmentStatus,
+  savedAppointmentArrival,
   visibleAppointmentStatusChange,
 } from "../lib/appointment-status";
 
@@ -45,6 +46,19 @@ test("a late calendar response cannot reset a pending or just-saved arrival", ()
   assert.equal(visibleAppointmentStatusChange(saved, null), saved);
   assert.equal(visibleAppointmentStatusChange(saved, saved.updatedAt), undefined);
   assert.equal(visibleAppointmentStatusChange(saved, "2026-11-14T09:10:00.000Z"), undefined);
+});
+
+test("only a saved arrival or an explicit arrival timestamp supplies the arrival time", () => {
+  const terminalUpdate = "2026-11-14T10:05:00.000Z";
+  assert.equal(savedAppointmentArrival(savedArrival), savedArrival.updatedAt);
+  assert.equal(savedAppointmentArrival({ status: "COMPLETATO", updatedAt: terminalUpdate }), null);
+  assert.equal(savedAppointmentArrival({ ...savedArrival, arrivedAt: "non valido" }), null);
+  assert.equal(savedAppointmentArrival({ ...savedArrival, arrivedAt: null }), null);
+  assert.equal(parseSavedAppointmentStatus({
+    status: "COMPLETATO",
+    updatedAt: terminalUpdate,
+    arrivedAt: savedArrival.updatedAt,
+  })?.arrivedAt, savedArrival.updatedAt);
 });
 
 test("a status save must return valid server confirmation", () => {

@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { isPinPrefixValidForUser } from "@/lib/pin";
 import { mobileLoginAllowed, clearMobileLoginAttempts } from "@/lib/mobile-login-limit";
 import { isAppointmentPinOnlyRole } from "@/lib/appointment-pin-entry";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
 import {
   appointmentStaffDisplayName,
   isAlwaysActiveAppointmentStaff,
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
     path: "/",
     maxAge: appointmentsPcWorkerCookieMaxAgeSeconds,
   });
+  response.cookies.set(appointmentPcArrivalCookieName, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
 
   return response;
 }

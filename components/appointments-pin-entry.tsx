@@ -11,7 +11,7 @@ import styles from "./appointments-pin-entry.module.css";
 const THEME_KEY = "paradise-appointments-entry-theme";
 const STAFF_REQUEST_TIMEOUT_MS = 6_000;
 
-export type PinEntryWorker = { id: string; name: string; photo_url?: string | null; locationName: string; status: string };
+export type PinEntryWorker = { id: string; name: string; photo_url?: string | null; locationName: string; status: string; arrivalOnly?: boolean };
 
 export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
   salon: "tutti" | AppointmentSalonSlug;

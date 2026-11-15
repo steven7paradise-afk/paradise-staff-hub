@@ -16,13 +16,14 @@ import { auth } from "@/lib/auth";
 import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
+import { isRepubblicaReceptionist } from "@/lib/appointment-arrival-access";
 import { hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentAgendaSalon, repubblicaIncludesLegacyBuenosAires, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentDateKey, isAppointmentDateKey, appointmentMonthRange } from "@/lib/appointment-date";
-import { resolveAgendaAppointmentStatus } from "@/lib/appointment-status";
+import { resolveAgendaAppointmentStatus, savedAppointmentArrival } from "@/lib/appointment-status";
 import { syncSystemazioneFasceTable } from "@/lib/systemazione-fasce-table";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -227,6 +228,7 @@ function isUsefulBookingDetailField(key: string) {
 export default async function AppointmentsPage({
   searchParams,
   forcePcSalon,
+  pcArrivalOnly = false,
   repubblicaBoard = false,
   navigationBasePath,
   pageTitle = "Appuntamenti",
@@ -234,6 +236,7 @@ export default async function AppointmentsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   forcePcSalon?: AppointmentSalonSlug;
+  pcArrivalOnly?: boolean;
   repubblicaBoard?: boolean;
   navigationBasePath?: string;
   pageTitle?: string;
@@ -305,13 +308,13 @@ export default async function AppointmentsPage({
   const accessUser = session?.user
     ? await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { id: true, role: true, mansione: true, access_list: true, location: { select: { name: true } } },
+        select: { id: true, role: true, mansione: true, access_list: true, location: { select: { name: true, active: true } } },
       })
     : null;
 
-  if (!isPC && accessUser && !(await canAccessSalonShiftModules(accessUser))) {
-    redirect("/dashboard?accesso=fuori-turno");
-  }
+  const outsideShift = !isPC && accessUser ? !(await canAccessSalonShiftModules(accessUser)) : false;
+  const arrivalOnly = pcArrivalOnly || Boolean(outsideShift && accessUser && isRepubblicaReceptionist(accessUser));
+  if (outsideShift && !arrivalOnly) redirect("/dashboard?accesso=fuori-turno");
   if (
     !isPC &&
     accessUser?.role !== "DIPENDENTE" &&
@@ -340,7 +343,7 @@ export default async function AppointmentsPage({
     : null;
   const isRepubblicaPc = pcSalon === "repubblica";
   const allowLegacyBuenosAires = Boolean(isRepubblicaPc && locations && repubblicaIncludesLegacyBuenosAires(locations, pcLocationId));
-  const isArchive = resolvedSearchParams.scope === "all" && !isRepubblicaPc;
+  const isArchive = resolvedSearchParams.scope === "all" && !isRepubblicaPc && !arrivalOnly;
   const appointmentRange = resolveAppointmentsRange(isRepubblicaPc ? { ...resolvedSearchParams, scope: undefined } : resolvedSearchParams);
   const useRepubblicaBoard = repubblicaBoard && (!isPC || isRepubblicaPc);
   const updateOnChange = useRepubblicaBoard && appointmentsRealtimeEnabled();
@@ -364,7 +367,7 @@ export default async function AppointmentsPage({
     for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
   });
 
-  const initialSalon = normalizeAppointmentAgendaSalon(pcSalon) || requestedSalon || "tutti";
+  const initialSalon = arrivalOnly ? "repubblica" : normalizeAppointmentAgendaSalon(pcSalon) || requestedSalon || "tutti";
   const bookingSalonScope = useRepubblicaBoard
     ? agendaSalonScope(activeLocations)
     : { mergeLegacyCorso: false, defaultToRepubblica: false };
@@ -443,6 +446,7 @@ export default async function AppointmentsPage({
           status?: string;
           updatedAt?: string;
           updatedBy?: string;
+          arrivedAt?: string | null;
           startedAt?: string | null;
           stoppedAt?: string | null;
           elapsedSeconds?: number;
@@ -508,7 +512,7 @@ export default async function AppointmentsPage({
         bookingSalonScope,
         useRepubblicaBoard,
       );
-      if (isRepubblicaPc && inferredSalon !== "repubblica" && !(allowLegacyBuenosAires && inferredSalon === "buenos-aires")) {
+      if ((isRepubblicaPc || arrivalOnly) && inferredSalon !== "repubblica" && !(allowLegacyBuenosAires && inferredSalon === "buenos-aires")) {
         return null;
       }
 
@@ -607,6 +611,7 @@ export default async function AppointmentsPage({
         statusUpdatedAt: currentStatus?.updatedAt ?? null,
         savedStatusUpdatedAt: savedStatus?.updatedAt ?? null,
         statusUpdatedBy: currentStatus?.updatedBy ?? null,
+        arrivedAt: savedAppointmentArrival(savedStatus),
         statusStartedAt: savedStatus?.startedAt ?? null,
         statusStoppedAt: savedStatus?.stoppedAt ?? null,
         statusElapsedSeconds: savedStatus?.elapsedSeconds ?? 0,
@@ -640,6 +645,7 @@ export default async function AppointmentsPage({
       role={role}
       hideHeader
       pcMode={isPC}
+      pcArrivalOnly={pcArrivalOnly}
       pcSalon={pcSalon}
       pcDisplayUser={pcDisplayUser ? { name: pcDisplayUser.name, photo_url: pcDisplayUser.photo_url } : kioskWorkerName ? { name: kioskWorkerName, photo_url: null } : null}
       remoteController={isAdminRemoteController}
@@ -668,6 +674,7 @@ export default async function AppointmentsPage({
         initialBookings={serializedBookings}
         corsoTeamOptions={corsoTeamOptions}
         isPC={isPC}
+        arrivalOnly={arrivalOnly}
         pcLocationId={pcLocationId}
         repubblicaBoard={useRepubblicaBoard}
         appointmentRevision={appointmentRevision}
@@ -682,7 +689,7 @@ export default async function AppointmentsPage({
         navigationBasePath={navigationBasePath}
         pageTitle={pageTitle}
         pageSubtitle={pageSubtitle}
-        canManageParadiseNotes={canManageAppointmentOfficeNotes({
+        canManageParadiseNotes={!arrivalOnly && canManageAppointmentOfficeNotes({
           role: pcDisplayUser?.role || role,
           mansione: pcDisplayUser?.mansione || accessUser?.mansione,
           locationName: pcDisplayUser?.location?.name || accessUser?.location?.name,

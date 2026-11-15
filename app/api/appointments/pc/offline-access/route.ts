@@ -6,6 +6,7 @@ import { deriveAttendanceState } from "@/lib/attendance-state";
 import { appointmentStaffDisplayName, isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { issueOfflineGrant, verifyOfflineGrant, offlineFingerprint } from "@/lib/appointments-offline-grant";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,5 +70,6 @@ export async function POST(request: NextRequest) {
   // Resume never extends the offline grant: only a fresh full PIN can renew it.
   const response = NextResponse.json(resuming ? { success: true, workerId, workerName } : { workerId, workerName, ...issueOfflineGrant(workerId, deviceToken, worker.pin_hash, worker.role, secret) }, { headers: { "Cache-Control": "no-store" } });
   response.cookies.set({ name: appointmentsPcWorkerCookieName, value: workerId, httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: appointmentsPcWorkerCookieMaxAgeSeconds });
+  response.cookies.set({ name: appointmentPcArrivalCookieName, value: "", httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
   return response;
 }

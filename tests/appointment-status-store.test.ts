@@ -66,6 +66,13 @@ test("concurrent status saves keep each booking and its latest service timing", 
     }),
   ));
 
+  const repeatedArrival = await saveAppointmentStatus("booking-7", {
+    status: "ARRIVATO_IN_RITARDO",
+    updatedBy: "Operatrice test",
+    transitionAt: new Date("2026-11-14T09:03:00.000Z"),
+  });
+  assert.equal(repeatedArrival.entry.arrivedAt, transitionAt.toISOString());
+
   const started = await saveAppointmentStatus("booking-0", {
     status: "INIZIATO",
     updatedBy: "Operatrice test",
@@ -81,6 +88,8 @@ test("concurrent status saves keep each booking and its latest service timing", 
   assert.equal(started.previousStatus, "IN_ATTESA");
   assert.notEqual(started.entry.updatedAt, transitionAt.toISOString());
   assert.equal(completed.previousStatus, "INIZIATO");
+  assert.equal(started.entry.arrivedAt, transitionAt.toISOString());
+  assert.equal(completed.entry.arrivedAt, transitionAt.toISOString());
   assert.equal(completed.entry.startedAt, transitionAt.toISOString());
   assert.equal(completed.entry.elapsedSeconds, 300);
 
@@ -90,9 +99,29 @@ test("concurrent status saves keep each booking and its latest service timing", 
   );
   assert.equal(Object.keys(value).length, 8);
   assert.deepEqual(value["booking-0"], completed.entry);
-  for (let index = 1; index < 8; index += 1) {
+  for (let index = 1; index < 7; index += 1) {
     assert.equal(value[`booking-${index}`].status, "IN_ATTESA");
   }
+  assert.equal(value["booking-7"].arrivedAt, transitionAt.toISOString());
+
+  const controlled = await saveAppointmentStatus("booking-0", {
+    status: "COMPLETATO",
+    updatedBy: "Controllo Cliente",
+  });
+  assert.equal(controlled.entry.arrivedAt, transitionAt.toISOString());
+
+  const reset = await saveAppointmentStatus("booking-7", {
+    status: "PRENOTATO",
+    updatedBy: "Operatrice test",
+  });
+  assert.equal(reset.entry.arrivedAt, null);
+  const newArrivalTime = new Date("2026-11-14T09:15:00.000Z");
+  const newArrival = await saveAppointmentStatus("booking-7", {
+    status: "IN_ATTESA",
+    updatedBy: "Operatrice test",
+    transitionAt: newArrivalTime,
+  });
+  assert.equal(newArrival.entry.arrivedAt, newArrivalTime.toISOString());
 
   await maintenance.query(`LISTEN ${APPOINTMENT_EVENTS_CHANNEL}`);
   process.env.APPOINTMENTS_REALTIME_ENABLED = "true";
@@ -126,6 +155,20 @@ test("concurrent status saves keep each booking and its latest service timing", 
   const followingDay = "2026-11-15";
   const readVisibleRevision = () => readAppointmentRangeRevision(agendaRange.from, agendaRange.to);
   const readFollowingRevision = () => readAppointmentRangeRevision(followingDay, followingDay);
+
+  await t.test("an arrival rejected by the locked status does not undo a completed service", async () => {
+    const before = await readVisibleRevision();
+    await assert.rejects(saveAppointmentStatus("booking-0", {
+      status: "IN_ATTESA",
+      updatedBy: "Reception test",
+      agendaRange,
+      validatePrevious: (entry) => {
+        assert.equal(entry?.status, "COMPLETATO");
+        throw new Error("Servizio già completato");
+      },
+    }), /Servizio già completato/);
+    assert.equal(await readVisibleRevision(), before);
+  });
 
   await t.test("a saved status changes only the affected agenda day", async () => {
     const before = await readVisibleRevision();

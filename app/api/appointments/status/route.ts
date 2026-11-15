@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { visibleAgendaRange } from "@/lib/appointment-range-revision";
+import { canRecordEarlyAppointmentArrival, isAppointmentArrivalStatus, isBeforeSalonOpening } from "@/lib/appointment-arrival-access";
+import { appointmentDateKey } from "@/lib/appointment-date";
+import { appointmentStatusContext, hasPresentAppointmentWorker } from "@/lib/appointment-status-access";
+import { normalizeAppointmentStatus } from "@/lib/appointment-status";
+import { canAccessForUser } from "@/lib/roles";
 
 const allowedStatuses = new Set([
   "PRENOTATO",
@@ -38,6 +43,8 @@ function formatElapsedTime(totalSeconds: number) {
     .join(":");
 }
 
+class ArrivalStateConflict extends Error {}
+
 async function hasConfirmedClientControl(bookingId: string) {
   const forms = await prisma.serviceForm.findMany({
     where: { active: true },
@@ -67,26 +74,66 @@ async function hasConfirmedClientControl(bookingId: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request, {
-    requirePcWorker: true,
-    preferAuthenticatedAdmin: true,
-  });
-  const isAuthorized = Boolean(operationalUser?.id);
-  const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
-  const sessionUserRole = operationalUser?.role || "DIPENDENTE";
-
-  if (!isAuthorized) {
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
-  }
-
   try {
     const body = await request.json();
     const bookingId = String(body?.bookingId || "").trim();
     const status = String(body?.status || "").trim().toUpperCase();
     const transitionAt = new Date();
+    const isArrival = isAppointmentArrivalStatus(status);
+    const isStartingService = status === "INIZIATO";
+    const operationalUser = await getOperationalUser(request, {
+      requirePcWorker: true,
+      preferAuthenticatedAdmin: true,
+      allowReceptionArrival: isArrival,
+    });
+    if (!operationalUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+    const sessionUserName = operationalUser.name || operationalUser.email || operationalUser.id;
+    const sessionUserRole = operationalUser.role;
 
     if (!bookingId || !allowedStatuses.has(status)) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
+    }
+
+    const bookingContext = isArrival || isStartingService ? await appointmentStatusContext(bookingId) : null;
+    if ((isArrival || isStartingService) && !bookingContext) {
+      return NextResponse.json({ error: "Appuntamento non disponibile." }, { status: 404 });
+    }
+    if (bookingContext && operationalUser.isPC && operationalUser.sedeId &&
+      !bookingContext.eligibleLocationIds.includes(operationalUser.sedeId)) {
+      return NextResponse.json({ error: "Questo appuntamento appartiene a un’altra sede." }, { status: 403 });
+    }
+    if (operationalUser.arrivalOnly && bookingContext) {
+      if ((!operationalUser.isPC && !await canAccessForUser(prisma, "/appointments", operationalUser)) ||
+        bookingContext.salon !== "repubblica" ||
+        !operationalUser.sedeId || !bookingContext.eligibleLocationIds.includes(operationalUser.sedeId) ||
+        appointmentDateKey(bookingContext.scheduledAt) !== appointmentDateKey(transitionAt)) {
+        return NextResponse.json({ error: "Puoi segnare l’arrivo solo per gli appuntamenti di oggi a Repubblica." }, { status: 403 });
+      }
+    }
+    if (isArrival && bookingContext) {
+      const opening = bookingContext.location?.opening_time || (bookingContext.salon === "repubblica" ? "10:00" : null);
+      const beforeOpening = isBeforeSalonOpening(transitionAt, opening);
+      if (beforeOpening && (
+        !canRecordEarlyAppointmentArrival(operationalUser) ||
+        (operationalUser.isPC && bookingContext.salon === "repubblica" && !operationalUser.hasVerifiedPcArrivalSession)
+      )) {
+        return NextResponse.json({
+          code: "EARLY_ARRIVAL_REQUIRES_RECEPTION",
+          error: "Prima dell’apertura solo Reception e amministratori possono segnare l’arrivo. Sul PC Cassa usa il PIN completo.",
+        }, { status: 403 });
+      }
+    }
+    if (isStartingService && bookingContext) {
+      const { workers, eligibleLocationIds, scheduledAt } = bookingContext;
+      const authorizedOperator = canRecordEarlyAppointmentArrival(operationalUser) ||
+        await hasPresentAppointmentWorker([operationalUser.id], eligibleLocationIds, transitionAt);
+      if (!authorizedOperator || appointmentDateKey(scheduledAt) !== appointmentDateKey(transitionAt) ||
+        !await hasPresentAppointmentWorker(workers.map(worker => worker.id), eligibleLocationIds, transitionAt)) {
+        return NextResponse.json({
+          code: "ATTENDANCE_REQUIRED",
+          error: "Per iniziare il servizio, una lavoratrice assegnata deve avere timbrato l’ingresso in questa sede.",
+        }, { status: 403 });
+      }
     }
 
     if (status === "COMPLETATO" && !(await hasConfirmedClientControl(bookingId))) {
@@ -99,7 +146,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const signedBy = operationalUser?.isPC ? "" : String(body?.signedBy || "").trim();
+    const signedBy = operationalUser.isPC || isArrival ? "" : String(body?.signedBy || "").trim();
     const updatedBy = signedBy || sessionUserName;
     const { previousStatus, entry, agendaRevision } = await saveAppointmentStatus(bookingId, {
       status,
@@ -107,6 +154,15 @@ export async function POST(request: NextRequest) {
       updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
       trackServiceTime: true,
       agendaRange: visibleAgendaRange(body.range),
+      validatePrevious: operationalUser.arrivalOnly ? previous => {
+        const effectiveStatus = normalizeAppointmentStatus(previous?.status) ||
+          normalizeAppointmentStatus(bookingContext?.sheetStatus) ||
+          normalizeAppointmentStatus(bookingContext?.booking.attendance) ||
+          normalizeAppointmentStatus(bookingContext?.booking.confirmation_status) || "PRENOTATO";
+        if (effectiveStatus !== "PRENOTATO" && effectiveStatus !== "IN_ATTESA") {
+          throw new ArrivalStateConflict("L’appuntamento non è più in attesa di arrivo.");
+        }
+      } : undefined,
     });
 
     const previousLabel = previousStatus && allowedStatuses.has(previousStatus)
@@ -162,6 +218,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, status: entry, statusComment, cowlendarSync, agendaRevision });
   } catch (error) {
+    if (error instanceof ArrivalStateConflict) return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Failed to update appointment status:", error);
     return NextResponse.json({ error: "Errore durante il salvataggio dello stato." }, { status: 500 });
   }

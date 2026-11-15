@@ -346,6 +346,7 @@ type AppointmentRecord = {
   statusUpdatedAt?: string | null;
   savedStatusUpdatedAt?: string | null;
   statusUpdatedBy?: string | null;
+  arrivedAt?: string | null;
   statusStartedAt?: string | null;
   statusStoppedAt?: string | null;
   statusElapsedSeconds?: number | null;
@@ -1100,6 +1101,7 @@ type ActivePcWorker = {
   clockedInAt?: string | null;
   breakStartedAt?: string | null;
   externalIds?: string[];
+  arrivalOnly?: boolean;
 };
 
 function formatPcBreakTimer(startedAt: string, now: number) {
@@ -1162,6 +1164,55 @@ function LiveAppointmentTimer({
   return <>{formatAppointmentTimer(currentElapsed)}</>;
 }
 
+function LiveAppointmentDelay({ startDate, dateKey }: { startDate: string; dateKey: string }) {
+  const scheduledAt = Date.parse(startDate);
+  const [delay, setDelay] = useState<{ startDate: string; minutes: number } | null>(null);
+
+  useEffect(() => {
+    if (!Number.isFinite(scheduledAt) || appointmentDateKey() !== dateKey) return;
+
+    let timeout: number;
+    const update = () => {
+      const now = new Date();
+      if (appointmentDateKey(now) !== dateKey) {
+        setDelay(null);
+        return;
+      }
+      const elapsedMs = now.getTime() - scheduledAt;
+      setDelay({ startDate, minutes: Math.max(0, Math.floor(elapsedMs / 60000)) });
+      // Count whole minutes from the scheduled start, even if the client arrived early.
+      const nextMinute = elapsedMs < 0 ? 60000 - elapsedMs : 60000 - (elapsedMs % 60000);
+      timeout = window.setTimeout(update, nextMinute);
+    };
+
+    update();
+    return () => window.clearTimeout(timeout);
+  }, [dateKey, scheduledAt, startDate]);
+
+  if (!delay || delay.startDate !== startDate || delay.minutes === 0) return null;
+  return <span className="font-bold text-[#8A4B0F]">Ritardo · {delay.minutes} min</span>;
+}
+
+function AppointmentArrivalTiming({ arrivedAt, startDate, dateKey, waiting }: {
+  arrivedAt: string | null;
+  startDate: string;
+  dateKey: string;
+  waiting: boolean;
+}) {
+  if (!arrivedAt || !Number.isFinite(Date.parse(arrivedAt))) return null;
+  const early = Date.parse(arrivedAt) < Date.parse(startDate);
+  return (
+    <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium tabular-nums text-[#594653]">
+      <span className="inline-flex items-center gap-1">
+        <Clock3 aria-hidden="true" className="size-3.5" />
+        Arrivata alle <time dateTime={arrivedAt}>{formatTime(arrivedAt)}</time>
+      </span>
+      {early ? <span className="rounded-full bg-[#DFF1E6] px-2 py-0.5 font-bold text-[#2B6248]">In anticipo</span> : null}
+      {waiting ? <LiveAppointmentDelay startDate={startDate} dateKey={dateKey} /> : null}
+    </span>
+  );
+}
+
 function PcStaffLockScreen({ salon, onUnlock }: { salon: SalonFilter; onUnlock: (worker: ActivePcWorker) => void }) {
   return <GlobalFullscreenLayer><AppointmentsPinEntry salon={salon} onUnlock={worker => onUnlock(worker)} /></GlobalFullscreenLayer>;
 }
@@ -1184,7 +1235,8 @@ export function AppointmentsBrowser({
   navigationBasePath,
   pageTitle = "Appuntamenti",
   pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
-  canManageParadiseNotes = false,
+  canManageParadiseNotes: allowParadiseNotes = false,
+  arrivalOnly = false,
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
@@ -1204,6 +1256,7 @@ export function AppointmentsBrowser({
   pageTitle?: string;
   pageSubtitle?: string;
   canManageParadiseNotes?: boolean;
+  arrivalOnly?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2500,6 +2553,7 @@ export function AppointmentsBrowser({
     openServiceDetails = false,
     boardWorker?: { id: string; name: string },
   ) {
+    if (isArrivalOnly) return;
     if (repubblicaBoard && booking.isCanceled) {
       setSelectedBookingId(booking.id);
       return;
@@ -3449,9 +3503,12 @@ export function AppointmentsBrowser({
   const [pcScreenLocked, setPcScreenLocked] = useState(isPC && !initialPcWorkerName);
   const [pcActiveWorker, setPcActiveWorker] = useState<ActivePcWorker | null>(
     initialPcWorkerName
-      ? { id: "kiosk-selected-worker", name: initialPcWorkerName, locationName: "", status: "IN" }
+      ? { id: "kiosk-selected-worker", name: initialPcWorkerName, locationName: "", status: "IN", arrivalOnly }
       : null,
   );
+  const isArrivalOnly = isPC ? Boolean(pcActiveWorker?.arrivalOnly) : arrivalOnly;
+  const arrivalOnlyToday = isArrivalOnly ? appointmentDateKey() : null;
+  const canManageParadiseNotes = allowParadiseNotes && !isArrivalOnly;
   const effectivePcWorkerName = pcActiveWorker?.name || initialPcWorkerName;
   const confirmationOperator = isPC ? pcActiveWorker : currentUser;
   const confirmationOperatorKey = confirmationOperator
@@ -3818,6 +3875,30 @@ export function AppointmentsBrowser({
     return visibleAppointmentStatusChange(statusByBooking[booking.id], booking.savedStatusUpdatedAt);
   }
 
+  function canSetStatus(booking: AppointmentRecord, nextStatus: AppointmentStatusValue) {
+    if (!isArrivalOnly) return true;
+    const currentStatus = normalizeAppointmentStatus(getBookingStatus(booking));
+    return !booking.isCanceled && getBookingDateKey(booking) === arrivalOnlyToday &&
+      (currentStatus === "PRENOTATO" || currentStatus === "IN_ATTESA") &&
+      normalizeAppointmentStatus(nextStatus) === "IN_ATTESA";
+  }
+
+  function statusOptionsForSelect(booking: AppointmentRecord, current: AppointmentStatusValue) {
+    return appointmentStatusOptions.filter(({ value }) => value === current || canSetStatus(booking, value));
+  }
+
+  function renderArrivalTiming(booking: AppointmentRecord) {
+    if (booking.isCanceled) return null;
+    const change = getBookingStatusChange(booking);
+    const status = change?.status ?? getDefaultAppointmentStatus(booking);
+    return <AppointmentArrivalTiming
+      arrivedAt={change ? change.arrivedAt : booking.arrivedAt ?? null}
+      startDate={booking.startDate}
+      dateKey={getBookingDateKey(booking)}
+      waiting={status === "IN_ATTESA"}
+    />;
+  }
+
   function renderStatusAudit(booking: AppointmentRecord, className: string) {
     const status = getBookingStatusChange(booking);
     const author = status?.updatedBy ?? booking.statusUpdatedBy;
@@ -3841,6 +3922,7 @@ export function AppointmentsBrowser({
   ) {
     const booking = initialBookings.find((item) => item.id === bookingId);
     if (!booking || booking.isCanceled || pendingStatusSaves.current.has(bookingId)) return;
+    if (!canSetStatus(booking, nextStatus)) return;
     pendingStatusSaves.current.add(bookingId);
     setSavingStatusIds(new Set(pendingStatusSaves.current));
 
@@ -3854,10 +3936,17 @@ export function AppointmentsBrowser({
       const pendingStatus: AppointmentStatusChange = {
         status: nextStatus,
         updatedAt: null,
+        arrivedAt: currentStatus ? currentStatus.arrivedAt : booking.arrivedAt ?? null,
         startedAt: currentStatus ? currentStatus.startedAt : booking.statusStartedAt ?? null,
         stoppedAt: currentStatus ? currentStatus.stoppedAt : booking.statusStoppedAt ?? null,
         elapsedSeconds: currentStatus?.elapsedSeconds ?? Number(booking.statusElapsedSeconds || 0),
       };
+
+      if (normalizeAppointmentStatus(nextStatus) === "IN_ATTESA" && !pendingStatus.arrivedAt) {
+        pendingStatus.arrivedAt = transitionAt.toISOString();
+      } else if (nextStatus === "PRENOTATO" || nextStatus === "RIPROGRAMMATO") {
+        pendingStatus.arrivedAt = null;
+      }
 
       if (nextStatus === "INIZIATO" && (previousStatus !== "INIZIATO" || !pendingStatus.startedAt)) {
         pendingStatus.startedAt = transitionAt.toISOString();
@@ -3959,6 +4048,7 @@ export function AppointmentsBrowser({
     teammateIds: string[],
     signedBy?: string,
   ) {
+    if (isArrivalOnly) return false;
     if ((repubblicaBoard && booking.isCanceled) || pendingTeamSaves.current.has(booking.id)) return false;
     const previousTeam = getBookingTeam(booking);
     const previousClientControlStaffIds =
@@ -4218,7 +4308,7 @@ export function AppointmentsBrowser({
     y: number,
     touch = false,
   ) {
-    if (booking.isCanceled) return;
+    if (booking.isCanceled || (isArrivalOnly && !canSetStatus(booking, "IN_ATTESA"))) return;
     setBoardStatusMenu({
       bookingId: booking.id,
       x: Math.min(x, window.innerWidth - 240),
@@ -4268,7 +4358,7 @@ export function AppointmentsBrowser({
     status: AppointmentStatusValue,
   ) {
     if (repubblicaBoard && booking.isCanceled) return;
-    if (event.pointerType !== "touch") {
+    if (event.pointerType !== "touch" || isArrivalOnly) {
       startBoardLongPress(event, booking, status);
       return;
     }
@@ -4738,7 +4828,7 @@ export function AppointmentsBrowser({
               event.target.value as AppointmentStatusValue,
             );
           }}
-          disabled={savingStatusIds.has(booking.id)}
+          disabled={savingStatusIds.has(booking.id) || (isArrivalOnly && !canSetStatus(booking, "IN_ATTESA"))}
           className={[
             "rounded-full border px-3 font-black outline-none transition focus:ring-2 focus:ring-[#FBE1EB]",
             compact ? "py-1 text-xs" : "py-2 text-sm",
@@ -4746,8 +4836,8 @@ export function AppointmentsBrowser({
             savingStatusIds.has(booking.id) ? "opacity-60" : "",
           ].join(" ")}
         >
-          {appointmentStatusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
+          {statusOptionsForSelect(booking, status).map((option) => (
+            <option key={option.value} value={option.value} disabled={!canSetStatus(booking, option.value)}>
               {option.label}
             </option>
           ))}
@@ -4757,6 +4847,7 @@ export function AppointmentsBrowser({
             Salvataggio...
           </span>
         ) : null}
+        {renderArrivalTiming(booking)}
         {status === "INIZIATO" ? (
           <div className="mt-1 inline-flex w-fit items-center gap-2 rounded-[14px] border border-[#E5C1D4] bg-[linear-gradient(135deg,#211820,#38212F)] px-3 py-2 text-white shadow-[0_8px_20px_rgba(54,24,42,0.16)]">
             <span className="grid size-7 place-items-center rounded-full bg-white/10 text-[#FFB9D8]">
@@ -4809,6 +4900,27 @@ export function AppointmentsBrowser({
           </div>
         ) : null}
       </div>
+    );
+  }
+
+  function renderMarkArrived(booking: AppointmentRecord) {
+    if (!isArrivalOnly || getBookingStatus(booking) !== "PRENOTATO" || !canSetStatus(booking, "IN_ATTESA")) return null;
+    return (
+      <button
+        type="button"
+        aria-label={`Segna Arrivata: ${booking.customerName}`}
+        disabled={savingStatusIds.has(booking.id)}
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          handleStatusChange(booking.id, "IN_ATTESA");
+        }}
+        className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+      >
+        <Check aria-hidden="true" className="size-4" />
+        Segna Arrivata
+      </button>
     );
   }
 
@@ -6694,6 +6806,12 @@ export function AppointmentsBrowser({
 
           )}
 
+          {isArrivalOnly ? (
+            <p className="rounded-xl border border-[#EBD58B] bg-[#FFF9E5] px-3 py-2 text-xs font-medium text-[#6B4810]">
+              Puoi segnare gli arrivi. Per le altre operazioni, timbra l’entrata{isPC ? " e accedi di nuovo" : ""}.
+            </p>
+          ) : null}
+
           {normalizedSearch && (!repubblicaBoard || filterStatus !== "ANNULLATO" || agendaBookings.length > 0) ? (
             <section
               className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]"
@@ -6750,6 +6868,7 @@ export function AppointmentsBrowser({
                           </span>
                         </div>
                         <p className="mt-3 line-clamp-2 text-xs font-bold uppercase leading-relaxed text-[#493C43]">{booking.serviceTitle}</p>
+                        {renderArrivalTiming(booking)}
                         <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-[#806774]">
                           <span>{getSalonLabel(booking.inferredSalon)}</span>
                           {booking.bookingStr ? <span>Ordine {formatOrderCode(booking.bookingStr)}</span> : null}
@@ -6765,7 +6884,7 @@ export function AppointmentsBrowser({
                               <select
                                 aria-label={`Cambia stato di ${booking.customerName}`}
                                 value={selectableStatus}
-                                disabled={booking.isCanceled || savingStatusIds.has(booking.id)}
+                                disabled={booking.isCanceled || savingStatusIds.has(booking.id) || (isArrivalOnly && !canSetStatus(booking, "IN_ATTESA"))}
                                 onChange={(event) =>
                                   handleStatusChange(
                                     booking.id,
@@ -6781,8 +6900,8 @@ export function AppointmentsBrowser({
                                 {booking.isCanceled ? (
                                   <option value={selectableStatus}>Annullato</option>
                                 ) : (
-                                  appointmentStatusOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
+                                  statusOptionsForSelect(booking, selectableStatus).map((option) => (
+                                    <option key={option.value} value={option.value} disabled={!canSetStatus(booking, option.value)}>
                                       {option.label}
                                     </option>
                                   ))
@@ -6801,14 +6920,14 @@ export function AppointmentsBrowser({
                               )}
                             </span>
                           </label>
-                          <button
+                          {!isArrivalOnly ? <button
                             type="button"
                             onClick={() => void openClientControlForBooking(booking)}
                             className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#211A1E] px-4 text-xs font-black text-white transition hover:bg-[#A93469] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F7D9E7]"
                           >
                             Apri scheda
                             <ChevronRight aria-hidden="true" className="size-4" />
-                          </button>
+                          </button> : null}
                         </div>
                       </article>
                     );
@@ -7059,8 +7178,8 @@ export function AppointmentsBrowser({
                                 data-appointment-state={booking.isCanceled ? "canceled" : cardStatus.toLowerCase()}
                                 data-appointment-overlap={overlaps || undefined}
                                 aria-describedby={overlaps ? `overlap-${column.id}-${booking.id}` : undefined}
-                                role="button"
-                                tabIndex={0}
+                                role={isArrivalOnly ? undefined : "button"}
+                                tabIndex={isArrivalOnly ? undefined : 0}
                                 onPointerDown={(event) => startBoardTouchGesture(event, booking, status)}
                                 onPointerMove={moveBoardTouchGesture}
                                 onPointerUp={(event) => finishBoardTouchGesture(event)}
@@ -7150,7 +7269,7 @@ export function AppointmentsBrowser({
                                       ) : null}
                                       {!repubblicaBoard && visit.length > 1 ? `${visit.length} servizi` : booking.isCanceled ? "Annullato" : appointmentStatusLabels[cardStatus]}
                                     </span>
-                                    <button
+                                    {!isArrivalOnly ? <button
                                       type="button"
                                       draggable={!savingTeamIds.has(booking.id)}
                                       onDragStart={(event) => {
@@ -7193,17 +7312,23 @@ export function AppointmentsBrowser({
                                       title="Trascina per spostare"
                                     >
                                       <GripVertical className="size-5" strokeWidth={2.5} />
-                                    </button>
+                                    </button> : null}
                                   </div>
                                 </div>
                                 <p className={`mt-3 truncate text-[#241D21] ${repubblicaBoard ? "text-[15px] font-semibold leading-tight" : "text-sm font-black"}`} title={booking.customerName}>{booking.customerName}</p>
                                 {visit.length > 1 ? <div className="mt-2 space-y-2" aria-label={`Servizi della visita di ${booking.customerName}`}>
                                   <p className="text-xs font-semibold text-[#97335d]">Unica visita · {visit.length} servizi</p>
-                                  {visit.map(service => <button key={service.id} type="button" className="block w-full rounded-lg border border-[#E2CED8] bg-white p-2 text-left text-xs text-[#352a33]" onPointerDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); void openClientControlForBooking(service, undefined, false);}} onKeyDown={event => event.stopPropagation()}>
-                                    <span className="block font-semibold">{formatTime(service.startDate)} · {service.serviceTitle}</span>
-                                    <span className="mt-1 block text-[11px] text-[#71656d]">{getBookingTeam(service).map(worker => worker.name).join(", ")} · {appointmentStatusLabels[getBookingStatus(service)]}</span>
-                                  </button>)}
+                                  {visit.map(service => <div key={service.id} className="rounded-lg border border-[#E2CED8] bg-white p-2">
+                                    <button type="button" disabled={isArrivalOnly} className="block w-full text-left text-xs text-[#352a33]" onPointerDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); void openClientControlForBooking(service, undefined, false);}} onKeyDown={event => event.stopPropagation()}>
+                                      <span className="block font-semibold">{formatTime(service.startDate)} · {service.serviceTitle}</span>
+                                      <span className="mt-1 block text-[11px] text-[#71656d]">{getBookingTeam(service).map(worker => worker.name).join(", ")} · {appointmentStatusLabels[getBookingStatus(service)]}</span>
+                                      {renderArrivalTiming(service)}
+                                    </button>
+                                    {renderMarkArrived(service)}
+                                  </div>)}
                                 </div> : <p className={`mt-1 line-clamp-2 leading-snug text-[#6F6269] ${repubblicaBoard ? "text-xs font-medium" : "text-[10px] font-bold"}`}>{booking.serviceTitle}</p>}
+                                {visit.length === 1 ? renderArrivalTiming(booking) : null}
+                                {visit.length === 1 ? renderMarkArrived(booking) : null}
                                 {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
@@ -7607,9 +7732,8 @@ export function AppointmentsBrowser({
                   const booking = initialBookings.find(
                     (item) => item.id === boardStatusMenu.bookingId,
                   );
-                  const selected = booking
-                    ? getBookingStatus(booking) === option.value
-                    : false;
+                  if (!booking || !canSetStatus(booking, option.value)) return null;
+                  const selected = getBookingStatus(booking) === option.value;
                   return (
                     <button
                       key={option.value}

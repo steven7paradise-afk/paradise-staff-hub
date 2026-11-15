@@ -2,6 +2,7 @@ import { accessFor } from "@/lib/mcp/permissions";
 import type { Prisma } from "@prisma/client";
 import { getRenderSession } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
+import { isRepubblicaReceptionist } from "@/lib/appointment-arrival-access";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, mergePermissionSets, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
@@ -111,7 +112,7 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcSalon, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcSalon?: AppointmentSalonSlug | null; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcArrivalOnly = false, pcSalon, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcArrivalOnly?: boolean; pcSalon?: AppointmentSalonSlug | null; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
   const [session, branding] = await Promise.all([getRenderSession(), getBrandingTheme()]);
   const isPcCassa = pcMode;
   if (!session?.user?.id && !isPcCassa) redirect("/login");
@@ -161,7 +162,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           employee_status: true,
           workforce_data: true,
           last_edited_at: true,
-          location: { select: { name: true } },
+          location: { select: { name: true, active: true } },
         },
       }).catch(() => null)
     : Promise.resolve(null);
@@ -428,7 +429,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   }
   if (!salonShiftModulesEnabled) {
     sidebarItems = sidebarItems.filter(
-      (item) => item.href !== "/appointments" && item.href !== "/service-forms",
+      (item) => item.href !== "/service-forms" &&
+        (item.href !== "/appointments" || Boolean(currentUser && isRepubblicaReceptionist(currentUser))),
     );
   }
   if (isPcCassa) {
@@ -440,7 +442,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "", badge: undefined },
       { href: "/shopify-orders", label: "Ordini Shopify", iconName: "ShoppingCart", section: "", badge: undefined },
     ];
-    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: [pcAppointmentsHref, "/service-forms", "/shopify-orders"] }];
+    if (pcArrivalOnly) sidebarItems = sidebarItems.filter(item => item.href === pcAppointmentsHref);
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: sidebarItems.map(item => item.href) }];
   }
   const aside = (
       <aside className={cn(

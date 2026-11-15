@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, appointmentSalonUrl } from "@/lib/appointment-salon-url";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
 
 export async function POST() {
   const jar = await cookies();
@@ -12,5 +13,6 @@ export async function POST() {
   const response = NextResponse.json({ redirectTo: salon ? `${appointmentSalonUrl(salon)}?choose=1` : null }, { headers: { "Cache-Control": "no-store" } });
   // Keep the device authorization; remove only the currently selected operator.
   response.cookies.set({ name: appointmentsPcWorkerCookieName, value: "", httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
+  response.cookies.set({ name: appointmentPcArrivalCookieName, value: "", httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
   return response;
 }

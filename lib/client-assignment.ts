@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getCowlendarBookingsForRange } from "./cowlendar";
+import { savedAppointmentArrival } from "./appointment-status";
 import { appointmentDateKey, appointmentDayBoundaryIso } from "./appointment-date";
 import { appointmentSalonSlugFromName } from "./appointment-salon-url";
 import { isAssignedWorker, type AssignedMate } from "./mobile-client-control-policy";
@@ -10,7 +11,7 @@ import { FORMER_EMPLOYEE_STATUS } from "./former-employee";
 
 const keys = ["appointment_team_overrides", "appointment_status_overrides", "appointment_staff_aliases"];
 type Team = { teammates: AssignedMate[]; updatedAt?: string };
-type Status = { status: string; updatedAt?: string };
+type Status = { status: string; updatedAt?: string; arrivedAt?: string | null };
 export type AssignmentRequest = {
   id: string; kind: "assignment"; state: "open" | "done" | "cancelled";
   locationId: string; bookingId: string; customerName: string; workerId: string; workerName: string;
@@ -67,9 +68,11 @@ export async function decideAssignment(locationId: string, id: string, decision:
       const busy = snapshot.items.some(b => b.status === "INIZIATO" && isAssignedWorker(worker.id, b.team, snapshot.aliases));
       if (busy) throw new Error("La lavoratrice sta già seguendo una cliente.");
       const now = new Date().toISOString();
+      const statuses = (currentRows.find(r => r.key === keys[1])?.value ?? {}) as Record<string, Status>;
+      const arrivedAt = savedAppointmentArrival(statuses[item.bookingId]);
       const changes = [
         { key: keys[0], entry: { teammates: [{ id: worker.id, name: worker.name, photoUrl: worker.photo_url }], updatedAt: now, updatedBy: actor.name ?? actor.id } },
-        { key: keys[1], entry: { status: "INIZIATO", startedAt: now, stoppedAt: null, elapsedSeconds: 0, updatedAt: now, updatedBy: actor.name ?? actor.id } },
+        { key: keys[1], entry: { status: "INIZIATO", arrivedAt, startedAt: now, stoppedAt: null, elapsedSeconds: 0, updatedAt: now, updatedBy: actor.name ?? actor.id } },
       ];
       for (const change of changes) {
         const old = currentRows.find(r => r.key === change.key);

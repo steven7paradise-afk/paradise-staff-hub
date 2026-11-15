@@ -6,6 +6,8 @@ import { appointmentSalonForPC, appointmentsPcCookieName, appointmentsPcWorkerCo
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 import { auth } from "@/lib/auth";
 import { appointmentStaffDisplayName } from "@/lib/appointment-staff-access";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
+import { findAppointmentPcArrivalOperator } from "@/lib/appointment-pc-arrival-operator";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,10 @@ export default async function SalonAppointmentsPage({
   }
 
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
+  const arrivalOperator = !selectedWorker && pcAuth && pcSalon === "repubblica"
+    ? await findAppointmentPcArrivalOperator(pcAuth.locationId, pcToken, cookieStore.get(appointmentPcArrivalCookieName)?.value)
+    : null;
+  const arrivalOnly = arrivalOperator?.arrivalOnly === true;
   const selectedWorkerRecord = pcAuth
     ? await findAppointmentPcWorker(pcAuth.locationId, pcSalon, selectedWorker).catch(() => null)
     : null;
@@ -87,11 +93,12 @@ export default async function SalonAppointmentsPage({
     return <AppointmentsKioskEntry salone={salone} pcName="Controllo remoto Admin" remoteTarget={remoteTarget} />;
   }
 
-  if (pcAuth && !selectedWorkerRecord && !forceProfileChoice && requestedWorker && !remoteTarget) {
+  if (pcAuth && !selectedWorkerRecord && !arrivalOnly && !forceProfileChoice && requestedWorker && !remoteTarget) {
     redirect(appointmentSalonUrl(salone));
   }
 
-  if (!selectedWorker || !selectedWorkerRecord || forceProfileChoice) {
+  const operator = arrivalOnly ? arrivalOperator : selectedWorkerRecord;
+  if (!operator || forceProfileChoice) {
     return <AppointmentsKioskEntry salone={salone} pcName={pcAuth?.name} />;
   }
 
@@ -100,9 +107,10 @@ export default async function SalonAppointmentsPage({
       ...resolvedSearchParams,
       salone,
       unlocked: "1",
-      worker: appointmentStaffDisplayName(selectedWorkerRecord.name, selectedWorkerRecord.id),
+      worker: appointmentStaffDisplayName(operator.name, operator.id),
     }),
     forcePcSalon: salone,
+    pcArrivalOnly: arrivalOnly,
     repubblicaBoard: salone === "repubblica" && !isAdminRemote,
   });
 }

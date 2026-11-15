@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { publishAppointmentChange } from "./appointment-realtime";
 import { readAppointmentEditRevisions, type AppointmentAgendaRange, type AppointmentAgendaRevision } from "./appointment-range-revision";
+import { normalizeAppointmentStatus, savedAppointmentArrival } from "./appointment-status";
 import { prisma } from "./prisma";
 
 const STATUS_SETTING_KEY = "appointment_status_overrides";
@@ -10,6 +11,7 @@ export type AppointmentStatusEntry = {
   status: string;
   updatedAt: string;
   updatedBy: string;
+  arrivedAt: string | null;
   startedAt?: string | null;
   stoppedAt?: string | null;
   elapsedSeconds?: number;
@@ -21,6 +23,7 @@ type StatusUpdate = {
   transitionAt?: Date;
   trackServiceTime?: boolean;
   agendaRange?: AppointmentAgendaRange;
+  validatePrevious?: (entry?: Partial<AppointmentStatusEntry>) => void;
 };
 
 type StatusEntryWithTiming = AppointmentStatusEntry & {
@@ -62,16 +65,23 @@ export async function saveAppointmentStatus(
     }
 
     const previous = row?.entry;
+    update.validatePrevious?.(previous ?? undefined);
     const previousStatus = previous?.status;
     const transitionAt = update.transitionAt ?? new Date();
     const previousUpdate = Date.parse(previous?.updatedAt ?? "");
     const updatedAt = Number.isFinite(previousUpdate)
       ? new Date(Math.max(transitionAt.getTime(), previousUpdate + 1))
       : transitionAt;
+    const status = normalizeAppointmentStatus(update.status);
+    const previousArrival = savedAppointmentArrival(previous);
+    const arrivedAt = status === "PRENOTATO" || status === "RIPROGRAMMATO"
+      ? null
+      : previousArrival ?? (status === "IN_ATTESA" ? transitionAt.toISOString() : null);
     const entry: AppointmentStatusEntry = {
       status: update.status,
       updatedAt: updatedAt.toISOString(),
       updatedBy: update.updatedBy,
+      arrivedAt,
     };
 
     if (update.trackServiceTime) {
