@@ -47,7 +47,12 @@ function selectedWorkerIdentity(request: NextRequest) {
 
 export async function getOperationalUser(
   request: NextRequest,
-  options?: { requirePcWorker?: boolean; preferAuthenticatedAdmin?: boolean; allowReceptionArrival?: boolean },
+  options?: {
+    requirePcWorker?: boolean;
+    preferAuthenticatedAdmin?: boolean;
+    allowReceptionArrival?: boolean;
+    allowPcOwnerStart?: boolean;
+  },
 ): Promise<OperationalUser | null> {
   const session = await auth();
   const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
@@ -57,11 +62,12 @@ export async function getOperationalUser(
   );
   if (pcAuth && !(options?.preferAuthenticatedAdmin && hasAuthenticatedAdmin)) {
     const token = request.cookies.get(appointmentPcArrivalCookieName)?.value;
-    if (token && options?.allowReceptionArrival) {
+    if (token && (options?.allowReceptionArrival || options?.allowPcOwnerStart)) {
       const operator = await findAppointmentPcArrivalOperator(
         pcAuth.locationId, pcToken, token,
       );
-      if (operator) return {
+      if (operator && (options.allowReceptionArrival ||
+        (options.allowPcOwnerStart && !operator.arrivalOnly && isAlwaysActiveAppointmentStaff(operator.name, operator.id)))) return {
         id: operator.id,
         name: appointmentStaffDisplayName(operator.name, operator.id),
         email: operator.email,
@@ -72,7 +78,9 @@ export async function getOperationalUser(
         hasVerifiedPcArrivalSession: true,
         arrivalOnly: operator.arrivalOnly,
       };
-    } else if (verifyAppointmentPcArrival(token, pcToken, process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET)?.arrivalOnly) {
+    }
+    if (!options?.allowReceptionArrival &&
+      verifyAppointmentPcArrival(token, pcToken, process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET)?.arrivalOnly) {
       return null;
     }
     const workerIdentity = selectedWorkerIdentity(request);

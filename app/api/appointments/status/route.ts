@@ -7,7 +7,7 @@ import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-
 import { visibleAgendaRange } from "@/lib/appointment-range-revision";
 import { canRecordEarlyAppointmentArrival, isAppointmentArrivalStatus, isBeforeSalonOpening } from "@/lib/appointment-arrival-access";
 import { appointmentDateKey } from "@/lib/appointment-date";
-import { appointmentStatusContext, hasPresentAppointmentWorker } from "@/lib/appointment-status-access";
+import { appointmentStatusContext, hasAvailableAssignedAppointmentWorker, hasPresentAppointmentWorker } from "@/lib/appointment-status-access";
 import { normalizeAppointmentStatus } from "@/lib/appointment-status";
 import { canAccessForUser } from "@/lib/roles";
 
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
       requirePcWorker: true,
       preferAuthenticatedAdmin: true,
       allowReceptionArrival: isArrival,
+      allowPcOwnerStart: isStartingService,
     });
     if (!operationalUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
     const sessionUserName = operationalUser.name || operationalUser.email || operationalUser.id;
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
       const authorizedOperator = canRecordEarlyAppointmentArrival(operationalUser) ||
         await hasPresentAppointmentWorker([operationalUser.id], eligibleLocationIds, transitionAt);
       if (!authorizedOperator || appointmentDateKey(scheduledAt) !== appointmentDateKey(transitionAt) ||
-        !await hasPresentAppointmentWorker(workers.map(worker => worker.id), eligibleLocationIds, transitionAt)) {
+        !await hasAvailableAssignedAppointmentWorker(workers, eligibleLocationIds, transitionAt)) {
         return NextResponse.json({
           code: "ATTENDANCE_REQUIRED",
           error: "Per iniziare il servizio, una lavoratrice assegnata deve avere timbrato l’ingresso in questa sede.",

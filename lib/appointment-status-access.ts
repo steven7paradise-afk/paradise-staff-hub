@@ -1,7 +1,7 @@
 import { appointmentDateKey } from "./appointment-date";
 import { agendaSalonScope, resolveAgendaAppointmentSalon } from "./appointment-booking-salon";
 import { appointmentSalonSlugFromName, repubblicaIncludesLegacyBuenosAires } from "./appointment-salon-url";
-import { hasCurrentAttendanceAtAppointmentSalon, matchesAppointmentOwnerName } from "./appointment-staff-access";
+import { hasCurrentAttendanceAtAppointmentSalon, isAlwaysActiveAppointmentStaff, matchesAppointmentOwnerName } from "./appointment-staff-access";
 import { deriveAttendanceState } from "./attendance-state";
 import { FORMER_EMPLOYEE_STATUS } from "./former-employee";
 import type { CowlendarBooking } from "./cowlendar";
@@ -84,4 +84,14 @@ export async function hasPresentAppointmentWorker(workerIds: string[], eligibleL
     const state = deriveAttendanceState(logs.filter(log => log.user_id === id));
     return hasCurrentAttendanceAtAppointmentSalon(state.status, state.lastValidLog?.location_id, eligibleLocationIds);
   });
+}
+
+export async function hasAvailableAssignedAppointmentWorker(
+  workers: Pick<BookingWorker, "id" | "name">[],
+  eligibleLocationIds: string[],
+  now: Date,
+) {
+  if (!eligibleLocationIds.length) return false;
+  if (workers.some(worker => isAlwaysActiveAppointmentStaff(worker.name, worker.id))) return true;
+  return hasPresentAppointmentWorker(workers.map(worker => worker.id), eligibleLocationIds, now);
 }

@@ -4,7 +4,7 @@ import {
   canRecordEarlyAppointmentArrival, isAppointmentArrivalStatus, isBeforeSalonOpening, isReceptionArrivalAgendaPath, isRepubblicaReceptionist,
 } from "../lib/appointment-arrival-access";
 import { signAppointmentPcArrival, verifyAppointmentPcArrival } from "../lib/appointment-pc-arrival-session";
-import { hasPresentAppointmentWorker, resolveAppointmentStatusWorkers } from "../lib/appointment-status-access";
+import { hasAvailableAssignedAppointmentWorker, hasPresentAppointmentWorker, resolveAppointmentStatusWorkers } from "../lib/appointment-status-access";
 import { prisma } from "../lib/prisma";
 
 test("early arrival requires Reception or administration and uses the salon's local opening time", () => {
@@ -77,4 +77,23 @@ test("a service needs an active shift in the correct salon", async t => {
   assert.equal(await hasPresentAppointmentWorker([worker], [location], startedAt), true);
   logs = [clockIn, clockOut];
   assert.equal(await hasPresentAppointmentWorker([worker], [location], startedAt), false);
+});
+
+test("an assigned owner can start without clocking in at the appointment salon", async t => {
+  const now = new Date("2026-11-15T09:05:00Z");
+  const salon = ["repubblica"];
+  const owner = { id: "cmqf02qgq0001jx0913ddfys1", name: "Francesca" };
+  const sameFirstName = { id: "other-worker", name: "Francesca" };
+  const original = prisma.attendanceLog.findMany;
+  const findLogs = t.mock.fn(async () => []);
+  prisma.attendanceLog.findMany = findLogs as unknown as typeof original;
+  t.after(() => { prisma.attendanceLog.findMany = original; });
+
+  assert.equal(await hasAvailableAssignedAppointmentWorker([owner], salon, now), true);
+  assert.equal(await hasAvailableAssignedAppointmentWorker([owner], [], now), false);
+  assert.equal(await hasAvailableAssignedAppointmentWorker([], salon, now), false);
+  assert.equal(findLogs.mock.callCount(), 0);
+
+  assert.equal(await hasAvailableAssignedAppointmentWorker([sameFirstName], salon, now), false);
+  assert.equal(findLogs.mock.callCount(), 1);
 });
