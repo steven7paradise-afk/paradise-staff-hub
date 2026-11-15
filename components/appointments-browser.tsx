@@ -1222,6 +1222,7 @@ export function AppointmentsBrowser({
   corsoTeamOptions,
   isPC = false,
   pcLocationId = "",
+  showCashierClock = false,
   repubblicaBoard = false,
   appointmentRevision = null,
   initialSalon = "tutti",
@@ -1242,6 +1243,7 @@ export function AppointmentsBrowser({
   corsoTeamOptions: TeamOption[];
   isPC?: boolean;
   pcLocationId?: string;
+  showCashierClock?: boolean;
   repubblicaBoard?: boolean;
   appointmentRevision?: string | null;
   initialSalon?: SalonFilter;
@@ -6303,6 +6305,7 @@ export function AppointmentsBrowser({
                 if (searchPanelOpen) setSearchTerm("");
                 else requestAnimationFrame(() => document.getElementById("appointments-client-search")?.focus());
               }}
+              showCashierClock={showCashierClock}
               operatorAction={isPC && pcActiveWorker ? { name: pcActiveWorker.name, onChange: () => { void handlePcLogout(); } } : undefined}
               searchField={searchPanelOpen ? <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} plain /> : null}
               workerValue={filterStaff}

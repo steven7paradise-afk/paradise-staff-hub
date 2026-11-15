@@ -2,6 +2,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Ellipsis,
   LayoutGrid,
   List,
@@ -39,6 +40,7 @@ type RepubblicaAgendaToolbarProps = {
   searchOpen: boolean;
   onSearchToggle: () => void;
   searchField: ReactNode;
+  showCashierClock?: boolean;
   operatorAction?: { name: string; onChange: () => void };
   workerValue: string;
   workerOptions: FilterOption[];
@@ -75,6 +77,45 @@ const focusClass = "outline-offset-2 focus-visible:outline focus-visible:outline
 const controlClass = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold text-[color:var(--agenda-text)] transition-colors hover:bg-[color:var(--agenda-hover)] disabled:cursor-default disabled:border-[color:var(--agenda-divider)] disabled:text-[color:var(--agenda-disabled)] disabled:hover:bg-[color:var(--agenda-surface)] ${toolbarSurface} ${focusClass}`;
 const inputClass = `min-h-11 min-w-0 rounded-xl border px-3 text-sm font-semibold text-[color:var(--agenda-text)] ${toolbarSurface} ${focusClass}`;
 const labelClass = "grid min-w-0 flex-1 gap-1 text-xs font-semibold text-[color:var(--agenda-muted)]";
+const cashierClockFormat = new Intl.DateTimeFormat("it-IT", {
+  timeZone: "Europe/Rome",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function CashierClock() {
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    let timeout: number;
+    function update() {
+      window.clearTimeout(timeout);
+      if (document.hidden) return;
+      const current = new Date();
+      setNow(current);
+      timeout = window.setTimeout(update, 1000 - current.getMilliseconds());
+    }
+
+    update();
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+
+  return (
+    <div className="flex items-center justify-center gap-1.5 px-1 text-[color:var(--agenda-text)]" title="Ora di Roma">
+      <Clock3 aria-hidden="true" className="size-3.5 shrink-0 text-[color:var(--agenda-muted)]" />
+      <span className="sr-only">Ora di Roma </span>
+      <time dateTime={now?.toISOString()} className="font-mono text-sm font-semibold tabular-nums">
+        {now ? cashierClockFormat.format(now) : "--:--:--"}
+      </time>
+    </div>
+  );
+}
 
 function DateRangeControls({
   from,
@@ -155,6 +196,7 @@ export function RepubblicaAgendaToolbar({
   searchOpen,
   onSearchToggle,
   searchField,
+  showCashierClock = false,
   operatorAction,
   workerValue,
   workerOptions,
@@ -250,7 +292,7 @@ export function RepubblicaAgendaToolbar({
             <span><strong className="font-semibold tabular-nums text-[color:var(--agenda-text)]">{visitCount}</strong> {visitCount === 1 ? "visita" : "visite"} in agenda</span>
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={`flex flex-wrap gap-2 ${showCashierClock ? "items-start" : "items-center"}`}>
           {operatorAction ? <button type="button" className={controlClass} onClick={operatorAction.onChange} title="Cambia profilo">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-600" />
             <span>{operatorAction.name}</span>
@@ -266,16 +308,19 @@ export function RepubblicaAgendaToolbar({
           >
             <RefreshCw aria-hidden="true" className={`size-4 ${isRefreshing ? "animate-spin motion-reduce:animate-none" : ""}`} />
           </button>
-          <button
-            type="button"
-            className={controlClass}
-            aria-controls="appointments-search-panel"
-            aria-expanded={searchOpen}
-            onClick={onSearchToggle}
-          >
-            {searchOpen ? <X aria-hidden="true" className="size-4" /> : <Search aria-hidden="true" className="size-4" />}
-            {searchOpen ? "Chiudi ricerca" : "Cerca"}
-          </button>
+          <div className={showCashierClock ? "grid gap-1.5" : "contents"}>
+            <button
+              type="button"
+              className={controlClass}
+              aria-controls="appointments-search-panel"
+              aria-expanded={searchOpen}
+              onClick={onSearchToggle}
+            >
+              {searchOpen ? <X aria-hidden="true" className="size-4" /> : <Search aria-hidden="true" className="size-4" />}
+              {searchOpen ? "Chiudi ricerca" : "Cerca"}
+            </button>
+            {showCashierClock ? <CashierClock /> : null}
+          </div>
           <details ref={extraMenu} className="sm:relative" onToggle={(event) => onAdvancedOpenChange?.(event.currentTarget.open)}>
             <summary
               ref={extraButton}
