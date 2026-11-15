@@ -39,11 +39,14 @@ test("day recovery adds new appointments and moves only a strictly newer booking
   const findMany = prisma.appointmentArchive.findMany;
   const transaction = prisma.$transaction;
   const lookupOrder = prisma.shopifyOrderCache.findMany;
+  const query = prisma.$queryRaw;
+  prisma.$queryRaw = (async () => [{ deadline_ms: null }]) as unknown as typeof query;
   prisma.shopifyOrderCache.findMany = (async () => [{ order_id: "42", order_name: "#42" }]) as unknown as typeof lookupOrder;
   t.after(() => {
     prisma.appointmentArchive.findMany = findMany;
     prisma.$transaction = transaction;
     prisma.shopifyOrderCache.findMany = lookupOrder;
+    prisma.$queryRaw = query;
   });
   const prior = {
     updated_at: "2026-11-14T08:30:00Z", start_date: "2026-11-14T09:30:00Z",
@@ -92,11 +95,13 @@ test("concurrent callers share today's lease and a Cowlendar 429 persists its fu
   const token = process.env.COWLENDAR_API_TOKEN;
   process.env.COWLENDAR_API_TOKEN = "test-day-rate-limit";
   const query = prisma.$queryRaw;
+  const execute = prisma.$executeRaw;
   const update = prisma.setting.updateMany;
   t.after(() => {
     if (token === undefined) delete process.env.COWLENDAR_API_TOKEN;
     else process.env.COWLENDAR_API_TOKEN = token;
     prisma.$queryRaw = query;
+    prisma.$executeRaw = execute;
     prisma.setting.updateMany = update;
   });
   const request = t.mock.method(globalThis, "fetch", async () => new Response(null, {
@@ -107,7 +112,10 @@ test("concurrent callers share today's lease and a Cowlendar 429 persists its fu
     leaseToken = values.find((value): value is string => typeof value === "string" && /^[a-f0-9-]{36}$/.test(value));
     return [{ claimed: true, until: null, rate_limited: false }];
   });
-  prisma.$queryRaw = claim as unknown as typeof prisma.$queryRaw;
+  prisma.$queryRaw = (async (sql: TemplateStringsArray, ...values: unknown[]) => sql.join("").includes("AS deadline_ms")
+    ? [{ deadline_ms: null }]
+    : claim(sql, ...values)) as unknown as typeof query;
+  prisma.$executeRaw = (async () => 1) as unknown as typeof execute;
   const record = t.mock.fn(async (args: { where: unknown; data: { value: { until: number; rateLimited: boolean } } }) => ({
     count: args.data.value.rateLimited ? 1 : 0,
   }));

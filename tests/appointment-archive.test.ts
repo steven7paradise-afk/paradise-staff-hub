@@ -67,6 +67,7 @@ test("a rate limit preserves the archive and extends its retry lease", async t =
   }));
   mockMethod(t, prisma.appointmentArchiveSync, "upsert", async () => ({}));
   mockMethod(t, prisma, "$queryRaw", async () => [{ completed_at: new Date(), lease_until: null, error: false }]);
+  mockMethod(t, prisma, "$executeRaw", async () => 1);
   const state = t.mock.fn(async (_args: { data: { error: boolean; lease_until: Date } }) => ({ count: 1 }));
   const reason = t.mock.fn(async (_args: { data: { key: string; value: boolean } }) => ({ count: 1 }));
   mockMethod(t, prisma, "$transaction", async run => run({
@@ -87,6 +88,9 @@ test("archive changes publish only after saving data and unchanged imports stay 
   const enabled = process.env.APPOINTMENTS_REALTIME_ENABLED;
   process.env.COWLENDAR_API_TOKEN = "test-only";
   process.env.APPOINTMENTS_REALTIME_ENABLED = "true";
+  // The previous test recorded a shared pause. Move past it before importing.
+  const now = Date.now() + 180_000;
+  t.mock.method(Date, "now", () => now);
   t.after(() => {
     if (token === undefined) delete process.env.COWLENDAR_API_TOKEN; else process.env.COWLENDAR_API_TOKEN = token;
     if (enabled === undefined) delete process.env.APPOINTMENTS_REALTIME_ENABLED; else process.env.APPOINTMENTS_REALTIME_ENABLED = enabled;

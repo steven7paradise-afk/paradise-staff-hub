@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { prisma } from "@/lib/prisma";
+import { APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX } from "./appointment-archive-range";
 
 const COWLENDAR_API_BASE = "https://app.cowlendar.com/public-api/v1";
 const COWLENDAR_READ_TIMEOUT_MS = 8_000;
@@ -8,28 +10,83 @@ const COWLENDAR_COMPLETE_PAGE_SPACING_MS = 250;
 const COWLENDAR_COMPLETE_MAX_RETRY_MS = 5_000;
 const COWLENDAR_COMPLETE_PAGE_RETRIES = 2;
 const COWLENDAR_DEFAULT_RATE_PAUSE_MS = 60_000;
-const rateLimitUntilByToken = new Map<string, number>();
+const COWLENDAR_RATE_LIMIT_KEY = "cowlendar_rate_limit";
+const COWLENDAR_RATE_LIMIT_CHECK_MS = 2_000;
+
+// Next route bundles share one memo per process. The settings row coordinates replicas.
+const globalForCowlendar = globalThis as typeof globalThis & {
+  cowlendarRateLimit?: { until: number; checkedUntil: number; pending?: Promise<void> };
+};
+const rateLimit = globalForCowlendar.cowlendarRateLimit ??= { until: 0, checkedUntil: 0 };
 
 function retryAfterMilliseconds(header: string | null, now: number) {
   const value = header?.trim() || "";
   if (!value) return null;
   const delay = /^\d+$/.test(value) ? Number(value) * 1000 : Date.parse(value) - now;
-  return Number.isFinite(delay) ? Math.max(0, delay) : null;
+  return Number.isSafeInteger(delay) && Number.isSafeInteger(now + delay) ? Math.max(0, delay) : null;
 }
 
-function assertCowlendarAvailable(token: string) {
-  const until = rateLimitUntilByToken.get(token);
-  if (until === undefined) return;
-  const remaining = until - Date.now();
+export async function cowlendarSharedRateLimitUntil() {
+  const now = Date.now();
+  if (rateLimit.until > now) return rateLimit.until;
+  if (rateLimit.checkedUntil <= now) {
+    rateLimit.pending ??= (async () => {
+      try {
+        // Honor pauses already recorded by an archive job during a rolling restart.
+        const [shared] = await prisma.$queryRaw<{ deadline_ms: number | null }[]>`
+          SELECT GREATEST(
+            (SELECT value::text::double precision FROM settings
+              WHERE key = ${COWLENDAR_RATE_LIMIT_KEY} AND jsonb_typeof(value) = 'number'),
+            (SELECT (value ->> 'until')::double precision FROM settings
+              WHERE key = 'appointment_archive_day_recovery' AND value ->> 'rateLimited' = 'true'
+                AND jsonb_typeof(value -> 'until') = 'number'),
+            (SELECT MAX(EXTRACT(EPOCH FROM archive.lease_until) * 1000)::double precision
+              FROM appointment_archive_sync AS archive
+              JOIN settings ON settings.key = ${APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX} || archive.month
+              WHERE archive.error AND archive.lease_until > ${new Date(now)})
+          ) AS deadline_ms
+        `;
+        if (typeof shared?.deadline_ms === "number" && Number.isFinite(shared.deadline_ms)) {
+          rateLimit.until = Math.max(rateLimit.until, shared.deadline_ms);
+        }
+      } catch {
+        // Use the local breaker if the database is temporarily unreachable.
+        console.warn("Could not read the shared Cowlendar rate limit");
+      }
+      const checkedAt = Date.now();
+      rateLimit.checkedUntil = rateLimit.until > checkedAt ? 0 : checkedAt + COWLENDAR_RATE_LIMIT_CHECK_MS;
+    })().finally(() => { rateLimit.pending = undefined; });
+    await rateLimit.pending;
+  }
+  return rateLimit.until > Date.now() ? rateLimit.until : 0;
+}
+
+async function assertCowlendarAvailable() {
+  const remaining = await cowlendarSharedRateLimitUntil() - Date.now();
   if (remaining > 0) throw new CowlendarHttpError(429, String(Math.ceil(remaining / 1000)));
-  rateLimitUntilByToken.delete(token);
 }
 
-function rememberCowlendarRateLimit(token: string, response: Response) {
+async function rememberCowlendarRateLimit(response: Response) {
   if (response.status !== 429) return;
   const now = Date.now();
   const delay = retryAfterMilliseconds(response.headers.get("Retry-After"), now) ?? COWLENDAR_DEFAULT_RATE_PAUSE_MS;
-  rateLimitUntilByToken.set(token, Math.max(rateLimitUntilByToken.get(token) ?? 0, now + delay));
+  if (delay > 0) {
+    const until = now + delay;
+    rateLimit.until = Math.max(rateLimit.until, until);
+    rateLimit.checkedUntil = 0;
+    try {
+      // Concurrent responses can extend a pause but cannot shorten it.
+      await prisma.$executeRaw`
+        INSERT INTO settings (id, key, value)
+        VALUES (${randomUUID()}, ${COWLENDAR_RATE_LIMIT_KEY}, to_jsonb(${until}::double precision))
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        WHERE CASE WHEN jsonb_typeof(settings.value) = 'number'
+          THEN settings.value::text::double precision < ${until} ELSE TRUE END
+      `;
+    } catch {
+      console.warn("Could not save the shared Cowlendar rate limit");
+    }
+  }
   return String(Math.ceil(delay / 1000));
 }
 
@@ -215,7 +272,7 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
     throw new Error("COWLENDAR_API_TOKEN mancante");
   }
 
-  assertCowlendarAvailable(token);
+  await assertCowlendarAvailable();
   const response = await fetch(`${COWLENDAR_API_BASE}${pathname}`, {
     ...init,
     signal: init?.signal || AbortSignal.timeout(COWLENDAR_READ_TIMEOUT_MS),
@@ -228,7 +285,7 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
   });
 
   if (!response.ok) {
-    const retryAfter = rememberCowlendarRateLimit(token, response) ?? response.headers.get("Retry-After");
+    const retryAfter = await rememberCowlendarRateLimit(response) ?? response.headers.get("Retry-After");
     throw new CowlendarHttpError(response.status, retryAfter);
   }
 
@@ -241,7 +298,7 @@ async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
     throw new Error("COWLENDAR_API_TOKEN mancante");
   }
 
-  assertCowlendarAvailable(token);
+  await assertCowlendarAvailable();
   const response = await fetch(`${COWLENDAR_API_BASE}${pathname}`, {
     ...init,
     signal: init?.signal || AbortSignal.timeout(COWLENDAR_WRITE_TIMEOUT_MS),
@@ -253,7 +310,7 @@ async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
     },
     cache: "no-store",
   });
-  rememberCowlendarRateLimit(token, response);
+  await rememberCowlendarRateLimit(response);
   return response;
 }
 
