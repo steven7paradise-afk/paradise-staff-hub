@@ -22,6 +22,7 @@ import { AppointmentsLiveRefresh } from "./appointments-live-refresh";
 import { AppointmentNoteDisclosure } from "./appointment-note-disclosure";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   CalendarCheck,
   CalendarDays,
   ArrowRight,
@@ -500,6 +501,11 @@ const agendaStatusOptions = [
   ...appointmentStatusOptions.filter(({ value }) => value !== "IN_ATTESA"),
   { value: "ARRIVATA", label: "Arrivata" },
   { value: "ANNULLATO", label: "Annullato" },
+];
+
+const cashierAgendaStatusOptions = [
+  ...agendaStatusOptions,
+  { value: "IN_ATTESA", label: "In attesa" },
 ];
 
 const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
@@ -1164,7 +1170,11 @@ function LiveAppointmentTimer({
   return <>{formatAppointmentTimer(currentElapsed)}</>;
 }
 
-function LiveAppointmentDelay({ startDate, dateKey }: { startDate: string; dateKey: string }) {
+function LiveAppointmentDelay({ startDate, dateKey, showWaitingWarning }: {
+  startDate: string;
+  dateKey: string;
+  showWaitingWarning: boolean;
+}) {
   const scheduledAt = Date.parse(startDate);
   const [delay, setDelay] = useState<{ startDate: string; minutes: number } | null>(null);
 
@@ -1190,16 +1200,32 @@ function LiveAppointmentDelay({ startDate, dateKey }: { startDate: string; dateK
   }, [dateKey, scheduledAt, startDate]);
 
   if (!delay || delay.startDate !== startDate || delay.minutes === 0) return null;
+  if (showWaitingWarning && delay.minutes >= 5) {
+    return <span
+      data-waiting-warning="true"
+      className="inline-flex w-fit items-center gap-1 rounded-full border border-red-200 bg-red-100 px-2 py-0.5 font-bold text-red-900"
+    >
+      <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="sr-only">Cliente ancora in attesa. </span>
+      Ritardo · {delay.minutes} min
+    </span>;
+  }
   return <span className="font-bold text-[#8A4B0F]">Ritardo · {delay.minutes} min</span>;
 }
 
-function AppointmentArrivalTiming({ arrivedAt, startDate, dateKey, waiting }: {
+function AppointmentArrivalTiming({ arrivedAt, startDate, dateKey, waiting, showWaitingWarning }: {
   arrivedAt: string | null;
   startDate: string;
   dateKey: string;
   waiting: boolean;
+  showWaitingWarning: boolean;
 }) {
-  if (!arrivedAt || !Number.isFinite(Date.parse(arrivedAt))) return null;
+  const delay = waiting
+    ? <LiveAppointmentDelay startDate={startDate} dateKey={dateKey} showWaitingWarning={showWaitingWarning} />
+    : null;
+  if (!arrivedAt || !Number.isFinite(Date.parse(arrivedAt))) {
+    return showWaitingWarning ? delay : null;
+  }
   const early = Date.parse(arrivedAt) < Date.parse(startDate);
   return (
     <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium tabular-nums text-[#594653]">
@@ -1208,7 +1234,7 @@ function AppointmentArrivalTiming({ arrivedAt, startDate, dateKey, waiting }: {
         Arrivata alle <time dateTime={arrivedAt}>{formatTime(arrivedAt)}</time>
       </span>
       {early ? <span className="rounded-full bg-[#DFF1E6] px-2 py-0.5 font-bold text-[#2B6248]">In anticipo</span> : null}
-      {waiting ? <LiveAppointmentDelay startDate={startDate} dateKey={dateKey} /> : null}
+      {delay}
     </span>
   );
 }
@@ -1222,7 +1248,7 @@ export function AppointmentsBrowser({
   corsoTeamOptions,
   isPC = false,
   pcLocationId = "",
-  showCashierClock = false,
+  isRepubblicaCashier = false,
   repubblicaBoard = false,
   appointmentRevision = null,
   initialSalon = "tutti",
@@ -1243,7 +1269,7 @@ export function AppointmentsBrowser({
   corsoTeamOptions: TeamOption[];
   isPC?: boolean;
   pcLocationId?: string;
-  showCashierClock?: boolean;
+  isRepubblicaCashier?: boolean;
   repubblicaBoard?: boolean;
   appointmentRevision?: string | null;
   initialSalon?: SalonFilter;
@@ -3313,19 +3339,12 @@ export function AppointmentsBrowser({
     return index;
   }, [initialBookings, paradiseNotes, visitShopifyNotes, teamByBooking]);
 
-  const bookingsBeforeHour = useMemo(() => {
+  const bookingsBeforeStatus = useMemo(() => {
     const bypassStatus = normalizedSearch && !repubblicaBoard;
-    const statusScoped = bypassStatus
-      ? initialBookings
-      : showCanceled
-        ? initialBookings.filter((booking) => booking.isCanceled)
-        : filterStatus === "all"
-          ? initialBookings
-          : initialBookings.filter((booking) => !booking.isCanceled);
     const base =
       salon === "tutti" || (bypassStatus && !pcRepubblica)
-        ? statusScoped
-        : statusScoped.filter((booking) => {
+        ? initialBookings
+        : initialBookings.filter((booking) => {
             if (booking.inferredSalon === salon || (legacyCorsoOnRepubblica && salon === "repubblica" && booking.inferredSalon === "buenos-aires")) return true;
             // Also include if assigned teammate belongs to current salon
             const team = getBookingTeam(booking);
@@ -3378,30 +3397,17 @@ export function AppointmentsBrowser({
             return true;
           });
 
-    const appointmentStatusScoped =
-      bypassStatus || filterStatus === "all"
-        ? paymentScoped
-        : paymentScoped.filter((booking) => {
-            const status = getBookingStatus(booking);
-            if (filterStatus === "ANNULLATO") return booking.isCanceled;
-            if (filterStatus === "ARRIVATA") {
-              return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
-            }
-            return status === filterStatus || (repubblicaBoard && filterStatus === "PRENOTATO" && status === "PAGATO");
-          });
-
     return normalizedSearch
-      ? appointmentStatusScoped.filter((booking) =>
+      ? paymentScoped.filter((booking) =>
           (bookingSearchIndex.get(booking.id) || "").includes(normalizedSearch),
         )
-      : appointmentStatusScoped;
+      : paymentScoped;
   }, [
     bookingSearchIndex,
     corsoTeamOptions,
     dateFilter,
     filterStaff,
     filterPayment,
-    filterStatus,
     initialBookings,
     legacyCorsoOnRepubblica,
     normalizedSearch,
@@ -3409,10 +3415,36 @@ export function AppointmentsBrowser({
     repubblicaBoard,
     repubblicaWorkersByBooking,
     salon,
-    showCanceled,
-    statusByBooking,
     teamByBooking,
   ]);
+
+  const bookingsBeforeHour = useMemo(() => {
+    if (normalizedSearch && !repubblicaBoard) return bookingsBeforeStatus;
+    const bookingScope = showCanceled
+      ? bookingsBeforeStatus.filter((booking) => booking.isCanceled)
+      : filterStatus === "all"
+        ? bookingsBeforeStatus
+        : bookingsBeforeStatus.filter((booking) => !booking.isCanceled);
+    if (filterStatus === "all") return bookingScope;
+
+    return bookingScope.filter((booking) => {
+      const status = getBookingStatus(booking);
+      if (filterStatus === "ANNULLATO") return booking.isCanceled;
+      if (filterStatus === "ARRIVATA") {
+        return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
+      }
+      if (filterStatus === "IN_ATTESA") return normalizeAppointmentStatus(status) === "IN_ATTESA";
+      return status === filterStatus || (repubblicaBoard && filterStatus === "PRENOTATO" && status === "PAGATO");
+    });
+  }, [bookingsBeforeStatus, filterStatus, normalizedSearch, repubblicaBoard, showCanceled, statusByBooking]);
+
+  const cashierVisits = useMemo(() => isRepubblicaCashier
+    ? appointmentVisits(bookingsBeforeStatus.filter((booking) => !booking.isCanceled))
+    : [], [bookingsBeforeStatus, isRepubblicaCashier]);
+  const cashierWaitingCount = useMemo(() => cashierVisits.filter((visit) => visit.some((booking) =>
+    (!filterHour || bookingHours.get(booking.id) === filterHour) &&
+    normalizeAppointmentStatus(getBookingStatus(booking)) === "IN_ATTESA",
+  )).length, [bookingHours, cashierVisits, filterHour, statusByBooking]);
 
   const agendaHourOptions = useMemo(() => {
     if (!repubblicaBoard) return [];
@@ -3897,7 +3929,8 @@ export function AppointmentsBrowser({
       arrivedAt={change ? change.arrivedAt : booking.arrivedAt ?? null}
       startDate={booking.startDate}
       dateKey={getBookingDateKey(booking)}
-      waiting={status === "IN_ATTESA"}
+      waiting={normalizeAppointmentStatus(status) === "IN_ATTESA"}
+      showWaitingWarning={isRepubblicaCashier}
     />;
   }
 
@@ -6305,18 +6338,26 @@ export function AppointmentsBrowser({
                 if (searchPanelOpen) setSearchTerm("");
                 else requestAnimationFrame(() => document.getElementById("appointments-client-search")?.focus());
               }}
-              showCashierClock={showCashierClock}
+              showCashierClock={isRepubblicaCashier}
               operatorAction={isPC && pcActiveWorker ? { name: pcActiveWorker.name, onChange: () => { void handlePcLogout(); } } : undefined}
               searchField={searchPanelOpen ? <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} plain /> : null}
               workerValue={filterStaff}
               workerOptions={agendaWorkerOptions}
               onWorkerChange={setFilterStaff}
               statusValue={filterStatus}
-              statusOptions={agendaStatusOptions}
+              statusOptions={isRepubblicaCashier ? cashierAgendaStatusOptions : agendaStatusOptions}
               onStatusChange={(value) => {
                 setFilterStatus(value);
                 setShowCanceled(value === "ANNULLATO");
               }}
+              waitingFilter={isRepubblicaCashier ? {
+                count: cashierWaitingCount,
+                active: filterStatus === "IN_ATTESA",
+                toggle: () => {
+                  setFilterStatus(filterStatus === "IN_ATTESA" ? "all" : "IN_ATTESA");
+                  setShowCanceled(false);
+                },
+              } : undefined}
               canReset={Boolean(activeAdvancedFilterCount || filterHour || searchTerm || (!isPC && salon !== agendaDefaultSalon))}
               onReset={() => {
                 setFilterStaff("all");

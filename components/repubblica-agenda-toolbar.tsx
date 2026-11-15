@@ -48,6 +48,7 @@ type RepubblicaAgendaToolbarProps = {
   statusValue: string;
   statusOptions: FilterOption[];
   onStatusChange: (value: string) => void;
+  waitingFilter?: { count: number; active: boolean; toggle: () => void };
   canReset: boolean;
   onReset: () => void;
   hideOffShift: boolean;
@@ -204,6 +205,7 @@ export function RepubblicaAgendaToolbar({
   statusValue,
   statusOptions,
   onStatusChange,
+  waitingFilter,
   canReset,
   onReset,
   hideOffShift,
@@ -428,6 +430,20 @@ export function RepubblicaAgendaToolbar({
             ))}
           </select>
         </label>
+        {waitingFilter ? (
+          <button
+            type="button"
+            aria-pressed={waitingFilter.active}
+            onClick={waitingFilter.toggle}
+            className={`${controlClass} aria-pressed:border-[color:var(--agenda-accent-border)] aria-pressed:bg-[color:var(--agenda-accent-surface)] aria-pressed:text-[color:var(--agenda-accent)]`}
+          >
+            <Clock3 aria-hidden="true" className="size-4" />
+            In attesa
+            <span className="grid min-w-5 place-items-center rounded-full bg-[color:var(--agenda-count)] px-1.5 py-0.5 text-xs tabular-nums text-[color:var(--agenda-count-text)]">
+              {waitingFilter.count}
+            </span>
+          </button>
+        ) : null}
         <button type="button" className={`${controlClass} !border-transparent !bg-transparent enabled:hover:!border-[color:var(--agenda-divider)] enabled:hover:!bg-[color:var(--agenda-hover)]`} disabled={!canReset} onClick={onReset}>Azzera filtri</button>
         {layoutMode === "board" ? <button
           type="button"

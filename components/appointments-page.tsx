@@ -676,7 +676,7 @@ export default async function AppointmentsPage({
         isPC={isPC}
         arrivalOnly={arrivalOnly}
         pcLocationId={pcLocationId}
-        showCashierClock={Boolean(pcAuth && isRepubblicaPc)}
+        isRepubblicaCashier={Boolean(pcAuth && isRepubblicaPc)}
         repubblicaBoard={useRepubblicaBoard}
         appointmentRevision={appointmentRevision}
         initialSalon={initialSalon}
