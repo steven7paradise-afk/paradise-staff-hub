@@ -3446,17 +3446,22 @@ export function AppointmentsBrowser({
     normalizeAppointmentStatus(getBookingStatus(booking)) === "IN_ATTESA",
   )).length, [bookingHours, cashierVisits, filterHour, statusByBooking]);
 
-  const agendaHourOptions = useMemo(() => {
-    if (!repubblicaBoard) return [];
+  const { agendaHourOptions, totalAgendaHourCount } = useMemo(() => {
+    if (!repubblicaBoard) return { agendaHourOptions: [], totalAgendaHourCount: 0 };
     const counts = new Map(agendaHours.map((hour) => [hour, 0]));
     for (const hour of bookingHours.values()) if (!counts.has(hour)) counts.set(hour, 0);
     if (filterHour && !counts.has(filterHour)) counts.set(filterHour, 0);
+
+    let totalAgendaHourCount = 0;
     for (const booking of bookingsBeforeHour) {
+      if (booking.isCanceled) continue;
+      totalAgendaHourCount += 1;
       const hour = bookingHours.get(booking.id);
       if (hour) counts.set(hour, (counts.get(hour) ?? 0) + 1);
     }
-    return [...counts].sort(([left], [right]) => left.localeCompare(right))
+    const agendaHourOptions = [...counts].sort(([left], [right]) => left.localeCompare(right))
       .map(([value, count]) => ({ value, count }));
+    return { agendaHourOptions, totalAgendaHourCount };
   }, [bookingHours, bookingsBeforeHour, filterHour, repubblicaBoard]);
 
   const filteredBookings = useMemo(() => {
@@ -6372,7 +6377,7 @@ export function AppointmentsBrowser({
               onHideOffShiftChange={(hide) => setShowEmptyBoardWorkers(!hide)}
               offShiftHint="Nasconde le colonne senza appuntamenti del personale fuori turno."
               hours={agendaHourOptions}
-              totalHoursCount={bookingsBeforeHour.length}
+              totalHoursCount={totalAgendaHourCount}
               hourValue={filterHour}
               onHourChange={setFilterHour}
               onAdvancedOpenChange={setIsFilterModalOpen}
