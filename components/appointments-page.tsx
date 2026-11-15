@@ -347,22 +347,29 @@ export default async function AppointmentsPage({
   const appointmentRange = resolveAppointmentsRange(isRepubblicaPc ? { ...resolvedSearchParams, scope: undefined } : resolvedSearchParams);
   const useRepubblicaBoard = repubblicaBoard && (!isPC || isRepubblicaPc);
   const updateOnChange = useRepubblicaBoard && appointmentsRealtimeEnabled();
-  const [appointmentRevision, archive, localUsers, activeLocations] = await Promise.all([
-    updateOnChange ? readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end) : null,
-    readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
-      ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
-    }),
+  const [agenda, localUsers, activeLocations] = await Promise.all([
+    (async () => {
+      // A revision newer than the rendered archive can hide a booking saved during this request.
+      const revision = updateOnChange
+        ? await readAppointmentRangeRevision(appointmentRange.start, appointmentRange.end)
+        : null;
+      const archive = await readAppointmentArchive(appointmentRange.start, appointmentRange.end, {
+        ...(isArchive ? { page: Math.max(1, Number(resolvedSearchParams.page) || 1), search: String(resolvedSearchParams.q || "") } : {}),
+      });
+      return { revision, archive };
+    })(),
     prisma.user.findMany({
       where: { active: true },
       select: { id: true, name: true, role: true, photo_url: true, mansione: true, sede_id: true, location: { select: { active: true, name: true } } },
     }),
     locations ?? locationsPromise,
   ]);
+  const { revision: appointmentRevision, archive } = agenda;
   if (hasCowlendarToken()) after(async () => {
     const today = appointmentDateKey();
-    if (appointmentRange.start <= today && today <= appointmentRange.end &&
-      (forceRefresh || archive.failed || archive.invalidated || !archive.ready)) {
-      await scheduleTodayAppointmentRecovery();
+    if (appointmentRange.start <= today && today <= appointmentRange.end) {
+      const recovery = await scheduleTodayAppointmentRecovery();
+      if (recovery.status === "rate-limited") return;
     }
     for (const month of archive.months) await scheduleAppointmentArchive(month, forceRefresh);
   });

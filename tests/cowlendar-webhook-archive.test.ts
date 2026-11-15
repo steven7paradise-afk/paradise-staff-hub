@@ -16,11 +16,12 @@ const booking = {
 
 test("only a full booking snapshot can write through, and archive metadata never comes from the event", () => {
   const parsed = parseCowlendarWebhookBooking({
-    ...booking, archiveOrderName: "incoming value", archiveWebhookUpdatedAt: 99,
+    ...booking, archiveOrderName: "incoming value", archiveWebhookUpdatedAt: 99, archiveDayUpdatedAt: 100,
   }, "booking.created");
   assert.ok(parsed);
   assert.equal("archiveOrderName" in parsed, false);
   assert.equal("archiveWebhookUpdatedAt" in parsed, false);
+  assert.equal("archiveDayUpdatedAt" in parsed, false);
   assert.equal(parseCowlendarWebhookBooking({ ...booking, customer: undefined }, "booking.created"), null);
   assert.equal(parseCowlendarWebhookBooking({ ...booking, updated_at: "yesterday" }, "booking.created"), null);
   assert.equal(parseCowlendarWebhookBooking(booking, "booking.canceled"), null);
@@ -83,14 +84,17 @@ test("write-through notifies after the archive write without invalidating the mo
   assert.deepEqual(actions, ["deduplicated", "booking", "locked booking"]);
 });
 
-test("a stale write-through cannot overwrite a newer result from the normal import", async () => {
+test("a stale write-through cannot overwrite a newer result from recovery even with an older webhook marker", async () => {
   const parsed = parseCowlendarWebhookBooking(booking, "booking.created");
   assert.ok(parsed);
   const writes: string[] = [];
   assert.equal(await applyCowlendarWebhookBooking(
     {
       $executeRaw: async (strings: TemplateStringsArray) => { writes.push(strings.join("")); return 0; },
-      $queryRaw: async () => [{ payload: { updated_at: "2026-11-14T09:11:00+01:00" } }],
+      $queryRaw: async () => [{ payload: {
+        updated_at: "2026-11-14T09:11:00+01:00",
+        archiveWebhookUpdatedAt: Date.parse("2026-11-14T08:09:00Z"),
+      } }],
     } as unknown as Parameters<typeof applyCowlendarWebhookBooking>[0],
     parsed, new Date("2026-11-14T09:00:00Z"),
   ), false);

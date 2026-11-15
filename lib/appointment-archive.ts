@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "./appointment-realtime";
@@ -6,13 +7,26 @@ import { APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX, archiveMonths, archiveSearch
 import { cowlendarRateLimitDelay, getCompleteCowlendarBookingsForRange, type CowlendarBooking } from "./cowlendar";
 import { getShopifyOrderNamesBulk } from "./shopify";
 import { getAppointmentStatusesFromGoogleSheet } from "./google-sheet";
-import { COWLENDAR_WEBHOOK_VERSION_FIELD, cowlendarArchiveVersion, cowlendarWebhookVersion } from "./cowlendar-webhook-archive";
+import {
+  COWLENDAR_DAY_VERSION_FIELD,
+  COWLENDAR_WEBHOOK_VERSION_FIELD,
+  cowlendarArchiveProtectionVersion,
+  cowlendarArchiveVersion,
+  cowlendarSavedArchiveVersion,
+} from "./cowlendar-webhook-archive";
 
 // One import per process; database leases also prevent duplicate work across replicas.
 let queue = Promise.resolve();
 const queued = new Set<string>();
-let pendingTodayRecovery: Promise<number> | null = null;
-let nextTodayRecovery = 0;
+type DayRecoveryResult = {
+  status: "completed" | "cooldown" | "rate-limited" | "failed";
+  changed?: number;
+};
+
+let pendingTodayRecovery: Promise<DayRecoveryResult> | null = null;
+let dayRecoveryCooldown: { until: number; status: "cooldown" | "rate-limited" } | null = null;
+const DAY_RECOVERY_KEY = "appointment_archive_day_recovery";
+const DAY_RECOVERY_INTERVAL_MS = 60_000;
 const FRESH_MS = 5 * 60_000;
 const LEASE_MS = 5 * 60_000;
 const STALE_LEASE = new Date(0);
@@ -53,6 +67,12 @@ async function importAppointmentArchive(month: string, force: boolean) {
         AND (${force} OR completed_at IS NULL
           OR completed_at < ${new Date(now.getTime() - FRESH_MS)}
           OR lease_until = ${STALE_LEASE})
+        AND NOT EXISTS (
+          SELECT 1 FROM settings AS recovery
+          WHERE recovery.key = ${DAY_RECOVERY_KEY}
+            AND recovery.value ->> 'rateLimited' = 'true'
+            AND (recovery.value ->> 'until')::bigint > ${now.getTime()}::bigint
+        )
       FOR UPDATE
     )
     UPDATE appointment_archive_sync AS archive
@@ -86,6 +106,7 @@ async function importAppointmentArchive(month: string, force: boolean) {
     const rows = bookings.map(b => {
       const payload: CowlendarBooking = { ...b, archiveOrderName: names.get(String(b.order_id)) || null };
       delete payload[COWLENDAR_WEBHOOK_VERSION_FIELD];
+      delete payload[COWLENDAR_DAY_VERSION_FIELD];
       return { id: String(b.id), start_at: b.start_date,
         source_version: cowlendarArchiveVersion(b.updated_at),
         search_text: archiveSearchText(b, names.get(String(b.order_id)) || ""),
@@ -105,11 +126,11 @@ async function importAppointmentArchive(month: string, force: boolean) {
         return "invalidated";
       }
 
-      // A signed webhook is authoritative until the normal list has caught up.
-      // Compare the same rows the transaction can overwrite.
+      // Monthly responses must catch up to a signed webhook or day recovery
+      // before replacing their data or dropping a booking missing from the list.
       const sourceCaughtUp = (saved: Prisma.Sql, sourceVersion: Prisma.Sql) => Prisma.sql`(
-        ${cowlendarWebhookVersion(saved)} IS NULL OR
-        ${sourceVersion} >= ${cowlendarWebhookVersion(saved)}
+        ${cowlendarArchiveProtectionVersion(saved)} IS NULL OR
+        ${sourceVersion} >= ${cowlendarArchiveProtectionVersion(saved)}
       )`;
       const [comparison] = await tx.$queryRaw<{ changed: boolean }[]>`
         WITH incoming AS MATERIALIZED (
@@ -122,7 +143,7 @@ async function importAppointmentArchive(month: string, force: boolean) {
             WHERE a.id IS NULL OR (a.synced_at <= ${now}
               AND ${sourceCaughtUp(Prisma.sql`a.payload`, Prisma.sql`r.source_version`)} AND (
               a.start_at IS DISTINCT FROM r.start_at
-              OR (a.payload - 'archiveOrderName' - ${COWLENDAR_WEBHOOK_VERSION_FIELD}::text) IS DISTINCT FROM (r.payload - 'archiveOrderName')
+              OR (a.payload - 'archiveOrderName' - ${COWLENDAR_WEBHOOK_VERSION_FIELD}::text - ${COWLENDAR_DAY_VERSION_FIELD}::text) IS DISTINCT FROM (r.payload - 'archiveOrderName')
               OR (r.payload->>'archiveOrderName' IS NOT NULL
                 AND a.payload->>'archiveOrderName' IS DISTINCT FROM r.payload->>'archiveOrderName')
               OR (NULLIF(r.sheet, 'null'::jsonb) IS NOT NULL
@@ -150,7 +171,14 @@ async function importAppointmentArchive(month: string, force: boolean) {
       const removed = await tx.appointmentArchive.deleteMany({ where: {
         start_at: { gte: new Date(appointmentDayBoundaryIso(range.start)), lte: new Date(appointmentDayBoundaryIso(range.end, true)) },
         synced_at: { lt: now },
-        NOT: { payload: { path: [COWLENDAR_WEBHOOK_VERSION_FIELD], not: Prisma.AnyNull } },
+        NOT: [
+          { payload: { path: [COWLENDAR_WEBHOOK_VERSION_FIELD], not: Prisma.AnyNull } },
+          // Allow a later complete import to remove a booking deleted upstream.
+          {
+            synced_at: { gte: new Date(now.getTime() - FRESH_MS) },
+            payload: { path: [COWLENDAR_DAY_VERSION_FIELD], not: Prisma.AnyNull },
+          },
+        ],
       } });
       await tx.appointmentArchiveSync.update({ where: { month }, data: { completed_at: new Date(), lease_until: null, error: false } });
       if (previous.error) await tx.setting.deleteMany({ where: { key: rateLimitKey } });
@@ -191,7 +219,7 @@ export function scheduleAppointmentArchive(month: string, force = false) {
   return queue;
 }
 
-/** Recover new bookings without deleting rows or marking the monthly import complete. */
+/** Merge today's upstream data without deleting visits or changing local service data. */
 export async function recoverAppointmentArchiveDay(day: string) {
   const start = appointmentDayBoundaryIso(day);
   const end = appointmentDayBoundaryIso(addAppointmentDays(day, 1));
@@ -202,45 +230,133 @@ export async function recoverAppointmentArchiveDay(day: string) {
 
   const existing = await prisma.appointmentArchive.findMany({
     where: { id: { in: bookings.map(booking => String(booking.id)) } },
-    select: { id: true },
+    select: { id: true, payload: true },
   });
-  const existingIds = new Set(existing.map(row => row.id));
-  const missing = bookings.filter(booking => !existingIds.has(String(booking.id)));
-  if (!missing.length) return 0;
+  const savedById = new Map(existing.map(row => [row.id, row.payload]));
+  const changes = bookings.flatMap<{ booking: CowlendarBooking; saved: Prisma.JsonValue | undefined }>(booking => {
+    const saved = savedById.get(String(booking.id));
+    if (saved === undefined) return [{ booking, saved: undefined }];
+    const previousVersion = cowlendarSavedArchiveVersion(saved);
+    const nextVersion = cowlendarArchiveVersion(booking.updated_at);
+    return previousVersion !== null && nextVersion !== null && nextVersion > previousVersion
+      ? [{ booking, saved }] : [];
+  });
+  if (!changes.length) return 0;
 
   const names = await bounded(
-    getShopifyOrderNamesBulk(missing.map(booking => booking.order_id)).catch(() => new Map<string, string>()),
+    getShopifyOrderNamesBulk(changes.map(({ booking }) => booking.order_id)).catch(() => new Map<string, string>()),
     new Map<string, string>(), 3_500,
   );
   const syncedAt = new Date();
+  const rows = changes.map(({ booking, saved }) => {
+    const oldBooking = saved && typeof saved === "object" && !Array.isArray(saved)
+      ? saved as Record<string, Prisma.JsonValue> : null;
+    const previousOrderName = oldBooking && String(booking.order_id ?? "") === String(oldBooking.order_id ?? "")
+      && typeof oldBooking.archiveOrderName === "string" ? oldBooking.archiveOrderName : null;
+    const orderName = names.get(String(booking.order_id)) || previousOrderName;
+    const upstream = { ...booking };
+    delete upstream[COWLENDAR_WEBHOOK_VERSION_FIELD];
+    delete upstream[COWLENDAR_DAY_VERSION_FIELD];
+    const sourceVersion = cowlendarArchiveVersion(booking.updated_at);
+    const payload = {
+      ...oldBooking, ...upstream, archiveOrderName: orderName,
+      ...(sourceVersion === null ? {} : { [COWLENDAR_DAY_VERSION_FIELD]: sourceVersion }),
+    };
+    return {
+      saved,
+      data: {
+        id: String(booking.id),
+        start_at: new Date(booking.start_date),
+        search_text: archiveSearchText(payload, orderName || ""),
+        payload: payload as Prisma.InputJsonValue,
+        synced_at: syncedAt,
+      },
+    };
+  });
   return prisma.$transaction(async tx => {
-    const result = await tx.appointmentArchive.createMany({
-      data: missing.map(booking => {
-        const orderName = names.get(String(booking.order_id)) || null;
-        return {
-          id: String(booking.id),
-          start_at: new Date(booking.start_date),
-          search_text: archiveSearchText(booking, orderName || ""),
-          payload: { ...booking, archiveOrderName: orderName } as Prisma.InputJsonValue,
-          synced_at: syncedAt,
-        };
-      }),
-      skipDuplicates: true,
-    });
-    if (result.count) await publishAppointmentChange(tx);
-    return result.count;
+    const additions = rows.filter(row => row.saved === undefined);
+    let changed = additions.length
+      ? (await tx.appointmentArchive.createMany({ data: additions.map(row => row.data), skipDuplicates: true })).count
+      : 0;
+    for (const { saved, data: { id, ...data } } of rows) {
+      if (saved === undefined) continue;
+      // Compare the source row again while writing. A concurrent webhook or
+      // monthly import that changed the same booking gets to keep its version.
+      changed += (await tx.appointmentArchive.updateMany({
+        where: { id, payload: { equals: saved ?? Prisma.JsonNull } },
+        data,
+      })).count;
+    }
+    if (changed) await publishAppointmentChange(tx);
+    return changed;
   });
 }
 
-export function scheduleTodayAppointmentRecovery() {
-  if (pendingTodayRecovery) return pendingTodayRecovery;
-  if (Date.now() < nextTodayRecovery) return Promise.resolve(0);
+async function recoverTodayWithLease(): Promise<DayRecoveryResult> {
+  const now = Date.now();
+  const lease = { token: randomUUID(), until: now + DAY_RECOVERY_INTERVAL_MS };
+  // Reserve a short database lease before calling Cowlendar. Tabs and
+  // replicas therefore share the same request and the same 429 cooldown.
+  const [claim] = await prisma.$queryRaw<{ claimed: boolean; until: number | null; rate_limited: boolean }[]>`
+    WITH monthly_rate_limit AS (
+      SELECT MAX(EXTRACT(EPOCH FROM archive.lease_until) * 1000)::double precision AS until
+      FROM appointment_archive_sync AS archive
+      INNER JOIN settings AS reason ON reason.key = ${APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX} || archive.month
+      WHERE archive.error AND archive.lease_until > ${new Date(now)}
+    ), taken AS (
+      INSERT INTO settings (id, key, value)
+      SELECT ${lease.token}, ${DAY_RECOVERY_KEY}, ${JSON.stringify(lease)}::jsonb
+      FROM monthly_rate_limit WHERE until IS NULL
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+      WHERE (settings.value ->> 'until')::bigint <= ${now}::bigint
+      RETURNING 1
+    )
+    SELECT EXISTS (SELECT 1 FROM taken) AS claimed,
+      GREATEST(monthly_rate_limit.until, (recovery.value ->> 'until')::double precision) AS until,
+      (monthly_rate_limit.until IS NOT NULL OR COALESCE(
+        recovery.value ->> 'rateLimited' = 'true' AND (recovery.value ->> 'until')::bigint > ${now}::bigint, false
+      )) AS rate_limited
+    FROM monthly_rate_limit LEFT JOIN settings AS recovery ON recovery.key = ${DAY_RECOVERY_KEY}
+  `;
 
-  nextTodayRecovery = Date.now() + 60_000;
-  pendingTodayRecovery = recoverAppointmentArchiveDay(appointmentDateKey())
-    .catch(() => {
+  if (!claim?.claimed) {
+    const status = claim?.rate_limited ? "rate-limited" : "cooldown";
+    dayRecoveryCooldown = { until: Math.max(claim?.until ?? now, now + 5_000), status };
+    return { status };
+  }
+
+  dayRecoveryCooldown = { until: lease.until, status: "cooldown" };
+  try {
+    const changed = await recoverAppointmentArchiveDay(appointmentDateKey(new Date(now)));
+    return { status: "completed", changed };
+  } catch (error) {
+    const retry = cowlendarRateLimitDelay(error);
+    if (retry === null) {
       console.error("Recupero degli appuntamenti di oggi non riuscito.");
-      return 0;
+      return { status: "failed" };
+    }
+    const until = Math.max(lease.until, Date.now() + retry);
+    dayRecoveryCooldown = { until, status: "rate-limited" };
+    await prisma.setting.updateMany({
+      where: { key: DAY_RECOVERY_KEY, value: { path: ["token"], equals: lease.token } },
+      data: { value: { ...lease, until, rateLimited: true } },
+    });
+    return { status: "rate-limited" };
+  }
+}
+
+export function scheduleTodayAppointmentRecovery(): Promise<DayRecoveryResult> {
+  if (pendingTodayRecovery) return pendingTodayRecovery;
+  if (dayRecoveryCooldown && Date.now() < dayRecoveryCooldown.until) {
+    return Promise.resolve({ status: dayRecoveryCooldown.status });
+  }
+  pendingTodayRecovery = recoverTodayWithLease()
+    .catch(() => {
+      if (!dayRecoveryCooldown || dayRecoveryCooldown.until <= Date.now()) {
+        dayRecoveryCooldown = { until: Date.now() + 5_000, status: "cooldown" };
+      }
+      console.error("Coordinamento del recupero degli appuntamenti non disponibile.");
+      return { status: "failed" } as const;
     })
     .finally(() => { pendingTodayRecovery = null; });
   return pendingTodayRecovery;

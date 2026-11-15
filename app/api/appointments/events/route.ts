@@ -62,6 +62,16 @@ export async function GET(request: NextRequest) {
     try { months = archiveMonths(from, to); } catch { return new Response(null, { status: 400 }); }
   }
   const range = from && to ? { from, to } : null;
+  const reconcileAfterToday = (reconcile: () => void) => {
+    const today = appointmentDateKey();
+    if (!range || today < range.from || today > range.to || !hasCowlendarToken()) {
+      reconcile();
+      return;
+    }
+    void scheduleTodayAppointmentRecovery().then(({ status }) => {
+      if (status !== "rate-limited") reconcile();
+    }).catch(() => {});
+  };
   const token = request.cookies.get(appointmentsPcCookieName)?.value;
   const workerCookie = request.cookies.get(appointmentsPcWorkerCookieName)?.value;
   const cashierScope = request.nextUrl.searchParams.get("scope") === "cashier";
@@ -167,12 +177,7 @@ export async function GET(request: NextRequest) {
       client.on("notification", (message) => {
         if (!/^[a-f0-9-]{36}$/.test(message.payload || "")) return;
         if (message.channel === APPOINTMENT_ARCHIVE_INVALIDATION_CHANNEL) {
-          const today = appointmentDateKey();
-          if (range && range.from <= today && today <= range.to && hasCowlendarToken()) {
-            void scheduleTodayAppointmentRecovery().then(() => scheduleInvalidatedMonths(months));
-          } else {
-            scheduleInvalidatedMonths(months);
-          }
+          reconcileAfterToday(() => scheduleInvalidatedMonths(months));
           return;
         }
         if (appointmentRevision === undefined) {
@@ -197,10 +202,12 @@ export async function GET(request: NextRequest) {
       });
 
       // Recheck invalidated months on reconnect in case a webhook arrived while offline.
-      scheduleInvalidatedMonths(months);
+      reconcileAfterToday(() => {
+        scheduleInvalidatedMonths(months);
+        reconcileVisibleMonths(months);
+      });
       await sendCurrentRevisions();
       if (closed) return;
-      reconcileVisibleMonths(months);
       // Keepalive does not send a new agenda revision.
       let checking = false;
       heartbeat = setInterval(async () => {
@@ -209,7 +216,8 @@ export async function GET(request: NextRequest) {
         try {
           if (!await authorized()) { close(); return; }
           if (!closed) {
-            reconcileVisibleMonths(months);
+            // Shared cooldown makes this a fallback when Cowlendar misses a notification.
+            reconcileAfterToday(() => reconcileVisibleMonths(months));
             controller.enqueue(encoder.encode(": keepalive\n\n"));
           }
         } catch { close(); } finally { checking = false; }

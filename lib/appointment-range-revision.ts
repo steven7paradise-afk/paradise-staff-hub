@@ -3,7 +3,7 @@ import { APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX, archiveMonths } from "./appo
 import { addAppointmentDays, appointmentDayBoundaryIso, isAppointmentDateKey } from "./appointment-date";
 import { appointmentsRealtimeEnabled } from "./appointment-realtime";
 import { prisma } from "./prisma";
-import { COWLENDAR_WEBHOOK_VERSION_FIELD } from "./cowlendar-webhook-archive";
+import { COWLENDAR_DAY_VERSION_FIELD, COWLENDAR_WEBHOOK_VERSION_FIELD } from "./cowlendar-webhook-archive";
 
 export type AppointmentAgendaRange = { from: string; to: string };
 export type AppointmentAgendaRevision = { before: string; after: string };
@@ -33,7 +33,7 @@ async function readRangeRevisions(
     WITH bookings AS (
       SELECT booking.id, status.value -> booking.id AS saved_status,
         EXTRACT(EPOCH FROM booking.start_at) AS starts_at,
-        booking.payload - 'updated_at' - ${COWLENDAR_WEBHOOK_VERSION_FIELD}::text AS payload,
+        booking.payload - 'updated_at' - ${COWLENDAR_WEBHOOK_VERSION_FIELD}::text - ${COWLENDAR_DAY_VERSION_FIELD}::text AS payload,
         CASE WHEN jsonb_typeof(booking.sheet) = 'object' THEN booking.sheet - 'updatedAt' END AS sheet,
         (team.value -> booking.id) -> 'teammates' AS saved_team,
         CASE WHEN jsonb_typeof(bot.value -> booking.id) = 'object'

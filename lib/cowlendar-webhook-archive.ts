@@ -3,6 +3,7 @@ import type { CowlendarBooking } from "./cowlendar";
 import { archiveSearchText } from "./appointment-archive-range";
 
 export const COWLENDAR_WEBHOOK_VERSION_FIELD = "archiveWebhookUpdatedAt";
+export const COWLENDAR_DAY_VERSION_FIELD = "archiveDayUpdatedAt";
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -51,6 +52,7 @@ export function parseCowlendarWebhookBooking(data: unknown, type: string) {
   const source = { ...booking };
   delete source.archiveOrderName;
   delete source[COWLENDAR_WEBHOOK_VERSION_FIELD];
+  delete source[COWLENDAR_DAY_VERSION_FIELD];
   return source as CowlendarBooking & { updated_at: string };
 }
 
@@ -58,11 +60,22 @@ export function cowlendarArchiveVersion(value: unknown) {
   return dateTime(value) ? Date.parse(value) : null;
 }
 
-export function cowlendarWebhookVersion(payload: Prisma.Sql) {
-  return Prisma.sql`CASE
-    WHEN jsonb_typeof(${payload}->${COWLENDAR_WEBHOOK_VERSION_FIELD}::text) = 'number'
-    THEN (${payload}->>${COWLENDAR_WEBHOOK_VERSION_FIELD}::text)::numeric
+export function cowlendarSavedArchiveVersion(payload: unknown) {
+  const saved = object(payload);
+  const observed = [
+    cowlendarArchiveVersion(saved?.updated_at),
+    saved?.[COWLENDAR_WEBHOOK_VERSION_FIELD],
+    saved?.[COWLENDAR_DAY_VERSION_FIELD],
+  ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return observed.length ? Math.max(...observed) : null;
+}
+
+export function cowlendarArchiveProtectionVersion(payload: Prisma.Sql) {
+  const numericField = (field: string) => Prisma.sql`CASE
+    WHEN jsonb_typeof(${payload}->${field}::text) = 'number'
+    THEN (${payload}->>${field}::text)::numeric
     ELSE NULL END`;
+  return Prisma.sql`GREATEST(${numericField(COWLENDAR_WEBHOOK_VERSION_FIELD)}, ${numericField(COWLENDAR_DAY_VERSION_FIELD)})`;
 }
 
 /** Apply one authenticated upstream booking without spending the GET quota. */
@@ -90,9 +103,7 @@ export async function applyCowlendarWebhookBooking(
     if (!saved) continue;
 
     const payload = object(saved.payload);
-    const marker = payload?.[COWLENDAR_WEBHOOK_VERSION_FIELD];
-    const savedVersion = typeof marker === "number" && Number.isFinite(marker)
-      ? marker : cowlendarArchiveVersion(payload?.updated_at);
+    const savedVersion = cowlendarSavedArchiveVersion(payload);
     // Equal versions are ambiguous and can be resolved by the normal import.
     if (savedVersion !== null && savedVersion >= sourceVersion) return false;
 
