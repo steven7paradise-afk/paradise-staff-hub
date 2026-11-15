@@ -37,6 +37,7 @@ test("concurrent status saves keep each booking and its latest service timing", 
     CREATE TABLE ${schema}.appointment_archive_sync (
       month text PRIMARY KEY,
       completed_at timestamptz,
+      lease_until timestamptz,
       error boolean NOT NULL DEFAULT false
     );
   `);
@@ -155,6 +156,22 @@ test("concurrent status saves keep each booking and its latest service timing", 
   const followingDay = "2026-11-15";
   const readVisibleRevision = () => readAppointmentRangeRevision(agendaRange.from, agendaRange.to);
   const readFollowingRevision = () => readAppointmentRangeRevision(followingDay, followingDay);
+
+  await t.test("the rate limit revision changes when the recorded pause expires", async () => {
+    await maintenance.query(`
+      INSERT INTO ${schema}.appointment_archive_sync (month, completed_at, lease_until, error)
+      VALUES ('2026-11', now(), now() + interval '5 minutes', true);
+      INSERT INTO ${schema}.settings (id, key, value)
+      VALUES ('archive-limit', 'appointment_archive_rate_limited:2026-11', 'true')
+    `);
+    const limited = await readVisibleRevision();
+    await maintenance.query(`
+      UPDATE ${schema}.appointment_archive_sync
+      SET lease_until = now() - interval '1 second'
+      WHERE month = '2026-11'
+    `);
+    assert.notEqual(await readVisibleRevision(), limited);
+  });
 
   await t.test("an arrival rejected by the locked status does not undo a completed service", async () => {
     const before = await readVisibleRevision();

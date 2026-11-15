@@ -72,7 +72,7 @@ async function readRangeRevisions(
       FROM changes
     ), health AS (
         SELECT CASE
-          WHEN bool_or(archive.error AND rate_limit.key IS NOT NULL) THEN 'rate-limited'
+          WHEN bool_or(archive.error AND archive.lease_until > CURRENT_TIMESTAMP AND rate_limit.key IS NOT NULL) THEN 'rate-limited'
           WHEN bool_or(archive.error) THEN 'failed'
           WHEN count(completed_at) = ${months.length}::integer THEN 'ready'
           ELSE 'loading'

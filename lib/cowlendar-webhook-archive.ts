@@ -120,7 +120,9 @@ export async function applyCowlendarWebhookBooking(
   { booking, sourceVersion, insertOnly }: ParsedWebhookBooking,
   receivedAt: Date,
 ): Promise<boolean | null> {
-  const data = { ...booking, [COWLENDAR_WEBHOOK_VERSION_FIELD]: sourceVersion };
+  // A later event timestamp is not the record's update time in the public API.
+  const savedSourceVersion = insertOnly ? cowlendarArchiveVersion(booking.created_at) : sourceVersion;
+  const data = savedSourceVersion === null ? booking : { ...booking, [COWLENDAR_WEBHOOK_VERSION_FIELD]: savedSourceVersion };
   const startAt = new Date(booking.start_date);
   const canInsert = nonemptyString(booking.service?.id) && nonemptyString(booking.service?.title) && (
     nonemptyString(booking.customer?.name) || nonemptyString(booking.customer?.email) || nonemptyString(booking.customer?.phone) ||

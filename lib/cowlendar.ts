@@ -391,6 +391,8 @@ export async function updateCowlendarBookingStatus(bookingId: string, status: Co
       if (response.status === 401 || response.status === 403 || response.status === 429) {
         throw new Error(lastError);
       }
+      // A missing route cannot accept any payload at this path.
+      if (response.status === 404 || response.status === 405) break;
     }
   }
 
@@ -441,6 +443,8 @@ export async function updateCowlendarBookingTeam(bookingId: string, teammateIds:
       if (response.status === 401 || response.status === 403 || response.status === 429) {
         throw new Error(lastError);
       }
+      // A missing route cannot accept any payload at this path.
+      if (response.status === 404 || response.status === 405) break;
     }
   }
 

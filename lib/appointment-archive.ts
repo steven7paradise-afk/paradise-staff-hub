@@ -4,7 +4,7 @@ import { prisma } from "./prisma";
 import { APPOINTMENT_ARCHIVE_INVALIDATION_KEY, publishAppointmentChange } from "./appointment-realtime";
 import { addAppointmentDays, appointmentDateKey, appointmentDayBoundaryIso, appointmentMonthRange } from "./appointment-date";
 import { APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX, archiveMonths, archiveSearchText } from "./appointment-archive-range";
-import { cowlendarRateLimitDelay, getCompleteCowlendarBookingsForRange, type CowlendarBooking } from "./cowlendar";
+import { cowlendarRateLimitDelay, cowlendarSharedRateLimitUntil, getCompleteCowlendarBookingsForRange, type CowlendarBooking } from "./cowlendar";
 import { getShopifyOrderNamesBulk } from "./shopify";
 import { getAppointmentStatusesFromGoogleSheet } from "./google-sheet";
 import {
@@ -26,7 +26,7 @@ type DayRecoveryResult = {
 let pendingTodayRecovery: Promise<DayRecoveryResult> | null = null;
 let dayRecoveryCooldown: { until: number; status: "cooldown" | "rate-limited" } | null = null;
 const DAY_RECOVERY_KEY = "appointment_archive_day_recovery";
-const DAY_RECOVERY_INTERVAL_MS = 60_000;
+const DAY_RECOVERY_INTERVAL_MS = 5 * 60_000;
 const FRESH_MS = 5 * 60_000;
 const LEASE_MS = 5 * 60_000;
 const STALE_LEASE = new Date(0);
@@ -52,6 +52,7 @@ async function bounded<T>(work: Promise<T>, fallback: T, ms: number): Promise<T>
 }
 
 async function importAppointmentArchive(month: string, force: boolean) {
+  if (await cowlendarSharedRateLimitUntil()) return "skipped";
   const range = appointmentMonthRange(`${month}-01`);
   const now = new Date();
   const lease = new Date(now.getTime() + LEASE_MS);
@@ -377,9 +378,11 @@ export async function readAppointmentArchive(start: string, end: string, options
     }),
     prisma.appointmentArchiveSync.findMany({ where: { month: { in: months } } }),
   ]);
-  const failedMonths = sync.filter(s => s.error).map(s => s.month);
-  const rateLimited = failedMonths.length > 0 && Boolean(await prisma.setting.count({
-    where: { key: { in: failedMonths.map(month => `${APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX}${month}`) } },
+  const now = Date.now();
+  const failedMonths = sync.filter(s => s.error);
+  const waitingMonths = failedMonths.filter(s => s.lease_until && s.lease_until.getTime() > now);
+  const rateLimited = waitingMonths.length > 0 && Boolean(await prisma.setting.count({
+    where: { key: { in: waitingMonths.map(({ month }) => `${APPOINTMENT_ARCHIVE_RATE_LIMIT_KEY_PREFIX}${month}`) } },
   }));
   const invalidated = sync.some(s => s.lease_until?.getTime() === STALE_LEASE.getTime());
   return { bookings: rows.map(r => r.payload as unknown as CowlendarBooking),

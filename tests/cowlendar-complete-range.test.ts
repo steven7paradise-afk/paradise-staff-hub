@@ -132,3 +132,16 @@ test("the overall deadline aborts an upstream retry", async (t) => {
   await assert.rejects(getCompleteCowlendarBookingsForRange(start, end, controller.signal), { name: "AbortError" });
   assert.equal(fetchMock.mock.callCount(), 1);
 });
+
+
+test("a missing update route is not retried with alternative bodies", async (t) => {
+  withTestToken(t);
+  const requests: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    requests.push(new URL(input).pathname);
+    return new Response(null, { status: 404 });
+  });
+
+  await assert.rejects(updateCowlendarBookingStatus("demo", "IN_ATTESA"), /Cowlendar 404/);
+  assert.deepEqual(requests, ["/public-api/v1/bookings/demo", "/public-api/v1/bookings/demo/status"]);
+});
