@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   if (typeof event.type !== "string" || !event.type.startsWith("booking.")) {
     return Response.json({ ignored: true });
   }
-  const booking = BOOKING_EVENTS.has(event.type) ? parseCowlendarWebhookBooking(event.data, event.type) : null;
+  const booking = BOOKING_EVENTS.has(event.type) ? parseCowlendarWebhookBooking(event.data, event.type, event.created_at) : null;
   try {
     await prisma.$transaction(async (tx) => {
       // Atomic deduplication across replicas. Store no customer data.
@@ -47,13 +47,14 @@ export async function POST(request: Request) {
         key: `cowlendar_event:${event.id}`, value: { receivedAt: new Date().toISOString() },
       }], skipDuplicates: true });
       if (!inserted.count) return;
-      if (booking && !await applyCowlendarWebhookBooking(tx, booking, new Date())) return;
+      const applied = booking ? await applyCowlendarWebhookBooking(tx, booking, new Date()) : null;
+      if (applied === false) return;
 
       await tx.setting.deleteMany({ where: { OR: [
         { key: { startsWith: "cowlendar_cache_bookings_" } },
         { key: { startsWith: "cowlendar_cache_range_" } },
       ] } });
-      if (booking) {
+      if (applied) {
         await publishAppointmentChange(tx);
         return;
       }
