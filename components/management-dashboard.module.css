@@ -1,0 +1,147 @@
+.dashboard {
+  --surface: #fff;
+  --line: #e9e6e8;
+  --ink: #202127;
+  --muted: #65656e;
+  --accent: #9d315f;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 32px;
+  color: var(--ink);
+  background: transparent;
+}
+
+.pageHeader, .sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pageHeader h1 {font-size: 26px; line-height: 1.2; font-weight: 700; letter-spacing: -.025em;}
+.pageHeader p, .sectionHeader p {margin-top: 6px; font-size: 13px; color: var(--muted);}
+.refresh {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .15s;
+}
+.refresh:hover {background: #f8f5f7;}
+.metrics {display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;}
+.metric {
+  display: flex;
+  min-width: 0;
+  min-height: 104px;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.metric:hover {border-color: #c98da7;}
+.metric[data-active="true"] {border-color: var(--accent); background: #fcf2f7;}
+.metricIcon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 14px;
+  background: #fceef5;
+  color: #a14b70;
+}
+.metric[data-tone="green"] .metricIcon, .metricIcon[data-tone="green"] {background: #e9f7f0; color: #21795a;}
+.metric[data-tone="red"] .metricIcon {background: #fcefee; color: #b14f50;}
+.metric[data-tone="gold"] .metricIcon {background: #fbf5e9; color: #947439;}
+.metricContent {display: flex; min-width: 0; flex-direction: column; gap: 8px;}
+.metricLabel {font-size: 11px; line-height: 1.4; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .025em;}
+.metricValue {font-size: 28px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums;}
+.greeting {padding: 0 4px;}
+.greeting p {display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; font-size: 14px;}
+.greeting strong {font-weight: 600;}
+.greeting span {color: var(--muted); font-size: 13px;}
+.panel {min-width: 0; overflow: hidden; scroll-margin-top: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface);}
+.panel h2 {font-size: 18px; font-weight: 650; letter-spacing: -.015em; line-height: 1.4;}
+.sectionHeader {padding: 20px 24px; border-bottom: 1px solid var(--line);}
+.staffGrid {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px;}
+.staffGrid > p {grid-column: 1 / -1;}
+.staffCard {display: flex; min-width: 0; flex-wrap: wrap; gap: 16px; align-items: start; padding: 16px; border: 1px solid var(--line); border-radius: 12px;}
+.staffCard > div:first-child {width: 100%; align-items: center;}
+.staffEntry {flex: 1;}
+.staffStatus {max-width: 65%; text-align: right;}
+.activityGrid {display: grid; min-width: 0; grid-template-columns: minmax(0, 1.7fr) minmax(280px, .7fr); gap: 24px;}
+.financialGrid {display: grid; grid-template-columns: minmax(230px, .8fr) minmax(0, 1.6fr); gap: 24px; padding: 24px;}
+.financialSummary {display: flex; flex-direction: column; align-items: start; gap: 12px; padding: 8px 24px 8px 0; border-right: 1px solid var(--line);}
+.financialSummary > strong {font-size: clamp(24px, 2.8vw, 36px); line-height: 1.15; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.025em;}
+.monthTotal {margin-top: auto; padding-top: 16px; font-size: 12px; line-height: 1.6; color: var(--muted);}
+.monthTotal b {display: block; font-size: 16px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;}
+.financialItems {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;}
+.financialItem {min-width: 0; padding: 4px; border-radius: 8px;}
+.financialItem strong {display: block; margin-top: 8px; font-size: 23px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums;}
+.financialBar {height: 4px; margin-top: 16px; overflow: hidden; border-radius: 4px; background: #f1eef0;}
+.financialBar span {display: block; height: 100%; border-radius: inherit;}
+.financialFootnote {display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 11px; color: var(--muted);}
+.cashFooter {display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--line); padding: 14px 24px; font-size: 12px; color: var(--muted);}
+.cashFooter strong {font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink);}
+.analytics {min-width: 0; overflow: hidden; border: 1px solid #383940; border-radius: 16px; background: #24252a; color: #fff;}
+.dashboard :is(button, a):focus-visible {outline: 2px solid var(--accent); outline-offset: 3px;}
+.analytics :is(button, a):focus-visible {outline-color: #f3a0c8;}
+.dashboard ::selection {background: #f4cadd; color: #52223a;}
+
+:global(.dark) .dashboard {--surface: #24252a; --line: #3b3b43; --ink: #f5f5f7; --muted: #b9b9c3; --accent: #f3a0c8; color-scheme: dark;}
+:global(.dark) .metric[data-active="true"] {background: #382b34;}
+:global(.dark) .refresh:hover {background: #303037;}
+:global(.dark) .metricIcon {background: #44303c; color: #f3a0c8;}
+:global(.dark) .metric[data-tone="green"] .metricIcon, :global(.dark) .metricIcon[data-tone="green"] {background: #243d34; color: #8de1b5;}
+:global(.dark) .metric[data-tone="red"] .metricIcon {background: #432d31; color: #ffb1ae;}
+:global(.dark) .metric[data-tone="gold"] .metricIcon {background: #403827; color: #e3c083;}
+:global(.dark) .financialBar {background: #3a3740;}
+
+@media (max-width: 1199px) {
+  .metric {padding: 16px; gap: 10px;}
+  .metricIcon {width: 40px; height: 40px; border-radius: 12px;}
+  .staffGrid {grid-template-columns: repeat(2, minmax(0, 1fr));}
+}
+@media (max-width: 900px) {
+  .metrics {grid-template-columns: repeat(3, minmax(0, 1fr));}
+  .activityGrid {grid-template-columns: minmax(0, 1fr);}
+  .financialGrid {grid-template-columns: minmax(200px, .7fr) minmax(0, 1fr);}
+  .financialItems {grid-template-columns: minmax(0, 1fr); gap: 16px;}
+}
+@media (max-width: 600px) {
+  .dashboard {gap: 20px;}
+  .pageHeader h1 {font-size: 22px;}
+  .pageHeader p {font-size: 12px;}
+  .refresh {padding-inline: 12px;}
+  .metrics {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;}
+  .metric {min-height: 92px; padding: 14px; gap: 12px;}
+  .metric:last-child {grid-column: 1 / -1;}
+  .metricLabel {font-size: 10px;}
+  .metricValue {font-size: 26px;}
+  .greeting span {line-height: 1.6;}
+  .sectionHeader {padding: 16px;}
+  .sectionHeader p {line-height: 1.6;}
+  .staffGrid {grid-template-columns: minmax(0, 1fr); padding: 16px;}
+  .financialGrid {grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px;}
+  .financialSummary {border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 20px;}
+  .financialSummary > strong {font-size: 32px;}
+  .monthTotal {padding-top: 0;}
+  .financialItems {grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px;}
+  .financialItem strong {font-size: 19px;}
+  .cashFooter {padding: 14px 16px;}
+}
+@media (prefers-reduced-motion: reduce) {.dashboard * {scroll-behavior: auto !important; transition: none !important;}}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import styles from "./management-dashboard.module.css";
 import { DashboardCommunicationBanner } from "./dashboard-communication-banner";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -171,23 +172,16 @@ function ThreeMonthControlsChart({ months, selectedDay, onSelectDay, subjectLabe
   );
 }
 
-function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, featured = false, controls, onClick }: {
+function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, controls, onClick }: {
   label: string;
   value: string;
   note: string;
   icon: typeof Users;
   tone?: "pink" | "green" | "gold" | "red";
   active?: boolean;
-  featured?: boolean;
   controls: string;
   onClick: () => void;
 }) {
-  const colors = {
-    pink: "bg-[#f9dbe8] text-[#9f2f60]",
-    green: "bg-[#daf4e8] text-[#137653]",
-    gold: "bg-[#f6ecd2] text-[#80621c]",
-    red: "bg-[#fde3e3] text-[#a83636]",
-  }[tone];
   return (
     <button
       type="button"
@@ -197,14 +191,16 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       aria-controls={controls}
       aria-label={`${label}: ${value}. ${note}`}
       title={`${label}: ${value}`}
-      className={`group min-h-[94px] min-w-0 rounded-[18px] border px-1 py-2 text-center transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none sm:min-h-[108px] sm:rounded-[22px] sm:px-3 sm:py-3 ${featured ? "border-[#d85991] bg-[linear-gradient(145deg,#b62f69_0%,#d95d95_55%,#f08bb8_100%)] text-white shadow-[0_18px_35px_rgba(183,47,105,0.22)] hover:border-[#b62f69]" : "border-black/[0.07] bg-white text-[#171719] shadow-[0_8px_24px_rgba(20,16,18,0.045)] hover:border-black/15 dark:border-white/10 dark:bg-[#292a30] dark:text-white dark:hover:border-white/20"} ${active && !featured ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
+      className={styles.metric}
+      data-active={active}
+      data-tone={tone}
     >
-      <div className="flex flex-col items-center justify-center gap-1">
-        <p className={`w-full truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] ${featured ? "text-white/80" : "text-black/50 dark:text-white/60"}`}>{label}</p>
-        <span className={`flex size-7 shrink-0 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none sm:size-9 ${featured ? "bg-white text-[#b62f69]" : colors}`}><Icon className="size-3.5 sm:size-4" aria-hidden="true" /></span>
-        <p className={`text-lg font-black leading-none tabular-nums sm:text-2xl ${featured ? "text-white" : "text-[#171719] dark:text-white"}`}>{value}</p>
-        <span className="sr-only">{label}. {note}</span>
-      </div>
+      <span className={styles.metricIcon}><Icon size={24} aria-hidden="true" /></span>
+      <span className={styles.metricContent}>
+        <span className={styles.metricLabel}>{label}</span>
+        <strong className={styles.metricValue}>{value}</strong>
+        <span className="sr-only">{note}</span>
+      </span>
     </button>
   );
 }
@@ -294,10 +290,6 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
     { label: "Spese", value: data.monthExpenses, color: "#e05b62", soft: "bg-red-50", text: "text-red-700" },
   ];
   const financialMax = Math.max(1, ...financialItems.map((item) => Math.abs(item.value)));
-  const movementSum = data.monthDeposits + data.monthWithdrawals + data.monthExpenses;
-  const movementTotal = Math.max(1, movementSum);
-  const depositEnd = data.monthDeposits / movementTotal * 100;
-  const withdrawalEnd = depositEnd + data.monthWithdrawals / movementTotal * 100;
 
   function showPersonnelSection(view: "PRESENT" | "ABSENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
     const shouldOpen = personnelView !== view;
@@ -318,48 +310,35 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
       : "Buonasera";
 
   return (
-    <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-none bg-[#f5f5f5] p-3 pb-12 font-sans antialiased dark:bg-[#151518] sm:rounded-[34px] sm:p-6 lg:p-8">
-      <DashboardCommunicationBanner userId={userId}><section className="order-0 relative isolate min-h-44 overflow-hidden rounded-[28px] border border-black/[0.06] bg-[#7d294f] text-white shadow-[0_18px_45px_rgba(72,24,47,0.16)] sm:min-h-56">
-        <img
-          src="/beta-login-hero.png"
-          alt=""
-          className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center"
-          aria-hidden="true"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(38,9,22,0.86)_0%,rgba(55,13,31,0.58)_48%,rgba(55,13,31,0.12)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(30,7,17,0.28)_0%,transparent_55%)]" />
-        <div className="relative z-10 flex min-h-44 max-w-2xl flex-col justify-end p-6 sm:min-h-56 sm:p-8 lg:p-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#ffc3dc]">Paradise Staff Hub</p>
-          <h1 className="mt-2 text-3xl font-black leading-none tracking-[-0.04em] drop-shadow-sm sm:text-5xl">{greeting}, {data.viewerName.split(" ")[0]}</h1>
-          <p className="mt-3 max-w-lg text-sm font-medium leading-6 text-white/78 sm:text-base">Ecco cosa sta succedendo oggi nei tuoi saloni.</p>
+    <div className={styles.dashboard}>
+      <header className={styles.pageHeader}>
+        <div>
+          <h1>Dashboard</h1>
+          <p>Stato in tempo reale · {data.scopeLabel}</p>
         </div>
-      </section></DashboardCommunicationBanner>
+        <button type="button" onClick={refresh} aria-label="Aggiorna i dati della dashboard" className={styles.refresh}>
+          <RefreshCw size={18} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
+        </button>
+      </header>
 
-      <section className="order-1 rounded-[28px] border border-black/[0.05] bg-[#fafafa] p-4 shadow-[0_14px_40px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-6">
-        <div className="flex flex-col gap-5 px-1 pb-6 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b83f70]">Direzione operativa</p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.045em] text-[#171719] dark:text-white sm:text-5xl">Dashboard</h1>
-            <p className="mt-2 text-sm text-black/50 dark:text-white/55">Stato in tempo reale · {data.scopeLabel}</p>
-          </div>
-          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#b62f69] bg-[#b62f69] px-6 text-xs font-black uppercase text-white shadow-[0_12px_25px_rgba(182,47,105,0.20)] transition hover:bg-[#9f285b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
-            <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
-          </button>
-        </div>
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-3">
-          <Metric label="Presenti" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="pink" featured active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
-          <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
-          <Metric label="Ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
-          <Metric label="Malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
-          <Metric label="Ritardi" value={String(data.lateStaff.length)} note="presi in visione" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
-        </div>
+      <section aria-label="Direzione operativa" className={styles.metrics}>
+        <Metric label="Presenti" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
+        <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
+        <Metric label="Ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
+        <Metric label="Malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
+        <Metric label="Ritardi" value={String(data.lateStaff.length)} note="presi in visione" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
       </section>
 
+      <DashboardCommunicationBanner userId={userId} compact>
+        <div className={styles.greeting}>
+          <p><strong>{greeting}, {data.viewerName.split(" ")[0]}</strong><span>Ecco cosa sta succedendo oggi nei tuoi saloni.</span></p>
+        </div>
+      </DashboardCommunicationBanner>
+
       {personnelView === "PRESENT" || personnelView === "ABSENT" || personnelView === "LATE" ? (
-        <section id="personale-oggi" className="order-2 scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
+        <section id="personale-oggi" className={styles.panel}>
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
-              <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
               <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "ABSENT" ? "Assenti rispetto al turno pianificato" : "Personale presente ora"}</h2>
             </div>
             <div className="flex items-center gap-1">
@@ -367,23 +346,23 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
               <button type="button" onClick={() => setPersonnelView(null)} className="grid size-11 place-items-center rounded-full text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none" aria-label="Nascondi dettaglio personale" title="Nascondi"><X className="size-5" aria-hidden="true" /></button>
             </div>
           </div>
-          <div className="divide-y divide-[#f0e7eb]">
+          <div className={styles.staffGrid}>
             {visibleStaff.length === 0 ? (
               <p className="p-8 text-center text-sm text-[#8d8589]">Nessuna persona in questa sezione.</p>
             ) : visibleStaff.map((staff) => (
-              <div key={staff.id} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-3 sm:grid-cols-[minmax(220px,1fr)_130px_130px]">
+              <div key={staff.id} className={styles.staffCard}>
                 <div className="flex min-w-0 items-center gap-3">
-                  <Avatar name={staff.name} photoUrl={staff.photoUrl} />
+                  <Avatar name={staff.name} photoUrl={staff.photoUrl} size={64} />
                   <div className="min-w-0">
-                    <p className="truncate font-bold text-[#241d21]">{staff.name}</p>
+                    <p className="break-words font-bold text-[#241d21]">{staff.name}</p>
                     <p className="truncate text-xs text-[#6f676b]">{staff.location}</p>
                   </div>
                 </div>
-                <div className="hidden sm:block">
+                <div className={styles.staffEntry}>
                   <p className="text-[10px] font-bold uppercase text-[#756d71]">{staff.status === "ABSENT" && staff.absenceReason === "NO_ENTRY" ? "Turno previsto" : "Entrata"}</p>
                   <p className="mt-1 font-black text-[#252025]">{staff.status === "ABSENT" && staff.absenceReason === "NO_ENTRY" ? staff.shiftStart || "--:--" : staff.firstEntry}</p>
                 </div>
-                <div className="text-right">
+                <div className={styles.staffStatus}>
                   <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${staff.status === "IN" ? "bg-[#dcf5e9] text-[#147553]" : staff.status === "BREAK" ? "bg-[#fff0ce] text-[#8a6310]" : staff.status === "ABSENT" ? "bg-red-100 text-red-700" : "bg-[#eee9eb] text-[#655b60]"}`}>
                     {staff.status === "IN" ? "Al lavoro" : staff.status === "BREAK" ? "In pausa" : staff.status === "ABSENT" ? "Assente" : "Uscito"}
                   </span>
@@ -396,10 +375,9 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
       ) : null}
 
       {personnelView === "HOLIDAYS" || personnelView === "SICKNESS" ? (
-        <section id="assenze-attive" className="order-2 scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
+        <section id="assenze-attive" className={`${styles.panel} p-5`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
               <h2 className="mt-1 text-xl font-black">{personnelView === "HOLIDAYS" ? "Personale in ferie" : "Personale in malattia"}</h2>
             </div>
             <button type="button" onClick={() => setPersonnelView(null)} className="grid size-11 shrink-0 place-items-center rounded-full text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none" aria-label="Nascondi dettaglio assenze" title="Nascondi"><X className="size-5" aria-hidden="true" /></button>
@@ -421,11 +399,41 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
         </section>
       ) : null}
 
-      <div className="order-4 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.7fr)]">
-      <section className="min-w-0 overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] lg:p-7">
+      <section className={styles.panel} aria-labelledby="financial-heading">
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2 id="financial-heading">Andamento finanziario</h2>
+            <p>{data.financialPeriodLabel} · disponibilità e movimenti reali</p>
+          </div>
+          <Link href="/cash" className={styles.refresh}>Apri cassa <ChevronRight size={16} aria-hidden="true" /></Link>
+        </div>
+        <div className={styles.financialGrid}>
+          <Link href="/cash" aria-label={`Apri cassa. Disponibilità attuale ${money.format(data.availableCash)}`} className={styles.financialSummary}>
+            <span className={styles.metricIcon} data-tone="green"><WalletCards size={24} aria-hidden="true" /></span>
+            <span className={styles.metricLabel}>Disponibilità</span>
+            <strong>{money.format(data.availableCash)}</strong>
+            <span className={styles.monthTotal}>Totale ricavato nel mese <b>{money.format(data.monthRevenue)}</b></span>
+          </Link>
+          <div className={styles.financialItems}>
+            {financialItems.map((item) => (
+              <Link key={item.label} href="/cash" aria-label={`Apri cassa. ${item.label}: ${money.format(item.value)}`} className={styles.financialItem}>
+                <div className="flex items-start justify-between gap-3">
+                  <div><p className={styles.metricLabel}>{item.label}</p><strong>{money.format(item.value)}</strong></div>
+                  <Banknote size={20} className={item.text} aria-hidden="true" />
+                </div>
+                <div className={styles.financialBar} aria-hidden="true"><span style={{ width: `${Math.max(item.value > 0 ? 7 : 0, Math.abs(item.value) / financialMax * 100)}%`, backgroundColor: item.color }} /></div>
+                <span className={styles.financialFootnote}>{item.label === "Disponibilità" ? "Saldo attuale" : "Totale del mese"}<ChevronRight size={14} aria-hidden="true" /></span>
+              </Link>
+            ))}
+          </div>
+        </div>
+        <div className={styles.cashFooter}><span>Chiusure cassa ieri</span><strong>{money.format(data.yesterdayCashClosings)}</strong></div>
+      </section>
+
+      <div className={styles.activityGrid}>
+      <section className={`${styles.panel} p-5 lg:p-6`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
             <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg text-left text-xl font-black text-[#171719] transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:text-white dark:hover:text-[#f3a0c8]"><TrendingUp className="size-5 text-[#eb5da3]" /> Controlli cliente completati per ora</button>
           </div>
           <button type="button" onClick={() => router.push("/client-control?date=today")} aria-label={`Apri tutte le ${data.clientsToday} schede Controllo Cliente completate oggi`} className="min-h-11 rounded-xl px-3 text-left text-[#171719] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:text-white dark:hover:bg-white/5 sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#6f676b] dark:text-white/55">schede oggi · apri controlli</p></button>
@@ -444,10 +452,9 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
       </section>
 
       <aside>
-        <section className="h-full rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22]">
+        <section className={`${styles.panel} h-full p-5 lg:p-6`}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#b83f70]">Priorità</p>
               <h2 className="mt-1 text-xl font-black text-[#171719] dark:text-white">Da gestire</h2>
             </div>
             <span className="grid size-10 place-items-center rounded-full bg-[#fff0f6] text-[#b62f69]"><AlertTriangle className="size-4" aria-hidden="true" /></span>
@@ -474,10 +481,9 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
       </aside>
       </div>
 
-      <section className="order-5 overflow-hidden rounded-[28px] border border-[#8d345d]/25 bg-[linear-gradient(145deg,#24151d_0%,#321824_52%,#431c30_100%)] text-white shadow-[0_18px_45px_rgba(54,18,37,0.18)]">
+      <section className={styles.analytics}>
         <div className="flex flex-col gap-6 border-b border-white/10 p-6 lg:flex-row lg:items-end lg:justify-between lg:p-8">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f080b7]">Performance Buenos Aires</p>
             <h2 className="mt-2 text-2xl font-black tracking-[-0.025em] sm:text-3xl">Confronto ultimi 3 mesi</h2>
             <p className="mt-1 text-sm text-white/60">Schede cliente, servizi e fatturazione attribuita · giorni 1–31</p>
           </div>
@@ -498,7 +504,7 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
           <div className="grid gap-5 p-5 lg:p-8 xl:grid-cols-[280px_minmax(0,1fr)]">
             <div className="min-w-0 rounded-[24px] border border-white/10 bg-black/10 p-4">
               <div className="flex items-center justify-between gap-3">
-                <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#f080b7]">Classifica</p><h3 className="mt-1 font-black">Performance staff</h3></div>
+                <h3 className="font-bold">Performance staff</h3>
                 <span className="rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase text-white/55">3 mesi</span>
               </div>
               <div className="mt-4 flex gap-3 overflow-x-auto pb-2 xl:max-h-[430px] xl:flex-col xl:overflow-x-hidden xl:overflow-y-auto xl:pr-1">
@@ -594,65 +600,8 @@ export function ManagementDashboard({ data, userId }: { data: ManagementDashboar
         )}
       </section>
 
-      <section className="order-3 overflow-hidden rounded-[28px] border border-[#7e294f]/30 bg-[linear-gradient(145deg,#2b1722_0%,#431b30_52%,#642441_100%)] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)] dark:border-[#f080b7]/20 dark:bg-[linear-gradient(145deg,#171217_0%,#2a1822_55%,#451d31_100%)]">
-        <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>
-            <h2 className="mt-1 text-xl font-black">Andamento finanziario</h2>
-            <p className="mt-1 text-xs font-semibold capitalize text-white/70">{data.financialPeriodLabel} · disponibilità e movimenti reali</p>
-          </div>
-          <Link href="/cash" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.06] px-5 text-xs font-black uppercase transition hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">Apri cassa <ChevronRight className="size-4" aria-hidden="true" /></Link>
-        </div>
 
-        <div className="grid gap-5 p-5 md:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.6fr)] lg:p-7">
-          <Link href="/cash" aria-label={`Apri cassa. Disponibilità attuale ${money.format(data.availableCash)}`} className="group relative flex min-h-72 flex-col items-center justify-center overflow-hidden rounded-[22px] border border-white/15 bg-white/[0.055] p-6 transition duration-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
-            <div
-              className="relative grid size-48 place-items-center rounded-full p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]"
-              style={{ background: movementSum > 0 ? `conic-gradient(#d95d95 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}
-            >
-              <div className="grid size-full place-items-center rounded-full border border-white/10 bg-[#17151e] text-center shadow-inner">
-                <div>
-                  <WalletCards className="mx-auto size-5 text-[#ee86b3]" />
-                  <p className="mt-3 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Disponibilità</p>
-                  <p className="mt-1 text-2xl font-black tabular-nums">{money.format(data.availableCash)}</p>
-                </div>
-              </div>
-            </div>
-            <div className="relative mt-5 flex items-center gap-2 text-xs font-bold text-white/70">
-              Totale ricavato nel mese
-              <span className="rounded-full bg-[#f080b7]/15 px-2 py-1 font-black text-[#f3a0c8]">{money.format(data.monthRevenue)}</span>
-            </div>
-          </Link>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {financialItems.map((item) => (
-              <Link key={item.label} href="/cash" aria-label={`Apri cassa. ${item.label}: ${money.format(item.value)}`} className="group min-h-44 rounded-[20px] border border-white/15 bg-white/[0.055] p-5 transition duration-200 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transform-none motion-reduce:transition-none">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/70">{item.label}</p>
-                    <p className="mt-2 text-2xl font-black tabular-nums">{money.format(item.value)}</p>
-                  </div>
-                  <span className={`grid size-9 place-items-center rounded-full ${item.soft} ${item.text}`}><Banknote className="size-4" /></span>
-                </div>
-                <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full transition-all duration-700 motion-reduce:transition-none" style={{ width: `${Math.max(item.value > 0 ? 7 : 0, Math.abs(item.value) / financialMax * 100)}%`, backgroundColor: item.color }} />
-                </div>
-                <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-white/65">
-                  <span>{item.label === "Disponibilità" ? "Saldo attuale" : "Totale del mese"}</span>
-                  <ChevronRight className="size-3.5 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" />
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex min-h-11 items-center justify-between border-t border-white/10 px-6 py-3 text-[10px] font-bold uppercase text-white/65 lg:px-8">
-          <span>Chiusure cassa ieri</span>
-          <strong className="text-sm text-white">{money.format(data.yesterdayCashClosings)}</strong>
-        </div>
-      </section>
-
-      <p className="order-6 flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b] dark:text-white/55"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
+      <p className="flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b] dark:text-white/55"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
     </div>
   );
 }
