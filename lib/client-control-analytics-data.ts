@@ -6,15 +6,46 @@ import { getCowlendarBookingsForRange, hasCowlendarToken, type CowlendarBooking 
 import { isClientControlFormName } from "@/lib/client-control-form";
 import { analyticsMonthRange, buildClientControlAnalytics, romeDate } from "@/lib/client-control-analytics";
 
-
-export async function loadClientControlAnalytics(requestedMonth?: string) {
+export async function loadClientControlPeriod(requestedMonth?: string, source: "live" | "archive" = "live") {
   const month = /^20\d{2}-(0[1-9]|1[0-2])$/.test(requestedMonth || "") ? requestedMonth! : romeDate(new Date()).slice(0, 7);
   const { start, end } = analyticsMonthRange(month);
+  const limit = 5000;
   let bookings: CowlendarBooking[] = []; let warning = "";
   try {
-    if (!hasCowlendarToken()) throw new Error("Agenda non configurata");
-    bookings = await getCowlendarBookingsForRange({ startDate: start.toISOString(), endDate: new Date(end.getTime() - 1).toISOString(), limit: 5000, forceRefresh: true });
-    if (bookings.length >= 5000) warning = "L’agenda ha raggiunto il limite di lettura: i conteggi degli appuntamenti potrebbero essere parziali.";
+    if (source === "archive") {
+      const [saved, sync] = await Promise.all([
+        prisma.$queryRaw<{
+          id: string;
+          start_at: Date;
+          customer_name: string | null;
+          attendance: string | null;
+          confirmation_status: string | null;
+          is_canceled: boolean;
+        }[]>`
+          SELECT id, start_at, payload #>> '{customer,name}' AS customer_name,
+                 payload ->> 'attendance' AS attendance, payload ->> 'confirmation_status' AS confirmation_status,
+                 COALESCE(payload ->> 'is_canceled' = 'true', false) AS is_canceled
+          FROM appointment_archive
+          WHERE start_at >= ${start} AND start_at < ${end}
+          ORDER BY start_at DESC, id
+          LIMIT ${limit}
+        `,
+        prisma.appointmentArchiveSync.findUnique({ where: { month }, select: { completed_at: true, error: true } }),
+      ]);
+      bookings = saved.map(row => ({
+        id: row.id,
+        start_date: row.start_at.toISOString(),
+        customer: { name: row.customer_name },
+        attendance: row.attendance,
+        confirmation_status: row.confirmation_status,
+        is_canceled: row.is_canceled,
+      }));
+      if (!sync?.completed_at || sync.error) warning = "L’archivio appuntamenti di questo mese può essere incompleto. Le schede già salvate sono disponibili.";
+    } else {
+      if (!hasCowlendarToken()) throw new Error("Agenda non configurata");
+      bookings = await getCowlendarBookingsForRange({ startDate: start.toISOString(), endDate: new Date(end.getTime() - 1).toISOString(), limit, forceRefresh: true });
+    }
+    if (bookings.length >= limit) warning = "L’agenda ha raggiunto il limite di lettura: i conteggi degli appuntamenti potrebbero essere parziali.";
   } catch {
     warning = "Agenda non disponibile: mostriamo solo le schede, per data di creazione. Annullati e appuntamenti senza scheda potrebbero mancare.";
   }
@@ -23,6 +54,20 @@ export async function loadClientControlAnalytics(requestedMonth?: string) {
     prisma.user.findMany({ select: { id: true, name: true, active: true, photo_url: true, location: { select: { id: true, name: true } } } }),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }),
   ]);
+  const formIds = forms.filter(f => isClientControlFormName(f.name, f.category)).map(f => f.id);
+  const cards = await prisma.serviceFormResponse.findMany({
+    where: { form_id: { in: formIds }, OR: [
+      { created_at: { gte: start, lt: end } },
+      ...bookings.map(b => ({ answers: { path: ["booking_id"], equals: b.id } })),
+    ] },
+    select: { id: true, answers: true, created_at: true, updated_at: true, user_location_name: true },
+  });
+  const rows = buildClientControlAnalytics({ month, cards: cards.map(c => ({ ...c, created_at: c.created_at.toISOString(), updated_at: c.updated_at.toISOString(), answers: c.answers as Record<string, unknown> })), bookings, staff, statuses: (overrides?.value || {}) as Record<string, { status?: string }> });
+  return { month, rows, warning, staff };
+}
+
+export async function loadClientControlAnalytics(requestedMonth?: string) {
+  const { month, rows, warning, staff } = await loadClientControlPeriod(requestedMonth);
   let delays: AnalyticsDelay[] = []; let delayWarning = "";
   let attendanceDays: Record<string, number> = {};
   const corsoStaff = staff.filter(s => s.active && /buenos|corso/i.test(s.location?.name || ""));
@@ -69,15 +114,6 @@ export async function loadClientControlAnalytics(requestedMonth?: string) {
         label: needsDocument ? "Malattia da giustificare" : explicitUnjustified && r.status === "APPROVED" ? "Non giustificata registrata" : r.status === "APPROVED" ? "Approvata" : r.status === "FLAGGED" ? "Da verificare" : "In attesa di approvazione" };
     });
   } catch { absenceWarning = "Assenze non disponibili: riprova ad aggiornare la pagina."; }
-  const formIds = forms.filter(f => isClientControlFormName(f.name, f.category)).map(f => f.id);
-  const cards = await prisma.serviceFormResponse.findMany({
-    where: { form_id: { in: formIds }, OR: [
-      { created_at: { gte: start, lt: end } },
-      ...bookings.map(b => ({ answers: { path: ["booking_id"], equals: b.id } })),
-    ] },
-    select: { id: true, answers: true, created_at: true, updated_at: true, user_location_name: true },
-  });
-  const rows = buildClientControlAnalytics({ month, cards: cards.map(c => ({ ...c, created_at: c.created_at.toISOString(), updated_at: c.updated_at.toISOString(), answers: c.answers as Record<string, unknown> })), bookings, staff, statuses: (overrides?.value || {}) as Record<string, { status?: string }> });
   return { month, rows, warning, delays, delayWarning, absences, absenceWarning, attendanceDays,
     staff: staff.map(s => ({ id: s.id, name: s.name, active: s.active, photoUrl: s.photo_url, salon: s.location?.name || "Sede non indicata" })) };
 }

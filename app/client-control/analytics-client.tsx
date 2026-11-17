@@ -4,6 +4,7 @@ import { useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ArrowUpRight, CheckCheck, FileWarning, Users, Search, X, Download } from "lucide-react";
+import { clientControlUrl } from "./client-control-navigation";
 import { clientControlWorkerCounts, workerCalendarDays, type AnalyticsAbsence, type AnalyticsDelay, type AnalyticsStaff, type AnalyticsCategory, type AnalyticsRow } from "@/lib/client-control-analytics";
 import styles from "./analytics.module.css";
 
@@ -71,12 +72,12 @@ export function ClientControlAnalytics({ month, rows, warning, staff, delays, de
     const url = URL.createObjectURL(new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" })); const a = document.createElement("a"); a.href = url; a.download = `controllo-cliente-${month}-${category}.csv`; a.click(); URL.revokeObjectURL(url);
   };
   return <div className={styles.page}>
-    <header className={styles.header}><div><span className={styles.eyebrow}>QUALITÀ DEL SERVIZIO</span><h1>Controllo cliente</h1><p>Le schede, le note e il lavoro di ogni collaboratore.</p></div><div className={styles.headerActions}><button className={styles.pdfButton} disabled={pdfBusy} onClick={downloadMonthlyPdf}><Download size={16}/>{pdfBusy ? "Generazione PDF…" : "Scarica report PDF"}</button><Link className={styles.archive} href="/client-control?view=archive">Gestisci schede <ArrowUpRight size={16} /></Link></div></header>
+    <header className={styles.header}><div><h1>Analisi controllo clienti</h1><p>Le schede, le note e il lavoro di ogni collaboratore.</p></div><div className={styles.headerActions}><Link className={styles.archive} href={clientControlUrl(month)}>Schede cliente</Link><button className={styles.pdfButton} disabled={pdfBusy} onClick={downloadMonthlyPdf}><Download size={16}/>{pdfBusy ? "Generazione PDF…" : "Scarica report PDF"}</button><Link className={styles.archive} href="/client-control?view=archive">Gestisci schede <ArrowUpRight size={16} /></Link></div></header>
     <p className={styles.reportHint}>Report mensile · Corso Buenos Aires · si aggiorna con il mese selezionato, indipendentemente dagli altri filtri.</p>
     {pdfError && <p role="alert" className={styles.warning}>{pdfError}</p>}
     {warning && <p role="status" className={styles.warning}>{warning}</p>}
     <div className={styles.filters}>
-      <label>Mese<input aria-label="Mese analisi" type="month" value={month} onChange={e => e.target.value && router.push(`/client-control?month=${e.target.value}`)} /></label>
+      <label>Mese<input aria-label="Mese analisi" type="month" value={month} onChange={e => e.target.value && router.push(clientControlUrl(e.target.value, { view: "analytics" }))} /></label>
       <label>Salone<select value={salon} onChange={e => setSalon(e.target.value)}><option value="">Tutti i saloni</option>{salons.map(s => <option key={s}>{s}</option>)}</select></label>
       <label>Collaboratore<select value={worker} onChange={e => setWorker(e.target.value)}><option value="">Tutti i collaboratori</option>{allWorkers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
       <label className={styles.search}>Cerca cliente o ordine<div><Search size={16}/><input aria-label="Cerca cliente o ordine" placeholder="Nome o numero ordine" value={search} onChange={e => setSearch(e.target.value)} /></div></label>

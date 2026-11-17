@@ -2,10 +2,12 @@ import { AnalyticsView } from "./analytics-view";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ClientControlDashboard } from "@/app/client-control/client-control-dashboard";
+import { ClientControlDirectory } from "./client-control-directory";
 import { auth } from "@/lib/auth";
 import { ensureClientControlForm, isClientControlFormName, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
+import { loadClientControlPeriod } from "@/lib/client-control-analytics-data";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,14 @@ export default async function ClientControlPage({ searchParams }: { searchParams
   }
 
   if (params.view !== "archive" && !params.date && !params.hour) {
+    if (params.view !== "analytics") {
+      const { month, rows, warning } = await loadClientControlPeriod(params.month, "archive");
+      return (
+        <AppShell title="Controllo clienti" subtitle="Schede servizio e verifiche" role={role} hideHeader>
+          <ClientControlDirectory key={month} month={month} rows={rows} warning={warning} />
+        </AppShell>
+      );
+    }
     return <AppShell title="Controllo Cliente" subtitle="Analisi delle note per collaboratore" role={role} hideHeader>
       <AnalyticsView requestedMonth={params.month} />
     </AppShell>;
