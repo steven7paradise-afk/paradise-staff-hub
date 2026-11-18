@@ -10,6 +10,7 @@ import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { ConversionBoard } from "@/components/conversion-board";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { normalizeScannedOrderReference, orderCodeCandidates } from "@/lib/order-code-reader";
 import { getOrderTaskType, isOrderInWorkspace, orderStatusForWorkspace, type OrderWorkspace } from "@/lib/order-workspace";
@@ -501,6 +502,8 @@ export function OrderManager({
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selected, setSelected] = useState<OrderResponse | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const statusRequestInFlight = useRef(false);
+  const [statusError, setStatusError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [mobileStatus, setMobileStatus] = useState("ALL");
   const [changingStatusTo, setChangingStatusTo] = useState<string | null>(null);
@@ -682,6 +685,9 @@ export function OrderManager({
     nextParams.delete("orderId");
 
     setSelected(null);
+    setChangingStatusTo(null);
+    setStatusNoteText("");
+    setStatusError("");
     const nextUrl = nextParams.size > 0 ? `${pathname}?${nextParams.toString()}` : pathname;
     router.replace(nextUrl, { scroll: false });
   }
@@ -773,17 +779,59 @@ export function OrderManager({
   }, [mobileStatus, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly]);
 
   async function moveOrder(order: OrderResponse, status: string, note?: string) {
+    if (!canManage) return { ok: false, error: "Non sei autorizzato a modificare lo stato." };
+    if (statusRequestInFlight.current) return { ok: false, error: "Attendi il completamento dell’aggiornamento in corso." };
+    statusRequestInFlight.current = true;
     setSavingId(order.id);
-    const response = await fetch(`/api/service-forms/responses/${order.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, statusNote: note }),
-    });
-    setSavingId(null);
-    if (!response.ok) return;
-    const updated = await response.json();
-    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
-    setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+    setStatusError("");
+    try {
+      const response = await fetch(`/api/service-forms/responses/${order.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, statusNote: note }),
+      });
+      const updated = await response.json().catch(() => null);
+      if (!response.ok || !updated || typeof updated !== "object") {
+        throw new Error(updated?.error || "Impossibile aggiornare lo stato. Verifica la scheda prima di riprovare.");
+      }
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
+      setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+      return { ok: true, error: "" };
+    } catch (error) {
+      const message = error instanceof TypeError
+        ? "Connessione non disponibile. Verifica la scheda prima di riprovare."
+        : error instanceof Error ? error.message : "Impossibile aggiornare lo stato. Verifica la scheda prima di riprovare.";
+      setStatusError(message);
+      return { ok: false, error: message };
+    } finally {
+      statusRequestInFlight.current = false;
+      setSavingId(null);
+    }
+  }
+
+  async function advanceConversion(id: string, status: string, note: string) {
+    const order = orders.find((item) => item.id === id && isOrderInWorkspace(item, "conversions"));
+    const currentStatus = order && orderStatusForWorkspace(order.status, "conversions");
+    const expected = currentStatus === "NEW" ? "PREPARING" : currentStatus === "PREPARING" ? "READY" : null;
+    if (!isConversions || !canManage || !order || status !== expected) {
+      throw new Error("Apri la scheda per verificare lo stato della lavorazione.");
+    }
+    const result = await moveOrder(order, status, note);
+    if (!result.ok) {
+      // The status can be saved before a downstream Shopify operation fails.
+      // Refresh the authoritative board; never automatically repeat the write.
+      router.refresh();
+      throw new Error(result.error.includes("Verifica la scheda") ? result.error : `${result.error} Verifica la scheda prima di riprovare.`);
+    }
+  }
+
+  function openConversion(id: string) {
+    const order = orders.find((item) => item.id === id && isOrderInWorkspace(item, "conversions"));
+    if (!order) return;
+    setChangingStatusTo(null);
+    setStatusNoteText("");
+    setStatusError("");
+    setSelected(order);
   }
 
   async function uploadPhotoSlot(order: OrderResponse, slot: number, file?: File) {
@@ -943,23 +991,23 @@ export function OrderManager({
             className={cn("inline-flex min-h-11 items-center rounded-xl border px-4 text-sm font-bold transition-colors outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#a73f6c]", active ? "border-[#a73f6c] bg-[#f8e5ee] text-[#8d315b] dark:border-[#e5a8c1] dark:bg-[#412333] dark:text-[#f6cee0]" : "border-black/10 bg-white text-black/60 hover:bg-[#fff0f6] dark:border-white/20 dark:bg-[#201f24] dark:text-white/80 dark:hover:bg-[#352632]")}>{item.label}</Link>;
         })}
       </nav>
-      <div className="orders-toolbar overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm">
-        <div className="p-4 md:p-6">
+      <div className={cn("orders-toolbar overflow-hidden border border-black/[0.06] bg-white", isConversions ? "rounded-2xl" : "rounded-[22px] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm")}>
+        <div className={cn("p-4", !isConversions && "md:p-6")}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d] md:block">Paradise Operations</p>
+            {!isConversions ? <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d] md:block">Paradise Operations</p> : null}
             <div className="flex items-center gap-2.5 md:mt-1 md:gap-3">
-              <h1 className="text-2xl font-black tracking-[-0.03em] text-[#221b20] md:text-4xl md:font-semibold">{isConversions ? "Conversioni capelli" : "Ordini"}</h1>
+              <h1 className={cn("tracking-[-0.03em] text-[#221b20]", isConversions ? "text-2xl font-semibold" : "text-2xl font-black md:text-4xl md:font-semibold")}>{isConversions ? "Conversioni capelli" : "Ordini"}</h1>
               <span className="grid min-w-7 place-items-center rounded-full bg-[#f8e5ee] px-2 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
             </div>
-            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{isConversions ? "Segui preparazione, lavorazione e consegna delle conversioni." : `${canManage ? "Gestisci" : "Controlla"} cosa ordinare, cosa attendere e cosa spedire.`}</p>
+            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{isConversions ? "Lavorazioni aperte e consegne del periodo selezionato." : `${canManage ? "Gestisci" : "Controlla"} cosa ordinare, cosa attendere e cosa spedire.`}</p>
           </div>
           
           <div className="grid w-full gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:items-center lg:gap-3">
             <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
               <span className="sr-only">Periodo</span>
               <select
-                aria-label="Mese degli ordini"
+                aria-label={isConversions ? "Mese delle consegne" : "Mese degli ordini"}
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(Number(e.target.value))}
                 className="h-11 w-full rounded-xl border border-black/[0.08] bg-[#faf7f9] px-3 text-sm font-bold capitalize text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-1.5 lg:text-xs"
@@ -972,7 +1020,7 @@ export function OrderManager({
               </select>
               
               <select
-                aria-label="Anno degli ordini"
+                aria-label={isConversions ? "Anno delle consegne" : "Anno degli ordini"}
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 className="h-11 w-full rounded-xl border border-black/[0.08] bg-[#faf7f9] px-3 text-sm font-bold text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-1.5 lg:text-xs"
@@ -1096,7 +1144,7 @@ export function OrderManager({
         ) : null}
         </div>
 
-        <div className={cn("orders-summary hidden border-t border-black/[0.06] bg-[#fffafd] md:grid", isConversions ? "grid-cols-4" : "grid-cols-5")}>
+        {!isConversions ? <div className="orders-summary hidden grid-cols-5 border-t border-black/[0.06] bg-[#fffafd] md:grid">
           {columns.map((column) => {
             const Icon = column.icon;
             return (
@@ -1117,9 +1165,34 @@ export function OrderManager({
               </button>
             );
           })}
-        </div>
+        </div> : null}
       </div>
 
+      {isConversions ? (
+        <ConversionBoard
+          items={filteredOrders.map((order) => {
+            const photo = orderPhoto(order);
+            const status = orderStatusForWorkspace(order.status, workspace);
+            return {
+              id: order.id,
+              clientName: orderClientName(order),
+              reference: orderNumber(order),
+              description: orderItems(order),
+              status,
+              photoUrl: photo ? orderPhotoPreviewUrl(photo) : null,
+              photoCount: orderProductPhotos(order).length || (photo ? 1 : 0),
+              staffName: order.confirmed_by?.name || order.user?.name || "Staff",
+              dateLabel: orderStatusDate(order),
+              deliveryLabel: status === "READY" ? orderDeliveryAction(order).label : "",
+              overdue: isReadyOrderOverdue(order),
+            };
+          })}
+          canManage={canManage}
+          savingId={savingId}
+          onOpen={openConversion}
+          onAdvance={advanceConversion}
+        />
+      ) : <>
       <div className="space-y-3 md:hidden">
         <div className="sticky top-0 z-20 rounded-2xl border border-black/[0.06] bg-white/95 p-2 shadow-[0_8px_24px_rgba(70,34,52,0.06)] backdrop-blur-xl">
         <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1328,6 +1401,8 @@ export function OrderManager({
           );
         })}
       </div>
+
+      </>}
 
       {selected ? (
         <GlobalFullscreenLayer className="orders-detail-layer bg-[#F7F5F6]">
@@ -1603,6 +1678,7 @@ export function OrderManager({
                 </Card>
                 <Card className="bg-white">
                   <h3 className="font-semibold">{canManage ? "Stato ordine" : "Avanzamento ordine"}</h3>
+                  {statusError ? <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">{statusError}</p> : null}
                   {!canManage ? <p className="mt-1 text-xs text-black/45">Puoi controllare lo stato. Le modifiche sono riservate ai responsabili.</p> : null}
                   {changingStatusTo ? (
                     <div className="mt-4 rounded-2xl border border-black/10 bg-black/5 p-4 space-y-3">
@@ -1628,10 +1704,13 @@ export function OrderManager({
                         </Button>
                         <Button
                           variant="primary"
-                          onClick={() => {
-                            void moveOrder(selected, changingStatusTo, statusNoteText);
-                            setChangingStatusTo(null);
-                            setStatusNoteText("");
+                          disabled={savingId !== null}
+                          onClick={async () => {
+                            const result = await moveOrder(selected, changingStatusTo, statusNoteText);
+                            if (result.ok) {
+                              setChangingStatusTo(null);
+                              setStatusNoteText("");
+                            }
                           }}
                         >
                           Conferma
