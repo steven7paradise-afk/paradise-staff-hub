@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { CalendarDays, FileText, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import { endAppointmentWorkerSession } from "@/lib/appointment-logout";
+import { readPersistedDarkTheme, themeStorageKey } from "@/lib/theme-bootstrap";
 
 function applyThemeVariables(isDark: boolean) {
   const root = document.querySelector<HTMLElement>(".paradise-theme-root");
@@ -36,10 +37,10 @@ function applyThemeVariables(isDark: boolean) {
 }
 
 export function ThemeRestorer() {
-  useEffect(() => {
-    const isDark = window.localStorage.getItem("paradise-theme") === "dark";
+  useLayoutEffect(() => {
+    const isDark = readPersistedDarkTheme();
     document.documentElement.classList.toggle("dark", isDark);
-    window.requestAnimationFrame(() => applyThemeVariables(isDark));
+    applyThemeVariables(isDark);
   }, []);
 
   return null;
@@ -48,18 +49,18 @@ export function ThemeRestorer() {
 export function ThemeToggleButton({ className }: { className?: string }) {
   const [dark, setDark] = useState(false);
 
-  useEffect(() => {
-    const isDark = window.localStorage.getItem("paradise-theme") === "dark";
+  useLayoutEffect(() => {
+    const isDark = readPersistedDarkTheme();
     setDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
-    window.requestAnimationFrame(() => applyThemeVariables(isDark));
+    applyThemeVariables(isDark);
   }, []);
 
   function toggleTheme() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    window.localStorage.setItem("paradise-theme", next ? "dark" : "light");
+    try { window.localStorage.setItem(themeStorageKey, next ? "dark" : "light"); } catch { /* The theme still works when storage is unavailable. */ }
     applyThemeVariables(next);
   }
 

@@ -7117,7 +7117,41 @@ export function AppointmentsBrowser({
                   <button type="button" className="shrink-0 underline" onClick={() => setBoardStaffRetry((attempt) => attempt + 1)}>Riprova</button>
                 </div>
               ) : null}
-              {visibleAppointmentBoardColumns.length ? (
+              {boardStaffLoading ? (
+                <div
+                  role="status"
+                  aria-busy="true"
+                  className={`appointments-board-scroll overflow-hidden ${repubblicaBoard ? "px-1 pb-4 sm:px-0" : "bg-[#FBFAFB] p-3 sm:p-5"}`}
+                >
+                  <span className="sr-only">Carico il personale del {boardSalonName}…</span>
+                  <div aria-hidden="true" className="flex min-h-[520px] min-w-max items-stretch gap-4">
+                    {[0, 1, 2].map((column) => (
+                      <div
+                        key={column}
+                        className={`appointments-board-column flex shrink-0 flex-col border p-3 ${repubblicaBoard ? "w-[min(18.5rem,calc(100vw-3rem))] rounded-[19px] border-[#E7DFE2] bg-white/60" : "w-[294px] rounded-[22px] border-[#E2E4E8] bg-[#F5F6F8]"}`}
+                      >
+                        <div className="appointments-board-worker mb-3 rounded-2xl bg-white px-3 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className="size-10 shrink-0 rounded-full bg-black/[0.06] dark:bg-white/10" />
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <div className="h-3 w-28 rounded bg-black/[0.06] dark:bg-white/10" />
+                              <div className="h-2.5 w-20 rounded bg-black/[0.04] dark:bg-white/[0.06]" />
+                            </div>
+                          </div>
+                          <div className="mt-3 h-2.5 w-24 rounded bg-black/[0.04] dark:bg-white/[0.06]" />
+                        </div>
+                        {[0, 1].map((card) => (
+                          <div key={card} className="appointments-board-card mb-2.5 space-y-3 rounded-2xl border border-black/5 bg-white p-3.5">
+                            <div className="h-3 w-16 rounded bg-black/[0.06] dark:bg-white/10" />
+                            <div className="h-3.5 w-36 rounded bg-black/[0.06] dark:bg-white/10" />
+                            <div className="h-2.5 w-28 rounded bg-black/[0.04] dark:bg-white/[0.06]" />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : visibleAppointmentBoardColumns.length ? (
                 <div
                   ref={boardScrollContainerRef}
                   className={`appointments-board-scroll overflow-x-auto scroll-smooth ${repubblicaBoard ? "px-1 pb-4 sm:px-0" : "bg-[#FBFAFB] p-3 sm:p-5"}`}
@@ -7485,13 +7519,6 @@ export function AppointmentsBrowser({
                         </div>
                       </article>
                     ))}
-                  </div>
-                </div>
-              ) : boardStaffLoading ? (
-                <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
-                  <div>
-                    <Loader2 className="mx-auto size-7 animate-spin text-[#A93469]" />
-                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale del {boardSalonName}...</p>
                   </div>
                 </div>
               ) : (

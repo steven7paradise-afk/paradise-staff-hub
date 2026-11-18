@@ -98,6 +98,20 @@
   --glass-blur: 24px;
   --glass-saturation: 140%;
   --glass-border-opacity: 16%;
+  --dark-background: #121114;
+  --dark-sidebar: #1B1A1F;
+  --dark-card: #201F24;
+  --dark-text: #F8F3F6;
+  --dark-button: #F4A3C4;
+}
+
+/* Keep the document canvas aligned with the streamed agenda before its shell mounts. */
+html:not(.dark):has(.appointments-route-loading) {
+  --background: #fff;
+}
+
+html.dark:has(.appointments-route-loading) {
+  --background: #121215;
 }
 
 .paradise-theme-root {

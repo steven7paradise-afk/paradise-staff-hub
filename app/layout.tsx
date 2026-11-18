@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AppVersionWatcher } from "@/components/app-version-watcher";
 import { RemoteScreenShare } from "@/components/remote-screen-share";
+import { themeBootstrapScript } from "@/lib/theme-bootstrap";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,6 +32,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const currentVersion = process.env.NEXT_PUBLIC_APP_BUILD_VERSION || "unknown";
   return (
     <html lang="it" suppressHydrationWarning>
+      <head>
+        <script id="paradise-theme-bootstrap" dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
       {/* Browser extensions can add attributes to body before hydration. */}
       <body className="min-h-screen antialiased" suppressHydrationWarning>
         <AppVersionWatcher currentVersion={currentVersion} />

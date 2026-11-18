@@ -1,0 +1,65 @@
+.screen {
+  --loading-canvas: #fff;
+  --loading-surface: #fff;
+  --loading-line: #ece5e8;
+  --loading-placeholder: #f1edef;
+  --loading-muted: #6d6067;
+  min-height: 100dvh;
+  background: var(--loading-canvas);
+  color: #2b2429;
+}
+
+:global(.dark) .screen {
+  --loading-canvas: #121215;
+  --loading-surface: #1c1d20;
+  --loading-line: #343539;
+  --loading-placeholder: #2a2b30;
+  --loading-muted: #bfb7bb;
+  color: #f4f1f0;
+}
+
+.rail { display: none; }
+.mobileHeader { height: calc(env(safe-area-inset-top) + 80px); padding: calc(env(safe-area-inset-top) + 10px) 16px 12px; display: flex; justify-content: space-between; }
+.mobileHeader span { width: 44px; height: 44px; border-radius: 12px; background: var(--loading-placeholder); }
+.mobileHeader span:last-child { border-radius: 50%; }
+.main { min-width: 0; padding: 32px 28px 24px; }
+.toolbar { padding: 16px; background: var(--loading-surface); border: 1px solid var(--loading-line); border-radius: 22px; }
+.toolbar h1 { font-size: 28px; font-weight: 750; letter-spacing: -.03em; line-height: 1.2; }
+.toolbar p { margin-top: 10px; font-size: 14px; color: var(--loading-muted); }
+.placeholders, .board { animation: loading-appear 180ms ease-out both; }
+.placeholders span, .worker span, .booking span { display: block; background: var(--loading-placeholder); border-radius: 10px; }
+.dates { display: flex; gap: 8px; margin-top: 24px; }
+.dates span { width: 44px; height: 44px; }
+.dates span:nth-child(2) { width: min(160px, 42%); }
+.filters { display: flex; gap: 12px; margin-top: 24px; }
+.filters span { width: 220px; max-width: 40%; height: 44px; }
+.filters span:last-child { width: 110px; max-width: 20%; }
+.hours { display: flex; gap: 8px; overflow: hidden; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--loading-line); }
+.hours span { flex: 0 0 90px; height: 44px; border-radius: 24px; }
+.board { display: flex; gap: 16px; overflow: hidden; margin-top: 64px; }
+.column { flex: 0 0 min(18.5rem, calc(100vw - 3rem)); min-width: 0; }
+.worker, .booking { padding: 20px; border: 1px solid var(--loading-line); border-radius: 16px; background: var(--loading-surface); }
+.worker { display: flex; gap: 14px; align-items: center; height: 112px; }
+.worker span:first-child { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; }
+.worker span:last-child { width: 55%; height: 14px; }
+.booking { display: grid; align-content: start; gap: 16px; height: 170px; margin-top: 12px; }
+.booking span { width: 65%; height: 12px; }
+.booking span:nth-child(2) { width: 85%; margin-top: 10px; }
+.booking span:last-child { width: 45%; }
+
+@media (min-width: 640px) {
+  .main { padding: 36px 44px 24px; }
+  .toolbar { padding: 24px; }
+  .toolbar h1 { font-size: 32px; }
+}
+
+@media (min-width: 1280px) {
+  .mobileHeader { display: none; }
+  .main { margin-left: 88px; padding: 116px 64px 32px; }
+  .rail { position: fixed; inset: 8px auto 8px 8px; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 32px; padding-top: 56px; border: 1px solid #5c394b; border-radius: 18px; background: #28151e; }
+  .rail span { width: 20px; height: 20px; border-radius: 6px; background: #5c394b; }
+  .rail .monogram { width: 40px; height: 40px; background: #fff7fa; border-radius: 10px; }
+}
+
+@keyframes loading-appear { from { opacity: .45; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .placeholders, .board { animation: none; } }
