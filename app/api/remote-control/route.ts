@@ -220,7 +220,7 @@ export async function GET(request: NextRequest) {
     reconnectRequest: reconnectRequest && Date.parse(reconnectRequest.expiresAt) > Date.now() ? reconnectRequest : null,
   });
 
-  if (activeSession(remote) && remote.workerId) {
+  if (activeSession(remote) && remote.workerId && pcAuth?.accessMode !== "reception") {
     const worker = await prisma.user.findFirst({
       where: { id: remote.workerId, active: true, OR: [{ sede_id: pcAuth!.locationId }, { sede_id: null }] },
       select: { id: true },
@@ -410,6 +410,7 @@ export async function POST(request: NextRequest) {
         ? null
         : previous?.workerId || null;
     if (workerId) {
+      if (pc.accessMode === "reception") return NextResponse.json({ error: "La Reception usa il proprio PIN personale. Seleziona un dispositivo Lavoratori per cambiare profilo." }, { status: 403 });
       const worker = await prisma.user.findFirst({
         where: { id: workerId, active: true, OR: [{ sede_id: pc.locationId }, { sede_id: null }] },
         select: { id: true },

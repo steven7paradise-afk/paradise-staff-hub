@@ -15,6 +15,8 @@ import { PAYMENT_EVENTS_CHANNEL, PAYMENT_REVISION_KEY } from "@/lib/shopify-paym
 import { APPOINTMENT_EVENTS_CHANNEL, APPOINTMENT_REVISION_KEY } from "@/lib/cowlendar-webhook";
 import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
 import { findAppointmentPcArrivalOperator } from "@/lib/appointment-pc-arrival-operator";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,10 +78,16 @@ export async function GET(request: NextRequest) {
   const workerCookie = request.cookies.get(appointmentsPcWorkerCookieName)?.value;
   const cashierScope = request.nextUrl.searchParams.get("scope") === "cashier";
   if (cashierScope && !range) return new Response(null, { status: 400 });
+  let receptionExpiresAt: number | null = null;
   const authorized = async () => {
-    if (!range) return Boolean(await checkPCAuthorization(token) || await getOperationalUser(request, { allowReceptionArrival: true }));
+    const pc = await checkPCAuthorization(token);
+    if (pc?.accessMode === "reception") {
+      const operator = await findAppointmentPcReceptionOperator(pc, token, request.cookies.get(appointmentPcReceptionCookieName)?.value);
+      receptionExpiresAt = operator?.expiresAt ?? 0;
+      return Boolean(operator);
+    }
+    if (!range) return Boolean(pc || await getOperationalUser(request, { allowReceptionArrival: true }));
     if (cashierScope) {
-      const pc = await checkPCAuthorization(token);
       if (!pc) return false;
       const salon = await appointmentSalonForPC(pc.locationId);
       return salon === "repubblica" && Boolean(
@@ -129,7 +137,9 @@ export async function GET(request: NextRequest) {
       streamController = controller;
       if (closed || request.signal.aborted) { close(); if (closed) { try { controller.close(); } catch {} } return; }
       request.signal.addEventListener("abort", close, { once: true });
+      if (receptionExpiresAt !== null) expiry = setTimeout(close, Math.max(0, Math.min(240_000, receptionExpiresAt - Date.now())));
       const send = (revision: string, event = "appointments.changed") => {
+        if (receptionExpiresAt !== null && Date.now() >= receptionExpiresAt) { close(); return; }
         if (!closed) controller.enqueue(encoder.encode(`event: ${event}\ndata: ${revision}\n\n`));
       };
       let pending = true;
@@ -222,7 +232,7 @@ export async function GET(request: NextRequest) {
           }
         } catch { close(); } finally { checking = false; }
       }, 20000);
-      expiry = setTimeout(close, 240000);
+      if (receptionExpiresAt === null) expiry = setTimeout(close, 240000);
     }, cancel() { close(); },
   });
   return new Response(stream, { headers: {

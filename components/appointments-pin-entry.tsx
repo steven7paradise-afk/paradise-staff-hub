@@ -13,9 +13,10 @@ const STAFF_REQUEST_TIMEOUT_MS = 6_000;
 
 export type PinEntryWorker = { id: string; name: string; photo_url?: string | null; locationName: string; status: string; arrivalOnly?: boolean };
 
-export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
+export function AppointmentsPinEntry({ salon, pcName, onUnlock, receptionMode = false }: {
   salon: "tutti" | AppointmentSalonSlug;
   pcName?: string;
+  receptionMode?: boolean;
   onUnlock: (worker: PinEntryWorker, destination: string) => void;
 }) {
   const [pin, setPin] = useState("");
@@ -23,7 +24,7 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
   const [entryState, setEntryState] = useState<"verifying" | "opening" | null>(null);
   const busy = entryState !== null;
   const [selectedWorker, setSelectedWorker] = useState<PinEntryWorker | null>(null);
-  const [pinOnly, setPinOnly] = useState(false);
+  const [pinOnly, setPinOnly] = useState(receptionMode);
   const pinLength = selectedWorker ? 2 : 4;
   const [workers, setWorkers] = useState<PinEntryWorker[]>([]);
   const [staffState, setStaffState] = useState<"loading" | "ready" | "error">("loading");
@@ -76,6 +77,7 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
     }
   }
   useEffect(() => {
+    if (receptionMode) return;
     let active = true;
     let request: AbortController | null = null;
     async function loadStaff() {
@@ -100,7 +102,7 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
     void loadStaff();
     const interval = window.setInterval(loadStaff, 30_000);
     return () => { active = false; request?.abort(); window.clearInterval(interval); };
-  }, [salon, staffRetry]);
+  }, [salon, staffRetry, receptionMode]);
   async function enter() {
     if (inFlight.current || !/^\d+$/.test(pin) || pin.length !== pinLength) return;
     inFlight.current = true; setEntryState("verifying"); setError("");
@@ -176,12 +178,12 @@ export function AppointmentsPinEntry({ salon, pcName, onUnlock }: {
         </ul>}
       </section>}
       <form ref={pinPanel} tabIndex={-1} aria-labelledby="appointment-entry-heading" aria-describedby={error ? "appointment-entry-error" : "appointment-entry-instructions"} onSubmit={event => { event.preventDefault(); void enter(); }} className={styles.pinPanel}>
-        {pinOnly && <button type="button" disabled={busy} onClick={returnToProfiles} className={styles.back}>
+        {pinOnly && !receptionMode && <button type="button" disabled={busy} onClick={returnToProfiles} className={styles.back}>
           <ArrowLeft aria-hidden className="size-4" /> Torna ai profili
         </button>}
         <div className={styles.identity}>
           {selectedWorker ? <StaffPortrait worker={selectedWorker} compact /> : <span className={styles.lock}><LockKeyhole aria-hidden className="size-5" /></span>}
-          <div className="min-w-0"><h2 id="appointment-entry-heading">{selectedWorker?.name ?? "Accesso con PIN"}</h2><p id="appointment-entry-instructions">{selectedWorker ? "Inserisci le prime 2 cifre del PIN" : "Inserisci il PIN completo di 4 cifre"}</p></div>
+          <div className="min-w-0"><h2 id="appointment-entry-heading">{receptionMode ? "Accesso Reception" : selectedWorker?.name ?? "Accesso con PIN"}</h2><p id="appointment-entry-instructions">{receptionMode ? "PIN personale di 4 cifre · accesso fino a fine giornata" : selectedWorker ? "Inserisci le prime 2 cifre del PIN" : "Inserisci il PIN completo di 4 cifre"}</p></div>
         </div>
         <div className={styles.pinProgress}>
           <span role="status" className="sr-only">{pin.length} di {pinLength} cifre inserite</span>

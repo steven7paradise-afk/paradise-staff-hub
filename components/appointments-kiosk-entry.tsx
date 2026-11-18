@@ -43,17 +43,17 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string }) {
+export function AppointmentsKioskEntry({ salone, pcName, remoteTarget, receptionMode = false }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string; receptionMode?: boolean }) {
   if (remoteTarget) return <RemoteAppointmentsKioskEntry salone={salone} pcName={pcName} remoteTarget={remoteTarget} />;
-  return <LocalAppointmentsKioskEntry salone={salone} pcName={pcName} />;
+  return <LocalAppointmentsKioskEntry salone={salone} pcName={pcName} receptionMode={receptionMode} />;
 }
 
-function LocalAppointmentsKioskEntry({ salone, pcName }: { salone: AppointmentSalonSlug; pcName?: string }) {
+function LocalAppointmentsKioskEntry({ salone, pcName, receptionMode }: { salone: AppointmentSalonSlug; pcName?: string; receptionMode: boolean }) {
   const router = useRouter();
   const navigationFallback = useRef<number>(undefined);
   useEffect(() => () => window.clearTimeout(navigationFallback.current), []);
 
-  return <><RemoteControlBridge pcMode /><AppointmentsPinEntry salon={salone} pcName={pcName} onUnlock={(_, destination) => {
+  return <><RemoteControlBridge pcMode /><AppointmentsPinEntry salon={salone} pcName={pcName} receptionMode={receptionMode} onUnlock={(_, destination) => {
     // Keep the local session and any screen share mounted while client routing succeeds.
     navigationFallback.current = window.setTimeout(() => {
       if (isSameAppointmentDestination(window.location.href, destination)) window.location.reload();

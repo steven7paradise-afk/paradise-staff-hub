@@ -3,13 +3,15 @@
 import { useRef, useState } from "react";
 import { Copy, Link2, Lock, Trash2, Unlock } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
+import { appointmentSalonSlugFromName, isCashierAppointmentSalon } from "@/lib/appointment-salon-url";
+import type { PCAccessMode } from "@/lib/appointments-pc-auth";
 
 type Device = { id: string; deviceId: string; name: string; location: string; status: "ACTIVE" | "BLOCKED"; lastUsed: string | null; registeredIp: string | null; activatedAt: string | null };
 type Location = { id: string; name: string };
 type ClockRule = { entranceRoundingMinutes: number; breakDurationMinutes: number };
-type AuthorizedPC = { code: string; name: string; location: string; locationId: string; createdAt: string; activatedAt: string | null; archivedAt: string | null; registeredIp: string | null };
+type AuthorizedPC = { code: string; name: string; location: string; locationId: string; createdAt: string; activatedAt: string | null; archivedAt: string | null; registeredIp: string | null; accessMode: PCAccessMode };
 
-async function requestActivationLink<T>(path: string, body?: { name: string; locationId: string }) {
+async function requestActivationLink<T>(path: string, body?: { name: string; locationId: string; accessMode?: PCAccessMode }) {
   const response = await fetch(path, {
     method: "POST",
     redirect: "manual",
@@ -20,11 +22,14 @@ async function requestActivationLink<T>(path: string, body?: { name: string; loc
   if (response.type === "opaqueredirect" || response.status === 401 || (response.status >= 300 && response.status < 400)) {
     throw new Error("Sessione scaduta. Accedi di nuovo e riprova.");
   }
-  const data = await response.json().catch(() => null) as (T & { activationUrl?: string; error?: string }) | null;
-  if (!response.ok || typeof data?.activationUrl !== "string" || !data.activationUrl) {
+  const data = await response.json().catch(() => null) as (T & { activationUrl?: string; link?: string; error?: string }) | null;
+  const url = data?.activationUrl || data?.link;
+  if (!response.ok || typeof url !== "string" || !url) {
     throw new Error(data?.error || "Link non creato. Riprova.");
   }
-  const { activationUrl: url, ...device } = data;
+  const device = { ...data! };
+  delete device.activationUrl;
+  delete device.link;
   return { data: device, url };
 }
 
@@ -33,8 +38,13 @@ export function DeviceManager({ initialDevices, locations, initialRules, initial
   const [pcs, setPcs] = useState(initialPcs.filter((pc) => !pc.archivedAt));
   const [rules, setRules] = useState(initialRules);
   const [draft, setDraft] = useState({ name: "", locationId: locations[0]?.id ?? "" });
+  const pcLocations = locations.filter(({ name }) => isCashierAppointmentSalon(appointmentSalonSlugFromName(name)));
+  const [pcDraft, setPcDraft] = useState<{ name: string; locationId: string; accessMode: PCAccessMode }>({
+    name: "", locationId: pcLocations.find(({ name }) => appointmentSalonSlugFromName(name) === "repubblica")?.id || pcLocations[0]?.id || "", accessMode: "worker",
+  });
+  const receptionAvailable = appointmentSalonSlugFromName(pcLocations.find(({ id }) => id === pcDraft.locationId)?.name) === "repubblica";
   const [message, setMessage] = useState("");
-  const [activationLink, setActivationLink] = useState<{ target: string; deviceId: string; url: string } | null>(null);
+  const [activationLink, setActivationLink] = useState<{ target: string; deviceId: string; url: string; kind?: "pc" } | null>(null);
   const [linkFeedback, setLinkFeedback] = useState<{ target: string; text: string } | null>(null);
   const [pendingEnrollment, setPendingEnrollment] = useState<string | null>(null);
   const enrollmentInProgress = useRef(false);
@@ -74,13 +84,42 @@ export function DeviceManager({ initialDevices, locations, initialRules, initial
   }
 
   async function copyActivationLink(link: NonNullable<typeof activationLink>) {
+    const destination = link.kind === "pc" ? "PC" : "tablet";
     try {
       await navigator.clipboard.writeText(link.url);
-      setLinkFeedback({ target: link.target, text: "Link copiato. Aprilo direttamente sul tablet." });
+      setLinkFeedback({ target: link.target, text: `Link copiato. Aprilo direttamente sul ${destination}.` });
     } catch {
       activationLinkField.current?.focus();
       activationLinkField.current?.select();
-      setLinkFeedback({ target: link.target, text: "Copia manualmente il link selezionato e aprilo sul tablet." });
+      setLinkFeedback({ target: link.target, text: `Copia manualmente il link selezionato e aprilo sul ${destination}.` });
+    }
+  }
+
+  async function generatePcLink(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = pcDraft.name.trim();
+    if (enrollmentInProgress.current || !name || !pcDraft.locationId) return;
+    enrollmentInProgress.current = true;
+    setPendingEnrollment("new-pc");
+    setLinkFeedback(null);
+    setActivationLink(null);
+    try {
+      const { data, url } = await requestActivationLink<{ code: string }>("/api/appointments/pc/generate", { ...pcDraft, name });
+      if (typeof data.code !== "string" || !data.code) throw new Error("Il server non ha restituito un codice valido. Riprova.");
+      setPcs((current) => [{
+        code: data.code, name, locationId: pcDraft.locationId,
+        location: pcLocations.find(({ id }) => id === pcDraft.locationId)?.name || "Salone",
+        accessMode: pcDraft.accessMode, createdAt: new Date().toISOString(),
+        activatedAt: null, archivedAt: null, registeredIp: null,
+      }, ...current]);
+      setActivationLink({ target: "new-pc", deviceId: data.code, url, kind: "pc" });
+      setLinkFeedback({ target: "new-pc", text: "Link creato. Aprilo sul PC da autorizzare e conferma l’attivazione." });
+      setPcDraft((current) => ({ ...current, name: "" }));
+    } catch (error) {
+      setLinkFeedback({ target: "new-pc", text: error instanceof Error ? error.message : "Link non creato. Riprova." });
+    } finally {
+      enrollmentInProgress.current = false;
+      setPendingEnrollment(null);
     }
   }
 
@@ -207,12 +246,42 @@ export function DeviceManager({ initialDevices, locations, initialRules, initial
       </Card>
       <Card className="mb-6 overflow-hidden p-0">
         <div className="border-b border-black/5 p-5">
-          <h2 className="text-lg font-semibold">PC cassa autorizzati</h2>
-          <p className="mt-2 text-sm text-black/55">Dispositivi con accesso operativo agli appuntamenti e alla reception.</p>
+          <h2 className="text-lg font-semibold">Autorizza un nuovo PC</h2>
+          <p className="mt-2 text-sm text-black/55">Scegli a chi serve il PC, poi apri il link sul computer da autorizzare.</p>
+          <form onSubmit={generatePcLink} className="mt-5 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm font-medium" htmlFor="new-pc-name">Nome del PC
+                <Field id="new-pc-name" required placeholder="Es. Reception Repubblica" value={pcDraft.name} disabled={pendingEnrollment !== null} onChange={(event) => setPcDraft({ ...pcDraft, name: event.target.value })} />
+              </label>
+              <label className="grid gap-2 text-sm font-medium" htmlFor="new-pc-location">Salone
+                <Select id="new-pc-location" required value={pcDraft.locationId} disabled={pendingEnrollment !== null} onChange={(event) => {
+                  const locationId = event.target.value;
+                  const reception = appointmentSalonSlugFromName(pcLocations.find(({ id }) => id === locationId)?.name) === "repubblica";
+                  setPcDraft({ ...pcDraft, locationId, accessMode: reception ? pcDraft.accessMode : "worker" });
+                }}>
+                  {pcLocations.length === 0 ? <option value="">Nessun salone disponibile</option> : pcLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                </Select>
+              </label>
+            </div>
+            <fieldset disabled={pendingEnrollment !== null} className="space-y-2">
+              <legend className="mb-2 text-sm font-medium">Utilizzo del PC</legend>
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-black/10 p-3">
+                <input type="radio" name="new-pc-purpose" value="worker" checked={pcDraft.accessMode === "worker"} onChange={() => setPcDraft({ ...pcDraft, accessMode: "worker" })} className="mt-1 accent-paradise-noir" />
+                <span><span className="block text-sm font-semibold">Lavoratori</span><span className="mt-1 block text-sm text-black/65">Accesso al proprio profilo con il PIN personale.</span></span>
+              </label>
+              <label className={`flex min-h-11 items-start gap-3 rounded-xl border border-black/10 p-3 ${receptionAvailable ? "cursor-pointer" : "opacity-60"}`}>
+                <input type="radio" name="new-pc-purpose" value="reception" disabled={!receptionAvailable} checked={pcDraft.accessMode === "reception"} onChange={() => setPcDraft({ ...pcDraft, accessMode: "reception" })} className="mt-1 accent-paradise-noir" />
+                <span><span className="block text-sm font-semibold">Reception</span><span className="mt-1 block text-sm text-black/65">PIN personale una volta al giorno. Disponibile per Repubblica.</span></span>
+              </label>
+            </fieldset>
+            <Button type="submit" disabled={pendingEnrollment !== null || !pcDraft.name.trim() || !pcDraft.locationId}><Link2 className="size-4" /> {pendingEnrollment === "new-pc" ? "Creazione del link…" : "Crea link PC"}</Button>
+          </form>
+          {renderActivationLink("new-pc")}
         </div>
+        <h3 className="px-5 pt-5 font-semibold">PC autorizzati</h3>
         {pcs.length === 0 ? <p className="p-5 text-sm text-black/45">Nessun PC autorizzato.</p> : pcs.map((pc) => (
           <div key={pc.code} className="grid gap-3 border-b border-black/5 p-5 last:border-b-0 md:grid-cols-[1fr_1fr_auto] md:items-center">
-            <div><p className="font-semibold">{pc.name}</p><p className="text-sm text-black/45">{pc.location}</p></div>
+            <div><p className="font-semibold">{pc.name}</p><p className="text-sm text-black/65">{pc.location} · {pc.accessMode === "reception" ? "Reception" : "Lavoratori"}</p></div>
             <div className="text-sm text-black/55">{pc.registeredIp ? `IP: ${pc.registeredIp}` : "In attesa di attivazione"}</div>
             <Button variant="soft" onClick={() => revokePc(pc)}><Trash2 className="size-4" /> Revoca</Button>
           </div>

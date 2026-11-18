@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { appointmentSalonForPC, appointmentStaffLocationsForPC, appointmentsPcCookieName, appointmentsPcWorkerCookieName, appointmentsPcWorkerCookieMaxAgeSeconds, checkPCAuthorization } from "@/lib/appointments-pc-auth";
@@ -12,11 +11,12 @@ import { isAppointmentReceptionist } from "@/lib/appointment-arrival-access";
 import { appointmentPcArrivalCookieName, signAppointmentPcArrival } from "@/lib/appointment-pc-arrival-session";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { pinLookup } from "@/lib/pin";
+import { appointmentPcReceptionCookieName, signAppointmentPcReception } from "@/lib/appointment-pc-reception-session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const jar = await cookies();
+  const jar = request.cookies;
   const deviceToken = jar.get(appointmentsPcCookieName)?.value;
   const pc = await checkPCAuthorization(deviceToken);
   if (!pc || !deviceToken) return NextResponse.json({ error: "PC non autorizzato." }, { status: 401 });
@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "PIN corretto, ma il profilo è associato a un'altra sede. Chiedi alla reception di verificare la sede del profilo e di questo PC." }, { status: 403 });
   }
   const isReceptionAtDevice = salon === "repubblica" && worker.sede_id !== null && isAppointmentReceptionist(worker);
+  const receptionMode = pc.accessMode === "reception";
+  if (receptionMode && (!isReceptionAtDevice && !pinOnlyAdmin)) {
+    return NextResponse.json({ error: "Questo link è riservato alla Reception. Per lavorare usa il link Lavoratori." }, { status: 403 });
+  }
   const arrivalOnly = isReceptionAtDevice && !alwaysActive && !pinOnlyAdmin && state?.status === "OUT";
   if (!alwaysActive && !pinOnlyAdmin && !arrivalOnly && (!state || !["IN", "BREAK"].includes(state.status))) return NextResponse.json({ error: "PIN corretto, ma non risulti timbrato adesso. Registra l'ingresso e riprova." }, { status: 403 });
   const needsArrivalGrant = salon === "repubblica" && (isReceptionAtDevice || pinOnlyAdmin);
@@ -59,9 +63,15 @@ export async function POST(request: NextRequest) {
     appointmentUrl: `${appointmentSalonUrl(salon)}?worker=${encodeURIComponent(name)}`,
     worker: { id: worker.id, name, photo_url: worker.photo_url, locationName: worker.location?.name ?? "", status: alwaysActive ? "IN" : state!.status, arrivalOnly },
   }, { headers: { "Cache-Control": "private, no-store" } });
-  const cookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/", maxAge: appointmentsPcWorkerCookieMaxAgeSeconds };
-  response.cookies.set(appointmentsPcWorkerCookieName, arrivalOnly ? "" : worker.id, { ...cookieOptions, maxAge: arrivalOnly ? 0 : cookieOptions.maxAge });
-  if (needsArrivalGrant && secret) {
+  const receptionGrant = receptionMode && secret
+    ? signAppointmentPcReception(worker.id, pc.locationId, deviceToken, secret)
+    : null;
+  const cookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/", maxAge: receptionGrant?.maxAge ?? appointmentsPcWorkerCookieMaxAgeSeconds };
+  response.cookies.set(appointmentsPcWorkerCookieName, arrivalOnly && !receptionGrant ? "" : worker.id, { ...cookieOptions, maxAge: arrivalOnly && !receptionGrant ? 0 : cookieOptions.maxAge });
+  response.cookies.set(appointmentPcReceptionCookieName, receptionGrant?.token ?? "", {
+    ...cookieOptions, maxAge: receptionGrant?.maxAge ?? 0,
+  });
+  if (!receptionMode && needsArrivalGrant && secret) {
     const expiresAt = Date.now() + cookieOptions.maxAge * 1000;
     response.cookies.set(appointmentPcArrivalCookieName, signAppointmentPcArrival(worker.id, deviceToken, arrivalOnly, secret, expiresAt), cookieOptions);
   } else {

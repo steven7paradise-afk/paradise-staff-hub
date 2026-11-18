@@ -14,6 +14,12 @@ export const appointmentsRemoteTargetCookieName = "appointments_remote_target";
 export const appointmentsRemoteWorkerCookieName = "appointments_remote_worker";
 export const appointmentsRemoteCookieMaxAgeSeconds = 2 * 60 * 60;
 
+export type PCAccessMode = "worker" | "reception";
+
+export function normalizePCAccessMode(value: unknown): PCAccessMode {
+  return value === "reception" ? "reception" : "worker";
+}
+
 export interface AuthorizedPC {
   code: string;
   name: string;
@@ -23,9 +29,10 @@ export interface AuthorizedPC {
   accessTokenHash: string | null;
   registeredIp: string | null;
   archivedAt: string | null;
+  accessMode?: PCAccessMode;
 }
 
-type PCAuthorization = { code: string; name: string; locationId: string; isPC: boolean };
+export type PCAuthorization = { code: string; name: string; locationId: string; isPC: boolean; accessMode: PCAccessMode };
 const pcAuthorizationCache = new Map<string, { value: PCAuthorization; expiresAt: number }>();
 const PC_AUTH_CACHE_MS = 5_000;
 
@@ -33,7 +40,13 @@ function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function generateOneTimeCode(locationId: string, name: string): Promise<string> {
+export async function generateOneTimeCode(locationId: string, name: string, accessMode: PCAccessMode = "worker"): Promise<string> {
+  if (accessMode !== "worker" && accessMode !== "reception") {
+    throw new PCActivationError("Scegli Lavoratori o Reception per questo PC.", 400);
+  }
+  if (accessMode === "reception" && await appointmentSalonForPC(locationId) !== "repubblica") {
+    throw new PCActivationError("La modalità Reception è disponibile solo per Repubblica attiva.", 400);
+  }
   const code = randomUUID();
 
   const setting = await prisma.setting.findUnique({
@@ -48,6 +61,7 @@ export async function generateOneTimeCode(locationId: string, name: string): Pro
       code,
       name,
       locationId,
+      accessMode,
       createdAt: new Date().toISOString(),
       activatedAt: null,
       accessTokenHash: null,
@@ -146,6 +160,9 @@ export async function activatePC(code: string, ip: string | null) {
   if (!isCashierAppointmentSalon(salon)) {
     throw new PCActivationError("La sede associata a questo link non è disponibile.", 409);
   }
+  if (normalizePCAccessMode(pc.accessMode) === "reception" && salon !== "repubblica") {
+    throw new PCActivationError("La modalità Reception è disponibile solo per Repubblica attiva.", 409);
+  }
 
   const accessToken = randomBytes(32).toString("hex");
   const activatedPc = {
@@ -209,6 +226,7 @@ export async function checkPCAuthorization(cookieToken: string | undefined): Pro
     name: found.name,
     locationId: found.locationId,
     isPC: true,
+    accessMode: normalizePCAccessMode(found.accessMode),
   };
   pcAuthorizationCache.set(accessTokenHash, { value: authorization, expiresAt: Date.now() + PC_AUTH_CACHE_MS });
   if (pcAuthorizationCache.size > 100) {

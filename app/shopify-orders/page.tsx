@@ -7,6 +7,8 @@ import { auth } from "@/lib/auth";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { fetchShopifyOrdersPage } from "@/lib/shopify-orders-dashboard";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,11 @@ export default async function ShopifyOrdersPage() {
     ? null
     : await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
   const isPC = Boolean(pcAuth);
-  const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
+  const receptionOperator = pcAuth?.accessMode === "reception"
+    ? await findAppointmentPcReceptionOperator(pcAuth, cookieStore.get(appointmentsPcCookieName)?.value, cookieStore.get(appointmentPcReceptionCookieName)?.value)
+    : null;
+  if (pcAuth?.accessMode === "reception" && (!receptionOperator || receptionOperator.arrivalOnly)) redirect("/appointments/repubblica?choose=1");
+  const selectedWorkerId = receptionOperator?.id || cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
 
   if (!session?.user?.id && !isPC) redirect("/login");
 

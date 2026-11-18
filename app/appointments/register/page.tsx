@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { appointmentSalonUrl } from "@/lib/appointment-salon-url";
-import { appointmentSalonForPC, appointmentsPcCookieName, checkPCAuthorization, verifyOneTimeCode } from "@/lib/appointments-pc-auth";
+import { appointmentSalonForPC, appointmentsPcCookieName, checkPCAuthorization, normalizePCAccessMode, verifyOneTimeCode, type PCAccessMode } from "@/lib/appointments-pc-auth";
 import { PcRegisterForm } from "@/components/pc-register-form";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,12 @@ export default async function AppointmentsRegisterPage({
   let error = "";
   let pcName = "";
   let existingAppointmentUrl = "";
+  let accessMode: PCAccessMode = "worker";
 
   const cookieStore = await cookies();
   const existingPcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
   if (existingPcAuth && (!code || existingPcAuth.code === code) && resolvedSearchParams.activation !== "retry") {
+    accessMode = existingPcAuth.accessMode;
     const salon = await appointmentSalonForPC(existingPcAuth.locationId);
     if (salon) existingAppointmentUrl = `${appointmentSalonUrl(salon)}?choose=1`;
   }
@@ -36,6 +38,7 @@ export default async function AppointmentsRegisterPage({
       // This prevents link prefetched crawlers (WhatsApp, Skype, Slack) from consuming the code.
       const pc = await verifyOneTimeCode(code);
       pcName = pc.name;
+      accessMode = normalizePCAccessMode(pc.accessMode);
     } catch (err) {
       error = err instanceof Error ? err.message : "Errore durante la verifica del codice.";
     }
@@ -63,7 +66,9 @@ export default async function AppointmentsRegisterPage({
             </div>
 
             <div className="p-4 rounded-2xl bg-[#F6FAF8] border border-[#DCEBE4] text-sm text-neutral-700 font-medium leading-relaxed">
-              Questo computer risulta gia autorizzato. Apri la scelta profilo per accedere all'agenda.
+              {accessMode === "reception"
+                ? "Questo computer è già autorizzato per la reception. Per accedere, inserisci il tuo PIN personale una volta al giorno."
+                : "Questo computer è già autorizzato per i lavoratori. Scegli il tuo profilo e inserisci il PIN personale."}
             </div>
 
             <div className="pt-4">
@@ -71,7 +76,7 @@ export default async function AppointmentsRegisterPage({
                 href={existingAppointmentUrl}
                 className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition"
               >
-                Scegli profilo staff
+                {accessMode === "reception" ? "Apri la Reception" : "Scegli profilo staff"}
               </Link>
             </div>
           </div>
@@ -108,7 +113,7 @@ export default async function AppointmentsRegisterPage({
             </div>
           </div>
         ) : (
-          <PcRegisterForm code={code} initialPcName={pcName} />
+          <PcRegisterForm code={code} initialPcName={pcName} accessMode={accessMode} />
         )}
 
       </div>

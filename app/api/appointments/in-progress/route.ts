@@ -12,6 +12,7 @@ const reply = (data: unknown, status = 200) => NextResponse.json(data, { status,
 export async function GET(request: NextRequest) {
   const pc = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value);
   if (!pc) return reply({ error: "PC non autorizzato." }, 401);
+  if (pc.accessMode === "reception" && !await getOperationalUser(request, { requirePcWorker: true })) return reply({ error: "Inserisci il PIN personale della Reception." }, 401);
   const today = appointmentDateKey();
   const [rows, arrivals] = await Promise.all([
     prisma.setting.findMany({ where: { key: { startsWith: `salon_live:${pc.locationId}:` }, NOT: [{ value: { path: ["state"], equals: "done" } }, { value: { path: ["state"], equals: "cancelled" } }] } }),

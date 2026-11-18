@@ -89,6 +89,9 @@ export async function POST(request: NextRequest) {
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
+  if (pcAuth?.accessMode === "reception" && !operationalUser) {
+    return NextResponse.json({ error: "Inserisci il PIN personale della Reception." }, { status: 401 });
+  }
   const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? request.headers.get("x-device-id") ?? "";
   const tabletDevice = requestedDevice
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)

@@ -7,6 +7,8 @@ import { hasCurrentAttendanceAtAppointmentSalon, isAlwaysActiveAppointmentStaff 
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { appointmentPcArrivalCookieName, signAppointmentPcArrival } from "@/lib/appointment-pc-arrival-session";
 import { findAppointmentPcArrivalOperator } from "@/lib/appointment-pc-arrival-operator";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
@@ -17,6 +19,11 @@ export async function POST(request: NextRequest) {
   const pc = await checkPCAuthorization(deviceToken);
   const workerId = request.cookies.get(appointmentsPcWorkerCookieName)?.value;
   if (!pc || !deviceToken) return NextResponse.json({ error: "Sessione scaduta." }, { status: 401 });
+  if (pc.accessMode === "reception") {
+    const operator = await findAppointmentPcReceptionOperator(pc, deviceToken, request.cookies.get(appointmentPcReceptionCookieName)?.value);
+    if (!operator) return NextResponse.json({ error: "Sessione scaduta. Inserisci di nuovo il PIN personale." }, { status: 401 });
+    return NextResponse.json({ success: true, expiresAt: operator.expiresAt }, { headers: { "Cache-Control": "private, no-store" } });
+  }
   const body = await request.json().catch(() => null);
   const maxAge = appointmentSessionRemainingSeconds(body?.activityAgeMs);
   if (!maxAge) return NextResponse.json({ error: "Sessione scaduta." }, { status: 401 });

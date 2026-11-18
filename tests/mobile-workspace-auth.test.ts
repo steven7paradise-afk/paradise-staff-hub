@@ -4,6 +4,26 @@ import { createHash } from "node:crypto";
 import { prisma } from "../lib/prisma";
 import { mobileWorkspace } from "../lib/mobile-workspace-auth";
 
+test("a Reception-purpose device cannot bypass the daily browser PIN through native workspace access", async t => {
+  const token = "fixture-reception-native-boundary";
+  const findSetting = prisma.setting.findUnique;
+  const findLocation = prisma.location.findUnique;
+  t.after(() => {
+    prisma.setting.findUnique = findSetting;
+    prisma.location.findUnique = findLocation;
+  });
+  prisma.setting.findUnique = (async () => ({ value: [{
+    code: "fixture-reception-native-code", name: "Reception demo", locationId: "salon-1", accessMode: "reception",
+    accessTokenHash: createHash("sha256").update(token).digest("hex"), archivedAt: null,
+  }] })) as unknown as typeof findSetting;
+  let reads = 0;
+  prisma.location.findUnique = (async () => { reads++; throw new Error("Native Reception must stop before data access"); }) as unknown as typeof findLocation;
+  assert.equal(await mobileWorkspace(new Request("https://example.test/api/mobile/workspace", {
+    headers: { "x-paradise-device": token },
+  })), null);
+  assert.equal(reads, 0);
+});
+
 // Deterministic authentication integration tests. No database or real credentials are used.
 test("workspace verifies identity, device binding, expiry and revocation", async (t) => {
   const originalSetting = prisma.setting.findUnique;

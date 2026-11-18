@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
   const deviceToken = request.cookies.get(appointmentsPcCookieName)?.value;
   const pc = await checkPCAuthorization(deviceToken);
   if (!pc || !deviceToken) return fail("PC non autorizzato.", 401);
+  if (pc.accessMode === "reception") return fail("Per accedere alla Reception verifica il PIN personale online.", 403);
   const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
   if (!secret) return fail("Accesso offline non configurato sul server.", 503);
   if (Number(request.headers.get("content-length") ?? 0) > 4096) return fail("Richiesta troppo grande.", 413);

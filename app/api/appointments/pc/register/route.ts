@@ -8,6 +8,8 @@ import {
   PCActivationError,
 } from "@/lib/appointments-pc-auth";
 import { appointmentSalonUrl } from "@/lib/appointment-salon-url";
+import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
 
 const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 
@@ -55,6 +57,9 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     });
+    for (const name of [appointmentPcArrivalCookieName, appointmentPcReceptionCookieName]) {
+      response.cookies.set(name, "", { path: "/", maxAge: 0, httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
+    }
     return response;
   } catch (error) {
     const knownError = error instanceof PCActivationError;

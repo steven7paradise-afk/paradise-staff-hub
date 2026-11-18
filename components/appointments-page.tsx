@@ -681,6 +681,7 @@ export default async function AppointmentsPage({
         initialBookings={serializedBookings}
         corsoTeamOptions={corsoTeamOptions}
         isPC={isPC}
+        pcReceptionMode={pcAuth?.accessMode === "reception"}
         arrivalOnly={arrivalOnly}
         pcLocationId={pcLocationId}
         isRepubblicaCashier={Boolean(pcAuth && isRepubblicaPc)}

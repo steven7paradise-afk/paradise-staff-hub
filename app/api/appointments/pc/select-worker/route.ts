@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
   if (!pcAuth) {
     return NextResponse.json({ error: "PC non autorizzato." }, { status: 401 });
   }
+  if (pcAuth.accessMode === "reception") {
+    return NextResponse.json({ error: "Per accedere alla Reception usa il PIN personale completo di 4 cifre." }, { status: 403 });
+  }
   const limitKey = `appointment-pin:${pcAuth.code}`;
   if (!mobileLoginAllowed(limitKey)) return NextResponse.json({ error: "Troppi tentativi. Attendi 15 minuti prima di riprovare." }, { status: 429 });
 

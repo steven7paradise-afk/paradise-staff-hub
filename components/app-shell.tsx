@@ -22,6 +22,9 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { AdminAssistant } from "@/components/admin-assistant";
 import { RemoteControlBridge } from "@/components/remote-control-bridge";
 import { AppointmentIdleSessionGuard } from "@/components/use-appointment-idle-session";
+import { AppointmentReceptionSessionGuard } from "@/components/appointment-reception-session-guard";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 import pkg from "@/package.json";
 import { redirect } from "next/navigation";
 import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
@@ -117,13 +120,18 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const isPcCassa = pcMode;
   if (!session?.user?.id && !isPcCassa) redirect("/login");
   let activePcSalon = pcSalon;
-  if (isPcCassa && activePcSalon === undefined) {
-    const token = (await cookies()).get(appointmentsPcCookieName)?.value;
-    const device = await checkPCAuthorization(token);
-    if (device) activePcSalon = await appointmentSalonForPC(device.locationId);
-  }
+  const pcCookies = isPcCassa && !remoteController ? await cookies() : null;
+  const pcToken = pcCookies?.get(appointmentsPcCookieName)?.value;
+  const device = pcCookies ? await checkPCAuthorization(pcToken) : null;
+  if (device && activePcSalon === undefined) activePcSalon = await appointmentSalonForPC(device.locationId);
   const pcAppointmentsHref = appointmentSalonUrl(activePcSalon || "buenos-aires");
   const pcProfileChooserHref = pcProfileChooserHrefOverride || `${pcAppointmentsHref}?choose=1`;
+  const receptionOperator = device?.accessMode === "reception"
+    ? await findAppointmentPcReceptionOperator(device, pcToken, pcCookies?.get(appointmentPcReceptionCookieName)?.value)
+    : null;
+  if (device?.accessMode === "reception" && !receptionOperator) redirect(pcProfileChooserHref);
+  if (receptionOperator?.arrivalOnly && !pcArrivalOnly) redirect(pcAppointmentsHref);
+  if (receptionOperator) pcDisplayUser = { name: receptionOperator.name, photo_url: receptionOperator.photo_url };
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
   const settingsKeys = [
@@ -539,7 +547,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<><ThemeRestorer />{isPcCassa && !remoteController ? <AppointmentIdleSessionGuard redirectTo={pcProfileChooserHref} /> : null}{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher userId={session?.user?.id ?? "PC_CASSA"} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
+      main={<><ThemeRestorer />{isPcCassa && !remoteController ? receptionOperator ? <AppointmentReceptionSessionGuard expiresAt={receptionOperator.expiresAt} redirectTo={pcProfileChooserHref} /> : <AppointmentIdleSessionGuard redirectTo={pcProfileChooserHref} /> : null}{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher userId={session?.user?.id ?? "PC_CASSA"} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),

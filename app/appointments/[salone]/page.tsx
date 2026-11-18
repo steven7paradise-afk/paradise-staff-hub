@@ -8,6 +8,8 @@ import { auth } from "@/lib/auth";
 import { appointmentStaffDisplayName } from "@/lib/appointment-staff-access";
 import { appointmentPcArrivalCookieName } from "@/lib/appointment-pc-arrival-session";
 import { findAppointmentPcArrivalOperator } from "@/lib/appointment-pc-arrival-operator";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +59,10 @@ export default async function SalonAppointmentsPage({
   }
 
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
+  const receptionMode = pcAuth?.accessMode === "reception" && !isAdminRemote;
+  const receptionOperator = receptionMode && pcAuth
+    ? await findAppointmentPcReceptionOperator(pcAuth, pcToken, cookieStore.get(appointmentPcReceptionCookieName)?.value)
+    : null;
   const arrivalOperator = !selectedWorker && pcAuth && pcSalon === "repubblica"
     ? await findAppointmentPcArrivalOperator(pcAuth.locationId, pcToken, cookieStore.get(appointmentPcArrivalCookieName)?.value)
     : null;
@@ -97,9 +103,9 @@ export default async function SalonAppointmentsPage({
     redirect(appointmentSalonUrl(salone));
   }
 
-  const operator = arrivalOnly ? arrivalOperator : selectedWorkerRecord;
-  if (!operator || forceProfileChoice) {
-    return <AppointmentsKioskEntry salone={salone} pcName={pcAuth?.name} />;
+  const operator = receptionMode ? receptionOperator : arrivalOnly ? arrivalOperator : selectedWorkerRecord;
+  if (!operator || (forceProfileChoice && !receptionMode)) {
+    return <AppointmentsKioskEntry salone={salone} pcName={pcAuth?.name} receptionMode={receptionMode} />;
   }
 
   return await AppointmentsPage({
@@ -110,7 +116,7 @@ export default async function SalonAppointmentsPage({
       worker: appointmentStaffDisplayName(operator.name, operator.id),
     }),
     forcePcSalon: salone,
-    pcArrivalOnly: arrivalOnly,
+    pcArrivalOnly: receptionMode ? Boolean(receptionOperator?.arrivalOnly) : arrivalOnly,
     repubblicaBoard: salone === "repubblica" && !isAdminRemote,
   });
 }

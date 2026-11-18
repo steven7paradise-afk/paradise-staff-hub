@@ -29,20 +29,28 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const locationId = String(body?.locationId || "").trim();
     const name = String(body?.name || "").trim();
+    const accessMode = body?.accessMode === undefined ? "worker" : body.accessMode;
 
     if (!locationId || !name) {
       return NextResponse.json({ error: "Sede o nome del PC mancanti." }, { status: 400 });
     }
-    if (!isCashierAppointmentSalon(await appointmentSalonForPC(locationId))) {
+    if (accessMode !== "worker" && accessMode !== "reception") {
+      return NextResponse.json({ error: "Scegli Lavoratori o Reception per questo PC." }, { status: 400 });
+    }
+    const salon = await appointmentSalonForPC(locationId);
+    if (!isCashierAppointmentSalon(salon)) {
       return NextResponse.json({ error: "Scegli una sede attiva che supporta il PC Cassa." }, { status: 400 });
     }
+    if (accessMode === "reception" && salon !== "repubblica") {
+      return NextResponse.json({ error: "La modalità Reception è disponibile solo per Repubblica attiva." }, { status: 400 });
+    }
 
-    const code = await generateOneTimeCode(locationId, name);
+    const code = await generateOneTimeCode(locationId, name, accessMode);
     const host = request.headers.get("host") || "www.staff-paradise.tech";
     const protocol = request.headers.get("x-forwarded-proto") || "https";
     const link = `${protocol}://${host}/appointments/register?code=${code}`;
 
-    return NextResponse.json({ success: true, code, link });
+    return NextResponse.json({ success: true, code, link, accessMode });
   } catch (error) {
     console.error("Errore durante la generazione del link PC:", error);
     return NextResponse.json({ error: "Impossibile generare il codice." }, { status: 500 });

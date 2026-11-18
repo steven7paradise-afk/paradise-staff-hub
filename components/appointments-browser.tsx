@@ -1239,8 +1239,8 @@ function AppointmentArrivalTiming({ arrivedAt, startDate, dateKey, waiting, show
   );
 }
 
-function PcStaffLockScreen({ salon, onUnlock }: { salon: SalonFilter; onUnlock: (worker: ActivePcWorker) => void }) {
-  return <GlobalFullscreenLayer><AppointmentsPinEntry salon={salon} onUnlock={worker => onUnlock(worker)} /></GlobalFullscreenLayer>;
+function PcStaffLockScreen({ salon, onUnlock, receptionMode = false }: { salon: SalonFilter; onUnlock: (worker: ActivePcWorker) => void; receptionMode?: boolean }) {
+  return <GlobalFullscreenLayer><AppointmentsPinEntry salon={salon} receptionMode={receptionMode} onUnlock={worker => onUnlock(worker)} /></GlobalFullscreenLayer>;
 }
 
 export function AppointmentsBrowser({
@@ -1249,6 +1249,7 @@ export function AppointmentsBrowser({
   isPC = false,
   pcLocationId = "",
   isRepubblicaCashier = false,
+  pcReceptionMode = false,
   repubblicaBoard = false,
   appointmentRevision = null,
   initialSalon = "tutti",
@@ -1270,6 +1271,7 @@ export function AppointmentsBrowser({
   isPC?: boolean;
   pcLocationId?: string;
   isRepubblicaCashier?: boolean;
+  pcReceptionMode?: boolean;
   repubblicaBoard?: boolean;
   appointmentRevision?: string | null;
   initialSalon?: SalonFilter;
@@ -1365,6 +1367,8 @@ export function AppointmentsBrowser({
   const [pcGenModalOpen, setPcGenModalOpen] = useState(false);
   const [genSedeId, setGenSedeId] = useState("");
   const [genPcName, setGenPcName] = useState("");
+  const [genAccessMode, setGenAccessMode] = useState<"worker" | "reception">("worker");
+  const generatedPcLinkField = useRef<HTMLInputElement>(null);
   const [generatedLink, setGeneratedLink] = useState("");
   const [generatingLink, setGeneratingLink] = useState(false);
   const [genError, setGenError] = useState("");
@@ -3716,7 +3720,7 @@ export function AppointmentsBrowser({
       const res = await fetch("/api/appointments/pc/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationId: genSedeId, name: genPcName.trim() }),
+        body: JSON.stringify({ locationId: genSedeId, name: genPcName.trim(), accessMode: genAccessMode }),
       });
 
       if (!res.ok) {
@@ -5114,6 +5118,7 @@ export function AppointmentsBrowser({
     const repubblica = pcLinkLocations.find(({ name }) => appointmentSalonSlugFromName(name) === "repubblica");
     setGenSedeId(repubblica?.id || pcLinkLocations[0]?.id || "");
     setGenPcName("");
+    setGenAccessMode("worker");
     setGeneratedLink("");
     setGenError("");
     setCopiedLink(false);
@@ -6163,7 +6168,7 @@ export function AppointmentsBrowser({
 
             <div className="space-y-1.5 text-center">
               <h2 id="pc-registration-title" className="text-xl font-serif font-light tracking-wide uppercase text-neutral-900">
-                Registra PC Cassa
+                Registra PC
               </h2>
               <p className="text-xs text-neutral-500 max-w-xs mx-auto">
                 Genera un link monouso per configurare un PC di cassa o reception.
@@ -6173,11 +6178,13 @@ export function AppointmentsBrowser({
             {generatedLink ? (
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center">
-                  Link generato con successo! Copialo e aprilo una sola volta sul PC della cassa.
+                  Link per {genAccessMode === "reception" ? "Reception" : "Lavoratori"} creato. Copialo e aprilo sul PC da autorizzare.
                 </div>
 
                 <div className="space-y-2">
                   <input
+                    ref={generatedPcLinkField}
+                    aria-label="Link di attivazione PC"
                     type="text"
                     readOnly
                     value={generatedLink}
@@ -6217,13 +6224,16 @@ export function AppointmentsBrowser({
                         setCopiedLink(true);
                         setTimeout(() => setCopiedLink(false), 2000);
                       } else {
-                        alert("Impossibile copiare automaticamente. Seleziona il testo sopra e copialo manualmente.");
+                        generatedPcLinkField.current?.focus();
+                        generatedPcLinkField.current?.select();
+                        setGenError("Copia manualmente il link selezionato e aprilo sul PC da autorizzare.");
                       }
                     }}
                     className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition"
                   >
                     {copiedLink ? "Copiato!" : "Copia Link"}
                   </button>
+                  <p role="status" className="empty:hidden text-xs text-neutral-600">{genError}</p>
                 </div>
               </div>
             ) : (
@@ -6241,7 +6251,11 @@ export function AppointmentsBrowser({
                   <select
                     id="pc-link-salon"
                     value={genSedeId}
-                    onChange={(e) => setGenSedeId(e.target.value)}
+                    onChange={(e) => {
+                      const locationId = e.target.value;
+                      setGenSedeId(locationId);
+                      if (appointmentSalonSlugFromName(locations.find(({ id }) => id === locationId)?.name) !== "repubblica") setGenAccessMode("worker");
+                    }}
                     required
                     className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
                   >
@@ -6255,10 +6269,25 @@ export function AppointmentsBrowser({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
+                  <label htmlFor="pc-link-purpose" className="text-xs font-semibold text-neutral-700">Utilizzo del PC</label>
+                  <select
+                    id="pc-link-purpose"
+                    value={genAccessMode}
+                    onChange={(event) => setGenAccessMode(event.target.value as "worker" | "reception")}
+                    className="h-12 w-full rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9f3f5b]"
+                  >
+                    <option value="worker">Lavoratori · PIN personale</option>
+                    <option value="reception" disabled={appointmentSalonSlugFromName(locations.find(({ id }) => id === genSedeId)?.name) !== "repubblica"}>Reception · PIN una volta al giorno</option>
+                  </select>
+                  <p className="text-xs text-neutral-600">Reception è disponibile solo per Repubblica.</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="pc-link-name" className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
                     Nome Dispositivo PC
                   </label>
                   <input
+                    id="pc-link-name"
                     type="text"
                     required
                     value={genPcName}
@@ -6483,7 +6512,7 @@ export function AppointmentsBrowser({
                       className="inline-flex items-center gap-1.5 rounded-xl border border-[#E8D8CF] bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[#4E382C] transition shadow-2xs hover:bg-[#FFF7F3] hover:shadow-xs sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs"
                     >
                       <Sparkles size={13} className="text-[#A56A42]" />
-                      <span>Genera Link PC Cassa</span>
+                      <span>Genera link di attivazione</span>
                     </button>
                   )}
                 </div>
@@ -9601,7 +9630,7 @@ export function AppointmentsBrowser({
       ) : null}
 
       {isPC && pcScreenLocked ? (
-        <PcStaffLockScreen salon={salon} onUnlock={handlePcUnlock} />
+        <PcStaffLockScreen salon={salon} receptionMode={pcReceptionMode} onUnlock={handlePcUnlock} />
       ) : null}
 
       <AppointmentSignModal

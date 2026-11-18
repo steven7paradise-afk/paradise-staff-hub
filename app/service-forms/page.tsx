@@ -7,6 +7,8 @@ import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
 import { prisma } from "@/lib/prisma";
 import { checkPCAuthorization, appointmentsPcCookieName, appointmentsPcWorkerCookieName } from "@/lib/appointments-pc-auth";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
@@ -46,6 +48,10 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
   );
   const pcAuth = hasAdministratorSession ? null : await checkPCAuthorization(pcToken);
+  const receptionOperator = pcAuth?.accessMode === "reception"
+    ? await findAppointmentPcReceptionOperator(pcAuth, pcToken, cookieStore.get(appointmentPcReceptionCookieName)?.value)
+    : null;
+  if (pcAuth?.accessMode === "reception" && (!receptionOperator || receptionOperator.arrivalOnly)) redirect("/appointments/repubblica?choose=1");
   if (pcAuth) {
       isPC = true;
       sessionUser = {
@@ -55,9 +61,9 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         role: "RESPONSABILE",
         sedeId: pcAuth.locationId,
       } as any;
-      const selectedWorkerIdentity = cookieStore.get(appointmentsPcWorkerCookieName)?.value
+      const selectedWorkerIdentity = receptionOperator?.id || (cookieStore.get(appointmentsPcWorkerCookieName)?.value
         ? decodeURIComponent(cookieStore.get(appointmentsPcWorkerCookieName)?.value || "")
-        : "";
+        : "");
       if (selectedWorkerIdentity) {
         const selectedWorker = await prisma.user.findFirst({
           where: {
@@ -67,6 +73,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
           select: { id: true, name: true, email: true, role: true, sede_id: true, photo_url: true },
         }).catch(() => null);
         const canUseSelectedProfile = selectedWorker && (
+          selectedWorker.id === receptionOperator?.id ||
           selectedWorker.sede_id === pcAuth.locationId ||
           isAlwaysActiveAppointmentStaff(selectedWorker.name, selectedWorker.id)
         );

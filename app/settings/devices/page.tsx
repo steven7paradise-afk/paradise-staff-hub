@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Nfc } from "lucide-react";
+import { normalizePCAccessMode } from "@/lib/appointments-pc-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function DeviceSettingsPage() {
       activatedAt: pc.activatedAt,
       archivedAt: pc.archivedAt,
       registeredIp: pc.registeredIp,
+      accessMode: normalizePCAccessMode(pc.accessMode),
     };
   });
 

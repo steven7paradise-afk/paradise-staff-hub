@@ -18,6 +18,8 @@ import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
 import { isRepubblicaReceptionist } from "@/lib/appointment-arrival-access";
 import { appointmentPcArrivalCookieName, verifyAppointmentPcArrival } from "@/lib/appointment-pc-arrival-session";
 import { findAppointmentPcArrivalOperator } from "@/lib/appointment-pc-arrival-operator";
+import { appointmentPcReceptionCookieName } from "@/lib/appointment-pc-reception-session";
+import { findAppointmentPcReceptionOperator } from "@/lib/appointment-pc-reception-operator";
 import {
   appointmentStaffDisplayName,
   isAlwaysActiveAppointmentStaff,
@@ -61,6 +63,23 @@ export async function getOperationalUser(
     session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
   );
   if (pcAuth && !(options?.preferAuthenticatedAdmin && hasAuthenticatedAdmin)) {
+    if (pcAuth.accessMode === "reception") {
+      const operator = await findAppointmentPcReceptionOperator(
+        pcAuth, pcToken, request.cookies.get(appointmentPcReceptionCookieName)?.value,
+      );
+      if (!operator || (operator.arrivalOnly && !options?.allowReceptionArrival)) return null;
+      return {
+        id: operator.id,
+        name: appointmentStaffDisplayName(operator.name, operator.id),
+        email: operator.email,
+        role: operator.role,
+        mansione: operator.mansione,
+        sedeId: pcAuth.locationId,
+        isPC: true,
+        hasVerifiedPcArrivalSession: true,
+        arrivalOnly: operator.arrivalOnly,
+      };
+    }
     const token = request.cookies.get(appointmentPcArrivalCookieName)?.value;
     if (token && (options?.allowReceptionArrival || options?.allowPcOwnerStart)) {
       const operator = await findAppointmentPcArrivalOperator(

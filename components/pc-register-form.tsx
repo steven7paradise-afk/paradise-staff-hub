@@ -3,13 +3,16 @@
 import { useState, type FormEvent } from "react";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import type { PCAccessMode } from "@/lib/appointments-pc-auth";
 
 interface PcRegisterFormProps {
   code: string;
   initialPcName: string;
+  accessMode?: PCAccessMode;
 }
 
-export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
+export function PcRegisterForm({ code, initialPcName, accessMode = "worker" }: PcRegisterFormProps) {
+  const reception = accessMode === "reception";
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [activatedName, setActivatedName] = useState(initialPcName);
@@ -53,7 +56,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
         
         <div className="space-y-2">
           <h1 className="text-xl md:text-2xl font-serif font-light tracking-wide uppercase text-neutral-900">
-            PC Cassa Attivato
+            PC {reception ? "Reception" : "Lavoratori"} attivato
           </h1>
           <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
             DISPOSITIVO ABILITATO
@@ -61,12 +64,14 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
         </div>
 
         <div className="p-5 rounded-2xl bg-[#F6FAF8] border border-[#DCEBE4] text-neutral-800 text-sm font-semibold space-y-1">
-          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">NOME PC CASSA</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400">NOME DEL PC</div>
           <div className="text-base text-neutral-900 font-serif font-light tracking-wide">{activatedName.toUpperCase()}</div>
         </div>
         
         <p className="text-xs text-neutral-500 leading-relaxed max-w-sm mx-auto font-normal">
-          Questo browser è stato registrato ed è ora autorizzato a visualizzare l'agenda appuntamenti e le schede cliente senza inserire credenziali personali.
+          {reception
+            ? "Questo browser è autorizzato per la reception. Per accedere, inserisci il tuo PIN personale una volta al giorno."
+            : "Questo browser è autorizzato per i lavoratori. Ogni persona accede al proprio profilo con il PIN personale."}
         </p>
 
         <div className="pt-4">
@@ -74,7 +79,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
             href={appointmentUrl}
             className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition"
           >
-            Accedi all'Agenda
+            {reception ? "Apri la Reception" : "Scegli profilo staff"}
           </Link>
         </div>
       </div>
@@ -91,7 +96,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
 
       <div className="space-y-2">
         <h1 className="text-xl md:text-2xl font-serif font-light tracking-wide uppercase text-neutral-900">
-          Attivazione PC Cassa
+          Attivazione PC {reception ? "Reception" : "Lavoratori"}
         </h1>
         <p className="text-xs font-black uppercase tracking-[0.2em] text-[#A56A42]">
           CONFIGURAZIONE DISPOSITIVO
@@ -111,7 +116,9 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
       </div>
 
       <p className="text-xs text-neutral-500 leading-relaxed max-w-sm mx-auto font-normal">
-        Clicca sul pulsante qui sotto per confermare l'attivazione e registrare questo computer come cassa del salone.
+        {reception
+          ? "Autorizza questo computer per la reception di Repubblica. L’accesso richiederà il PIN personale una volta al giorno."
+          : "Autorizza questo computer per i lavoratori del salone. L’accesso al proprio profilo continuerà a richiedere il PIN personale."}
       </p>
 
       <form action="/api/appointments/pc/register" method="post" onSubmit={handleActivate} className="pt-4">

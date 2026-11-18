@@ -8,6 +8,8 @@ export async function mobileWorkspace(request: Request) {
   const deviceToken = request.headers.get("x-paradise-device");
   const device = deviceToken ? await checkPCAuthorization(deviceToken) : null;
   if (deviceToken && !device) return null;
+  // Reception uses its daily, browser-bound PIN session, never device-only native access.
+  if (device?.accessMode === "reception") return null;
   const auth = request.headers.has("authorization") ? await mobileUser(request) : null;
   if (request.headers.has("authorization") && (!auth || auth.user.must_change_password)) return null;
   if (!device && !auth) return null;

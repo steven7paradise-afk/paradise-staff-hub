@@ -53,6 +53,7 @@ function isBuenosAiresBooking(booking: {
 export async function GET(request: NextRequest) {
   const pcAuth = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value);
   if (!pcAuth) return NextResponse.json({ error: "PC non autorizzato." }, { status: 401 });
+  if (pcAuth.accessMode === "reception") return NextResponse.json({ error: "Per la Reception usa l’agenda online e il PIN personale." }, { status: 403 });
 
   const requestedDate = request.nextUrl.searchParams.get("date") || appointmentDateKey();
   if (!isAppointmentDateKey(requestedDate)) {
