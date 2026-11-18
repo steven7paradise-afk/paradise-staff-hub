@@ -5,6 +5,7 @@ export const PC_CASSA_ALLOWED_PAGE_PATHS = [
   "/service-forms",
   "/cassa-live",
   "/orders",
+  "/conversioni",
   "/shopify-orders",
 ] as const;
 
@@ -38,6 +39,7 @@ export function isPcCassaProxyAllowedPath(pathname: string) {
     pathname === "/appointments/repubblica" ||
     pathname === "/client-control/giornata" ||
     pathname === "/orders" ||
+    pathname === "/conversioni" ||
     pathname === "/shopify-orders" ||
     pathname.startsWith("/shopify-orders/") ||
     pathname === "/service-forms" ||

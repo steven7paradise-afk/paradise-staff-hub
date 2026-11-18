@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ScanLine, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, Store, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ArrowLeftRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ScanLine, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, Store, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -1620,6 +1620,18 @@ export function StaffFormsViewer({
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7F1D1D] opacity-80">ORDINI</p>
               <h2 className="mt-1 text-xl font-black text-[#7F1D1D] leading-tight">Stato Ordini</h2>
             </div>
+          </Link>
+
+          <Link
+            href="/conversioni"
+            aria-label="Apri lo stato delle conversioni"
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#9BB7D4]/35 bg-gradient-to-br from-[#9BB7D4] to-[#D6E4F0] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(155,183,212,0.16)" }}
+          >
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <ArrowLeftRight className="size-14 text-white" />
+            </div>
+            <h2 className="mt-1 text-xl font-black leading-tight text-[#7F1D1D]">Conversioni</h2>
           </Link>
 
           {/* Card: Shopify Orders */}

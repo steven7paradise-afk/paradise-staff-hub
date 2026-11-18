@@ -20,9 +20,20 @@ export function inferSidebarArea(folder: { title?: unknown; area?: unknown }): S
     : "LAVORO";
 }
 
+export function includeOrderConversionsInSidebar<T extends { routes: string[] }>(folders: T[]): T[] {
+  if (folders.some((folder) => folder.routes.includes("/conversioni"))) return folders;
+  return folders.map((folder) => {
+    const index = folder.routes.indexOf("/orders");
+    return index < 0 ? folder : {
+      ...folder,
+      routes: [...folder.routes.slice(0, index + 1), "/conversioni", ...folder.routes.slice(index + 1)],
+    };
+  });
+}
+
 export function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
   if (!Array.isArray(value)) return [];
-  return value
+  const folders = value
     .filter((folder): folder is Record<string, unknown> => Boolean(folder) && typeof folder === "object")
     .map((folder, index) => ({
       id: typeof folder.id === "string" ? folder.id : `folder-${index}`,
@@ -36,6 +47,7 @@ export function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
         : {},
       area: inferSidebarArea(folder),
     }));
+  return includeOrderConversionsInSidebar(folders);
 }
 
 export function resolveSidebarLayout(

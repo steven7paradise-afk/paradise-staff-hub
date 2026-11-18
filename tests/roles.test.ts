@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canAccess, canEdit, defaultRolePermissions, mergePermissionSets, normalizeRolePermissions } from "../lib/roles";
+import { canAccess, canEdit, defaultRolePermissions, mergePermissionSets, normalizeMansionePermissions, normalizePermissionSet, normalizeRolePermissions, type Role } from "../lib/roles";
 
 test("un dipendente non accede alle pagine amministrative", () => {
   assert.equal(canAccess("/employees", "DIPENDENTE"), false);
@@ -66,4 +66,40 @@ test("le vecchie matrici permessi mantengono la checklist disponibile agli ammin
   assert.equal(permissions.ADMIN.edit.includes("/fine-giornata"), true);
   assert.equal(permissions.SUPER_ADMIN.view.includes("/fine-giornata"), true);
   assert.equal(permissions.SUPER_ADMIN.edit.includes("/fine-giornata"), true);
+});
+
+test("Conversioni keeps the same default and explicit read/write access as Ordini", () => {
+  const roles: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"];
+  for (const role of roles) {
+    assert.equal(canAccess("/conversioni", role), canAccess("/orders", role));
+    assert.equal(canEdit("/conversioni", role), canEdit("/orders", role));
+    for (const permissions of [
+      { view: [], edit: [] },
+      { view: ["/orders"], edit: [] },
+      { view: ["/orders"], edit: ["/orders"] },
+      { view: ["/dashboard", "/conversioni"], edit: ["/conversioni"] },
+    ]) {
+      assert.equal(canAccess("/conversioni", role, undefined, permissions), canAccess("/orders", role, undefined, permissions));
+      assert.equal(canEdit("/conversioni", role, undefined, permissions), canEdit("/orders", role, undefined, permissions));
+    }
+  }
+});
+
+test("saved role and mansione maps inherit only the corresponding Ordini permission", () => {
+  const roles = normalizeRolePermissions({
+    ADMIN: { view: ["/dashboard"], edit: [] },
+    RESPONSABILE: { view: ["/orders"], edit: [] },
+  });
+  assert.equal(roles.ADMIN.view.includes("/conversioni"), false);
+  assert.equal(roles.RESPONSABILE.view.includes("/conversioni"), true);
+  assert.equal(roles.RESPONSABILE.edit.includes("/conversioni"), false);
+  const mansioni = normalizeMansionePermissions({
+    sarta: { view: ["/orders"], edit: ["/orders"] },
+    assistenza: { view: ["/appointments"], edit: [] },
+  });
+  const combined = mergePermissionSets(roles.RESPONSABILE, mansioni.sarta);
+  assert.equal(canEdit("/conversioni", "RESPONSABILE", "sarta", combined), true);
+  assert.equal(mansioni.assistenza.view.includes("/conversioni"), false);
+  assert.deepEqual(normalizePermissionSet(["ordini"]), { view: ["/orders", "/conversioni"], edit: [] });
+  assert.deepEqual(normalizePermissionSet({ view: ["/conversioni"], edit: ["/conversioni"] }), { view: [], edit: [] });
 });

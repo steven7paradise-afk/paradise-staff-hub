@@ -528,7 +528,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         return;
       }
       const next = new URL(anchor.href);
-      if (!["/appointments", "/service-forms", "/orders", "/client-control"].some((path) => next.pathname === path || next.pathname.startsWith(`${path}/`))) {
+      if (!["/appointments", "/service-forms", "/orders", "/conversioni", "/client-control"].some((path) => next.pathname === path || next.pathname.startsWith(`${path}/`))) {
         queueEvent({ kind: "click", ...click }, true);
         return;
       }

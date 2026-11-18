@@ -13,6 +13,7 @@ export const SIDEBAR_ICON_OPTIONS = [
   { name: "UserPlus", label: "Nuova persona" },
   { name: "Building2", label: "Salone" },
   { name: "ShoppingCart", label: "Carrello" },
+  { name: "ArrowLeftRight", label: "Conversioni" },
   { name: "Store", label: "Negozio" },
   { name: "Truck", label: "Spedizione" },
   { name: "Package", label: "Pacco" },

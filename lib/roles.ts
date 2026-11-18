@@ -41,6 +41,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/service-forms": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/conversioni": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shopify-orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/barcode-labels": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -81,7 +82,7 @@ export function defaultEditRolesForPath(pathname: string): Role[] {
   if (pathname === "/magazzino") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
-  if (pathname === "/orders" || pathname === "/shopify-orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  if (pathname === "/orders" || pathname === "/conversioni" || pathname === "/shopify-orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
   if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms" || pathname === "/settings/nfc") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname.startsWith("/settings")) return ["ZERO"];
   return ["ZERO", "SUPER_ADMIN", "ADMIN"];
@@ -105,6 +106,7 @@ const legacyAccessRouteMap: Record<string, string> = {
   social: "/social-calendar",
   ordini: "/orders",
   orders: "/orders",
+  conversioni: "/conversioni",
   "etichette barcode": "/barcode-labels",
   barcode: "/barcode-labels",
   "ordini shopify": "/shopify-orders",
@@ -170,16 +172,25 @@ export function normalizeAccessRoutes(values: unknown): string[] {
   );
 }
 
+function withOrderConversionPermissions(permissions: PermissionSet): PermissionSet {
+  // Conversioni is the second view of Ordini, not an independent access grant.
+  const view = permissions.view.filter((route) => route !== "/conversioni");
+  const edit = permissions.edit.filter((route) => route !== "/conversioni");
+  if (view.includes("/orders")) view.push("/conversioni");
+  if (edit.includes("/orders")) edit.push("/conversioni");
+  return { view, edit };
+}
+
 export function normalizePermissionSet(value: unknown): PermissionSet {
   if (Array.isArray(value)) {
-    return { view: normalizeAccessRoutes(value), edit: [] };
+    return withOrderConversionPermissions({ view: normalizeAccessRoutes(value), edit: [] });
   }
 
   if (value && typeof value === "object") {
     const raw = value as { view?: unknown; edit?: unknown };
     const view = normalizeAccessRoutes(raw.view);
     const edit = normalizeAccessRoutes(raw.edit).filter((route) => view.includes(route));
-    return { view, edit };
+    return withOrderConversionPermissions({ view, edit });
   }
 
   return { view: [], edit: [] };
@@ -341,7 +352,7 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
     return ["ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(role);
   }
 
-  if (pathname === "/orders" || pathname.startsWith("/orders/")) {
+  if (pathname === "/orders" || pathname.startsWith("/orders/") || pathname === "/conversioni" || pathname.startsWith("/conversioni/")) {
     return ["ADMIN", "RESPONSABILE"].includes(role);
   }
 

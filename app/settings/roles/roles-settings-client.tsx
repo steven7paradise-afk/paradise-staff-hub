@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { ChevronDown, Eye, LockKeyhole, Loader2, Plus, Search, ShieldCheck, ShieldOff, Trash2, UserCheck, UserPlus, Users } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
-import { roleLabels, routePermissions, type MansionePermissionMap, type PermissionSet, type Role, type RolePermissionMap } from "@/lib/roles";
+import { normalizePermissionSet, roleLabels, routePermissions, type MansionePermissionMap, type PermissionSet, type Role, type RolePermissionMap } from "@/lib/roles";
 
 type UserType = {
   id: string;
@@ -44,7 +44,7 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/email": { name: "Email", description: "Invio di email interne al personale.", group: "Base" },
   "/profile": { name: "Profilo", description: "Dati personali, foto, password e impostazioni account.", group: "Base" },
   "/schedules": { name: "Planning", description: "Turnistica mensile dei saloni.", group: "Planning & Saloni" },
-  "/orders": { name: "Ordini", description: "Kanban ordini, stati, foto e stampa etichette.", group: "Planning & Saloni" },
+  "/orders": { name: "Ordini e Conversioni", description: "Stessi permessi per entrambi i kanban: stati, foto e stampa etichette.", group: "Planning & Saloni" },
   "/barcode-labels": { name: "Etichette barcode", description: "Creazione, archivio, selezione e stampa delle etichette Code 128.", group: "Planning & Saloni" },
   "/shopify-orders": { name: "Ordini Shopify", description: "Elenco completo degli ordini e relativi dettagli Shopify.", group: "Planning & Saloni" },
   "/ordine": { name: "Scheda ordine diretta", description: "Pagina aperta da barcode o link diretto ordine.", group: "Planning & Saloni" },
@@ -148,7 +148,7 @@ function nextPermissionSet(current: PermissionSet, path: string, kind: keyof Per
     if (checked) view = Array.from(new Set([...view, path]));
   }
 
-  return { view, edit };
+  return normalizePermissionSet({ view, edit });
 }
 
 export function RolesSettingsClient({
@@ -174,7 +174,7 @@ export function RolesSettingsClient({
   const isZero = currentUser.role === "ZERO";
   const isAdmin = isZero || currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
   const isSuperAdmin = isZero;
-  const allRoutes = useMemo(() => Object.keys(routePermissions), []);
+  const allRoutes = useMemo(() => Object.keys(routePermissions).filter((path) => path !== "/conversioni"), []);
 
   const mansioneNames = useMemo(() => {
     const fromUsers = users.map((user) => user.mansione?.trim().toLowerCase()).filter((name): name is string => Boolean(name));

@@ -34,3 +34,14 @@ test("the authorized cashier PC can receive a live screen-share request", () => 
   assert.equal(isPcCassaAllowedPath("/api/remote-video?mode=pc"), true);
   assert.equal(isPcCassaProxyAllowedPath("/api/remote-video"), true);
 });
+
+test("Conversioni follows the same cashier page boundary as Ordini without exposing another API namespace", () => {
+  for (const suffix of ["", "/details"]) {
+    assert.equal(isPcCassaAllowedPath(`/conversioni${suffix}`), isPcCassaAllowedPath(`/orders${suffix}`));
+    assert.equal(isPcCassaProxyAllowedPath(`/conversioni${suffix}`), isPcCassaProxyAllowedPath(`/orders${suffix}`));
+  }
+  assert.equal(isPcCassaAllowedPath("/conversioni-admin"), false);
+  assert.equal(isPcCassaProxyAllowedPath("/conversioni-admin"), false);
+  assert.equal(isPcCassaProxyAllowedPath("/api/conversioni/import"), false);
+  assert.equal(isPcCassaProxyAllowedPath("/api/orders/import"), false);
+});

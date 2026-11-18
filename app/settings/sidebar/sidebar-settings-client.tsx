@@ -27,6 +27,7 @@ import { Card } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { routePermissions } from "@/lib/roles";
 import { SIDEBAR_ICON_OPTIONS } from "@/lib/sidebar-icons";
+import { includeOrderConversionsInSidebar } from "@/lib/sidebar-layout";
 
 type SidebarFolder = {
   id: string;
@@ -55,6 +56,7 @@ const PAGE_ICONS: Record<string, string> = {
   "/social-calendar": "Share2",
   "/locations": "Building2",
   "/orders": "ShoppingCart",
+  "/conversioni": "ArrowLeftRight",
   "/shopify-orders": "Store",
   "/shipping": "Truck",
   "/barcode-labels": "Barcode",
@@ -109,6 +111,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/remote": "Controllo remoto",
   "/tables": "Tabelle",
   "/orders": "Ordini",
+  "/conversioni": "Conversioni",
   "/ordine": "Scheda ordine diretta",
   "/appointments": "Appuntamenti",
   "/consulenza-online": "Consulenza Online",
@@ -157,7 +160,7 @@ const DEFAULT_LAYOUT: SidebarFolder[] = [
   {
     id: "planning",
     title: "Planning & Saloni",
-    routes: ["/schedules", "/orders", "/barcode-labels"],
+    routes: ["/schedules", "/orders", "/conversioni", "/barcode-labels"],
     area: "LAVORO",
   },
   {
@@ -183,7 +186,7 @@ function inferArea(folder: Pick<SidebarFolder, "title" | "area">) {
 
 function normalizeFolders(value: unknown): SidebarFolder[] {
   if (!Array.isArray(value)) return [];
-  return value
+  const folders = value
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     .map((item, index) => {
       const folder: SidebarFolder = {
@@ -196,6 +199,7 @@ function normalizeFolders(value: unknown): SidebarFolder[] {
       };
       return { ...folder, area: inferArea(folder) };
     });
+  return includeOrderConversionsInSidebar(folders);
 }
 
 function cloneFolders(folders: SidebarFolder[]) {

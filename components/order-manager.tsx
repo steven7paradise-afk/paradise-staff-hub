@@ -1,16 +1,18 @@
 "use client";
 
 import Papa from "papaparse";
+import Link from "next/link";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, ImagePlus, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Trash2, Truck, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, ImagePlus, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, Scissors, ShoppingCart, Trash2, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { normalizeScannedOrderReference, orderCodeCandidates } from "@/lib/order-code-reader";
+import { getOrderTaskType, isOrderInWorkspace, orderStatusForWorkspace, type OrderWorkspace } from "@/lib/order-workspace";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
@@ -73,6 +75,16 @@ const ORDER_COLUMNS = [
   { id: "READY", label: "Pronto · azione richiesta", helper: "Spedisci, fissa l’appuntamento o prepara il ritiro", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
   { id: "COMPLETED", label: "Consegnato", helper: "Operazione conclusa", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
 ];
+
+const CONVERSION_COLUMNS = ORDER_COLUMNS
+  .filter((column) => column.id !== "ORDERED")
+  .map((column) => column.id === "NEW"
+    ? { ...column, label: "Da preparare", helper: "Controlla i dettagli della conversione", icon: Scissors }
+    : column);
+
+function columnsForWorkspace(workspace: OrderWorkspace) {
+  return workspace === "conversions" ? CONVERSION_COLUMNS : ORDER_COLUMNS;
+}
 
 const monthsList = [
   { value: 1, label: "Gennaio" },
@@ -217,33 +229,6 @@ function orderNumber(order: OrderResponse) {
   const title = answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title) return title;
   return `#${order.id.substring(0, 5).toUpperCase()}`;
-}
-
-function getOrderTaskType(order: OrderResponse): "conversione" | "acquisto" | "accessori" | "altro" {
-  const answers = order.answers || {};
-  const fields = order.form?.fields || [];
-  
-  const allText = Object.values(answers)
-    .map(v => typeof v === "object" ? (v?.name ?? "") : String(v))
-    .join(" ")
-    .toLowerCase();
-
-  const itemsText = (orderItems(order) || "").toLowerCase();
-  const titleText = (answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || "").toLowerCase();
-  
-  const haystack = `${allText} ${itemsText} ${titleText}`;
-
-  if (haystack.includes("conversione") || haystack.includes("conver")) {
-    return "conversione";
-  }
-  if (haystack.includes("accessori") || haystack.includes("accessorio")) {
-    return "accessori";
-  }
-  if (haystack.includes("acquisto") || haystack.includes("extension") || haystack.includes("nuove ext")) {
-    return "acquisto";
-  }
-  
-  return "altro";
 }
 
 function renderTaskBadge(taskType: "conversione" | "acquisto" | "accessori" | "altro") {
@@ -441,8 +426,9 @@ function formatDateTime(value?: string) {
   }).format(new Date(value));
 }
 
-function statusLabel(status: string) {
-  return ORDER_COLUMNS.find((column) => column.id === status)?.label ?? status;
+function statusLabel(status: string, workspace: OrderWorkspace) {
+  const visibleStatus = orderStatusForWorkspace(status, workspace);
+  return columnsForWorkspace(workspace).find((column) => column.id === visibleStatus)?.label ?? visibleStatus;
 }
 
 function statusPillClass(status: string) {
@@ -480,13 +466,13 @@ function hasShippingAddress(order: OrderResponse) {
   return delivery.kind === "shipping" && Boolean(delivery.address);
 }
 
-function orderNextAction(order: OrderResponse) {
-  const status = order.status || "NEW";
+function orderNextAction(order: OrderResponse, workspace: OrderWorkspace) {
+  const status = orderStatusForWorkspace(order.status, workspace);
   if (status === "READY") return orderDeliveryAction(order).label;
   if (status === "ORDERED") return "Non spedire ancora · attendi l’arrivo";
   if (status === "PREPARING") return "Completa la preparazione";
   if (status === "COMPLETED") return "Consegna completata";
-  return "Da inviare al fornitore";
+  return workspace === "conversions" ? "Da preparare" : "Da inviare al fornitore";
 }
 
 export function OrderManager({
@@ -494,16 +480,22 @@ export function OrderManager({
   canManage,
   currentUserName,
   currentUserRole,
+  workspace = "orders",
 }: {
   initialOrders: OrderResponse[];
   canManage: boolean;
   currentUserName: string;
   currentUserRole: string;
+  workspace?: OrderWorkspace;
 }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const isConversions = workspace === "conversions";
+  const columns = columnsForWorkspace(workspace);
+  const [resolvingCode, setResolvingCode] = useState(false);
   const [orders, setOrders] = useState(initialOrders);
+  useEffect(() => setOrders(initialOrders), [initialOrders]);
   const [query, setQuery] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -527,9 +519,13 @@ export function OrderManager({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
+  const resolvingCodeRef = useRef(false);
   const scannerInstanceRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
   const scannerRegionId = "order-barcode-camera";
-  const requestedStatus = searchParams.get("status")?.toUpperCase() ?? null;
+  const statusFromUrl = searchParams.get("status")?.toUpperCase();
+  const requestedStatus = statusFromUrl ? orderStatusForWorkspace(statusFromUrl, workspace) : null;
+  const remoteTarget = searchParams.get("remoteTarget");
+  const workspaceHref = (path: string) => remoteTarget ? `${path}?remoteTarget=${encodeURIComponent(remoteTarget)}` : path;
 
   const stopBarcodeCamera = useCallback(() => {
     const scanner = scannerInstanceRef.current;
@@ -547,6 +543,7 @@ export function OrderManager({
   const findOrderFromBarcode = useCallback((rawValue: string) => {
     const normalized = normalizeScannedOrderReference(rawValue);
     return orders.find((order) => {
+      if (!isOrderInWorkspace(order, workspace)) return false;
       const candidates = orderCodeCandidates({
         responseId: order.id,
         visibleOrderNumber: orderNumber(order),
@@ -554,20 +551,49 @@ export function OrderManager({
       });
       return candidates.has(normalized);
     }) ?? null;
-  }, [orders]);
+  }, [orders, workspace]);
 
-  const openOrderFromBarcode = useCallback((rawValue: string) => {
+  const openOrderFromBarcode = useCallback(async (rawValue: string) => {
+    if (resolvingCodeRef.current) return false;
     const match = findOrderFromBarcode(rawValue);
-    if (!match) {
-      setScannerMessage(`Nessun ordine trovato per il codice “${rawValue.trim()}”.`);
+    if (match) {
+      stopBarcodeCamera();
+      setBarcodeInput("");
+      setScannerMessage(`Ordine ${orderNumber(match)} trovato.`);
+      setSelected(match);
+      return true;
+    }
+
+    const reference = normalizeScannedOrderReference(rawValue);
+    if (!reference) {
+      setScannerMessage("Codice non riconosciuto. Inserisci il numero ordine.");
       return false;
     }
+    resolvingCodeRef.current = true;
+    setResolvingCode(true);
     stopBarcodeCamera();
-    setBarcodeInput("");
-    setScannerMessage(`Ordine ${orderNumber(match)} trovato.`);
-    setSelected(match);
-    return true;
-  }, [findOrderFromBarcode, stopBarcodeCamera]);
+    setScannerMessage("Cerco il codice negli ordini e nelle conversioni…");
+    try {
+      const params = new URLSearchParams({ reference });
+      if (remoteTarget) params.set("remoteTarget", remoteTarget);
+      const response = await fetch(`/api/orders/resolve?${params}`, { cache: "no-store" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error || "Impossibile cercare il codice. Riprova.");
+      if (typeof result?.href !== "string" || !/^\/(orders|conversioni)\?/.test(result.href)) {
+        throw new Error("Impossibile aprire la scheda. Riprova.");
+      }
+      setBarcodeInput("");
+      setScannerMessage("Scheda trovata. Apertura in corso…");
+      router.push(result.href);
+      return true;
+    } catch (error) {
+      setScannerMessage(error instanceof Error ? error.message : "Impossibile cercare il codice. Riprova.");
+      return false;
+    } finally {
+      resolvingCodeRef.current = false;
+      setResolvingCode(false);
+    }
+  }, [findOrderFromBarcode, stopBarcodeCamera, remoteTarget, router]);
 
   async function startBarcodeCamera() {
     setScannerMessage("");
@@ -600,7 +626,7 @@ export function OrderManager({
           },
           aspectRatio: 4 / 3,
         },
-        (decodedText) => { openOrderFromBarcode(decodedText); },
+        (decodedText) => { void openOrderFromBarcode(decodedText); },
         () => { /* Frames without a barcode are expected while focusing. */ },
       );
     } catch (error) {
@@ -635,13 +661,16 @@ export function OrderManager({
       return;
     }
     if (target === dismissedDeepLink || selected?.id === target) return;
-    const cleanTarget = target.replace(/^#/, "").trim().toLowerCase();
+    const cleanTarget = normalizeScannedOrderReference(target);
     const match = orders.find((order) => {
-      const cleanNumber = orderNumber(order).replace(/^#/, "").trim().toLowerCase();
-      return order.id === target || cleanNumber === cleanTarget;
+      return isOrderInWorkspace(order, workspace) && orderCodeCandidates({
+        responseId: order.id,
+        visibleOrderNumber: orderNumber(order),
+        answers: order.answers,
+      }).has(cleanTarget);
     });
-    if (match) setSelected(match);
-  }, [orders, searchParams, selected?.id, dismissedDeepLink]);
+    if (match && match.id !== selected?.id) setSelected(match);
+  }, [orders, searchParams, selected?.id, dismissedDeepLink, workspace]);
 
   function closeSelectedOrder() {
     const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
@@ -684,11 +713,11 @@ export function OrderManager({
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
-    let result = orders;
+    let result = orders.filter((order) => isOrderInWorkspace(order, workspace));
 
     if (clean) {
       // Search is active on ALL orders in the list, bypassing the month filter.
-      result = orders.filter((order) => {
+      result = result.filter((order) => {
         const haystack = [
           orderClientName(order),
           orderNumber(order),
@@ -702,8 +731,8 @@ export function OrderManager({
       });
     } else {
       // Default board view: active columns show all active orders, completed column only shows those of selected month/year.
-      result = orders.filter((order) => {
-        const status = order.status || "NEW";
+      result = result.filter((order) => {
+        const status = orderStatusForWorkspace(order.status, workspace);
         if (status !== "COMPLETED") return true;
         const d = new Date(orderCompletionTimestamp(order));
         return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
@@ -715,28 +744,29 @@ export function OrderManager({
     }
 
     if (shippingOnly) {
-      result = result.filter((order) => (order.status || "NEW") !== "COMPLETED" && hasShippingAddress(order));
+      result = result.filter((order) => orderStatusForWorkspace(order.status, workspace) !== "COMPLETED" && hasShippingAddress(order));
     }
 
-    if (requestedStatus && ORDER_COLUMNS.some((column) => column.id === requestedStatus)) {
-      result = result.filter((order) => (order.status || "NEW") === requestedStatus);
+    if (requestedStatus && columns.some((column) => column.id === requestedStatus)) {
+      result = result.filter((order) => orderStatusForWorkspace(order.status, workspace) === requestedStatus);
     }
 
     return result;
-  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly, requestedStatus]);
+  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly, requestedStatus, workspace, columns]);
 
   const mobileOrders = useMemo(() => {
     if (mobileStatus === "ALL") return filteredOrders;
-    return filteredOrders.filter((order) => (order.status || "NEW") === mobileStatus);
-  }, [filteredOrders, mobileStatus]);
+    return filteredOrders.filter((order) => orderStatusForWorkspace(order.status, workspace) === mobileStatus);
+  }, [filteredOrders, mobileStatus, workspace]);
 
   const orderCounts = useMemo(() => {
-    const counts = Object.fromEntries(ORDER_COLUMNS.map((column) => [column.id, 0])) as Record<string, number>;
+    const counts = Object.fromEntries(columns.map((column) => [column.id, 0])) as Record<string, number>;
     filteredOrders.forEach((order) => {
-      counts[order.status || "NEW"] = (counts[order.status || "NEW"] || 0) + 1;
+      const status = orderStatusForWorkspace(order.status, workspace);
+      counts[status] = (counts[status] || 0) + 1;
     });
     return counts;
-  }, [filteredOrders]);
+  }, [filteredOrders, columns, workspace]);
 
   useEffect(() => {
     setVisibleMobileCount(18);
@@ -906,16 +936,23 @@ export function OrderManager({
 
   return (
     <div className="orders-workspace space-y-3 pb-8 md:space-y-6">
+      <nav aria-label="Ordini e conversioni" className="flex flex-wrap gap-2">
+        {[{ href: "/orders", label: "Ordini" }, { href: "/conversioni", label: "Conversioni capelli" }].map((item) => {
+          const active = item.href === (isConversions ? "/conversioni" : "/orders");
+          return <Link key={item.href} href={workspaceHref(item.href)} aria-current={active ? "page" : undefined}
+            className={cn("inline-flex min-h-11 items-center rounded-xl border px-4 text-sm font-bold transition-colors outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#a73f6c]", active ? "border-[#a73f6c] bg-[#f8e5ee] text-[#8d315b] dark:border-[#e5a8c1] dark:bg-[#412333] dark:text-[#f6cee0]" : "border-black/10 bg-white text-black/60 hover:bg-[#fff0f6] dark:border-white/20 dark:bg-[#201f24] dark:text-white/80 dark:hover:bg-[#352632]")}>{item.label}</Link>;
+        })}
+      </nav>
       <div className="orders-toolbar overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm">
         <div className="p-4 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d] md:block">Paradise Operations</p>
             <div className="flex items-center gap-2.5 md:mt-1 md:gap-3">
-              <h1 className="text-2xl font-black tracking-[-0.03em] text-[#221b20] md:text-4xl md:font-semibold">Ordini</h1>
+              <h1 className="text-2xl font-black tracking-[-0.03em] text-[#221b20] md:text-4xl md:font-semibold">{isConversions ? "Conversioni capelli" : "Ordini"}</h1>
               <span className="grid min-w-7 place-items-center rounded-full bg-[#f8e5ee] px-2 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
             </div>
-            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{canManage ? "Gestisci" : "Controlla"} cosa ordinare, cosa attendere e cosa spedire.</p>
+            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{isConversions ? "Segui preparazione, lavorazione e consegna delle conversioni." : `${canManage ? "Gestisci" : "Controlla"} cosa ordinare, cosa attendere e cosa spedire.`}</p>
           </div>
           
           <div className="grid w-full gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:items-center lg:gap-3">
@@ -974,7 +1011,7 @@ export function OrderManager({
               </button>
             </div>
             
-            <div className="relative w-full lg:w-auto">
+            {!isConversions ? <div className="relative w-full lg:w-auto">
               <select
                 aria-label="Tipo di ordine"
                 value={selectedTaskType}
@@ -988,12 +1025,11 @@ export function OrderManager({
                 }}
               >
                 <option value="ALL">Tutti i tipi</option>
-                <option value="conversione">Conversione capelli</option>
                 <option value="acquisto">Acquisto extension</option>
                 <option value="accessori">Accessori</option>
                 <option value="altro">Altro</option>
               </select>
-            </div>
+            </div> : null}
 
             <button
               type="button"
@@ -1025,17 +1061,21 @@ export function OrderManager({
                   className="mt-3 flex gap-2"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (barcodeInput.trim()) openOrderFromBarcode(barcodeInput);
+                    if (barcodeInput.trim()) void openOrderFromBarcode(barcodeInput);
                   }}
                 >
                   <input
                     autoFocus
+                    disabled={resolvingCode}
                     value={barcodeInput}
                     onChange={(event) => setBarcodeInput(event.target.value)}
                     placeholder="Scansiona o inserisci il codice…"
                     className="orders-scanner-input min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-[#d8739f]"
                   />
-                  <button type="submit" className="rounded-2xl bg-[#b74660] px-5 text-sm font-black text-white">Apri</button>
+                  <button type="submit" disabled={resolvingCode} className="inline-flex items-center gap-2 rounded-2xl bg-[#b74660] px-5 text-sm font-black text-white disabled:opacity-60">
+                    {resolvingCode ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {resolvingCode ? "Cerco…" : "Apri"}
+                  </button>
                 </form>
                 {scannerMessage ? <p role="status" className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[#a94670]">{scannerMessage}</p> : null}
               </div>
@@ -1056,8 +1096,8 @@ export function OrderManager({
         ) : null}
         </div>
 
-        <div className="orders-summary hidden grid-cols-5 border-t border-black/[0.06] bg-[#fffafd] md:grid">
-          {ORDER_COLUMNS.map((column) => {
+        <div className={cn("orders-summary hidden border-t border-black/[0.06] bg-[#fffafd] md:grid", isConversions ? "grid-cols-4" : "grid-cols-5")}>
+          {columns.map((column) => {
             const Icon = column.icon;
             return (
               <button
@@ -1093,7 +1133,7 @@ export function OrderManager({
           >
             Tutti <span className={cn("rounded-md px-1.5 py-0.5 text-[10px]", mobileStatus === "ALL" ? "bg-white/15" : "bg-black/[0.05]")}>{filteredOrders.length}</span>
           </button>
-          {ORDER_COLUMNS.map((column) => {
+          {columns.map((column) => {
             const count = orderCounts[column.id] || 0;
             const Icon = column.icon;
             return (
@@ -1123,8 +1163,8 @@ export function OrderManager({
             <Card className="bg-white p-6 text-center text-sm font-semibold text-black/40">Nessun ordine in questo stato.</Card>
           ) : null}
           {mobileOrders.slice(0, visibleMobileCount).map((order) => {
-            const currentStatus = order.status || "NEW";
-            const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
+            const currentStatus = orderStatusForWorkspace(order.status, workspace);
+            const status = columns.find((column) => column.id === currentStatus) ?? columns[0];
             const Icon = status.icon;
             const photo = orderPhoto(order);
             const readyAgeDays = orderReadyAgeDays(order);
@@ -1166,7 +1206,7 @@ export function OrderManager({
                     </div>
                     <h3 className="mt-1.5 line-clamp-2 text-[15px] font-black leading-[1.15] tracking-[-0.01em] text-[#211b20]">{orderClientName(order)}</h3>
                     <p className="mt-1 line-clamp-1 text-[11px] font-medium leading-4 text-black/48">{orderItems(order) || "Nessun dettaglio prodotti"}</p>
-                    <p className={cn("mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.04em]", readyOverdue ? "text-amber-900" : currentStatus === "READY" ? "text-blue-700" : "text-black/38")}>{orderNextAction(order)}</p>
+                    <p className={cn("mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.04em]", readyOverdue ? "text-amber-900" : currentStatus === "READY" ? "text-blue-700" : "text-black/38")}>{orderNextAction(order, workspace)}</p>
                   </div>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5 border-t border-black/[0.05] px-3 py-2.5 text-[10px] font-bold text-black/38">
@@ -1192,9 +1232,9 @@ export function OrderManager({
         </div>
       </div>
 
-      <div className="hidden gap-4 md:grid md:grid-cols-5">
-        {ORDER_COLUMNS.map((column) => {
-          const columnOrders = filteredOrders.filter((order) => (order.status || "NEW") === column.id);
+      <div className={cn("hidden gap-4 md:grid", isConversions ? "md:grid-cols-4" : "md:grid-cols-5")}>
+        {columns.map((column) => {
+          const columnOrders = filteredOrders.filter((order) => orderStatusForWorkspace(order.status, workspace) === column.id);
           const Icon = column.icon;
           return (
             <Card key={column.id} className={cn("orders-column min-h-[26rem] border p-4", column.color)}>
@@ -1268,7 +1308,7 @@ export function OrderManager({
                             const ActionIcon = delivery.kind === "shipping" ? Truck : delivery.kind === "appointment" ? CalendarDays : MapPin;
                             return <ActionIcon className="mt-0.5 size-3.5 shrink-0" />;
                           })() : null}
-                          <span>{orderNextAction(order)}</span>
+                          <span>{orderNextAction(order, workspace)}</span>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2 items-center">
                           {renderTaskBadge(taskType)}
@@ -1303,7 +1343,7 @@ export function OrderManager({
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-black/35">Ordine {orderNumber(selected)}</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="truncate text-xl font-black tracking-tight text-slate-950">{orderClientName(selected)}</h2>
-                    <Badge tone={(selected.status || "NEW") === "COMPLETED" ? "green" : "pink"}>{statusLabel(selected.status || "NEW")}</Badge>
+                    <Badge tone={orderStatusForWorkspace(selected.status, workspace) === "COMPLETED" ? "green" : "pink"}>{statusLabel(selected.status || "NEW", workspace)}</Badge>
                     {renderTaskBadge(getOrderTaskType(selected))}
                   </div>
                   <p className="mt-1 line-clamp-1 text-sm font-semibold text-black/55">{orderItems(selected) || "Nessuna descrizione inserita"}</p>
@@ -1356,8 +1396,8 @@ export function OrderManager({
             </div>
             <div className="mb-4 overflow-x-auto rounded-2xl border border-black/10 bg-white px-4 py-3.5 shadow-sm">
               <div className="flex min-w-[720px] items-start">
-                {ORDER_COLUMNS.map((column, index) => {
-                  const currentIndex = ORDER_COLUMNS.findIndex((item) => item.id === (selected.status || "NEW"));
+                {columns.map((column, index) => {
+                  const currentIndex = columns.findIndex((item) => item.id === orderStatusForWorkspace(selected.status, workspace));
                   const complete = index < currentIndex;
                   const active = index === currentIndex;
                   const Icon = column.icon;
@@ -1395,14 +1435,16 @@ export function OrderManager({
                   {orderTimeline(selected).map((log: any, idx: number) => {
                     const isPhoto = log.type === "PHOTO_ADDED";
                     const isCreated = log.type === "CREATED";
-                    const destination = ORDER_COLUMNS.find((column) => column.id === log.to);
-                    const source = ORDER_COLUMNS.find((column) => column.id === log.from);
+                    const destination = log.to ? columns.find((column) => column.id === orderStatusForWorkspace(log.to, workspace)) : undefined;
+                    const source = log.from ? columns.find((column) => column.id === orderStatusForWorkspace(log.from, workspace)) : undefined;
                     const photo = isPhoto ? orderProductPhotos(selected).find((item) => (item.id || item.driveFileId) === log.photoId) : null;
                     const title = isPhoto
                       ? "Foto prodotto aggiunta"
                       : isCreated
                         ? "Ordine creato"
-                        : log.action || `Stato aggiornato: ${source?.label ?? log.from ?? "iniziale"} → ${destination?.label ?? log.to ?? "nuovo stato"}`;
+                        : log.from || log.to
+                          ? `Stato aggiornato: ${source?.label ?? log.from ?? "iniziale"} → ${destination?.label ?? log.to ?? "nuovo stato"}`
+                          : log.action || "Stato aggiornato";
                     const EventIcon = isPhoto ? Camera : isCreated ? ShoppingCart : destination?.icon || Clock3;
                     return (
                       <div key={`${log.at || log.date || idx}-${idx}`} className="relative grid grid-cols-[38px_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
@@ -1452,7 +1494,7 @@ export function OrderManager({
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-black/[0.07] pt-4">
-                    <span className={cn("rounded-full px-3 py-1.5 text-[11px] font-black", statusPillClass(selected.status || "NEW"))}>{statusLabel(selected.status || "NEW")}</span>
+                    <span className={cn("rounded-full px-3 py-1.5 text-[11px] font-black", statusPillClass(orderStatusForWorkspace(selected.status, workspace)))}>{statusLabel(selected.status || "NEW", workspace)}</span>
                     <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-black/55 ring-1 ring-black/[0.07]">Creato {orderDate(selected)}</span>
                     <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-black/55 ring-1 ring-black/[0.07]">{selected.user_location_name || "Sede non indicata"}</span>
                   </div>
@@ -1527,7 +1569,7 @@ export function OrderManager({
                       <div key={index} className="overflow-hidden rounded-2xl border border-black/[0.08] bg-[#FCFAFB]">
                         <div className="flex items-center justify-between border-b border-black/[0.07] bg-white px-3 py-2.5">
                           <span className="text-xs font-black text-slate-950">Foto {index + 1}</span>
-                          <span className="text-[10px] font-bold text-black/35">{photo ? statusLabel(photo.stage || "NEW") : "Da aggiungere"}</span>
+                          <span className="text-[10px] font-bold text-black/35">{photo ? statusLabel(photo.stage || "NEW", workspace) : "Da aggiungere"}</span>
                         </div>
                         {photo ? (
                           <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="group relative block overflow-hidden">
@@ -1565,7 +1607,7 @@ export function OrderManager({
                   {changingStatusTo ? (
                     <div className="mt-4 rounded-2xl border border-black/10 bg-black/5 p-4 space-y-3">
                       <h4 className="text-xs font-bold uppercase text-black/60">
-                        Nota per cambio in: {statusLabel(changingStatusTo)}
+                        Nota per cambio in: {statusLabel(changingStatusTo, workspace)}
                       </h4>
                       <textarea
                         value={statusNoteText}
@@ -1598,9 +1640,9 @@ export function OrderManager({
                     </div>
                   ) : (
                     <div className="mt-4 grid gap-2">
-                      {ORDER_COLUMNS.map((column) => {
+                      {columns.map((column) => {
                         const Icon = column.icon;
-                        const active = (selected.status || "NEW") === column.id;
+                        const active = orderStatusForWorkspace(selected.status, workspace) === column.id;
                         return (
                         <button
                           key={column.id}

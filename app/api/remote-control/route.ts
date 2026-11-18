@@ -96,7 +96,7 @@ function reconnectRequestsFrom(value: unknown): Record<string, ReconnectRequest>
 function cleanPath(value: unknown) {
   const pathname = typeof value === "string" ? value.trim() : "";
   const allowed = [
-    "/appointments", "/service-forms", "/orders", "/shopify-orders", "/client-control",
+    "/appointments", "/service-forms", "/orders", "/conversioni", "/shopify-orders", "/client-control",
     "/cassa-live", "/cash", "/invoices", "/refunds", "/recruitment", "/shipping",
     "/service-notes", "/tasks", "/requests", "/notifications", "/profile",
   ];
